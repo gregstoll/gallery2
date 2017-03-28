@@ -373,7 +373,7 @@
 	* All error messages go through this bottleneck function.
 	* You can define your own handler by defining the function name in ADODB_OUTP.
 	*/
-	function outp($msg,$newline=true)
+	static function outp($msg,$newline=true)
 	{
 	global $ADODB_FLUSH,$ADODB_OUTP;
 	

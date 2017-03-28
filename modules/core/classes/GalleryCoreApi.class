@@ -295,7 +295,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               string a value
      */
-    function getPluginParameter($pluginType, $pluginId, $parameterName, $itemId=0) {
+    static function getPluginParameter($pluginType, $pluginId, $parameterName, $itemId=0) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_simple.class');
 	return GalleryPluginHelper_simple::getParameter($pluginType, $pluginId,
@@ -363,7 +363,7 @@ class GalleryCoreApi {
      *						     'requiredModuleApi' => array,
      *						     'version' => string)
      */
-    function fetchPluginStatus($pluginType, $ignoreCache=false) {
+    static function fetchPluginStatus($pluginType, $ignoreCache=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_simple.class');
 	return GalleryPluginHelper_simple::fetchPluginStatus($pluginType, $ignoreCache);
@@ -376,7 +376,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array of (pluginId => ('active' => boolean))
      */
-    function fetchPluginList($pluginType) {
+    static function fetchPluginList($pluginType) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_simple.class');
 	return GalleryPluginHelper_simple::fetchPluginList($pluginType);
@@ -2355,7 +2355,7 @@ class GalleryCoreApi {
      *               mixed one GalleryEntity or an array of GalleryEntities
      * @deprecated $requiredEntityType will no longer be optional after the next major API change
      */
-    function loadEntitiesById($ids, $requiredEntityType=null) {
+    static function loadEntitiesById($ids, $requiredEntityType=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryEntityHelper_simple.class');
 	return GalleryEntityHelper_simple::loadEntitiesById($ids, $requiredEntityType);
@@ -2708,7 +2708,7 @@ class GalleryCoreApi {
      * @param string $sourceEncoding source encoding (eg. 'ISO-8859-1'), defaults to system charset
      * @return string the result
      */
-    function convertToUtf8($inputString, $sourceEncoding=null) {
+    static function convertToUtf8($inputString, $sourceEncoding=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryCharsetHelper_simple.class');
 	return GalleryCharsetHelper_simple::convertToUtf8($inputString, $sourceEncoding);
@@ -2734,7 +2734,7 @@ class GalleryCoreApi {
      * @param int $length the length of the substring, not optional
      * @return string a multibyte safe substring of input value
      */
-    function utf8Substring($string, $start, $length) {
+    static function utf8Substring($string, $start, $length) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryCharsetHelper_simple.class');
 	return GalleryCharsetHelper_simple::utf8Substring($string, $start, $length);
@@ -2747,7 +2747,7 @@ class GalleryCoreApi {
      * @param int $length the length in bytes (not in characters), not optional
      * @return string a multibyte safe substring of input value
      */
-    function utf8Strcut($string, $start, $length) {
+    static function utf8Strcut($string, $start, $length) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryCharsetHelper_simple.class');
 	return GalleryCharsetHelper_simple::utf8Strcut($string, $start, $length);
@@ -2817,7 +2817,7 @@ class GalleryCoreApi {
      * @param string $file
      * @param boolean $skipBaseDirectoryDetection deprecated
      */
-    function requireOnce($file, $skipBaseDirectoryDetection=false) {
+    static function requireOnce($file, $skipBaseDirectoryDetection=false) {
 	static $loaded;
 	if (!isset($loaded[$file])) {
 	    $loaded[$file] = 1;

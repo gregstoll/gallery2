@@ -40,7 +40,7 @@ class GalleryDataCache {
      * @staticvar cache the singleton cache
      * @access private
      */
-    function &_getCache() {
+    static function &_getCache() {
 	static $cache;
 	if (!isset($cache)) {
 	    $cache['maxKeys'] = 800;
@@ -81,7 +81,7 @@ class GalleryDataCache {
      * @param mixed $data
      * @param boolean $protected should this key survive a reset call?
      */
-    function put($key, $data, $protected=false) {
+    static function put($key, $data, $protected=false) {
 	$cache =& GalleryDataCache::_getCache();
 	if (!$cache['memoryCacheEnabled']) {
 	    return;
@@ -182,7 +182,7 @@ class GalleryDataCache {
      * @param string $key
      * @return mixed the cached data
      */
-    function get($key) {
+    static function get($key) {
 	$cache =& GalleryDataCache::_getCache();
 	if (!$cache['memoryCacheEnabled']) {
 	    return null;
@@ -199,7 +199,7 @@ class GalleryDataCache {
      * @param string $key
      * @return boolean true if the cache contains the key given
      */
-    function containsKey($key) {
+    static function containsKey($key) {
 	$cache =& GalleryDataCache::_getCache();
 	if (!$cache['memoryCacheEnabled']) {
 	    return false;
@@ -268,7 +268,7 @@ class GalleryDataCache {
      * @param array $pathInfo the path info
      * @return mixed object data
      */
-    function &getFromDisk($pathInfo) {
+    static function &getFromDisk($pathInfo) {
 	$null = null;
 	$cache =& GalleryDataCache::_getCache();
 	if (!$cache['fileCacheEnabled']) {
@@ -341,7 +341,7 @@ class GalleryDataCache {
      * @param array $requiredClasses classes that must be loaded in order to retrieve this data
      * @see GalleryDataCache::getCachePath
      */
-    function putToDisk($pathInfo, &$data, $requiredClasses=array()) {
+    static function putToDisk($pathInfo, &$data, $requiredClasses=array()) {
 	$cache =& GalleryDataCache::_getCache();
 	if (!$cache['fileCacheEnabled']) {
 	    return;
@@ -373,7 +373,7 @@ class GalleryDataCache {
      * @param int $id
      * @return array the tuple
      */
-    function getCacheTuple($id) {
+    static function getCacheTuple($id) {
 	$id = "$id";
 	if ($id > 100) {
 	    return array($id[0], $id[1]);
@@ -395,7 +395,7 @@ class GalleryDataCache {
      *
      * @return string the path
      */
-    function getCachePath($pathInfo) {
+    static function getCachePath($pathInfo) {
 	global $gallery;
 
 	$base = $gallery->getConfig('data.gallery.cache');
