@@ -1,0 +1,29 @@
+# The WebDAV spec, RFC2518, promises the DAV header on all OPTIONS responses:
+#
+#     This header indicates that the resource supports the DAV schema and
+#     protocol as specified. All DAV compliant resources MUST return the
+#     DAV header on all OPTIONS responses.
+#
+# Some WebDAV clients, e.g. Mac OS X WebDAVFS, fail to connect if this header
+# is missing.  The WebDAV module will return the DAV header on all responses,
+# but some server configurations don't pass OPTIONS requests to scripts, e.g.
+# Apache doesn't pass OPTIONS requests to CGI scripts:
+# http://issues.apache.org/bugzilla/show_bug.cgi?id=37982
+#
+# Consequently, some WebDAV clients will work with mod_php, but not php-cgi.
+#
+# Alternatively, we can set the DAV header using mod_rewrite and mod_headers.
+# The Header statement doesn't belong in gallery2/.htaccess, it belongs in the
+# directory of the interpreter, i.e. php-cgi.
+#
+# To avoid editing /usr/lib/cgi-bin/.htaccess we can use the URL rewrite module
+# to redirect OPTIONS requests to this directory.
+#
+# Reimplementation of WebDavHelper::options using mod_headers.
+#
+# TODO: COPY not implemented.
+<IfModule mod_headers.c>
+    Header set Allow OPTIONS,PROPFIND,PROPPATCH,MKCOL,GET,HEAD,DELETE,PUT,MOVE,LOCK,UNLOCK
+    Header set DAV 1,2
+    Header set MS-Author-Via DAV
+</IfModule>

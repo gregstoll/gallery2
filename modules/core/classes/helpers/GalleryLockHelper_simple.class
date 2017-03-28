@@ -1,0 +1,267 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper class for handling locking.  It delegates to the active GalleryLockSystem
+ * implementation that we're using, which is stored in the Gallery instance.
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryLockHelper_simple {
+
+    /**
+     * @see GalleryCoreApi::getLockIds
+     * @see GalleryLockSystem::getLockIds
+     */
+    function getLockIds() {
+	global $gallery;
+	$result =& $gallery->getLockSystem();
+	$ret = $result[0];
+	if ($ret) {
+	    /* Swallow this error; the API does not allow us to return one here */
+	    $result = array(); return $result;  /* Doing it this way keeps the Code Audit happy */
+	}
+	$lockSystem =& $result[1];
+
+	return $lockSystem->getLockIds();
+    }
+
+    /**
+     * @see GalleryCoreApi::acquireReadLock
+     * @see GalleryLockSystem::acquireReadLock
+     */
+    function acquireReadLock($ids, $timeout=10) {
+	global $gallery;
+	$result =& $gallery->getLockSystem();
+	$ret = $result[0];
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$lockSystem =& $result[1];
+
+	list ($ret, $lockId) = $lockSystem->acquireReadLock($ids, $timeout);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $lockId);
+    }
+
+    /**
+     * @see GalleryCoreApi::acquireReadLockParents
+     */
+    function acquireReadLockParents($id, $timeout=10) {
+	global $gallery;
+
+	/*
+	 * The current id may not be an item, in which case it has no direct
+	 * parent sequence.  But its parent should be an item, so the surefire
+	 * way to get the parent sequence in one shot is to get the parent's
+	 * parent sequence and then tack on the parent id.
+	 */
+	$storage =& $gallery->getStorage();
+	$result =& $gallery->getLockSystem();
+	$ret = $result[0];
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$lockSystem =& $result[1];
+
+	/* Get the parent entity id */
+	$query = '
+	SELECT
+	  [GalleryItemAttributesMap::itemId],
+	  [GalleryItemAttributesMap::parentSequence]
+	FROM
+	  [GalleryChildEntity], [GalleryItemAttributesMap]
+	WHERE
+	  [GalleryChildEntity::id] = ?
+	  AND
+	  [GalleryChildEntity::parentId] = [GalleryItemAttributesMap::itemId]
+	';
+
+	list ($ret, $searchResults) = $gallery->search($query, array((int)$id));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($searchResults->resultCount() == 0) {
+	    /* No parents; nothing to lock */
+	    return array(null, null);
+	}
+
+	/* Extract the parent ids */
+	$parentIds = array();
+	while ($result = $searchResults->nextResult()) {
+	    $parentIds = preg_split('/\//', $result[1], -1, PREG_SPLIT_NO_EMPTY);
+	    $parentIds[] = $result[0];
+	}
+
+	/* Get rid of any locks we already have */
+	$tmp = array();
+	foreach ($parentIds as $id) {
+	    if (!$lockSystem->isReadLocked($id) && !$lockSystem->isWriteLocked($id)) {
+		$tmp[] = $id;
+	    }
+	}
+	$parentIds = $tmp;
+
+	if (empty($parentIds)) {
+	    /* No locks required */
+	    return array(null, null);
+	}
+
+	/* Read lock the parents */
+	list ($ret, $lock) = $lockSystem->acquireReadLock($parentIds, $timeout);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $lock);
+    }
+
+    /**
+     * @see GalleryCoreApi::isReadLocked
+     * @see GalleryLockSystem::isReadLocked
+     */
+    function isReadLocked($ids) {
+	global $gallery;
+	$result =& $gallery->getLockSystem();
+	$ret = $result[0];
+	if ($ret) {
+	    /* This method doesn't return a status code.  What should we do? */
+	    if ($gallery->getDebug()) {
+		$gallery->debug($ret->getAsHtml());
+	    }
+	    return false;
+	}
+	$lockSystem =& $result[1];
+
+	return $lockSystem->isReadLocked($ids);
+    }
+
+    /**
+     * @see GalleryCoreApi::acquireWriteLock
+     * @see GalleryLockSystem::acquireWriteLock
+     */
+    function acquireWriteLock($ids, $timeout=10) {
+	global $gallery;
+	$result =& $gallery->getLockSystem();
+	$ret = $result[0];
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$lockSystem =& $result[1];
+
+	list ($ret, $lockId) = $lockSystem->acquireWriteLock($ids, $timeout);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $lockId);
+    }
+
+    /**
+     * @see GalleryCoreApi::isWriteLocked
+     * @see GalleryLockSystem::isWriteLocked
+     */
+    function isWriteLocked($ids) {
+	global $gallery;
+	$result =& $gallery->getLockSystem();
+	$ret = $result[0];
+	if ($ret) {
+	    /* This method doesn't return a status code.  What should we do? */
+	    if ($gallery->getDebug()) {
+		$gallery->debug($ret->getAsHtml());
+	    }
+	    return false;
+	}
+	$lockSystem =& $result[1];
+
+	return $lockSystem->isWriteLocked($ids);
+    }
+
+    /**
+     * @see GalleryCoreApi::releaseLocks
+     * @see GalleryLockSystem::releaseLocks
+     */
+    function releaseLocks($lockIds) {
+	global $gallery;
+	$result =& $gallery->getLockSystem();
+	$ret = $result[0];
+	if ($ret) {
+	    return $ret;
+	}
+	$lockSystem =& $result[1];
+
+	$ret = $lockSystem->releaseLocks($lockIds);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::releaseAllLocks
+     * @see GalleryLockSystem::releaseAllLocks
+     */
+    function releaseAllLocks() {
+	global $gallery;
+	$result =& $gallery->getLockSystem();
+	$ret = $result[0];
+	if ($ret) {
+	    return $ret;
+	}
+	$lockSystem =& $result[1];
+
+	$ret = $lockSystem->releaseAllLocks();
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::refreshLocks
+     * @see GalleryLockSystem::refreshLocks
+     */
+    function refreshLocks($freshUntil) {
+	global $gallery;
+	$result =& $gallery->getLockSystem();
+	$ret = $result[0];
+	if ($ret) {
+	    return $ret;
+	}
+	$lockSystem =& $result[1];
+
+	$ret = $lockSystem->refreshLocks($freshUntil);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+}
+?>

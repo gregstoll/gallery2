@@ -1,0 +1,86 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/AdminMaintenance.inc');
+
+/**
+ * This is a MaintenanceTask that will optimize all the Gallery tables in the database to make
+ * Gallery run smoothly.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ConvertDatabaseToUtf8Task extends MaintenanceTask {
+    /**
+     * @see MaintenanceTask::getInfo
+     */
+    function getInfo() {
+	global $gallery;
+
+	$info['l10Domain'] = 'modules_core';
+	$info['title'] = $gallery->i18n('Convert MySQL database to UTF8');
+	$info['description'] = $gallery->i18n(
+	    'If you created your database with MySQL 3.x and you upgrade to MySQL 4.x, you ' .
+	    'will experience scrambled characters until you convert your database to use ' .
+	    'UTF8.  This operation is harmless if your database is already converted, so ' .
+	    'it\'s safe to try it if you\'re unsure.  After using this, you should run the ' .
+	    '\'Delete database cache\' task to get rid of any corruption in your cache.');
+	return $info;
+    }
+
+    /**
+     * @see MaintenanceTask::run
+     */
+    function run() {
+	global $gallery;
+
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	GalleryCoreApi::requireOnce('modules/core/CoreModuleExtras.inc');
+	list ($ret, $converted) = CoreModuleExtras::convertCharacterSetToUtf8(
+	    $module, new MockStatusMonitor());
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	if ($converted) {
+	    $details = array($module->translate('Database successfully converted to UTF8'));
+	} else {
+	    $details = array($module->translate('No conversion required'));
+	}
+
+	return array(null, true, $details);
+    }
+}
+
+/**
+ * Use a mock status monitor to simulate what we use in the upgrader.
+ *
+ * @todo use the real progress bar when we unify the two implementations.
+ */
+class MockStatusMonitor {
+    function renderStatusMessage() {
+    }
+}
+?>

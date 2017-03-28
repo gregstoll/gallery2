@@ -1,0 +1,504 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+/**
+ * A helper class for the Custom Field module.
+ * @package CustomField
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+
+/**
+ * Session key for storing item admin mode
+ */
+define('CUSTOM_FIELD_SESSION_KEY', 'customfield.adminMode.itemId');
+
+GalleryCoreApi::requireOnce('modules/customfield/classes/CustomFieldInterface_1_0.class');
+
+/**
+ * A helper class for the Custom Field module.
+ * @static
+ */
+class CustomFieldHelper extends CustomFieldInterface_1_0 /* and GalleryEventListener */ {
+
+    /**
+     * Load and decode module parameters
+     *
+     * @param int $containerId id of container; check for album-specific settings
+     * @param boolean $fallback fallback to site-defaults if no album-specific settings found
+     * @param array $sets sets to load; all by default
+     * @return array GalleryStatus a status code
+     *               mixed containing custom field data
+     *               boolean true if album-specific settings are returned
+     */
+    function loadParameters($containerId=0, $fallback=true,
+			    $sets = array('common', 'album', 'photo')) {
+	$isContainer = ($containerId > 0);
+	list ($ret, $param) =
+	    GalleryCoreApi::fetchAllPluginParameters('module', 'customfield', $containerId);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	if (empty($param) && $containerId > 0 && $fallback) {
+	    list ($ret, $param) = GalleryCoreApi::fetchAllPluginParameters('module', 'customfield');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    $isContainer = false;
+	}
+	foreach ($sets as $set) {
+	    $result[$set] = array();
+	    foreach ((!empty($param[$set]) ? explode('|', $param[$set]) : array()) as $tmp) {
+		$list = explode('`', $tmp);
+		$result[$set][] = array('field' => $list[0],
+					'summary' => ($list[1]=='1'), 'detail' => ($list[2]=='1'),
+					'choices' => array_splice($list, 3));
+	    }
+	}
+	return array(null, $result, $isContainer);
+    }
+
+    /**
+     * Encode and save module parameters
+     *
+     * @param array $param data to save
+     * @param int $containerId id of container; to save album-specific settings
+     * @return GalleryStatus a status code
+     */
+    function saveParameters($param, $containerId=0) {
+	foreach (array('common', 'album', 'photo') as $set) {
+	    if (!isset($param[$set])) {
+		continue;
+	    }
+	    $list = array();
+	    foreach ($param[$set] as $item) {
+		$list[] = $item['field'] . '`' . ($item['summary'] ? 1 : 0) . '`'
+			. ($item['detail'] ? 1 : 0)
+			. (!empty($item['choices']) ? ('`' . implode('`', $item['choices'])) : '');
+	    }
+	    $ret = GalleryCoreApi::setPluginParameter('module', 'customfield', $set,
+						      implode('|', $list), $containerId);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * Add new custom field in given set/container.
+     *
+     * @param string $newField field name
+     * @param string $set (common, album, photo)
+     * @param int $containerId id of container; to save album-specific settings
+     * @return array GalleryStatus a status code
+     *               boolean true on success, false on duplicate field name
+     */
+    function addField($newField, $set, $containerId=0) {
+	list ($ret, $param) = CustomFieldHelper::loadParameters($containerId, false);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	foreach ($param as $list) {
+	    $idx = CustomFieldHelper::findParameter($list, $newField);
+	    if ($idx >= 0) {
+		return array(null, false);
+	    }
+	}
+	$param[$set][] = array('field' => $newField,
+			       'summary' => false, 'detail' => true, 'choices' => array());
+	$ret = CustomFieldHelper::saveParameters(array($set => $param[$set]), $containerId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	return array(null, true);
+    }
+
+    /**
+     * Find a field in a parameter list
+     *
+     * @param array $list parameter list
+     * @param string $field field to find
+     * @return int index or -1 if not found
+     */
+    function findParameter(&$list, $field) {
+	foreach ($list as $i => $item) {
+	    if ($item['field'] == $field) {
+		return $i;
+	    }
+	}
+	return -1;
+    }
+
+    /**
+     * Delete custom field values for given field
+     *
+     * @param string $field field to delete
+     * @param int $containerId id of container, to delete only for specific album
+     * @param string $exceptType 'album' or 'photo' -- don't delete values for items of this type
+     * @return GalleryStatus a status code
+     */
+    function deleteField($field, $containerId=0, $exceptType='') {
+	switch ($exceptType) {
+
+	case 'album':
+	    $setTypes = array(0,2);
+	case 'photo':
+	    if (!isset($setTypes)) {
+		$setTypes = array(0,1);
+	    }
+	    $ret = GalleryCoreApi::removeMapEntry(
+		'CustomFieldMap',
+		array('field' => $field, 'setId' => $containerId, 'setType' => $setTypes) );
+	    if ($ret) {
+		return $ret;
+	    }
+	    break;
+
+	default:
+	    $ret = GalleryCoreApi::removeMapEntry(
+		'CustomFieldMap',
+		array('field' => $field, 'setId' => $containerId) );
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * Load custom field values for specified items
+     *
+     * @param array $items GalleryEntity item, ...
+     * @param string $viewType if given then only include fields for that view (summary or detail)
+     * @param string $fillSet if given then include in results all valid fields for this type,
+     *               even if item has no value
+     * @return array GalleryStatus a status code
+     *               array(itemId => array(field => value))
+     *               array(itemId => array) loadParameters results
+     *               array(itemId => boolean) loadParameters results
+     */
+    function fetchFieldValues($items, $viewType=null, $fillSet=null) {
+	global $gallery;
+	$data = $result = array();
+
+	if (empty($items) || !is_array($items)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER),
+		    null, null, null);
+	}
+
+	foreach ($items as $item) {
+	    $itemId = (int)$item->getId();
+	    $itemIds[] = $itemId;
+	    $result[$itemId] = array();
+	    $containerId = GalleryUtilities::isA($item, 'GalleryAlbumItem')
+			 ? $itemId : (int)$item->getParentId();
+	    list ($ret, $param[$itemId], $isContainer[$itemId]) =
+		CustomFieldHelper::loadParameters($containerId);
+	    if ($ret) {
+		return array($ret, null, null, null);
+	    }
+	}
+
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('CustomFieldMap',
+	    array('itemId', 'field', 'value'), array('itemId' => $itemIds));
+	if ($ret) {
+	    return array($ret, null, null, null);
+	}
+
+	while ($rec = $searchResults->nextResult()) {
+	    $data[(int)$rec[0]][$rec[1]] = $rec[2];
+	}
+
+	foreach ($itemIds as $itemId) {
+	    foreach (array('common', 'album', 'photo') as $set) {
+		foreach ($param[$itemId][$set] as $it) {
+		    $field = $it['field'];
+		    if (isset($viewType) && !$it[$viewType]) {
+			continue;
+		    }
+		    if (isset($data[$itemId][$field])) {
+			$result[$itemId][$field] = $data[$itemId][$field];
+		    }
+		    else if (isset($fillSet) && ($set == 'common' || $set == $fillSet)) {
+			$result[$itemId][$field] = '';
+		    }
+		}
+	    }
+	}
+
+	return array(null, $result, $param, $isContainer);
+    }
+
+    /**
+     * Save custom field values for specified item, overwriting any existing values
+     *
+     * @param GalleryEntity $item
+     * @param array $fields (field => value)
+     * @return GalleryStatus a status code
+     */
+    function saveFieldValues(&$item, $fields) {
+	$set = GalleryUtilities::isA($item, 'GalleryAlbumItem') ? 1
+	     : (GalleryUtilities::isA($item, 'GalleryPhotoItem') ? 2 : 0);
+	$containerId = ($set == 1) ? $item->getId() : $item->getParentId();
+	list ($ret, $param) =
+	    GalleryCoreApi::fetchAllPluginParameters('module', 'customfield', $containerId);
+	if ($ret) {
+	    return $ret;
+	}
+	$isContainer = !empty($param);
+	$ret = GalleryCoreApi::removeMapEntry('CustomFieldMap', array('itemId' => $item->getId()));
+	if ($ret) {
+	    return $ret;
+	}
+	foreach ($fields as $field => $value) {
+	    if (!empty($value)) {
+		$ret = GalleryCoreApi::addMapEntry(
+		    'CustomFieldMap',
+		    array('itemId' => $item->getId(), 'field' => $field, 'value' => $value,
+			  'setId' => $isContainer ? $containerId : 0, 'setType' => $set));
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * Event handler for GalleryEntity::delete event
+     * Remove any custom field values for entity being deleted.
+     *
+     * @see GalleryEventListener::handleEvent
+     */
+    function handleEvent($event) {
+	if ($event->getEventName() == 'GalleryEntity::delete') {
+	    $item = $event->getEntity();
+	    $ret = GalleryCoreApi::removeMapEntry(
+		'CustomFieldMap', array('itemId' => $item->getId()));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+	return array(null, null);
+    }
+
+    /**
+     * Handler for Custom Field Admin actions
+     *
+     * @param array $form form data
+     * @param int $containerId id of container, for album-specific settings
+     * @return array GalleryStatus a status code
+     *               mixed status to return from controller
+     */
+    function handleAdminAction($form, $containerId=0) {
+	$status = array();
+
+	if (isset($form['action']['save'])) {
+	    list ($ret, $param) = CustomFieldHelper::loadParameters($containerId, false);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    foreach (array('common', 'album', 'photo') as $set) {
+		$newParam[$set] = array();
+		if (isset($form[$set]['index'])) {
+		    foreach ($form[$set]['index'] as $newidx => $oldidx) {
+			$newParam[$set][] =
+				array('field' => $param[$set][$oldidx]['field'],
+				      'summary' => isset($form[$set]['summary'][$newidx]),
+				      'detail' => isset($form[$set]['detail'][$newidx]),
+				      'choices' => $param[$set][$oldidx]['choices']);
+		    }
+		}
+	    }
+	    $ret = CustomFieldHelper::saveParameters($newParam, $containerId);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $status['saved'] = 1;
+	} else if (isset($form['action']['add'])) {
+	    foreach ($form['action']['add'] as $set => $tmp) {}
+	    $newField = str_replace('|', ':', str_replace('`', "&#039;", $form[$set]['newField']));
+	    if (empty($newField)) {
+		$status['error']['empty'] = 1;
+		return array(null, $status);
+	    }
+	    list ($ret, $added) = CustomFieldHelper::addField($newField, $set, $containerId);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if ($added) {
+		$status['added'] = 1;
+	    } else {
+		$status['error']['duplicate'] = 1;
+	    }
+	} else if (isset($form['action']['go'])) {
+	    foreach ($form['action']['go'] as $set => $tmp) {}
+	    list ($ret, $param, $isContainer) =
+		    CustomFieldHelper::loadParameters($containerId, false);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $idx = CustomFieldHelper::findParameter($param[$set], $form[$set]['goField']);
+	    if ($idx < 0) {
+		return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	    }
+	    switch ($form[$set]['goAction']) {
+
+	    case 'common':
+		/* Remove from $set, add to common; no db change */
+		$param['common'][] = $param[$set][$idx];
+		unset($param[$set][$idx]);
+		$ret = CustomFieldHelper::saveParameters(
+		    array('common' => $param['common'], $set => $param[$set]), $containerId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+		break;
+
+	    case 'remove':
+		/* Remove from $set; delete from all items */
+		unset($param[$set][$idx]);
+		$ret = CustomFieldHelper::saveParameters(array($set => $param[$set]), $containerId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+		$ret = CustomFieldHelper::deleteField($form[$set]['goField'],
+						      $isContainer ? $containerId : 0);
+		if ($ret) {
+		    return array($ret, null);
+		}
+		$status['removed'] = 1;
+		break;
+
+	    case 'album':
+		/* Remove from common, add to album; delete from non-album items */
+	    case 'photo':
+		/* Remove from common, add to photo; delete from non-photo items */
+		$newSet = $form[$set]['goAction'];
+		$param[$newSet][] = $param[$set][$idx];
+		unset($param[$set][$idx]);
+		$ret = CustomFieldHelper::saveParameters(
+		    array('common' => $param['common'], $newSet => $param[$newSet]), $containerId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+		$ret = CustomFieldHelper::deleteField($form[$set]['goField'],
+						      $isContainer ? $containerId : 0, $newSet);
+		if ($ret) {
+		    return array($ret, null);
+		}
+		break;
+
+	    default:
+		return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+	    }
+	    if (empty($status)) {
+		$status['moved'] = 1;
+	    }
+	} else if (isset($form['action']['picklist'])) {
+	    $choices = array();
+	    foreach (array_map('trim', explode("\n", $form['picklist'])) as $tmp) {
+		if (!empty($tmp)) {
+		    $choices[] = $tmp;
+		}
+	    }
+	    list ($ret, $param) = CustomFieldHelper::loadParameters($containerId, false);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    foreach ($param as $set => $list) {
+		$idx = CustomFieldHelper::findParameter($list, $form['pickField']);
+		if ($idx >= 0) {
+		    $param[$set][$idx]['choices'] = $choices;
+		    $ret = CustomFieldHelper::saveParameters(
+					      array($set => $param[$set]), $containerId);
+		    if ($ret) {
+			return array($ret, null);
+		    }
+		    $status['picklist'] = 1;
+		    break;
+		}
+	    }
+	} /* else $form['action']['reset'] */
+
+	return array(null, $status);
+    }
+
+    /**
+     * Load form data for Admin template
+     *
+     * @param array $form form
+     * @param int $containerId id of container, for album-specific settings
+     * @return GalleryStatus a status code
+     */
+    function loadAdminForm(&$form, $containerId=0) {
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'customfield');
+	if ($ret) {
+	    return $ret;
+	}
+
+	$form['set'] = array();
+	$form['set'][] = array('key' => 'common', 'name' => $module->translate('Common Fields'));
+	$form['set'][] = array('key' => 'album', 'name' => $module->translate('Album Fields'));
+	$form['set'][] = array('key' => 'photo', 'name' => $module->translate('Photo Fields'));
+
+	list ($ret, $form['fields']) = CustomFieldHelper::loadParameters($containerId, false);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see CustomFieldInterface_1_0::createCustomFields
+     */
+    function createCustomFields($fieldNames, $containerId=0) {
+	$duplicates = array();
+	foreach ($fieldNames as $fieldName) {
+	    list ($ret, $added) = CustomFieldHelper::addField($fieldName, 'common', $containerId);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if (!$added) {
+		$duplicates[] = $fieldName;
+	    }
+	}
+	return array(null, $duplicates);
+    }
+
+    /**
+     * @see CustomFieldInterface_1_0::setCustomFieldValues
+     */
+    function setCustomFieldValues($itemId, $data) {
+	list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId, 'GalleryItem');
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = CustomFieldHelper::saveFieldValues($item, $data);
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+}
+?>

@@ -1,0 +1,321 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * An abstraction layer over PHP.  For now, this serves as a way to allow our test classes to
+ * interpose themselves between the code and the PHP VM so that we can simulate different VMs.  For
+ * example, this lets us return arbitrary values for calls like function_exists().  Every call here
+ * is a straight pass-through.  New functions can be added at any time.
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryPhpVm {
+
+    /**
+     * Return true if the given function has been defined.
+     *
+     * @param string $functionName
+     * @return boolean
+     */
+    function function_exists($functionName) {
+	return function_exists($functionName);
+    }
+
+    /**
+     * Return true if the given extension is loaded.
+     * @param string $name
+     * @return boolean
+     */
+    function extension_loaded($name) {
+	return extension_loaded($name);
+    }
+
+    /**
+     * iconv -- Convert string to requested character encoding
+     *
+     * @param string $inCharset source character set
+     * @param string $outCharset target character set
+     * @param string $string data
+     * @return string result
+     */
+    function iconv($inCharset, $outCharset, $string) {
+	return iconv($inCharset, $outCharset, $string);
+    }
+
+    /**
+     * mb_convert_encoding -- Convert character encoding
+     *
+     * @param string $string data
+     * @param string $outCharset target character set
+     * @param string $inCharset source character set
+     * @return string result
+     */
+    function mb_convert_encoding($string, $outCharset, $inCharset) {
+	return mb_convert_encoding($string, $outCharset, $inCharset);
+    }
+
+    /**
+     * recode_string -- Recode a string according to a recode request
+     *
+     * @param string $request source..target character set
+     * @param string $string data
+     * @return string result
+     */
+    function recode_string($request, $string) {
+	return recode_string($request, $string);
+    }
+
+    /**
+     * Return the 32-byte md5 hash of the given string
+     *
+     * @param string $string string to be hashed
+     * @return string hashed string value
+     */
+    function md5($string) {
+	return md5($string);
+    }
+
+    /**
+     * Calculates the crc32 polynomial of a string
+     *
+     * @param string $string the value to be checksummed
+     * @return a signed integer checksum
+     */
+    function crc32($string) {
+	return crc32($string);
+    }
+
+    /**
+     * Query language and locale information
+     *
+     * @param int $item
+     */
+    function nl_langinfo($item) {
+	return nl_langinfo($item);
+    }
+
+    /**
+     * Set locale information.  Passing multiple locales isn't avialable until PHP 4.3.0 so it's not
+     * supported here (yet).
+     *
+     * @param mixed $category
+     * @param string $locale
+     */
+    function setlocale($category, $locale) {
+	return setlocale($category, $locale);
+    }
+
+    /**
+     * Send a raw HTTP header
+     *
+     * PHP 4.1 compatible header() function.  The second optional parameter http_response_code was
+     * introduced in PHP 4.3.0 and is therefore not supported in Gallery.
+     *
+     * @param string $string
+     * @param boolean $replace (optional)
+     */
+    function header($string, $replace=null) {
+	if (!GalleryUtilities::isSafeHttpHeader($string)) {
+	    return;
+	}
+
+	return header($string, $replace);
+    }
+
+    /**
+     * Checks if or where headers have been sent
+     *
+     * PHP 4.1 compatible headers_sent() function.  The optional parameters were introduced in PHP
+     * 4.3.0 and are therefore not supported in Gallery.
+     *
+     * @return boolean whether headers are already sent
+     */
+    function headers_sent() {
+	return headers_sent();
+    }
+
+    /**
+     * Gets the current configuration setting of magic quotes gpc
+     *
+     * @return integer 0 for off, 1 for on
+     */
+    function get_magic_quotes_gpc() {
+	return get_magic_quotes_gpc();
+    }
+
+    /**
+     * Get configuration parameter
+     *
+     * @param string $varname
+     * @return string
+     */
+    function ini_get($varname) {
+	return ini_get($varname);
+    }
+
+    /**
+     * Set configuration parameter
+     *
+     * @param string $varname
+     * @param string $newvalue
+     * @return string
+     */
+    function ini_set($varname, $newvalue) {
+	return ini_set($varname, $newvalue);
+    }
+
+    /**
+     * Return current Unix timestamp
+     *
+     * @return int
+     */
+    function time() {
+	return time();
+    }
+
+    /**
+     * Output a message and terminate the current script
+     *
+     * @param mixed $status (optional)
+     */
+    function exit_($status=null) {
+	if (isset($status)) {
+	    exit($status);
+	} else {
+	    exit;
+	}
+    }
+
+    /**
+     * Generate random integer
+     *
+     * @param int $min (optional)
+     * @param int $max (optional)
+     */
+    function rand($min=null, $max=null) {
+	if (isset($min) && isset($max)) {
+	    return rand($min, $max);
+	} else {
+	    return rand();
+	}
+    }
+
+    /**
+     * Fetch all HTTP request headers
+     *
+     * @return array
+     */
+    function getAllHeaders() {
+	return getallheaders();
+    }
+
+    /**
+     * Send mail
+     *
+     * @param string $to
+     * @param string $subject
+     * @param string $message
+     * @param string $additionalHeaders addition headers (optional)
+     * @param string $additionalParameters additional parameters (optional)
+     * @return boolean true if the mail was successfully accepted for delivery
+     */
+    function mail($to, $subject, $message, $additionalHeaders=null, $additionalParameters=null) {
+	return mail($to, $subject, $message, $additionalHeaders, $additionalParameters);
+    }
+
+    /**
+     * Inflate a deflated string
+     *
+     * @param string $data data compresed by gzdeflate
+     * @param int $length (optional) maximum length to decode
+     * @return string uncompressed data
+     */
+    function gzinflate($data, $length=null) {
+	if (isset($length)) {
+	    return gzinflate($data, $length);
+	} else {
+	    return gzinflate($data);
+	}
+    }
+
+    /**
+     * Checks if the class has been defined
+     * @param string $class_name
+     * @return bool true if $class_name is a defined class, false otherwise.
+     */
+    function class_exists($class_name) {
+	return class_exists($class_name);
+    }
+
+    /**
+     * Create a gzip compressed string
+     * @param string $data The data to encode
+     * @param int $level The level of compression
+     * @param int $encodingMode The encoding mode. Can be FORCE_GZIP (default) or FORCE_DEFLATE.
+     */
+    function gzencode($data, $level=null, $encodingMode=null) {
+	if (isset($level) && isset($encodingMode)) {
+	    return gzencode($data, $level, $encodingMode);
+	} else if (isset($level)) {
+	    return gzencode($data, $level);
+	} else {
+	    return gzencode($data);
+	}
+    }
+
+    /**
+     * Returns the IP address of the Internet host specified by hostname.
+     *
+     * @param string $hostname
+     * @return string ip address
+     */
+    function gethostbyname($hostname) {
+	return gethostbyname($hostname);
+    }
+
+    /**
+     * Checks whether the given constant exists and is defined.
+     *
+     * @param string $name the name of the constant
+     * @return bool returns TRUE if the named constant has been defined, FALSE otherwise
+     */
+    function defined($name) {
+	return defined($name);
+    }
+
+    /**
+     * Format a local time/date
+     *
+     * @param string $format the string format
+     * @param int timestamp the timestamp
+     * @see http://us.php.net/manual/en/function.date.php
+     */
+    function date($format, $timestamp=null) {
+	if (isset($timestamp)) {
+	    return date($format, $timestamp);
+	} else {
+	    return date($format);
+	}
+    }
+}
+?>

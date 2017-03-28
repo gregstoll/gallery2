@@ -1,0 +1,642 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper functions for the notification module
+ * @package Notification
+ * @subpackage Classes
+ * @author Zimzat <zimzat@zimzat.com>
+ * @author Tim Almdal <tnalmda@shaw.ca>
+ * @version $Revision: 17802 $
+ * @static
+ */
+class NotificationHelper {
+    /**
+     * Check if the user is logged on.
+     * @return array GalleryStatus a status code
+     *               integer UserId
+     */
+    function getUserIdCheck() {
+	global $gallery;
+
+	list ($ret, $isAnonymous) = GalleryCoreApi::isAnonymousUser();
+	if ($ret) {
+	    return array($ret, null);
+	} else if ($isAnonymous) {
+	    return array(GalleryCoreApi::error(ERROR_PERMISSION_DENIED), null);
+	}
+
+	return array(null, $gallery->getActiveUserId());
+    }
+
+    /**
+     * Get the enable notifications.
+     * @param boolean $forUpdate (optional) Grab the write lock. (default is false)
+     * @return array GalleryStatus
+     * 		     array An associative array of the enabled events and handlers
+     * 				['Event Name']['handler'] => 'public' => 0|1)
+     * 							     'enabled' => 0|1)
+     * 		     int the lock id
+     */
+    function getEnabledNotifications($forUpdate=false) {
+	$eventMapLockId = null;
+	if ($forUpdate) {
+	    list($ret, $eventMapLock) =
+		GalleryCoreApi::getPluginParameter('module', 'notification', 'id.eventMapLock');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+
+	    list ($ret, $eventMapLockId) = GalleryCoreApi::acquireWriteLock($eventMapLock);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	}
+
+	list ($ret, $enabled) =
+	    GalleryCoreApi::getPluginParameter('module', 'notification', '_enabledMap');
+	if ($ret) {
+	    global $gallery;
+	    return array($ret, null, null);
+	}
+
+	list ($ret, $isAdmin) = GalleryCoreApi::isUserInSiteAdminGroup();
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$enabled = !empty($enabled) ? unserialize($enabled) : array();
+	foreach ($enabled as $notification => $handlers) {
+	    foreach ($handlers as $handler => $value) {
+		if (empty($value['public']) && !$isAdmin) {
+		    unset($handlers[$handler]);
+		}
+	    }
+	    if (empty($handlers)) {
+		unset($enabled[$notification]);
+	    }
+	}
+
+	return array(null, $enabled, $eventMapLockId);
+    }
+
+    /**
+     * Get all the event notifications.
+     * @param boolean $display (optional) add display entry to the list. default: false
+     * @return array GalleryStatus
+     *  	     array (event id => event description)
+     */
+    function getDefinedEvents($display=false) {
+	$descriptions = $events = array();
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'notification');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $notificationNames) =
+	    GalleryCoreApi::getAllFactoryImplementationIds('NotificationEvent_1_0');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	foreach (array_keys($notificationNames) as $notificationName) {
+	    list($ret, $notification) = GalleryCoreApi::newFactoryInstanceById(
+						     'NotificationEvent_1_0', $notificationName);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    list ($ret, $description) = $notification->getDescription();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $descriptions[$description] = $notificationName;
+	    $events[$notificationName] = array('global' => $notification->isGlobal(),
+					       'description' => $description);
+	}
+
+	if ($display) {
+	    ksort($descriptions);
+	    $sortedEvents = array('' => array('global' => false, 
+		    'description' => $module->translate('Select Event')));
+	    foreach ($descriptions as $notificationName) {
+		$sortedEvents[$notificationName] = $events[$notificationName];
+	    }
+	    $events = $sortedEvents;
+	}
+
+	return array(null, $events);
+    }
+
+    /**
+     * Get all the notification handlers.
+     * @param boolean $display (optional) add display entry to the list. default: false
+     * @return array GalleryStatus
+     *  	     array (handler id => handler description)
+     */
+    function getDefinedHandlers($display=false) {
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'notification');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $handlerNames) =
+	    GalleryCoreApi::getAllFactoryImplementationIds('NotificationHandler_1_0');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($display) {
+	    $handlers[''] = $module->translate('Select Handler');
+	}
+
+	foreach (array_keys($handlerNames) as $handlerName) {
+	    list($ret, $handler) =
+		GalleryCoreApi::newFactoryInstanceById('NotificationHandler_1_0', $handlerName);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    list ($ret, $handlers[$handlerName]) = $handler->getDescription();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, $handlers);
+    }
+
+    /**
+     * Get the subscriptions for a user and optionally an itemId.
+     * @param int $userId User id to retrieve the subscription for
+     * @param mixed $itemId (optional) array of itemids or single id to filter the subscriptions for
+     * @return array GalleryStatus a status code
+     *               array (event name => 1)
+     */
+    function getSubscriptions($userId, $itemId=null) {
+	global $gallery;
+
+	$selection = array('userId' => $userId);
+	if (isset($itemId)) {
+	    $selection['itemId'] = $itemId;
+	}
+	list ($ret, $searchResult) = GalleryCoreApi::getMapEntry('SubscriptionMap',
+			array('notificationName', 'itemId'), $selection);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$subscriptions = array();
+	while ($row = $searchResult->nextResult()) {
+	    $subscriptions[$row[0]][] = $row[1];
+	}
+
+	return array(null, $subscriptions);
+    }
+
+    /**
+     * Retrieve the active Gallery events that the active notification subscriptions depend on.
+     * @return array GalleryStatus
+     *               array An array suitable for use as hints. (i.e. array(gallery event, ...))
+     */
+    function getActiveSubscriptionsEvents() {
+	global $gallery;
+
+	$sql = 'SELECT DISTINCT [::notificationName] FROM [SubscriptionMap]';
+
+	list ($ret, $searchResult) = $gallery->search($sql);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$events = array();
+	while ($row = $searchResult->nextResult()) {
+	    list($ret, $notification) =
+		GalleryCoreApi::newFactoryInstanceById('NotificationEvent_1_0', $row[0]);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $specs = $notification->getEventSpecs();
+	    $events[] = $specs['eventName'];
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array($ret, $events);
+    }
+
+    /**
+     * Retrieve the list of active notifications and hndlers registered for the specified event
+     *
+     * @param array $notificationEvents Names of the Notification events to return.
+     * @return array array('notificationName' => array('handlerId', ...)
+     */
+    function getActiveNotificationsHandlers($notificationEvents) {
+	global $gallery;
+
+	$markers = GalleryUtilities::makeMarkers(count($notificationEvents));
+
+	$sql = '
+             SELECT DISTINCT [::notificationName], [::handlerName]
+	      FROM [SubscriptionMap]
+	     WHERE [::notificationName] IN (' . $markers . ')';
+
+	list ($ret, $searchResult) = $gallery->search($sql, $notificationEvents);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$notifications = array();
+	while ($row = $searchResult->nextResult()) {
+	    $notifications[$row[0]][] = $row[1];
+	}
+
+	return array($ret, $notifications);
+    }
+
+    /**
+     * Get the subscribers that have permission for an event.
+     * @param string $notificationName
+     * @param NotificationEvent_1_0 $notification
+     * @return array GalleryStatus a status code
+     *               array Array of userid that are subscribed to the event for the specfied item
+     */
+    function getSubscribers($notificationName, $notification) {
+	$event = $notification->getEvent();
+	$itemId = $notification->getItemId();
+
+	$requiredPermission = $notification->getPermission();
+
+	list ($ret, $searchResult) = GalleryCoreApi::getMapEntry('SubscriptionMap',
+			array('userId'), array('notificationName' => $notificationName,
+					       'itemId' => $itemId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/**
+	 * @todo Performance: either load the permissions all at once or do more in SQL.
+	 */
+	$subscriptions = array();
+	while ($row = $searchResult->nextResult()) {
+	    $userId = $row[0];
+	    if (!$notification->isGlobal()) {
+		list ($ret, $permissions) = GalleryCoreApi::getPermissions($itemId, $userId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+
+		if (empty($requiredPermission) || empty($permissions['core.view'])
+			|| empty($permissions[$requiredPermission])) {
+		    continue;
+		}
+		$subscriptions[] = $userId;
+	    } else {
+		list ($ret, $inGroup) = GalleryCoreApi::isUserInSiteAdminGroup($userId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+		if ($inGroup) {
+		    $subscriptions[] = $userId;
+		}
+	    }
+	}
+
+	return array(null, $subscriptions);
+    }
+
+    /**
+     * Get all the subscriptions for an item.
+     * @param int $userId User id to retrieve the subscription for
+     * @param int $itemId Item id to filter the subscriptions for
+     * @return array GalleryStatus a status code
+     *               array Array of eventId => userid array
+     */
+    function getSubscriberByEntityId($itemId) {
+	list ($ret, $searchResult) = GalleryCoreApi::getMapEntry('SubscriptionMap',
+			   array('notificationName', 'userId', 'handlerName'),
+			   array('itemId' => $itemId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$subscriptions = array();
+	while ($row = $searchResult->nextResult()) {
+	    $subscriptions[$row[0]][] = array($row[1], $row[2]);
+	}
+
+	return array(null, $subscriptions);
+    }
+
+    /**
+     * Unsubscribe the user from the item/event combination.
+     *
+     * @param int $userId The user id
+     * @param int $itemId The item id
+     * @param string $eventName The name of the event that is being unsubscribed from.
+     * @param string $notificationName The notification definiftion name
+     * @param string $handler The notification handler name
+     * @param boolean $recursive If not empty apply subscription removal to descendent items
+     * @return GalleryStatus
+     */
+    function unsubscribe($userId, $itemId, $eventName, $notificationName, $handler, $recursive) {
+	$ret = NotificationHelper::_applyUnsubscribe($userId, $itemId, $eventName,
+						     $notificationName, $handler, $recursive);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return NotificationHelper::removeHintFromListener($notificationName);
+    }
+
+    /**
+     * Unubscribe the user to item/event combination with the specified handler and optioanlly
+     * propagate the subscription removal to any existing descendents.
+     * @param int $userId The user id
+     * @param int $itemId The item id
+     * @param string $name The name of the notification to be subscribed to.
+     * @param string $notification The notification being subscribed to
+     * @param string $handler The notification handler to be invoked
+     * @param boolean $recursive If not empty apply subscription to child items
+     * @return GalleryStatus
+     */
+    function _applyUnsubscribe($userId, $itemId, $eventName, $name, $handler, $recursive) {
+	$ret = GalleryCoreApi::removeMapEntry('SubscriptionMap',
+			    array('userId' => $userId, 'itemId' => $itemId,
+				  'notificationName' => $name, 'handlerId' => $handler));
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($itemId > 0) {
+	    list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId, 'GalleryItem');
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if ($recursive && $item->getCanContainChildren()) {
+		list ($ret, $childItems) = GalleryCoreApi::fetchChildItemIds($item);
+		if ($ret) {
+		    return $ret;
+		}
+
+		if (count($childItems) > 0) {
+		    foreach ($childItems as $childId) {
+			$ret = NotificationHelper::_applyUnsubscribe($userId, $childId, $eventName,
+								     $name, $handler, $recursive);
+			if ($ret) {
+			    return $ret;
+			}
+		    }
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * When a subscription is removed, check that that the event listener is no longer required.
+     *
+     * @param int $event The id of the event to be unsubscribed from
+     * @return GalleryStatus
+     */
+    function removeHintFromListener($event) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+
+	list ($ret, $hintsLockId) = NotificationHelper::_lockHints();
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $hints) = GalleryCoreApi::getFactoryDefinitionHints('GalleryEventListener',
+									'NotificationRouter');
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($hintsLockId);
+	    return $ret;
+	}
+
+	$sql = 'SELECT COUNT(*) FROM [SubscriptionMap]
+		 WHERE [SubscriptionMap::notificationName] = ?';
+	list ($ret, $results) = $storage->search($sql, array($event));
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($hintsLockId);
+	    return $ret;
+	}
+
+	$count = $results->nextResult();
+	$count = (int)$count[0];
+	if (empty($count)) {
+	    $hint = GalleryUtilities::strToLower($event);
+
+	    if (!empty($hints)) {
+		$key = array_search($hint, $hints);
+		unset($hints[$key]);
+		$ret = GalleryCoreApi::updateFactoryDefinitionHints('GalleryEventListener',
+								    'NotificationRouter', $hints);
+		if ($ret) {
+		    GalleryCoreApi::releaseLocks($hintsLockId);
+		    return $ret;
+		}
+	    }
+	}
+
+	$ret = GalleryCoreApi::releaseLocks($hintsLockId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = $storage->checkPoint();
+	return $ret;
+    }
+
+    /**
+     * Subscribe the user to item/event combination with the specified handler.
+     * @param int $userId The user id
+     * @param GalleryItem $item
+     * @param string $eventName The name of the event that is being subscribed to.
+     * @param string $notificationName The name of the notification to be subscribed to.
+     * @param string $handler The notification handler to be invoked
+     * @param boolean $recursive If not empty apply subscription to descendent items
+     * @return GalleryStatus
+     */
+    function subscribe($userId, $item, $eventName, $notificationName, $handler, $recursive) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+
+	list ($ret, $hintsLockId) = NotificationHelper::_lockHints();
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $hints) = GalleryCoreApi::getFactoryDefinitionHints('GalleryEventListener',
+									'NotificationRouter');
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($hintsLockId);
+	    return $ret;
+	}
+
+	$hint = GalleryUtilities::strToLower($eventName);
+	$updateHints = false;
+	if (!empty($hints)) {
+	    $key = array_search($hint, $hints);
+	    /* Only add if it is not in the hint list already */
+	    if ($key === false) {
+		$hints[] = $hint;
+		$updateHints = true;
+	    }
+	} else {
+	    $hints = array($hint);
+	    $updateHints = true;
+	}
+
+	if ($updateHints) {
+	    $ret = GalleryCoreApi::updateFactoryDefinitionHints('GalleryEventListener',
+								'NotificationRouter', $hints);
+	    if ($ret) {
+		GalleryCoreApi::releaseLocks($hintsLockId);
+		return $ret;
+	    }
+	}
+
+	$ret = GalleryCoreApi::releaseLocks($hintsLockId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $notification) = GalleryCoreApi::newFactoryInstanceById(
+						     'NotificationEvent_1_0', $notificationName);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = NotificationHelper::_applySubscription($userId, $item, $notificationName,
+						      $notification, $handler, $recursive);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = $storage->checkPoint();
+	return $ret;
+    }
+
+    /**
+     * Subscribe the user to item/event combination with the specified handler and optionally
+     * propagate the subscriptions to any existing children.
+     * @param int $userId The user id
+     * @param GalleryItem $item The item
+     * @param string $name The name of the notification to be subscribed to.
+     * @param string $notification The notification being subscribed to
+     * @param string $handler The notification handler to be invoked
+     * @param boolean $recursive If not empty apply subscription to descendent items
+     * @return GalleryStatus
+     */
+    function _applySubscription($userId, $item, $name, $notification, $handler, $recursive) {
+	if (!empty($item)) {
+	    $itemId = $item->getId();
+	    $canContainChildren = $item->getCanContainChildren();
+	} else {
+	    $itemId = 0;
+	    $canContainChildren = false;
+	}
+	$ret = GalleryCoreApi::addMapEntry('SubscriptionMap', array('userId' => $userId,
+			    'itemId' => $itemId, 'notificationName' => $name,
+			    'handlerName' => $handler));
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($recursive && $canContainChildren) {
+	    list ($ret, $childItemIds) = GalleryCoreApi::fetchChildItemIds($item);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if (count($childItemIds) > 0) {
+		list ($ret, $all) = NotificationHelper::getSubscriptions($userId, $childItemIds);
+		if ($ret) {
+		    return $ret;
+		}
+
+		list ($ret, $childItems) =
+		    GalleryCoreApi::loadEntitiesById($childItemIds, 'GalleryItem');
+		if ($ret) {
+		    return $ret;
+		}
+
+		$subscriptions = array();
+		if (!empty($all[$name])) {
+		    $subscriptions = $all[$name];
+		}
+
+		$requiredPermission = $notification->getPermission();
+		foreach ($childItems as $child) {
+		    $childId = $child->getId();
+		    if (in_array($childId, $subscriptions)) {
+			continue;
+		    }
+
+		    if (!$notification->isAppropriateForItem($child)) {
+			continue;
+		    }
+
+
+		    list ($ret, $permissions) = GalleryCoreApi::getPermissions($childId, $userId);
+		    if ($ret) {
+			return $ret;
+		    }
+
+		    if (empty($requiredPermission) || empty($permissions[$requiredPermission])) {
+			continue;
+		    }
+
+		    $ret = NotificationHelper::_applySubscription(
+			$userId, $child, $name, $notification, $handler, true);
+		    if ($ret) {
+			return $ret;
+		    }
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Acquire the lock for the hints
+     * @return int the lock id
+     * @private
+     */
+    function _lockHints() {
+	list($ret, $hintsLock) =
+		GalleryCoreApi::getPluginParameter('module', 'notification', 'id.hintsLock');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $hintsLockId) = GalleryCoreApi::acquireWriteLock($hintsLock);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $hintsLockId);
+    }
+}
+?>

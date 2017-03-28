@@ -1,0 +1,101 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Utility functions useful in managing GalleryUsers
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryUserHelper_simple {
+
+    /**
+     * @see GalleryCoreApi::assertHasItemPermission
+     */
+    function assertHasItemPermission($itemId, $permission) {
+	global $gallery;
+
+	list ($ret, $hasPermission) =
+	    GalleryUserHelper_simple::hasItemPermission($itemId, $permission);
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (!$hasPermission) {
+	    return GalleryCoreApi::error(
+		ERROR_PERMISSION_DENIED, __FILE__, __LINE__,
+		sprintf('user id: %s doesn\'t have permission: %s for item id: %s',
+			$gallery->getActiveUserId(), $permission, $itemId));
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::hasItemPermission
+     */
+    function hasItemPermission($itemId, $permission, $userId=null, $sessionPermissions=true) {
+	global $gallery;
+	if (!isset($userId)) {
+	    $userId = $gallery->getActiveUserId();
+	}
+	$sessionPermissions = (int)$sessionPermissions;
+
+	$cacheKey = "GalleryPermissionHelper::getPermissions($itemId,$userId,$sessionPermissions)";
+	if (GalleryDataCache::containsKey($cacheKey)) {
+	    $permissions = GalleryDataCache::get($cacheKey);
+	    return array(null, isset($permissions[$permission]));
+	}
+
+	/* Only use the permission cache from the session data for the activeUser */
+	if ($sessionPermissions && $userId == $gallery->getActiveUserId()
+		&& GalleryDataCache::hasPermission($itemId, $permission)) {
+	    return array(null, true);
+	}
+
+	list ($ret, $aclIds) =
+	    GalleryCoreApi::fetchAccessListIds($permission, $userId, $sessionPermissions);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (empty($aclIds)) {
+	    return array(null, false);
+	}
+	$aclMarkers = GalleryUtilities::makeMarkers(count($aclIds));
+
+	/*
+	 * TODO: We could get and cache the accessListId here, and then do a
+	 * hash lookup to see if it's in our valid aclid list.
+	 */
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryAccessSubscriberMap',
+	    array('itemId'), array('itemId' => (int)$itemId, 'accessListId' => $aclIds),
+	    array('limit' => array('count' => 1)));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$hasPermission = ($searchResults->resultCount() > 0);
+
+	return array(null, $hasPermission);
+    }
+}
+?>

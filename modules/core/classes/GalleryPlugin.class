@@ -1,0 +1,651 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Plugin meta-info container.  This is a container for information about a given plugin.
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class GalleryPlugin {
+
+    /**
+     * The id of this plugin
+     * @var string
+     * @access private
+     */
+    var $_id;
+
+    /**
+     * The name of this plugin
+     * @var string
+     * @access private
+     */
+    var $_name;
+
+    /**
+     * The description of this plugin
+     * @var string
+     * @access private
+     */
+    var $_description;
+
+    /**
+     * The version of this plugin
+     * @var string
+     * @access private
+     */
+    var $_version;
+
+    /**
+     * The version of the Core API required by this plugin
+     * @var array
+     * @access private
+     */
+    var $_requiredCoreApi;
+
+    /**
+     * The localization domain for this plugin
+     * @var string
+     * @access private
+     */
+    var $_l10Domain;
+
+
+    /**
+     * Localize the given content.
+     *
+     * Gallery uses GNU gettext for internationalization (i18n) and localization (l10n) of
+     * text presented to the user. Gettext needs to know about all places involving strings
+     * that must be translated. Mark any place where localization at runtime shall take place
+     * by using this function.
+     *
+     * E.g. instead of:
+     *   print 'TEST to be displayed in different languages';
+     * use (in any subclass of GalleryPlugin):
+     *   print $this->translate('TEST to be displayed in different languages');
+     * and you are all set for pure literals. The translation teams will receive that literal
+     * string as a job to translate and will translate it (when the message is clear enough).
+     * At runtime the message is then localized when printed.
+     *
+     * But consider this case:
+     *   $message_to_be_localized = 'TEST to be displayed in different languages';
+     *   print $this->translate($message_to_be_localized);
+     *
+     * The translate() method is called in the right place for runtime handling, but there
+     * is no message at gettext preprocessing time to be given to the translation teams,
+     * just a variable name. Translation of the variable name would break the code! So all
+     * places potentially feeding this variable have to be marked to be given to translation
+     * teams, but not translated at runtime!
+     *
+     * The (noop) method Gallery::i18n() is there to resolve all such cases (including storing
+     * the original string in, say, the database). Simply mark the candidates:
+     *   $message_to_be_localized = $gallery->i18n('TEST to be displayed in different languages');
+     *   print $this->translate($message_to_be_localized);
+     *
+     * The i18n() method does nothing, but feeding translators with that new string.
+     * This method does the runtime job, thanks to GNU gettext.
+     *
+     * Input parameters may also include $params['hint'] which is text to appear in the po file to
+     * assist translators, but is not text to be translated.  Example:
+     *   print $this->translate(array('text' => 'TT', 'hint' => 'Abbreviation for ToolTip'));
+     * Input parameters may also include $params['cFormat'] (boolean value) which tells gettext
+     * whether or not to use "c-format" for this string (it may guess wrong for "5% faster",
+     * for example).
+     *
+     * @param mixed $params a single string, or an array of parameters
+     * @return string the localized value
+     * @see GalleryTranslator::translateDomain
+     * @see Gallery::i18n
+     */
+    function translate($params) {
+	global $gallery;
+	$translator =& $gallery->getTranslator();
+	if (!isset($translator)) {
+	    /* No translator! (could be an old module calling translate() from constructor) */
+	    return 'Translation error: ' . print_r($params, true);
+	}
+	list ($ret, $content) =
+	    $translator->translateDomain($this->getPluginType() . 's_' . $this->getId(), $params);
+	if ($ret) {
+	    if ($gallery->getDebug()) {
+		$gallery->debug($ret->getAsHtml());
+	    }
+	    return 'Translation error: ' . print_r($params, true);
+	} else {
+	    return $content;
+	}
+    }
+
+    /**
+     * Activate this plugin
+     *
+     * @param boolean $postActivationEvent (optional) should we post an activation event?  Normally
+     *                true, but the upgrader may choose to suppress this event so that it can
+     *                reactivate a module without causing a ripple effect.
+     * @return array GalleryStatus a status code
+     *               array redirect info for error page (empty for success)
+     */
+    function activate($postActivationEvent=true) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$pluginType = $this->getPluginType();
+	$pluginId = $this->getId();
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('GalleryPlugin::activate %s plugin', $pluginId));
+	}
+
+	list ($ret, $pluginStatus) = GalleryCoreApi::fetchPluginStatus($pluginType);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (isset($pluginStatus[$pluginId]['active'])) {
+	    $ret = GalleryCoreApi::updateMapEntry(
+		'GalleryPluginMap',
+		array('pluginType' => $pluginType,
+		      'pluginId' => $pluginId),
+		array('active' => 1));
+	} else {
+	    $ret = GalleryCoreApi::addMapEntry(
+		'GalleryPluginMap',
+		array('pluginType' => $pluginType,
+		      'pluginId' => $pluginId,
+		      'active' => 1));
+	}
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Flush the cache */
+	$this->_flushPluginCache();
+	GalleryDataCache::removeFromDisk(array('type' => 'local-url-map'));
+
+	$templateCacheDir = $gallery->getConfig('data.smarty.templates_c');
+	if ($platform->file_exists($templateCacheDir)) {
+	    /* Ignore errors */
+	    $platform->recursiveRmdir($templateCacheDir);
+	}
+
+	if ($postActivationEvent) {
+	    if ($gallery->getDebug()) {
+		$gallery->debug('GalleryPlugin::activate post activation event');
+	    }
+
+	    $event = GalleryCoreApi::newEvent('Gallery::ActivatePlugin');
+	    $event->setData(array('pluginType' => $this->getPluginType(),
+				  'pluginId' => $this->getId()));
+	    list ($ret) = GalleryCoreApi::postEvent($event);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('GalleryPlugin::activate %s plugin successfully activated',
+				    $pluginId));
+	}
+
+	return array(null, array());
+    }
+
+    /**
+     * Deactivate this plugin.
+     *
+     * Note that modules and themes should not override this method to do anything critical.
+     * Modules and themes can be forcibly deactivated during the upgrade process and it's
+     * important that this doesn't leave the app in a broken state.
+     *
+     * @param bool $postDeactivationEvent (optional) should we post a deactivation event?  Normally
+     *             true, but the upgrader may choose to suppress this event so that it can
+     *             reactivate a module without causing a ripple effect.
+     * @return array GalleryStatus a status code
+     *               array redirect info for error page (empty for success)
+     */
+    function deactivate($postDeactivationEvent=true) {
+	$pluginType = $this->getPluginType();
+	$pluginId = $this->getId();
+
+	$ret = GalleryCoreApi::updateMapEntry(
+	    'GalleryPluginMap',
+	    array('pluginType' => $pluginType,
+		  'pluginId' => $pluginId),
+	    array('active' => 0));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$this->_flushPluginCache();
+
+	if ($postDeactivationEvent) {
+	    $ret = $this->_postDeactivationEvent();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, array());
+    }
+
+    /**
+     * Reactivate this plugin.  The plugin is already active, so call deactivate() and then
+     * activate().  Perform the deactivation without sending an event because the activation will
+     * immediately follow and we don't want other plugins to sense this deactivation and
+     * deactivate themselves.  If the plugin isn't currently active, don't do anything.
+     *
+     * @return array GalleryStatus a status code
+     *               array redirect info for error page (empty for success)
+     */
+    function reactivate() {
+	global $gallery;
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('GalleryPlugin::reactivate %s plugin', $this->getId()));
+	}
+
+	list ($ret, $isActive) = $this->isActive();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (!$isActive) {
+	    if ($gallery->getDebug()) {
+		$gallery->debug(sprintf('GalleryPlugin::reactivate %s plugin, plugin is ' .
+					'not active, nothing to do', $this->getId()));
+	    }
+	    return array(null, null);
+	}
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('GalleryPlugin::reactivate %s plugin, deactivate',
+				    $this->getId()));
+	}
+
+	list ($ret, $redirect) = $this->deactivate(false);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (!empty($redirect)) {
+	    return array(null, $redirect);
+	}
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('GalleryPlugin::reactivate %s plugin, activate again',
+				    $this->getId()));
+	}
+
+	list ($ret, $redirect) = $this->activate(false);
+	if ($ret) {
+	    /* Try to send the deactivation event before failing completely. */
+	    $this->_postDeactivationEvent();
+	    return array($ret, null);
+	}
+
+	if (!empty($redirect)) {
+	    return array(null, $redirect);
+	}
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('GalleryPlugin::reactivate %s plugin, successfully ' .
+				    'reactivated', $this->getId()));
+	}
+
+	return array(null, array());
+    }
+
+    /**
+     * Post a deactivation event for this plugin.  Used by deactivate and reactivate.
+     *
+     * @return GalleryStatus a status code
+     * @access private
+     */
+    function _postDeactivationEvent() {
+	$event = GalleryCoreApi::newEvent('Gallery::DeactivatePlugin');
+	$event->setData(array('pluginType' => $this->getPluginType(),
+			      'pluginId' => $this->getId()));
+	list ($ret) = GalleryCoreApi::postEvent($event);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Remove this plugin's parameters
+     *
+     * @return GalleryStatus a status code
+     */
+    function uninstall() {
+	global $gallery;
+
+	/* Remove this plugin */
+	$ret = GalleryCoreApi::removePlugin($this->getPluginType(), $this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Remove data directory for this plugin */
+	$platform =& $gallery->getPlatform();
+	$dataDir = $gallery->getConfig('data.gallery.plugins_data') . $this->getPluginType() .
+		   's' . $platform->getDirectorySeparator() . $this->getId();
+	if ($platform->is_dir($dataDir)) {
+	    $platform->recursiveRmdir($dataDir);
+	}
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('Removing translations for %s plugin', $this->getId()));
+	}
+	$ret = GalleryCoreApi::removeTranslationsForPlugin($this->getPluginType(), $this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	$this->_flushPluginCache();
+
+	$event = GalleryCoreApi::newEvent('Gallery::UninstallPlugin');
+	$event->setData(array('pluginType' => $this->getPluginType(),
+			      'pluginId' => $this->getId()));
+	list ($ret) = GalleryCoreApi::postEvent($event);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Perform the plugin installation or upgrade, whatever is required.
+     *
+     * Plugins should not need to override this method.  Instead they should
+     * override the upgrade method and put all their plugin specific logic
+     * there.
+     *
+     * @return GalleryStatus a status code
+     */
+    function installOrUpgrade() {
+	global $gallery;
+
+	/**
+	 * Remove old translations before installing new ones so that if any translations
+	 * got removed we don't wind up with old copies hanging around.
+	 *
+	 * @todo keep track of which translations didn't get updated and remove them
+	 *       instead of using this heavy approach.
+	 */
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('Removing translations for %s plugin', $this->getId()));
+	}
+	$ret = GalleryCoreApi::removeTranslationsForPlugin($this->getPluginType(), $this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('Installing translations for %s plugin', $this->getId()));
+	}
+	$ret = GalleryCoreApi::installTranslationsForPlugin($this->getPluginType(), $this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $searchResult) = GalleryCoreApi::getMapEntry('GalleryPluginMap',
+	    array('pluginId'),
+	    array('pluginType' => $this->getPluginType(), 'pluginId' => $this->getId()));
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (!$searchResult->resultCount()) {
+	    $ret = GalleryCoreApi::addMapEntry(
+		'GalleryPluginMap',
+		array('pluginType' => $this->getPluginType(),
+		      'pluginId' => $this->getId(),
+		      'active' => 0));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	/** @todo Change scanPlugin to be called as a static function or helper function */
+	GalleryCoreApi::requireOnce('modules/core/classes/GalleryRepository.class');
+	list ($ret, $repositories) = GalleryRepository::getRepositories();
+	if ($ret) {
+	    return $ret;
+	}
+	if (!empty($repositories)) {
+	    $repository = array_pop($repositories);
+	} else {
+	    $repository = new GalleryRepository();
+	    $repository->init('bogus');
+	}
+	$ret = $repository->scanPlugin($this->getPluginType(), $this->getId());
+	if ($ret && !($ret->getErrorCode() & ERROR_STORAGE_FAILURE)) {
+	    /*
+	     * Something is wrong with this plugin. Maybe it's a 3rd party plugin w/o MANIFEST
+	     * file, maybe it has no revisions in the po files, maybe the module.inc is foobar.
+	     * Just log and ignore it.
+	     */
+	    if ($gallery->getDebug()) {
+		$gallery->debug_r($ret);
+	    }
+	} else if ($ret) {
+	    return $ret;
+	}
+	$this->_flushPluginCache();
+
+	return null;
+    }
+
+    /**
+     * Flush plugin-related caches.
+     */
+    function _flushPluginCache() {
+	/* Flush the cache */
+	$pluginType = $this->getPluginType();
+	GalleryDataCache::remove("GalleryPluginHelper::fetchPluginStatus($pluginType)");
+	GalleryDataCache::removeFromDisk(array('type' => $pluginType,
+					       'itemId' => 'GalleryPluginHelper_fetchPluginStatus',
+					       'id' => '_all'));
+	GalleryDataCache::remove("GalleryPluginHelper::fetchPluginList($pluginType)");
+    }
+
+    /**
+     * Is this plugin active?
+     *
+     * @return array GalleryStatus a status code
+     *               boolean true if active
+     */
+    function isActive() {
+	global $gallery;
+
+	list ($ret, $pluginStatus) = GalleryCoreApi::fetchPluginStatus($this->getPluginType());
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (empty($pluginStatus[$this->getId()])) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+			      sprintf("No such %s: %s", $this->getPluginType(), $this->getId())),
+			 null);
+	}
+
+	return array(null,
+		     empty($pluginStatus[$this->getId()]['active']) ? false : true);
+    }
+
+    /**
+     * Convenience method to get a plugin parameter
+     *
+     * @param string $parameterName
+     * @param int $itemId (optional)
+     * @return array GalleryStatus a status code
+     *               mixed value
+     */
+    function getParameter($parameterName, $itemId=0) {
+	list ($ret, $value) = GalleryCoreApi::getPluginParameter(
+	    $this->getPluginType(), $this->getId(), $parameterName, $itemId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $value);
+    }
+
+    /**
+     * Convenience method to set a plugin parameter
+     *
+     * @param string $parameterName
+     * @param string $parameterValue
+     * @param int $itemId (optional)
+     * @return GalleryStatus a status code
+     */
+    function setParameter($parameterName, $parameterValue, $itemId=0) {
+	$ret = GalleryCoreApi::setPluginParameter(
+	    $this->getPluginType(), $this->getId(), $parameterName, $parameterValue, $itemId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Convenience method to remove a plugin parameter
+     *
+     * @param string $parameterName
+     * @param int $itemId (optional)
+     * @return GalleryStatus a status code
+     */
+    function removeParameter($parameterName, $itemId=0) {
+	$ret = GalleryCoreApi::removePluginParameter(
+	    $this->getPluginType(), $this->getId(), $parameterName, $itemId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Fetch all plugin specific parameters for the given item.  The results will contain
+     * a mixture of global parameters and item specific parameters, where the
+     * item specific ones ones override the global ones.
+     *
+     * @param int $itemId (optional)
+     * @return array GalleryStatus a status code
+     *               array parameters in key => value form
+     */
+    function fetchParameters($itemId=null) {
+	$order = array(null);
+	if ($itemId) {
+	    $order[] = $itemId;
+	}
+
+	$results = array();
+	/* TODO: we should do this in one database query, ordered by id. */
+	foreach ($order as $id) {
+	    list ($ret, $params) = GalleryCoreApi::fetchAllPluginParameters(
+		$this->getPluginType(), $this->getId(), $id);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $results = array_merge($results, $params);
+	}
+
+	return array(null, $results);
+    }
+
+    /**
+     * Perform any upgrade tasks required at this point.  This method is called
+     * if the plugin version in the code does not match the version number in
+     * the database.  For modules, the framework will upgrade database tables as
+     * necessary, but it is the responsibility of the module to:
+     *
+     * 1. Register/unregister permissions
+     * 2. Move or massage data as required by the upgrade
+     *
+     * This method will be called with a null version on an initial install.
+     * @param string $currentVersion the current version (null if this is an initial install)
+     * @return GalleryStatus a status code
+     * @access protected
+     */
+    function upgrade($currentVersion) {
+	return null;
+    }
+
+    /* Getters and setters below */
+
+    function setId($id) {
+	$this->_id = $id;
+    }
+
+    function getId() {
+	return $this->_id;
+    }
+
+    function setName($name) {
+	$this->_name = $name;
+    }
+
+    function getName() {
+	return $this->_name;
+    }
+
+    function setDescription($description) {
+	$this->_description = $description;
+    }
+
+    function getDescription() {
+	return $this->_description;
+    }
+
+    function setVersion($version) {
+	$this->_version = $version;
+    }
+
+    function getVersion() {
+	return $this->_version;
+    }
+
+    function getL10Domain() {
+	return $this->getPluginType() . 's_' . $this->getId();
+    }
+
+    function setRequiredCoreApi($requirement) {
+	$this->_requiredCoreApi = $requirement;
+    }
+
+    function getRequiredCoreApi() {
+	return $this->_requiredCoreApi;
+    }
+
+    /**
+     * @access protected
+     */
+    function getPluginType() {
+	return null;
+    }
+}
+?>

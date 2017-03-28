@@ -1,0 +1,96 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A helper class for the NewItems module.
+ * @package NewItems
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class NewItemsHelper {
+
+    /**
+     * Count number of albums with NewItems sort
+     *
+     * @return array GalleryStatus a status code
+     *               int count
+     */
+    function fetchAlbumCount() {
+	global $gallery;
+	$query = 'SELECT COUNT([GalleryAlbumItem::id]) FROM [GalleryAlbumItem] ' .
+		 'WHERE [GalleryAlbumItem::orderBy] LIKE \'%NewItems%\'';
+
+	list ($ret, $results) = $gallery->search($query);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$count = 0;
+	if ($result = $results->nextResult()) {
+	    $count = (int)$result[0];
+	}
+	return array(null, $count);
+    }
+
+    /**
+     * Remove NewItems sort from all albums
+     *
+     * @return GalleryStatus a status code
+     */
+    function resetNewItemSorts() {
+	global $gallery;
+	$query = 'SELECT [GalleryAlbumItem::id] FROM [GalleryAlbumItem] ' .
+		 'WHERE [GalleryAlbumItem::orderBy] LIKE \'%NewItems%\'';
+
+	list ($ret, $results) = $gallery->search($query);
+	if ($ret) {
+	    return $ret;
+	}
+
+	for ($i = 0; $result = $results->nextResult();) {
+	    if ($i++ % 10 == 0) {
+		$gallery->guaranteeTimeLimit(5);
+	    }
+	    $itemId = (int)$result[0];
+	    list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($itemId);
+	    if ($ret) {
+		return $ret;
+	    }
+	    list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId, 'GalleryAlbumItem');
+	    if ($ret) {
+		return $ret;
+	    }
+	    $item->setOrderBy('');
+	    $item->setOrderDirection('');
+	    $ret = $item->save();
+	    if ($ret) {
+		return $ret;
+	    }
+	    $ret = GalleryCoreApi::releaseLocks($lockId);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	return null;
+    }
+}
+?>

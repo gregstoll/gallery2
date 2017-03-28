@@ -1,0 +1,127 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is an interface for adding custom sort orders for displaying items.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class GallerySortInterface_1_2 {
+
+    /**
+     * Return information about this sort
+     *
+     * @return array GalleryStatus a status code
+     *               string localized name
+     *               boolean true for presort
+     */
+    function getSortInfo() {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null, null);
+    }
+
+    /**
+     * Get the query fragments used to perform this sort.
+     * Order by clause may contain %1%, %2% or %3% to reference the corresponding
+     * items in the select clause.
+     * A join should be of the form: JOIN [Class] ON [BASE::ID] = [Class::Column]
+     * Replace "Class" and "Column" with appropriate values, but BASE::ID is literal.
+     * This references the base table and id column in the query.
+     *
+     * @param string $direction either '' for ascending or ' DESC' for descending
+     * @return array GalleryStatus a status code
+     *               string order by clause
+     *               string select clause,
+     *               string optional row matching condition
+     *               string optional join clause
+     */
+    function getSortOrder($direction) {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null, null, null, null);
+    }
+
+    /**
+     * Get information about available sort orders
+     *
+     * @param boolean $includeDefault (optional) false to omit "default sort order" selection
+     * @return array GalleryStatus a status code
+     *               array of orderBy => localized name for sort orders
+     *               array of orderBy => localized name for presorts
+     *               array of orderDirection => localized name for direction
+     * @static
+     */
+    function getAllSortOrders($includeDefault=true) {
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null, null);
+	}
+
+	$orderByList = array(  '' => $module->translate('&laquo; default sort order &raquo;'),
+		    'orderWeight' => $module->translate('Manual sort order'),
+			  'title' => $module->translate('Title'),
+			'summary' => $module->translate('Summary'),
+	   'originationTimestamp' => $module->translate('Origination Date'),
+	      'creationTimestamp' => $module->translate('Creation Date'),
+	  'modificationTimestamp' => $module->translate('Last Changed Date'),
+		    'description' => $module->translate('Description'),
+		       'keywords' => $module->translate('Keywords'),
+		  'pathComponent' => $module->translate('Name'),
+		      'viewCount' => $module->translate('View Count'),
+			 'random' => $module->translate('Random'));
+	if (!$includeDefault) {
+	    array_shift($orderByList);
+	}
+
+	$presortList = array(  '' => $module->translate('&laquo; no presort &raquo;'),
+		    'albumsFirst' => $module->translate('Albums First'),
+		    'viewedFirst' => $module->translate('Most Viewed First'));
+
+	list ($ret, $implIds) =
+	    GalleryCoreApi::getAllFactoryImplementationIds('GallerySortInterface_1_2');
+	if ($ret) {
+	    return array($ret, null, null, null);
+	}
+
+	foreach ($implIds as $sortId => $className) {
+	    list ($ret, $sort) =
+		GalleryCoreApi::newFactoryInstance('GallerySortInterface_1_2', $className);
+	    if ($ret) {
+		return array($ret, null, null, null);
+	    }
+	    list ($ret, $sortName, $isPresort) = $sort->getSortInfo();
+	    if ($ret) {
+		return array($ret, null, null, null);
+	    }
+	    if ($isPresort) {
+		$presortList[$sortId] = $sortName;
+	    } else {
+		$orderByList[$sortId] = $sortName;
+	    }
+	}
+
+	$orderDirectionList = array(
+	     ORDER_ASCENDING => $module->translate('Ascending'),
+	    ORDER_DESCENDING => $module->translate('Descending'));
+
+	return array(null, $orderByList, $presortList, $orderDirectionList);
+    }
+}
+?>

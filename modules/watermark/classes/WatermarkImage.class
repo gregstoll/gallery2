@@ -1,0 +1,538 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryEntity.class');
+
+/**
+ * Representation of an image used for watermarking
+ *
+ * @g2 <class-name>WatermarkImage</class-name>
+ * @g2 <parent-class-name>GalleryEntity</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>1</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package Watermark
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class WatermarkImage extends GalleryEntity {
+
+    /**
+     * Should this watermark be applied to the preferred derivative?
+     *
+     * @g2 <member>
+     * @g2   <member-name>applyToPreferred</member-name>
+     * @g2   <member-type>BOOLEAN</member-type>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var bool $applyToPreferred
+     * @access public
+     */
+    var $applyToPreferred;
+
+    /**
+     * Should this watermark be applied to resize derivatives?
+     *
+     * @g2 <member>
+     * @g2   <member-name>applyToResizes</member-name>
+     * @g2   <member-type>BOOLEAN</member-type>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var int $applyToResizes
+     * @access public
+     */
+    var $applyToResizes;
+
+    /**
+     * Should this watermark be applied to the thumbnail derivative?
+     *
+     * @g2 <member>
+     * @g2   <member-name>applyToThumbnail</member-name>
+     * @g2   <member-type>BOOLEAN</member-type>
+     * @g2 </member>
+     *
+     * @var int $applyToThumbnail
+     * @access public
+     */
+    var $applyToThumbnail;
+
+    /**
+     * The symbolic name of this watermark, eg "My Watermark"
+     *
+     * @g2 <member>
+     * @g2   <member-name>name</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $name
+     * @access public
+     */
+    var $name;
+
+    /**
+     * The watermark image filename, in the g2data/watermark directory
+     *
+     * @g2 <member>
+     * @g2   <member-name>fileName</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <unique/>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $fileName
+     * @access public
+     */
+    var $fileName;
+
+    /**
+     * The mime type of the image.
+     *
+     * @g2 <member>
+     * @g2   <member-name>mimeType</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $mimeType
+     * @access public
+     */
+    var $mimeType;
+
+    /**
+     * The size of the image file.
+     *
+     * @g2 <member>
+     * @g2   <member-name>size</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2 </member>
+     *
+     * @var int $size
+     * @access public
+     */
+    var $size;
+
+    /**
+     * The width of the image.
+     *
+     * @g2 <member>
+     * @g2   <member-name>width</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var int $width
+     * @access public
+     */
+    var $width;
+
+    /**
+     * The height of the image.
+     *
+     * @g2 <member>
+     * @g2   <member-name>height</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var int $height
+     * @access public
+     */
+    var $height;
+
+    /**
+     * The owner of the image
+     *
+     * @g2 <member>
+     * @g2   <member-name>ownerId</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2 </member>
+     *
+     * @var int $ownerId
+     * @access public
+     */
+    var $ownerId;
+
+    /**
+     * The desired location of this watermark on the target
+     * image on the x-axis.  Stored as a string instead of an
+     * integer so that we can have float values.
+     *
+     * @g2 <member>
+     * @g2   <member-name>xPercentage</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>SMALL</member-size>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $xPercentage
+     * @access public
+     */
+    var $xPercentage;
+
+    /**
+     * The desired location of this watermark on the target
+     * image on the y-axis.  Stored as a string instead of an
+     * integer so that we can have float values.
+     *
+     * @g2 <member>
+     * @g2   <member-name>yPercentage</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>SMALL</member-size>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $yPercentage
+     * @access public
+     */
+    var $yPercentage;
+
+    /**
+     * Create a new instance of this type in the persistent store.
+     *
+     * @access public
+     * @param string $inputFileName the path to a data file to be contained
+     * @param string $mimeType the mime type of the new item
+     * @param string $targetName the desired name of the new item
+     * @return GalleryStatus a status code
+     */
+    function create($inputFileName, $mimeType, $targetName=null) {
+	GalleryCoreApi::requireOnce('modules/watermark/classes/WatermarkHelper.class');
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$dir = $this->getWatermarkDir();
+	if (empty($targetName)) {
+	    $targetName = basename($inputFileName);
+	}
+
+	/* Validate the input file */
+	if (empty($inputFileName)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+	if (!$platform->file_exists($inputFileName)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PATH);
+	}
+
+	/*
+	 * Neutralize the file extension to avoid receiving an executable file
+	 * (like a .php or .pl cgi script)
+	 */
+	$targetFilename = str_replace('.', '_', $targetName);
+
+	/* Uniquify filename */
+	while ($platform->file_exists($dir . $targetFilename)) {
+	    $targetFilename = '_' . $targetFilename;
+	}
+
+	list ($ret, $watermarks) = WatermarkHelper::fetchWatermarks();
+	if ($ret) {
+	    return $ret;
+	}
+	$nameMap = array();
+	foreach ($watermarks as $watermark) {
+	    $nameMap[$watermark->getName()] = true;
+	}
+
+	/* Uniquify name */
+	while (isset($nameMap[$targetName])) {
+	    $targetName = '_' . $targetName;
+	}
+
+	$ret = parent::create();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$this->setName($targetName);
+	$this->setFileName($targetFilename);
+	$this->setMimeType($mimeType);
+	$this->setWidth(0);
+	$this->setHeight(0);
+	$this->setXPercentage(100);
+	$this->setYPercentage(100);
+	$this->setApplyToPreferred(false);
+	$this->setApplyToResizes(true);
+	$this->setApplyToThumbnail(true);
+	$this->setOwnerId($gallery->getActiveUserId());
+
+	$newFileName = $dir . $targetFilename;
+	if (!$platform->copy($inputFileName, $newFileName)) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+	}
+
+	$ret = $this->rescan();
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Determine file size and dimensions
+     * @return GalleryStatus a status code
+     */
+    function rescan() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$path = $this->getWatermarkDir() . $this->getFileName();
+	$this->setSize($platform->filesize($path));
+
+	list ($ret, $toolkit) =
+	    GalleryCoreApi::getToolkitByProperty($this->getMimeType(), 'dimensions');
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (isset($toolkit)) {
+	    list ($ret, $dimensions) =
+		$toolkit->getProperty($this->getMimeType(), 'dimensions', $path);
+	    if ($ret) {
+		$ret->addErrorCode(ERROR_BAD_DATA_TYPE);
+		return $ret;
+	    }
+	    $this->setWidth($dimensions[0]);
+	    $this->setHeight($dimensions[1]);
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::save
+     */
+    function save($postEvent=true) {
+	return parent::save($postEvent, 0);
+    }
+
+    /**
+     * @see GalleryEntity::delete
+     */
+    function delete() {
+	global $gallery;
+
+	/* Delete myself */
+	$ret = parent::delete();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Delete our source file */
+	$path = $this->getWatermarkDir() . $this->getFileName();
+	$platform =& $gallery->getPlatform();
+	if (!$platform->unlink($path)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PATH, __FILE__, __LINE__,
+					 "Could not delete $path");
+	}
+
+	return null;
+    }
+
+    /**
+     * Full path to image file
+     *
+     * @return array GalleryStatus a status code,
+     *               string path
+     */
+    function fetchPath() {
+	return array(null, $this->getWatermarkDir() . $this->getFileName());
+    }
+
+    /**
+     * Watermark directory
+     *
+     * @return string Directory where watermark images are stored
+     */
+    function getWatermarkDir() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$slash = $platform->getDirectorySeparator();
+	return $gallery->getConfig('data.gallery.plugins_data') . 'modules/watermark' . $slash;
+    }
+
+    /**
+     * Render image
+     *
+     * @return string content
+     */
+    function render($format, $params) {
+	global $gallery;
+
+	switch($format) {
+	case 'HTML':
+	    $urlGenerator =& $gallery->getUrlGenerator();
+	    $src = $urlGenerator->generateUrl(
+		array('view' => 'core.DownloadItem', 'itemId' => $this->getId(),
+		      'serialNumber' => $this->getSerialNumber()),
+		array('forceFullUrl' => !empty($params['forceFullUrl'])));
+
+	    list ($width, $height) = array($this->getWidth(), $this->getHeight());
+
+	    /* Shrink our dimensions if necessary */
+	    if (isset($params['maxSize'])) {
+		list ($width, $height) =
+		    GalleryUtilities::shrinkDimensionsToFit($width, $height, $params['maxSize']);
+		unset($params['maxSize']);
+	    }
+
+	    $sizeStr = ($width > 0 && $height > 0)
+		? sprintf(' width="%s" height="%s"', $width, $height) : '';
+	    if (!isset($params['alt'])) {
+		$params['alt'] = $this->getFileName();
+	    }
+
+	    $html = sprintf('<img src="%s"%s', $src, $sizeStr);
+	    unset($params['fallback']);
+	    unset($params['forceFullUrl']);
+	    foreach ($params as $attr => $value) {
+		if (isset($value)) {
+		    $html .= " $attr=\"$value\"";
+		}
+	    }
+	    return $html . '/>';
+
+	default:
+	    return null;
+	}
+    }
+
+    /**
+     * So WatermarkImage is displayable with {g->image}
+     */
+    function getRenderer() {
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'WatermarkImage';
+    }
+
+    function getApplyToPreferred() {
+	return $this->applyToPreferred;
+    }
+
+    function setApplyToPreferred($applyToPreferred) {
+	$this->applyToPreferred = $applyToPreferred;
+    }
+
+    function getApplyToResizes() {
+	return $this->applyToResizes;
+    }
+
+    function setApplyToResizes($applyToResizes) {
+	$this->applyToResizes = $applyToResizes;
+    }
+
+    function getApplyToThumbnail() {
+	return $this->applyToThumbnail;
+    }
+
+    function setApplyToThumbnail($applyToThumbnail) {
+	$this->applyToThumbnail = $applyToThumbnail;
+    }
+
+    function getName() {
+	return $this->name;
+    }
+
+    function setName($name) {
+	$this->name = $name;
+    }
+
+    function getFileName() {
+	return $this->fileName;
+    }
+
+    function setFileName($fileName) {
+	$this->fileName = $fileName;
+    }
+
+    function getMimeType() {
+	return $this->mimeType;
+    }
+
+    function setMimeType($mimeType) {
+	$this->mimeType = $mimeType;
+    }
+
+    function getSize() {
+	return $this->size;
+    }
+
+    function setSize($size) {
+	$this->size = $size;
+    }
+
+    function getWidth() {
+	return $this->width;
+    }
+
+    function setWidth($width) {
+	$this->width = $width;
+    }
+
+    function getHeight() {
+	return $this->height;
+    }
+
+    function setHeight($height) {
+	$this->height = $height;
+    }
+
+    function getOwnerId() {
+	return $this->ownerId;
+    }
+
+    function setOwnerId($ownerId) {
+	$this->ownerId = $ownerId;
+    }
+
+    function getXPercentage() {
+	return $this->xPercentage;
+    }
+
+    function setXPercentage($xPercentage) {
+	$this->xPercentage = $xPercentage;
+    }
+
+    function getYPercentage() {
+	return $this->yPercentage;
+    }
+
+    function setYPercentage($yPercentage) {
+	$this->yPercentage = $yPercentage;
+    }
+}
+?>

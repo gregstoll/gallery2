@@ -1,0 +1,419 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Upgrade plugins
+ * @package Upgrade
+ */
+class UpgradeOtherModulesStep extends UpgradeStep {
+    function stepName() {
+	return _('Upgrade Plugins');
+    }
+
+    function processRequest() {
+	global $gallery;
+
+	if (!isset($_REQUEST['upgrade'])) {
+	    return true;
+	}
+
+	/* We want to log all debug output in our upgrade log */
+	$this->_startDebugLog('Upgrade Plugins');
+	$gallery->startRecordingDebugSnippet();
+
+	$totalPlugins = $currentModule = $currentTheme = 0;
+	$templateData['stackTrace'] = '';
+	$template = new StatusTemplate();
+	$template->renderHeader(true);
+
+	$ret = selectAdminUser(true);
+	if ($ret) {
+	    $templateData['errors'][] = _('Unable to initialize Gallery session');
+	    $templateData['stackTrace'] .= $ret->getAsHtml();
+	    unset($_REQUEST['module']);
+	    unset($_REQUEST['theme']);
+	}
+	if (isset($_REQUEST['module']) || isset($_REQUEST['theme'])) {
+	    $storage =& $gallery->getStorage();
+	}
+
+	if (isset($_REQUEST['module']) && is_array($_REQUEST['module'])) {
+	    $totalPlugins += ($totalModules = count($_REQUEST['module']));
+	    foreach (array_keys($_REQUEST['module']) as $moduleId) {
+		$currentModule++;
+		list ($ret, $module) = GalleryCoreApi::loadPlugin('module', $moduleId, true);
+		if ($ret) {
+		    $this->resetL10Domain();
+		    $templateData['errors'][] =
+			sprintf(_('Unable to load the %s module'), $moduleId);
+		    $templateData['stackTrace'] .= $ret->getAsHtml();
+		    continue;
+		}
+		$module->setName($module->translate($module->getName()));
+		$module->setDescription($module->translate($module->getDescription()));
+		$this->resetL10Domain();
+		$gallery->guaranteeTimeLimit(120);
+
+		$template->renderStatusMessage(_('Upgrading modules'),
+		    $module->getName(), $currentModule / $totalModules);
+
+		$ret = $module->installOrUpgrade();
+		$this->resetL10Domain();
+		if ($ret) {
+		    if ($ret->getErrorCode() & ERROR_CONFIGURATION_REQUIRED) {
+			$templateData['needsConfig'][] =
+			    sprintf(_('%s module needs configuration'), $module->getName());
+		    } else {
+			$templateData['errors'][] =
+			    sprintf(_('Unable to upgrade the %s module'), $module->getName());
+			$templateData['stackTrace'] .= $ret->getAsHtml();
+		    }
+		    continue;
+		}
+		$templateData['upgradedModule'][$moduleId] = $module->getName();
+		$ret = $storage->checkPoint();
+		if ($ret) {
+		    $templateData['errors'][] = _('Unable to commit database transaction');
+		    $templateData['stackTrace'] .= $ret->getAsHtml();
+		}
+	    }
+	}
+
+	if (isset($_REQUEST['theme']) && is_array($_REQUEST['theme'])) {
+	    $totalPlugins += ($totalThemes = count($_REQUEST['theme']));
+	    foreach (array_keys($_REQUEST['theme']) as $themeId) {
+		$currentTheme++;
+		list ($ret, $theme) = GalleryCoreApi::loadPlugin('theme', $themeId, true);
+		if ($ret) {
+		    $this->resetL10Domain();
+		    $templateData['errors'][] =
+			sprintf(_('Unable to load the %s theme'), $themeId);
+		    $templateData['stackTrace'] .= $ret->getAsHtml();
+		    continue;
+		}
+		$theme->setName($theme->translate($theme->getName()));
+		$theme->setDescription($theme->translate($theme->getDescription()));
+		$this->resetL10Domain();
+
+		$template->renderStatusMessage(_('Upgrading themes'),
+		    $theme->getName(), $currentTheme / $totalThemes);
+
+		$gallery->guaranteeTimeLimit(120);
+		$ret = $theme->installOrUpgrade();
+		$this->resetL10Domain();
+		if ($ret) {
+		    $templateData['errors'][] =
+			sprintf(_('Unable to upgrade the %s theme'), $theme->getName());
+		    $templateData['stackTrace'] .= $ret->getAsHtml();
+		    continue;
+		}
+		$templateData['upgradedTheme'][$themeId] = $theme->getName();
+		$ret = $storage->checkPoint();
+		if ($ret) {
+		    $templateData['errors'][] = _('Unable to commit database transaction');
+		    $templateData['stackTrace'] .= $ret->getAsHtml();
+		}
+	    }
+	}
+
+	if (isset($_REQUEST['module']) || isset($_REQUEST['theme'])) {
+	    $ret = $storage->commitTransaction();
+	    if ($ret) {
+		$templateData['errors'][] = _('Unable to commit database transaction');
+		$templateData['stackTrace'] .= $ret->getAsHtml();
+	    }
+	}
+	$templateData['bodyFile'] = 'UpgradeOtherModulesSuccess.html';
+	$templateData['anyUpgradeable'] = false;
+	if (!empty($templateData['errors'])) {
+	    $templateData['debug'] = $gallery->stopRecordingDebugSnippet();
+	} else {
+	    if ($totalPlugins < $_REQUEST['upgrade']) {
+		$templateData['anyUpgradeable'] = true;
+	    } else {
+		$this->setComplete(true);
+	    }
+	}
+	$template->hideStatusBlock();
+	$template->renderBodyAndFooter($templateData);
+	return false;
+    }
+
+    function loadTemplateData(&$templateData) {
+	global $gallery;
+	if (!$gallery->getDebug()) {
+	    $gallery->setDebug('buffered');
+	}
+	$gallery->guaranteeTimeLimit(60);
+
+	/*
+	 * We'll need a translator to load up our modules for the
+	 * GalleryPlugin::setGroup() method to work.
+	 */
+	$translator =& $gallery->getTranslator();
+	if (empty($translator)) {
+	    $ret = $gallery->initTranslator();
+	    if ($ret) {
+		return;
+	    }
+	}
+
+	$groupedModules = $groupLabel = array();
+	$moduleInstalledStatus = $pluginIsUpgradeable = $pluginIsCompatible =
+	    $installedVersion = $deactivatedPlugins = array();
+	$templateData['stackTrace'] = '';
+
+	if (empty($templateData['errors'])) {
+	    list ($ret, $moduleList) = GalleryCoreApi::fetchPluginStatus('module', true);
+	    if ($ret) {
+		$templateData['errors'][] = _('Unable to get the module list');
+		$templateData['stackTrace'] .= $ret->getAsHtml();
+	    }
+	    list ($ret, $installedModules) = GalleryCoreApi::fetchPluginList('module');
+	    if ($ret) {
+		$templateData['errors'][] = _('Unable to get the module list');
+		$templateData['stackTrace'] .= $ret->getAsHtml();
+	    }
+	    foreach ($installedModules as $moduleId => $data) {
+		if ($data['active'] && !isset($moduleList[$moduleId])) {
+		    $deactivatedPlugins['module'][] = $moduleId;
+		}
+	    }
+	}
+	if (empty($templateData['errors'])) {
+	    list ($ret, $themeList) = GalleryCoreApi::fetchPluginStatus('theme', true);
+	    if ($ret) {
+		$templateData['errors'][] = _('Unable to get the theme list');
+		$templateData['stackTrace'] .= $ret->getAsHtml();
+	    }
+	    list ($ret, $installedThemes) = GalleryCoreApi::fetchPluginList('theme');
+	    if ($ret) {
+		$templateData['errors'][] = _('Unable to get the theme list');
+		$templateData['stackTrace'] .= $ret->getAsHtml();
+	    }
+	    foreach ($installedThemes as $themeId => $data) {
+		if ($data['active'] && !isset($themeList[$themeId])) {
+		    $deactivatedPlugins['theme'][] = $themeId;
+		}
+	    }
+	}
+
+	if (empty($templateData['errors'])) {
+	    foreach (array_keys($moduleList) as $moduleId) {
+		list ($ret, $modulePlugin) = GalleryCoreApi::loadPlugin('module', $moduleId, true);
+		if ($ret) {
+		    $this->resetL10Domain();
+		    $templateData['errors'][] =
+			sprintf(_('Unable to load the %s module'), $moduleId);
+		    $templateData['stackTrace'] .= $ret->getAsHtml();
+		} else {
+		    $pluginIsCompatible['module'][$moduleId] =
+			GalleryCoreApi::isPluginCompatibleWithApis($modulePlugin);
+		    if (!$pluginIsCompatible['module'][$moduleId]) {
+			list ($ret, $isActive) = $modulePlugin->isActive();
+			if ($ret) {
+			    $this->resetL10Domain();
+			    $templateData['errors'][] =
+				sprintf(_('Unable to query the %s module'), $moduleId);
+			    $templateData['stackTrace'] .= $ret->getAsHtml();
+			    continue;
+			}
+
+			if ($isActive) {
+			    $deactivatedPlugins['module'][] = $moduleId;
+			}
+		    }
+
+		    $modulePlugin->setName($modulePlugin->translate($modulePlugin->getName()));
+		    $modulePlugin->setDescription(
+			$modulePlugin->translate($modulePlugin->getDescription()));
+		    $modules[$moduleId] = $modulePlugin;
+		    $this->resetL10Domain();
+		}
+	    }
+
+	    uksort($modules, array($this, '_sortModules'));
+	    foreach (array_keys($modules) as $moduleId) {
+		$module =& $modules[$moduleId];
+		$pluginIsUpgradeable['module'][$moduleId] =
+		    !empty($moduleList[$moduleId]['version']) &&
+		    $moduleList[$moduleId]['version'] != $module->getVersion() &&
+		    $pluginIsCompatible['module'][$moduleId];
+		$currentVersion[$moduleId] = $moduleList[$moduleId]['version'];
+
+		$group = $module->getGroup();
+		if (empty($group)) {
+		    $group = array('group' => 'others', 'groupLabel' => _('Other'));
+		}
+		$groupedModules[$group['group']][$moduleId] =& $module;
+		$groupLabel[$group['group']] = $group['groupLabel'];
+		$groupType[$group['group']] = 'module';
+	    }
+
+	    foreach (array_keys($themeList) as $themeId) {
+		list ($ret, $themePlugin) = GalleryCoreApi::loadPlugin('theme', $themeId, true);
+		if ($ret) {
+		    $this->resetL10Domain();
+		    $templateData['errors'][] =
+			sprintf(_('Unable to load the %s theme'), $themeId);
+		    $templateData['stackTrace'] .= $ret->getAsHtml();
+		} else {
+		    $pluginIsCompatible['theme'][$themeId] =
+			GalleryCoreApi::isPluginCompatibleWithApis($themePlugin);
+		    if (!$pluginIsCompatible['theme'][$themeId]) {
+			list ($ret, $isActive) = $themePlugin->isActive();
+			if ($ret) {
+			    $this->resetL10Domain();
+			    $templateData['errors'][] =
+				sprintf(_('Unable to query the %s theme'), $themeId);
+			    $templateData['stackTrace'] .= $ret->getAsHtml();
+			    continue;
+			}
+
+			if ($isActive) {
+			    $deactivatedPlugins['theme'][] = $themeId;
+			}
+		    }
+
+		    $themePlugin->setName($themePlugin->translate($themePlugin->getName()));
+		    $themePlugin->setDescription(
+			$themePlugin->translate($themePlugin->getDescription()));
+		    $themes[$themeId] = $themePlugin;
+		    $this->resetL10Domain();
+		}
+	    }
+
+	    ksort($themes);
+	    $groupLabel['themes'] = _('Themes');
+	    $groupType['themes'] = 'theme';
+	    foreach (array_keys($themes) as $themeId) {
+		$theme =& $themes[$themeId];
+		$pluginIsUpgradeable['theme'][$themeId] =
+		   !empty($themeList[$themeId]['version']) &&
+		    $themeList[$themeId]['version'] != $theme->getVersion() &&
+		    $pluginIsCompatible['theme'][$themeId];
+		$currentVersion[$themeId] = $themeList[$themeId]['version'];
+
+		$groupedModules['themes'][$themeId] =& $theme;
+	    }
+	    ksort($groupedModules);
+	    $templateData['bodyFile'] = 'UpgradeOtherModulesRequest.html';
+	}
+
+	/* Deactivate any plugins that need it */
+	eval('
+	    class MockTheme extends GalleryTheme {
+		function MockTheme($pluginId) {
+		  $this->_pluginId = $pluginId;
+		}
+
+		function getId() {
+		  return $this->_pluginId;
+		}
+	    }
+
+	    class MockModule extends GalleryModule {
+		function MockModule($pluginId) {
+		  $this->_pluginId = $pluginId;
+		}
+
+		function getId() {
+		  return $this->_pluginId;
+		}
+	    }
+	');
+
+	foreach (array('theme' => 'MockTheme',
+		       'module' => 'MockModule') as $type => $className) {
+	    if (empty($deactivatedPlugins[$type])) {
+		continue;
+	    }
+
+	    foreach ($deactivatedPlugins[$type] as $pluginId) {
+		$plugin = new $className($pluginId);
+		list ($ret, $ignored) = $plugin->deactivate(false);
+		if ($ret) {
+		    $this->resetL10Domain();
+		    if ($type == 'theme') {
+			$templateData['errors'][] =
+			    sprintf(_('Unable to deactivate the %s theme'), $pluginId);
+		    } else {
+			$templateData['errors'][] =
+			    sprintf(_('Unable to deactivate the %s module'), $pluginId);
+		    }
+		    $templateData['stackTrace'] .= $ret->getAsHtml();
+		}
+	    }
+	}
+
+	$templateData['groupedModules'] =& $groupedModules;
+	$templateData['groupLabel'] = $groupLabel;
+	$templateData['groupType'] = $groupType;
+	$templateData['pluginIsUpgradeable'] = $pluginIsUpgradeable;
+	$templateData['currentVersion'] = $currentVersion;
+	$templateData['bodyFile'] = 'UpgradeOtherModulesRequest.html';
+	$templateData['anyUpgradeable'] = false;
+	$templateData['deactivatedPlugins'] = $deactivatedPlugins;
+
+	$templateData['pluginIsCompatible'] = $pluginIsCompatible;
+	if (!empty($templateData['errors'])) {
+	    $templateData['debug'] = $gallery->getDebugBuffer();
+	} else if (!empty($pluginIsUpgradeable)) {
+	    foreach ($pluginIsUpgradeable as $pluginType) {
+		foreach ($pluginType as $tmp) {
+		    if ($tmp) {
+			$templateData['anyUpgradeable'] = true;
+			break;
+		    }
+		}
+	    }
+	    if (!$templateData['anyUpgradeable']) {
+		$this->setComplete(true);
+	    }
+	}
+    }
+
+    function isRedoable() {
+	return false;
+    }
+
+    function isOptional() {
+	return true;
+    }
+
+    /**
+     * Put GD at the end of the list so that it's the lowest priority toolkit.  This is a hack,
+     * that we should replace with a more sophisticated system in the future.
+     *
+     * Note: we do the same in the installer
+     */
+    function _sortModules($a, $b) {
+	if ($a == 'gd' && $b == 'gd') {
+	    return 0;
+	} else if ($a == 'gd') {
+	    return 1;
+	} else if ($b == 'gd') {
+	    return -1;
+	} else {
+	    return strcmp($a, $b);
+	}
+    }
+}
+?>

@@ -1,0 +1,538 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryFileSystemEntity.class');
+
+/**
+ * Abstract base class for all objects in the Gallery composite tree.
+ *
+ * Container for all functionality and data common objects that Gallery can deal with.
+ * Each GalleryItem has the capacity to own other GalleryItems in a parent-child relationship.
+ * That capacity can be enabled or disabled by subclasses of GalleryItem.
+ *
+ * @g2 <class-name>GalleryItem</class-name>
+ * @g2 <parent-class-name>GalleryFileSystemEntity</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>2</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class GalleryItem extends GalleryFileSystemEntity {
+
+    /**
+     * Can this item contain children?
+     * @var boolean
+     *
+     * @g2 <member>
+     * @g2   <member-name>canContainChildren</member-name>
+     * @g2   <member-type>BOOLEAN</member-type>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $canContainChildren;
+
+    /**
+     * The (long) description of this item
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>description</member-name>
+     * @g2   <member-type>TEXT</member-type>
+     * @g2   <member-size>SMALL</member-size>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     */
+    var $description;
+
+    /**
+     * A set of keywords that describe this item
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>keywords</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>LARGE</member-size>
+     * @g2   <indexed/>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     */
+    var $keywords;
+
+    /**
+     * The id of the User who owns this item
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>ownerId</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <indexed/>
+     * @g2   <required/>
+     * @g2 </member>
+     */
+    var $ownerId;
+
+    /**
+     * The renderer for drawing this item
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>renderer</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2 </member>
+     */
+    var $renderer;
+
+    /**
+     * The summary of this item
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>summary</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>LARGE</member-size>
+     * @g2   <indexed/>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     */
+    var $summary;
+
+    /**
+     * The (short) title of this item
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>title</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <indexed/>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     */
+    var $title;
+
+    /**
+     * Date and time marking the beginning of the view count
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>viewedSinceTimestamp</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $viewedSinceTimestamp;
+
+    /**
+     * Date and time when this item was originally captured (i.e. photographed, filmed, etc)
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>originationTimestamp</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <required/>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     */
+    var $originationTimestamp;
+
+
+    /**
+     * Create a new instance of this GalleryEntity in the persistent store.
+     * Let the parent do its work, then add any initialization specific to this class.
+     *
+     * @param int $parentId the id of the GalleryEntity parent of this object
+     * @param string $path the path component of this new object
+     * @param boolean $canContainChildren (optional) Used for legal path component characters.
+     *        Defaults to false.
+     * @return GalleryStatus a status code
+     */
+    function create($parentId, $path, $canContainChildren=false) {
+	global $gallery;
+
+	if (!isset($path) || !isset($parentId)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	list ($ret, $parent) = GalleryCoreApi::loadEntitiesById($parentId, 'GalleryItem');
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (!$parent->getCanContainChildren()) {
+	    return GalleryCoreApi::error(ERROR_ILLEGAL_CHILD);
+	}
+
+	$ret = parent::create($parentId, $path, $canContainChildren);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Record the owner */
+	$this->setOwnerId($gallery->getActiveUserId());
+
+	/* Initialize the viewedSince timestamp */
+	$this->setViewedSinceTimestamp(time());
+
+	/* By default, items can't contain children */
+	$this->setCanContainChildren($canContainChildren);
+
+	/* Origination timestamp defaults to now */
+	$this->setOriginationTimestamp(time());
+
+	/* Init other fields */
+	$this->setTitle(null);
+	$this->setSummary(null);
+	$this->setDescription(null);
+	$this->setKeywords(null);
+	$this->setRenderer(null);
+
+	return null;
+    }
+
+    /**
+     * Create a root level instance of this GalleryEntity in the persistent store.
+     * Let the parent do its work, then add any initialization specific to this class.
+     *
+     * @return GalleryStatus a status code
+     */
+    function createRoot() {
+	global $gallery;
+
+	$ret = parent::createRoot();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Record the owner */
+	$this->setOwnerId($gallery->getActiveUserId());
+
+	/* Initialize the viewedSince timestamp */
+	$this->setViewedSinceTimestamp(time());
+
+	/* Origination timestamp defaults to now */
+	$this->setOriginationTimestamp(time());
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::createLink
+     */
+    function createLink($entity, $parentId) {
+	global $gallery;
+
+	$ret = parent::createLink($entity, $parentId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $parent) = GalleryCoreApi::loadEntitiesById($parentId, 'GalleryItem');
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (!$parent->getCanContainChildren()) {
+	    return GalleryCoreApi::error(ERROR_ILLEGAL_CHILD);
+	}
+
+	/* Record the owner */
+	$this->setOwnerId($gallery->getActiveUserId());
+
+	/* Initialize the viewedSince timestamp */
+	$this->setViewedSinceTimestamp(time());
+
+	/* By default, items can't contain children */
+	$this->setCanContainChildren(false);
+
+	/* Copy over anything else from the target entity */
+	$this->setDescription($entity->getDescription());
+	$this->setKeywords($entity->getKeywords());
+	$this->setSummary($entity->getSummary());
+	$this->setTitle($entity->getTitle());
+	$this->setOriginationTimestamp($entity->getOriginationTimestamp());
+	$this->setRenderer($entity->getRenderer());
+
+	return null;
+    }
+
+    /**
+     * Delete this GalleryEntity.  Delete all of its children also, if it has any.
+     * @return GalleryStatus a status code
+     */
+    function delete() {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+
+	/* Delete any children */
+	$query = '
+	SELECT
+	  [GalleryChildEntity::id]
+	FROM
+	  [GalleryChildEntity]
+	WHERE
+	  [GalleryChildEntity::parentId] = ?
+	';
+	list ($ret, $searchResults) = $gallery->search($query, array($this->getId()));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$i = 0;
+	while ($result = $searchResults->nextResult()) {
+	    $ret = GalleryCoreApi::deleteEntityById($result[0], 'GalleryChildEntity');
+	    /*
+	     * Deletes can cascade in interesting ways.  For example, deleting a derivative will
+	     * get rid of any other derivatives that are sourced to it, so it's possible that
+	     * deleting children here can lead to a MISSING_OBJECT result unless we re-run the
+	     * parent/child query each time.  Easier to just ignore the MISSING_OBJECT error
+	     * since we only care that it's gone.
+	     */
+	    if ($ret && !($ret->getErrorCode() & ERROR_MISSING_OBJECT)) {
+		return $ret;
+	    }
+	    if (!(++$i % 30)) {
+		$ret = $storage->checkPoint();
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	/* Delete myself */
+	$ret = parent::delete();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Remove all my attributes */
+	$ret = GalleryCoreApi::removeItemAttributes($this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($this->getParentId()) {
+	    $event = GalleryCoreApi::newEvent('Gallery::ViewableTreeChange');
+	    $event->setData(array('userId' => null, 'itemId' => $this->getParentId()));
+	    list ($ret) = GalleryCoreApi::postEvent($event);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    /* Instruct G2 to "touch" modification timestamp of parent album at end of request */
+	    $gallery->addShutdownAction(array('GalleryCoreApi', 'updateModificationTimestamp'),
+					array($this->getParentId()));
+	}
+
+	return null;
+    }
+
+    /**
+     * Move item to a new parent
+     *
+     * @param int $newParentId the id of the new parent GalleryItem
+     * @return GalleryStatus a status code
+     */
+    function move($newParentId) {
+	$parentId = $this->getParentId();
+	$ret = parent::move($newParentId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$event = GalleryCoreApi::newEvent('Gallery::ViewableTreeChange');
+	$event->setData(array('userId' => null, 'itemId' =>
+	    empty($parentId) ? $this->getParentId() : array($parentId, $this->getParentId())));
+	list ($ret) = GalleryCoreApi::postEvent($event);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Set the new parent sequence */
+	list ($ret, $newParentSequence) = GalleryCoreApi::fetchParentSequence($this->getParentId());
+	if ($ret) {
+	    return $ret;
+	}
+	$newParentSequence[] = $this->getParentId();
+	$ret = GalleryCoreApi::setParentSequence($this->getId(), $newParentSequence);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Save the changes to this GalleryItem.
+     *
+     * @return GalleryStatus a status code
+     */
+    function save($postEvent=true) {
+	global $gallery;
+	$isNew = $this->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED);
+
+	$changedParent = $this->isModified('parentId');
+	if ($changedParent) {
+	    $oldParentId = $this->getOriginalValue('parentId');
+	}
+
+	$setAclId = 0;
+	if ($isNew && $this->getParentId()) {
+	    list ($ret, $setAclId) = GalleryCoreApi::fetchAccessListId($this->getParentId());
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	/* Save myself */
+	$ret = parent::save($postEvent, $setAclId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($isNew) {
+	    if ($this->getParentId()) {
+		list ($ret, $parentSequence) =
+		    GalleryCoreApi::fetchParentSequence($this->getParentId());
+		if ($ret) {
+		    return $ret;
+		}
+		$parentSequence[] = $this->getParentId();
+	    } else {
+		$parentSequence = array();
+	    }
+
+	    /* Create an empty attribute entry */
+	    $ret = GalleryCoreApi::createItemAttributes($this->getId(), $parentSequence);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if ($this->getParentId()) {
+		$event = GalleryCoreApi::newEvent('Gallery::ViewableTreeChange');
+		$event->setData(array('userId' => null, 'itemId' => $this->getParentId()));
+		list ($ret) = GalleryCoreApi::postEvent($event);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+	if (($isNew || $changedParent) && $this->getParentId()) {
+	    /* Instruct G2 to "touch" modification timestamp of parent album at end of request */
+	    $gallery->addShutdownAction(array('GalleryCoreApi', 'updateModificationTimestamp'),
+					array($this->getParentId()));
+	}
+	if (!empty($oldParentId)) {
+	    $gallery->addShutdownAction(array('GalleryCoreApi', 'updateModificationTimestamp'),
+					array($oldParentId));
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryItem';
+    }
+
+    function getCanContainChildren() {
+	return $this->canContainChildren;
+    }
+
+    function setCanContainChildren($canContainChildren) {
+	$this->canContainChildren = $canContainChildren;
+    }
+
+    function getDescription() {
+	return $this->description;
+    }
+
+    function setDescription($description) {
+	$this->description = $description;
+    }
+
+    function getKeywords() {
+	return $this->keywords;
+    }
+
+    function setKeywords($keywords) {
+	$this->keywords = $keywords;
+    }
+
+    function getOwnerId() {
+	return $this->ownerId;
+    }
+
+    function setOwnerId($ownerId) {
+	$this->ownerId = $ownerId;
+    }
+
+    function getRenderer() {
+	return $this->renderer;
+    }
+
+    function setRenderer($renderer) {
+	$this->renderer = $renderer;
+    }
+
+    function getSummary() {
+	return $this->summary;
+    }
+
+    function setSummary($summary) {
+	$this->summary = $summary;
+    }
+
+    function getTitle() {
+	return $this->title;
+    }
+
+    function setTitle($title) {
+	$this->title = $title;
+    }
+
+    function getViewedSinceTimestamp() {
+	return $this->viewedSinceTimestamp;
+    }
+
+    function setViewedSinceTimestamp($viewedSinceTimestamp) {
+	$this->viewedSinceTimestamp = $viewedSinceTimestamp;
+    }
+
+    function getOriginationTimestamp() {
+	return $this->originationTimestamp;
+    }
+
+    function setOriginationTimestamp($originationTimestamp) {
+	$this->originationTimestamp = $originationTimestamp;
+    }
+}
+?>

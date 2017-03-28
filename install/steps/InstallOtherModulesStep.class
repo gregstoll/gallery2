@@ -1,0 +1,301 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Install plugins.
+ * @package Install
+ */
+class InstallOtherModulesStep extends InstallStep {
+
+    function stepName() {
+	return _('Install Plugins');
+    }
+
+    function processRequest() {
+	$templateData = array();
+	$this->_init($templateData);
+
+	if (!isset($_REQUEST['activate'])) {
+	    return true;
+	}
+
+	global $gallery;
+	$currentModule = $totalModules = 0;
+	$template = new StatusTemplate();
+
+	$ret = $this->_selectAdminUser();
+	if ($ret) {
+	    $templateData['errors'][] = _('Unable to initialize our Gallery session');
+	    $templateData['stackTrace'][] = $ret->getAsHtml();
+	    unset($_REQUEST['module']);
+	}
+	if (isset($_REQUEST['module'])) {
+	    $storage =& $gallery->getStorage();
+	}
+
+	if (!empty($_REQUEST['module']) && is_array($_REQUEST['module'])) {
+	    uksort($_REQUEST['module'], array($this, '_sortModules'));
+	    $template->renderHeader(true);
+	    $totalModules = count($_REQUEST['module']);
+	    foreach (array_keys($_REQUEST['module']) as $moduleId) {
+		$currentModule++;
+		list ($ret, $module) = GalleryCoreApi::loadPlugin('module', $moduleId);
+		if ($ret) {
+		    $this->resetL10Domain();
+		    $templateData['errors'][] =
+			sprintf(_('Unable to load the %s module'), $moduleId);
+		    $templateData['stackTrace'][] = $ret->getAsHtml();
+		    continue;
+		}
+		$module->setName($module->translate($module->getName()));
+		$module->setDescription($module->translate($module->getDescription()));
+		$this->resetL10Domain();
+		$gallery->guaranteeTimeLimit(120);
+
+		$template->renderStatusMessage(_('Installing modules'),
+		    $module->getName(), $currentModule / $totalModules);
+
+		$ret = $module->installOrUpgrade();
+		if ($ret) {
+		    $this->resetL10Domain();
+		    $templateData['errors'][] =
+			sprintf(_('Unable to install the %s module'), $module->getName());
+		    $templateData['stackTrace'][] = $ret->getAsHtml();
+		    continue;
+		}
+		$moduleInstalled[$moduleId] = true;
+
+		$templateData['installedModule'][$moduleId] = $module->getName();
+		$ret = $storage->checkPoint();
+		if ($ret) {
+		    $this->resetL10Domain();
+		    $templateData['errors'][] = _('Unable to commit database transaction');
+		    $templateData['stackTrace'][] = $ret->getAsHtml();
+		}
+
+		list ($ret, $success) = $module->autoConfigure();
+		if ($ret) {
+		    $this->resetL10Domain();
+		    $templateData['errors'][] =
+			    sprintf(_('Unable to activate the %s module'), $module->getName());
+		    $templateData['stackTrace'][] = $ret->getAsHtml();
+		    continue;
+		}
+
+		if (!$success) {
+		    /* This is not really an error, just a warning */
+		    $templateData['needsConfiguration'][$moduleId] = $module->getName();
+		    $this->resetL10Domain();
+		    continue;
+		}
+
+		list ($ret, $redirect) = $module->activate();
+		$this->resetL10Domain();
+		if ($ret) {
+		    $templateData['errors'][] =
+			    sprintf(_('Unable to activate the %s module'), $module->getName());
+		    $templateData['stackTrace'][] = $ret->getAsHtml();
+		    continue;
+		}
+		$templateData['activated'][$moduleId] = $module->getName();
+		continue;
+	    }
+	    $template->hideStatusBlock();
+	} else {
+	    $template->renderHeader();
+	}
+
+	if (!empty($_REQUEST['module'])) {
+	    $ret = $storage->commitTransaction();
+	    if ($ret) {
+		$templateData['errors'][] = _('Unable to commit database transaction');
+		$templateData['stackTrace'][] = $ret->getAsHtml();
+	    }
+	}
+	$templateData['bodyFile'] = 'InstallOtherModulesSuccess.html';
+	$templateData['anyInstallable'] = false;
+	if (!empty($templateData['errors'])) {
+	    $templateData['debug'] = $gallery->getDebugBuffer();
+	} else {
+	    if ($totalModules < $_REQUEST['install']) {
+		$templateData['anyInstallable'] = true;
+	    } else {
+		$this->setComplete(true);
+	    }
+	}
+	$template->renderBodyAndFooter($templateData);
+	return false;
+    }
+
+    function loadTemplateData(&$templateData) {
+	$this->_init($templateData);
+	$groupedModules = $groupLabel = $moduleInstalled = $moduleInvalid = array();
+
+	if (empty($templateData['errors'])) {
+	    list ($ret, $moduleList) = GalleryCoreApi::fetchPluginStatus('module', true);
+	    if ($ret) {
+		$templateData['errors'][] = _('Unable to get the module list');
+		$templateData['stackTrace'][] = $ret->getAsHtml();
+	    }
+	}
+
+	if (empty($templateData['errors'])) {
+	    foreach (array_keys($moduleList) as $moduleId) {
+		list ($ret, $modulePlugin) = GalleryCoreApi::loadPlugin('module', $moduleId);
+		if ($ret) {
+		    $this->resetL10Domain();
+		    $templateData['warnings'][] =
+			sprintf(_('Unable to load the %s module'), $moduleId);
+		    $templateData['stackTrace'][] = $ret->getAsHtml();
+		} else {
+		    $modulePlugin->setName($modulePlugin->translate($modulePlugin->getName()));
+		    $modulePlugin->setDescription(
+			$modulePlugin->translate($modulePlugin->getDescription()));
+		    $modules[$moduleId] = $modulePlugin;
+		    $this->resetL10Domain();
+		}
+	    }
+
+	    uksort($modules, array($this, '_sortModules'));
+	    foreach (array_keys($modules) as $moduleId) {
+		$moduleInstalled[$moduleId] = !empty($moduleList[$moduleId]['version']);
+		$module =& $modules[$moduleId];
+		$moduleInvalid[$moduleId] = !GalleryCoreApi::isPluginCompatibleWithApis($module);
+
+		$group = $module->getGroup();
+		if (empty($group)) {
+		    $group = array('group' => 'others', 'groupLabel' => _('Other'));
+		}
+		$groupedModules[$group['group']][$moduleId] =& $module;
+		$groupLabel[$group['group']] = $group['groupLabel'];
+	    }
+	}
+
+	$templateData['groupedModules'] =& $groupedModules;
+	$templateData['groupLabel'] = $groupLabel;
+	$templateData['moduleInstalled'] = $moduleInstalled;
+	$templateData['moduleInvalid'] = $moduleInvalid;
+	$templateData['bodyFile'] = 'InstallOtherModulesRequest.html';
+
+	$templateData['anyInstallable'] = false;
+	foreach ($moduleInstalled as $moduleId => $tmp) {
+	    if (!$tmp) {
+		$templateData['anyInstallable'] = true;
+		break;
+	    }
+	}
+	if (!$templateData['anyInstallable']) {
+	    $this->setComplete(true);
+	}
+    }
+
+    function _init(&$templateData) {
+	require_once(dirname(__FILE__) . '/../../modules/core/classes/GalleryDataCache.class');
+	$cacheKey = 'Installer::installOtherModulesStepInitialized';
+	if (!GalleryDataCache::containsKey($cacheKey)) {
+	    /*
+	     * Disable the data cache before initializing.  If we don't do this *first* then some
+	     * data (like factory registrations) will get cached now, and then the modules won't be
+	     * able to update it later on.
+	     */
+	    GalleryDataCache::setFileCachingEnabled(false);
+
+	    if (!defined('GALLERY_CONFIG_DIR')) {
+		define('GALLERY_CONFIG_DIR', $_SESSION['configPath']);
+	    }
+	    require_once(dirname(__FILE__) . '/../../bootstrap.inc');
+	    require_once(dirname(__FILE__) . '/../../init.inc');
+	    $ret = GalleryInitFirstPass(array('debug' => 'buffered',
+					      'noDatabase' => true,
+					      'activeLanguage' => $_SESSION['language']));
+	    if ($ret) {
+		$templateData['errors'][] = _('Unable to initialize our Gallery data');
+		$templateData['stackTrace'][] = $ret->getAsHtml();
+	    }
+	    if (empty($templateData['errors'])) {
+		$ret = $this->_selectAdminUser();
+		if ($ret) {
+		    $templateData['errors'][] = _('Unable to initialize our Gallery session');
+		    $templateData['stackTrace'][] = $ret->getAsHtml();
+		}
+	    }
+	    GalleryDataCache::put($cacheKey, true);
+	}
+    }
+
+    function isRedoable() {
+	return false;
+    }
+
+    function isOptional() {
+	return true;
+    }
+
+    /**
+     * Find admin user and set as active user.
+     * @return GalleryStatus a status code
+     */
+    function _selectAdminUser() {
+	global $gallery;
+
+	list ($ret, $siteAdminGroupId) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $adminUserInfo) = GalleryCoreApi::fetchUsersForGroup($siteAdminGroupId, 1);
+	if ($ret) {
+	    return $ret;
+	}
+	if (empty($adminUserInfo)) {
+	    return GalleryCoreApi::error(ERROR_MISSING_VALUE);
+	}
+	$adminUserInfo = array_keys($adminUserInfo);
+	list ($ret, $adminUser) =
+	    GalleryCoreApi::loadEntitiesById($adminUserInfo[0], 'GalleryUser');
+	if ($ret) {
+	    return $ret;
+	}
+
+	$gallery->setActiveUser($adminUser);
+	$session =& $gallery->getSession();
+	$session->put('isInstall', true);
+	return null;
+    }
+
+    /**
+     * Put GD at the end of the list so that it's the lowest priority toolkit.  This is a hack,
+     * that we should replace with a more sophisticated system in the future.
+     *
+     * Note: we do the same in the upgrader
+     */
+    function _sortModules($a, $b) {
+	if ($a == 'gd' && $b == 'gd') {
+	    return 0;
+	} else if ($a == 'gd') {
+	    return 1;
+	} else if ($b == 'gd') {
+	    return -1;
+	} else {
+	    return strcmp($a, $b);
+	}
+    }
+}
+?>

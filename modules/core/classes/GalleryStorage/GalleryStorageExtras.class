@@ -1,0 +1,2233 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Extended functionality in GalleryStorage that's not generally required for
+ * simply viewing albums and photos.
+ * @package GalleryCore
+ * @subpackage Storage
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17988 $
+ */
+class GalleryStorageExtras /* the other half of GalleryStorage */ {
+    /**
+     * @param GalleryStorage $galleryStorage the database storage instance
+     */
+    function GalleryStorageExtras(&$galleryStorage) {
+	$this->_gs =& $galleryStorage;
+    }
+
+    /**
+     * Return a non transactional database connection.
+     * On occasion we'll need a non-transactional connection to do things like locking and
+     * sequence handling, since they have to be consistent across may concurrent requests.
+     * @return array GalleryStatus a status code
+     *               ADOdb a database connection
+     */
+    function _getNonTransactionalDatabaseConnection() {
+	if ($this->_gs->_isTransactional) {
+	    if (empty($this->_gs->_nonTransactionalDb)) {
+		list ($ret, $this->_gs->_nonTransactionalDb) = $this->_gs->_getConnection(true);
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	    return array(null, $this->_gs->_nonTransactionalDb);
+	} else {
+	    $ret = $this->_dbInit();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    return array(null, $this->_gs->_db);
+	}
+    }
+
+    /**
+     * Connect to database if needed and optionally guarantee db transaction.
+     * @return GalleryStatus a status code
+     * @access private
+     */
+    function _dbInit($transaction=false) {
+	if (!isset($this->_gs->_db)) {
+	    list ($ret, $this->_gs->_db) = $this->_gs->_getConnection();
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	if ($transaction) {
+	    $ret = $this->_gs->_guaranteeTransaction();
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::loadEntities
+     */
+    function loadEntities($ids) {
+	global $gallery;
+	$ret = $this->_dbInit();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	foreach ($ids as $idx => $id) {
+	    $ids[$idx] = (int)$id;
+	}
+
+	/* Identify all the ids at once */
+	list ($ret, $types) = $this->_identifyEntities($ids);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Separate the ids by type */
+	$classNames = array();
+	$gallery->guaranteeTimeLimit(5);
+	for ($i = 0; $i < count($ids); $i++) {
+	    if (empty($types[$i])) {
+		return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT, __FILE__, __LINE__,
+						  "Missing object for id $ids[$i]"), null);
+	    }
+	    $classNames[$types[$i]][$ids[$i]] = 1;
+	}
+
+	/* Load them in groups */
+	foreach ($classNames as $className => $targetIdHash) {
+	    $gallery->guaranteeTimeLimit(5);
+
+	    /* Get unique target ids */
+	    $targetIds = array_keys($targetIdHash);
+
+	    /* Get our member info for this class */
+	    list ($ret, $memberInfo) = $this->describeEntity($className);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $idCol = $this->_gs->_translateColumnName('id');
+
+	    /* Build up our query */
+	    $columns = $tables = $where = $memberData = $callbacks = array();
+	    $markers = GalleryUtilities::makeMarkers(count($targetIds));
+	    $target = $className;
+	    while ($target) {
+		foreach ($memberInfo[$target]['members'] as $columnName => $columnInfo) {
+		    list ($tableName, $unused) = $this->_gs->_translateTableName($target);
+		    $memberData[] = $columnInfo;
+		    $callbacks[] = $columnName;
+		    $columns[$tableName . '.' . $this->_gs->_translateColumnName($columnName)] = 1;
+		    $tables[$tableName] = 1;
+		}
+		$target = $memberInfo[$target]['parent'];
+	    }
+	    $tables = array_keys($tables);
+	    $columns = array_keys($columns);
+
+	    for ($i = 0; $i < count($tables); $i++) {
+		if ($i == 0) {
+		    $where[] = $tables[$i] . '.' . $idCol . ' IN (' . $markers . ')';
+		} else {
+		    $where[] = $tables[$i] . '.' . $idCol . '=' . $tables[0] . '.' . $idCol;
+		}
+	    }
+
+	    $query = 'SELECT ';
+	    $query .= implode(', ', $columns);
+	    $query .= ' FROM ';
+	    $query .= implode(', ', $tables);
+	    $query .= ' WHERE ';
+	    $query .= implode(' AND ', $where);
+
+	    /* Execute the query */
+	    $this->_gs->_traceStart();
+	    $recordSet = $this->_gs->_db->Execute($query, $targetIds);
+	    $this->_gs->_traceStop();
+	    if ($recordSet) {
+		if ($recordSet->RecordCount() != count($targetIds)) {
+		    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT),
+				 null);
+		}
+
+		/* Process all the results */
+		$j = 0;
+		while ($row = $recordSet->FetchRow()) {
+		    if (++$j % 20 == 0) {
+			$gallery->guaranteeTimeLimit(5);
+		    }
+
+		    if (!class_exists($className)) {
+			GalleryCoreApi::requireOnce(
+			    "modules/{$memberInfo[$className]['module']}/classes/$className.class");
+		    }
+		    $entity = new $className;
+
+		    if (empty($entity)) {
+			return array(GalleryCoreApi::error(ERROR_BAD_DATA_TYPE),
+				     null);
+		    }
+
+		    for ($i = 0; $i < count($callbacks); $i++) {
+			$value = $this->_gs->_normalizeValue($row[$i], $memberData[$i], true);
+
+			/* Store the value in the object */
+			$entity->$callbacks[$i] = $value;
+			$entity->_persistentStatus['originalValue'][$callbacks[$i]] = $value;
+		    }
+
+		    $entity->resetOriginalValues();
+		    $entities[$entity->id] = $entity;
+		}
+
+		$recordSet->Close();
+	    } else {
+		return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	    }
+	}
+
+	/* Assemble the entities in the right order and return them */
+	$result = array();
+	foreach ($ids as $id) {
+	    $result[] = $entities[$id];
+	}
+
+	return array(null, $result);
+    }
+
+    /**
+     * @see GalleryStorage::saveEntity
+     */
+    function saveEntity(&$entity) {
+	$ret = $this->_dbInit(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Update the serial number, but remember the original one */
+	$originalSerialNumber = (int)$entity->serialNumber++;
+
+	/* Get our member info for this class */
+	list ($ret, $memberInfo) = $this->describeEntity($entity->entityType);
+	if ($ret) {
+	    return $ret;
+	}
+	$idColumn = null;
+
+	/*
+	 * Build up a complete picture of all the various changed fields, so
+	 * that we can do an insert or update.
+	 */
+	$dataTable = array();
+	$id = array();
+	$target = $entity->getEntityType();
+
+	while ($target) {
+	    foreach ($memberInfo[$target]['members'] as $memberName => $memberData) {
+		$type = $memberData['type'];
+		list ($tableName, $unused) = $this->_gs->_translateTableName($target);
+
+		/* If the member is modified, record the new value in our table */
+		if ($entity->isModified($memberName)) {
+		    $value = $entity->$memberName;
+
+		    $entity->$memberName = $value =
+			$this->_gs->_normalizeValue($value, $memberData);
+
+		    $columnName = $this->_gs->_translateColumnName($memberName);
+		    $dataTable[$tableName][$columnName] = $value;
+		} else {
+		    /*
+		     * If we haven't set up a table for this class, do so now.
+		     * Otherwise we don't have a complete list of tables that we
+		     * need to insert into in order for this class to be completely
+		     * serialized.
+		     */
+		    if (!isset($dataTable[$tableName])) {
+			$dataTable[$tableName] = array();
+		    }
+		}
+
+		if ($type & STORAGE_TYPE_ID) {
+		    $value = $entity->$memberName;
+
+		    $id['column'] = $this->_gs->_translateColumnName($memberName);
+		    $id['value'] = $value;
+		}
+	    }
+	    $target = $memberInfo[$target]['parent'];
+	}
+
+	if ($entity->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED)) {
+	    /*
+	     * Iterate through the data table and make up an INSERT statement
+	     * for each table that requires one.
+	     */
+	    foreach ($dataTable as $tableName => $columnChanges) {
+
+		/* Make sure that the id column is set for each table */
+		if (empty($columnChanges[$id['column']])) {
+		    $columnChanges[$id['column']] = $id['value'];
+		}
+
+		$columns = array_keys($columnChanges);
+		$data = array_values($columnChanges);
+		$markers = GalleryUtilities::makeMarkers(count($columnChanges));
+		$query = 'INSERT INTO ' . $tableName . ' (';
+		$query .= implode(', ', $columns);
+		$query .= ') VALUES (' . $markers . ')';
+
+		$this->_gs->_traceStart();
+		$recordSet = $this->_gs->_db->Execute($query, $data);
+		$this->_gs->_traceStop();
+
+		if (!$recordSet) {
+		    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+		}
+	    }
+	} else {
+	    /*
+	     * Iterate through the data table and make an UPDATE statement for
+	     * each table that requires one.  Make sure that we do the table
+	     * that has the serial number in it first, as we use the serial
+	     * number to make sure that we're not hitting a concurrency issue.
+	     */
+	    list ($serialNumberTable) = $this->_gs->_translateTableName('GalleryEntity');
+
+	    $queryList = array();
+	    foreach ($dataTable as $tableName => $columnChanges) {
+		$changeList = array();
+		$data = array();
+
+		foreach ($columnChanges as $columnName => $value) {
+		    $changeList[] = $columnName . '=?';
+		    $data[] = $value;
+		}
+
+		if (count($changeList)) {
+		    $query = 'UPDATE ' . $tableName  .  ' SET';
+		    $query .= ' ' . implode(',', $changeList);
+		    $query .= ' WHERE ' . $id['column'] . '=?';
+		    $data[] = $id['value'];
+
+		    if (!strcmp($tableName, $serialNumberTable)) {
+			$query .= ' AND ' .
+				$this->_gs->_translateColumnName('serialNumber') .
+				'=?';
+			$data[] = $originalSerialNumber;
+			array_unshift($queryList, array($query, $data));
+		    } else {
+			array_push($queryList, array($query, $data));
+		    }
+		}
+	    }
+
+	    /*
+	     * Now apply each UPDATE statement in turn.  Make sure that we're
+	     * only affecting one row each time.
+	     */
+	    foreach ($queryList as $queryAndData) {
+		list ($query, $data) = $queryAndData;
+
+		$this->_gs->_traceStart();
+		$recordSet = $this->_gs->_db->Execute($query, $data);
+		$this->_gs->_traceStop();
+
+		if (!$recordSet) {
+		    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+		} else {
+		    $this->_gs->_traceStart();
+		    $affectedRows = $this->_gs->_db->Affected_Rows();
+		    $this->_gs->_traceStop();
+		    if ($affectedRows == 0) {
+			return GalleryCoreApi::error(ERROR_OBSOLETE_DATA, __FILE__, __LINE__,
+						    "$query (" . implode('|', $data) . ')');
+		    } else if ($affectedRows > 1) {
+			/* We just updated more than one row!  What do we do now? */
+			return GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+					      "$query (" . implode('|', $data) . ") $affectedRows");
+		    }
+		}
+	    }
+	}
+
+	$entity->clearPersistentFlag(STORAGE_FLAG_NEWLY_CREATED);
+	$entity->resetOriginalValues();
+	$ret = $entity->onSave();
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::deleteEntity
+     */
+    function deleteEntity(&$entity) {
+	$ret = $this->_dbInit(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* If this object has not yet been saved in the database, don't bother saving it. */
+	if ($entity->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED)) {
+	    $entity->clearPersistentFlag(STORAGE_FLAG_NEWLY_CREATED);
+	    $entity->setPersistentFlag(STORAGE_FLAG_DELETED);
+	    return null;
+	}
+
+	/* Get our persistent and member info for this class */
+	list ($ret, $memberInfo) = $this->describeEntity($entity->entityType);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$idCol = $this->_gs->_translateColumnName('id');
+
+	$tables = array();
+	$target = $entity->entityType;
+	while ($target) {
+	    foreach ($memberInfo[$target]['members'] as $columnName => $columnInfo) {
+		list ($tableName, $unused) = $this->_gs->_translateTableName($target);
+		$tables[$tableName] = 1;
+	    }
+	    $target = $memberInfo[$target]['parent'];
+	}
+
+	/*
+	 * XXX OPT:  Override this for specific database implementations that
+	 * allow multi-table delete.
+	 */
+	foreach ($tables as $tableName => $junk) {
+	    $query = 'DELETE FROM ' . $tableName . ' WHERE ' . $idCol . '=?';
+	    $data = array((int)$entity->getId());
+
+	    $this->_gs->_traceStart();
+	    $recordSet = $this->_gs->_db->Execute($query, $data);
+	    $this->_gs->_traceStop();
+	    if (!$recordSet) {
+		return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	    }
+	}
+
+	$entity->setPersistentFlag(STORAGE_FLAG_DELETED);
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::newEntity
+     */
+    function newEntity(&$entity) {
+	$ret = $this->_dbInit();
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $id) = $this->_gs->getUniqueId(DATABASE_SEQUENCE_ID);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$entity->id = $id;
+	$entity->serialNumber = 0;
+	$entity->setPersistentFlag(STORAGE_FLAG_NEWLY_CREATED);
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::getUniqueId
+     */
+    function getUniqueId($sequence=DATABASE_SEQUENCE_ID) {
+	$ret = $this->_dbInit();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/*
+	 * Wrap _getUniqueIdWithConnection with the current connection.  This allows
+	 * subclasses to use a different connection if necessary, like MySQL which
+	 * wants a non-transactional connection.
+	 */
+	return $this->_getUniqueIdWithConnection($this->_gs->_db, $sequence);
+    }
+
+    /**
+     * Internal implementation of GalleryStorage::getUniqueId that additionally takes a database
+     * connection.
+     *
+     * @param string $sequence A sequence name
+     * @see GalleryStorage::getUniqueId
+     */
+    function _getUniqueIdWithConnection($dbConn, $sequence) {
+	/* In case we're embedded in an app that sets adodb hasGenID to false (xaraya/postnuke) */
+	if (isset($dbConn->hasGenID) && !$dbConn->hasGenID) {
+	    $dbConn->hasGenID = $setGenID = true;
+	}
+
+	/* Get the id of the next object from our sequence */
+	$this->_gs->_traceStart();
+	$id = (int)$dbConn->GenId($this->_gs->_tablePrefix . $sequence);
+	$this->_gs->_traceStop();
+	if (empty($id)) {
+	    return array(GalleryCoreApi::error(
+			     ERROR_STORAGE_FAILURE, __FILE__, __LINE__, 'Empty sequence id!'),
+			 null);
+	}
+
+	if (isset($setGenID)) {
+	    $dbConn->hasGenID = false;
+	}
+
+	return array(null, $id);
+    }
+
+    /**
+     * @see GalleryStorage::refreshEntity
+     */
+    function refreshEntity($entity) {
+	$ret = $this->_dbInit();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/*
+	 * We could check the serial number against the database, or check to
+	 * see if the entity is modified in order to figure out whether or not
+	 * we should refresh.  But either way that requires a database hit so we
+	 * might as well just retrieve the record every time
+	 */
+	list ($ret, list ($freshEntity)) = $this->_gs->loadEntities(array($entity->id));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Let entity do its post-load procedure */
+	$ret = $freshEntity->onLoad();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $freshEntity);
+    }
+
+    /**
+     * @see GalleryStorage::acquireReadLock
+     */
+    function acquireReadLock($entityIds, $timeout) {
+	/* It's ok to pass in a single id */
+	if (!is_array($entityIds)) {
+	    $entityIds = array($entityIds);
+	}
+
+	foreach ($entityIds as $idx => $id) {
+	    $entityIds[$idx] = (int)$id;
+	}
+
+	/* Acquire a non-transactional connection to use for this request */
+	list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Know when to call it quits */
+	$cutoffTime = time() + $timeout;
+
+	/* Get the true name of the lock table */
+	list ($lockTable, $unused) = $this->_gs->_translateTableName('Lock');
+
+	/*
+	 * Algorithm:
+	 * 1. Get clearance to acquire locks (and get the lock id)
+	 * 2. If any of the entities that we want to lock are currently write
+	 *    locked, then clear the request and go back to step 1.
+	 * 3. Acquire our read locks
+	 */
+	while (true) {
+	    list ($ret, $lockId) = $this->_getLockClearance($cutoffTime);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    /* Check to see if any of the ids that we care about are write locked */
+	    $writeEntityIdCol = $this->_gs->_translateColumnName('writeEntityId');
+	    $markers = GalleryUtilities::makeMarkers(count($entityIds));
+	    $query = 'SELECT COUNT(*) FROM ' . $lockTable
+		   . ' WHERE ' . $writeEntityIdCol . ' IN (' . $markers . ')';
+	    $data = $entityIds;
+
+	    $this->_gs->_traceStart();
+	    $recordSet = $db->Execute($query, $data);
+	    $this->_gs->_traceStop();
+	    if (!$recordSet) {
+		$this->releaseLocks($lockId);
+		return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	    }
+
+	    $row = $recordSet->FetchRow();
+	    if ($row[0] == 0 ) {
+		/* Success */
+		break;
+	    } else {
+		/* An entity that we want is write locked */
+		$this->releaseLocks($lockId);
+
+		if (time() > $cutoffTime) {
+		    return array(GalleryCoreApi::error(ERROR_LOCK_TIMEOUT),
+				 null);
+		}
+
+		/* Wait a second and try again */
+		sleep(1);
+
+		/* Expire any bogus locks */
+		$ret = $this->_expireLocks();
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	}
+
+	/* Put in a read lock for every entity id */
+	$lockIdCol = $this->_gs->_translateColumnName('lockId');
+	$readEntityIdCol = $this->_gs->_translateColumnName('readEntityId');
+	$freshUntilCol = $this->_gs->_translateColumnName('freshUntil');
+	$freshUntil = time() + 30;
+	$lockInfo = array();
+	foreach ($entityIds as $entityId) {
+	    $query = sprintf('INSERT INTO %s (%s, %s, %s) VALUES (?, ?, ?)',
+			     $lockTable, $lockIdCol, $readEntityIdCol, $freshUntilCol);
+	    $data = array($lockId, $entityId, $freshUntil);
+
+	    $this->_gs->_traceStart();
+	    $recordSet = $db->Execute($query, $data);
+	    $this->_gs->_traceStop();
+	    if (!$recordSet) {
+		$this->releaseLocks($lockId);
+		return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	    }
+	    $lockInfo[$entityId] = true;
+	}
+
+	/* Drop the lock request, now that we've got the read locks */
+	$requestCol = $this->_gs->_translateColumnName('request');
+	$query = 'DELETE FROM ' . $lockTable
+	       . ' WHERE ' . $lockIdCol . '=? AND ' . $requestCol . '=1';
+	$data = array($lockId);
+
+	$this->_gs->_traceStart();
+	$recordSet = $db->Execute($query, $data);
+	$this->_gs->_traceStop();
+	if (!$recordSet) {
+	    $this->releaseLocks($lockId);
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	}
+
+	return array(null,
+		     array('lockId' => $lockId, 'type' => LOCK_READ, 'ids' => $lockInfo));
+    }
+
+    /**
+     * @see GalleryStorage::acquireWriteLock
+     */
+    function acquireWriteLock($entityIds, $timeout) {
+	/* It's ok to pass in a single id */
+	if (!is_array($entityIds)) {
+	    $entityIds = array($entityIds);
+	}
+
+	foreach ($entityIds as $idx => $id) {
+	    $entityIds[$idx] = (int)$id;
+	}
+
+	/* Acquire a non-transactional connection to use for this request */
+	list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Know when to call it quits */
+	$cutoffTime = time() + $timeout;
+
+	/* Get the true name of the lock table */
+	list ($lockTable, $unused) = $this->_gs->_translateTableName('Lock');
+
+	/*
+	 * Algorithm:
+	 * 1. Get clearance to acquire locks (and get the lock id)
+	 * 2. If any of the entities that we want to lock are currently locked,
+	 *    then clear the request and go back to step 1.
+	 * 3. Acquire our write locks
+	 */
+	while (true) {
+	    list ($ret, $lockId) = $this->_getLockClearance($cutoffTime);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $lockId = (int)$lockId;
+
+	    /* Check to see if any of the ids that we care about are locked */
+	    $readEntityIdCol = $this->_gs->_translateColumnName('readEntityId');
+	    $writeEntityIdCol = $this->_gs->_translateColumnName('writeEntityId');
+	    $markers = GalleryUtilities::makeMarkers(count($entityIds));
+	    $query = 'SELECT COUNT(*) FROM ' . $lockTable . ' ' .
+		    'WHERE ' . $readEntityIdCol . ' IN (' . $markers . ') ' .
+		    'OR ' . $writeEntityIdCol . ' IN (' . $markers . ')';
+	    $data = $entityIds;
+	    $data = array_merge($data, $entityIds);
+
+	    $this->_gs->_traceStart();
+	    $recordSet = $db->Execute($query, $data);
+	    $this->_gs->_traceStop();
+	    if (!$recordSet) {
+		$this->releaseLocks($lockId);
+		return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	    }
+
+	    $row = $recordSet->FetchRow();
+	    if ($row[0] == 0 ) {
+		/* Success */
+		break;
+	    } else {
+		/* An entity that we want is still locked */
+		$this->releaseLocks($lockId);
+
+		if (time() > $cutoffTime) {
+		    return array(GalleryCoreApi::error(ERROR_LOCK_TIMEOUT),
+				 null);
+		}
+
+		/* Wait a second and try again */
+		sleep(1);
+
+		/* Expire any bogus locks */
+		$ret = $this->_expireLocks();
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	}
+
+	/* We are approved to acquire our write locks */
+	$lockIdCol = $this->_gs->_translateColumnName('lockId');
+	$writeEntityIdCol = $this->_gs->_translateColumnName('writeEntityId');
+	$freshUntilCol = $this->_gs->_translateColumnName('freshUntil');
+	$freshUntil = time() + 30;
+	$lockInfo = array();
+	foreach ($entityIds as $entityId) {
+	    $query = sprintf('INSERT INTO %s (%s, %s, %s) VALUES (?, ?, ?)',
+			     $lockTable, $lockIdCol, $writeEntityIdCol, $freshUntilCol);
+	    $data = array($lockId, $entityId, $freshUntil);
+
+	    $this->_gs->_traceStart();
+	    $recordSet = $db->Execute($query, $data);
+	    $this->_gs->_traceStop();
+	    if (!$recordSet) {
+		$this->releaseLocks($lockId);
+		return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	    }
+	    $lockInfo[$entityId] = true;
+	}
+
+	/* Drop the lock request, now that we've got the write locks */
+	$requestCol = $this->_gs->_translateColumnName('request');
+	$query = 'DELETE FROM ' . $lockTable
+	       . ' WHERE ' . $lockIdCol . '=? AND ' . $requestCol . '=1';
+	$data = array($lockId);
+
+	$this->_gs->_traceStart();
+	$recordSet = $db->Execute($query, $data);
+	$this->_gs->_traceStop();
+	if (!$recordSet) {
+	    $this->releaseLocks($lockId);
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	}
+
+	return array(null,
+		     array('lockId' => $lockId, 'type' => LOCK_WRITE, 'ids' => $lockInfo));
+    }
+
+    /**
+     * @see GalleryStorage::refreshLocks
+     */
+    function refreshLocks($lockIds, $freshUntil) {
+	if (!empty($lockIds)) {
+	    foreach ($lockIds as $idx => $id) {
+		$lockIds[$idx] = (int)$id;
+	    }
+
+	    /* Acquire a non-transactional connection to use for this request */
+	    list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    list ($lockTable, $unused) = $this->_gs->_translateTableName('Lock');
+	    $lockIdCol = $this->_gs->_translateColumnName('lockId');
+	    $freshUntilCol = $this->_gs->_translateColumnName('freshUntil');
+	    $lockIdMarkers = GalleryUtilities::makeMarkers(count($lockIds));
+	    $query = sprintf('UPDATE %s SET %s = ? WHERE %s in (%s)',
+			     $lockTable, $freshUntilCol, $lockIdCol, $lockIdMarkers);
+
+	    $this->_gs->_traceStart();
+	    $data = array_merge(array($freshUntil), $lockIds);
+	    $recordSet = $db->Execute($query, $data);
+	    $this->_gs->_traceStop();
+
+	    if (!$recordSet) {
+		return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Delete all not-so-fresh locks.
+     * @return GalleryStatus a status code
+     * @access private
+     */
+    function _expireLocks() {
+	/* Acquire a non-transactional connection to use for this request */
+	list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($lockTable, $unused) = $this->_gs->_translateTableName('Lock');
+	$freshUntilCol = $this->_gs->_translateColumnName('freshUntil');
+	$query = sprintf('DELETE FROM %s WHERE %s < ?',
+			 $lockTable, $freshUntilCol);
+
+	$this->_gs->_traceStart();
+	$recordSet = $db->Execute($query, array(time()));
+	$this->_gs->_traceStop();
+
+	if (!$recordSet) {
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::releaseLocks
+     */
+    function releaseLocks($lockIds) {
+	if (!is_array($lockIds)) {
+	    $lockIds = array($lockIds);
+	}
+	foreach ($lockIds as $idx => $id) {
+	    $lockIds[$idx] = (int)$id;
+	}
+
+	/* Acquire a non-transactional connection to use for this request */
+	list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Get the true name of the lock table */
+	list ($lockTable, $unused) = $this->_gs->_translateTableName('Lock');
+
+	$lockIdCol = $this->_gs->_translateColumnName('lockId');
+	$markers = GalleryUtilities::makeMarkers(count($lockIds));
+	$query = 'DELETE FROM ' . $lockTable . ' WHERE ' . $lockIdCol . ' IN (' . $markers . ')';
+
+	$this->_gs->_traceStart();
+	$recordSet = $db->Execute($query, $lockIds);
+	$this->_gs->_traceStop();
+	if ($recordSet) {
+	    return null;
+	} else {
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	}
+    }
+
+    /**
+     * @see GalleryStorage::removeIdsFromLock
+     */
+    function removeIdsFromLock($lock, $ids) {
+	list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$query = '
+	DELETE FROM [Lock]
+	WHERE [::lockId] = ?
+	  AND [::' . ($lock['type'] == LOCK_WRITE ? 'write' : 'read') . 'EntityId] IN ('
+	    . GalleryUtilities::makeMarkers(count($ids)) . ')';
+	$query = $this->_gs->_translateQuery($query);
+
+	$this->_gs->_traceStart();
+	$recordSet = $db->Execute($query, array_merge(array($lock['lockId']), $ids));
+	$this->_gs->_traceStop();
+	if ($recordSet) {
+	    return null;
+	} else {
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	}
+    }
+
+    /**
+     * @see GalleryStorage::moveIdsBetweenLocks
+     */
+    function moveIdsBetweenLocks($relock, $newLockId, $lockType) {
+	list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$query = '
+	UPDATE [Lock] SET [::lockId] = ? WHERE [::lockId] = ? AND [::'
+	    . ($lockType == LOCK_WRITE ? 'write' : 'read') . 'EntityId] IN (';
+	$query = $this->_gs->_translateQuery($query);
+	foreach ($relock as $lockId => $ids) {
+	    $this->_gs->_traceStart();
+	    $recordSet = $db->Execute($query . GalleryUtilities::makeMarkers(count($ids)) . ')',
+				      array_merge(array($newLockId, $lockId), $ids));
+	    $this->_gs->_traceStop();
+	    if (!$recordSet) {
+		return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::newLockId
+     */
+    function newLockId() {
+	list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$this->_gs->_traceStart();
+	$lockId = $db->GenId($this->_gs->_tablePrefix . DATABASE_SEQUENCE_LOCK);
+	$this->_gs->_traceStop();
+
+	if (empty($lockId)) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE,
+					       __FILE__, __LINE__, 'Empty lock sequence id!'),
+			 null);
+	}
+
+	return array(null, (int)$lockId);
+    }
+
+    /**
+     * @see GalleryStorage::execute
+     */
+    function execute($statement, $data=array()) {
+	$ret = $this->_dbInit(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$statement = $this->_gs->_translateQuery($statement);
+
+	$this->_gs->_traceStart();
+	$recordSet = $this->_gs->_db->Execute($statement, $data);
+	$this->_gs->_traceStop();
+
+	/* Direct SQL commands can undermine our memory cache, so reset it */
+	GalleryDataCache::reset();
+
+	return $recordSet ? null
+			  : GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+    }
+
+    /**
+     * @see GalleryStorage::addMapEntry
+     */
+    function addMapEntry($mapName, $entry, $useNonTransactionalConnection=false) {
+	if ($useNonTransactionalConnection && $this->_gs->isTransactional()) {
+	    list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	    if ($ret) {
+		return $ret;
+	    }
+	} else {
+	    $ret = $this->_dbInit(true);
+	    if ($ret) {
+		return $ret;
+	    }
+	    $db = $this->_gs->_db;
+	}
+
+	list ($ret, $mapInfo) = $this->_gs->describeMap($mapName);
+	if ($ret) {
+	    return $ret;
+	}
+	list ($tableName) = $this->_gs->_translateTableName($mapName);
+	$data = $columns = array();
+	foreach ($mapInfo as $memberName => $memberData) {
+	    if (!array_key_exists($memberName, $entry)) {
+		return GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					     'Missing parameter: ' . $memberName);
+	    }
+
+	    if (is_array($entry[$memberName])) {
+		return $this->_addMapEntries($mapInfo, $tableName, $entry, $db);
+	    }
+	    $columns[] = $this->_gs->_translateColumnName($memberName);
+	    $data[] = $this->_gs->_normalizeValue($entry[$memberName], $memberData);
+	}
+
+	$markers = GalleryUtilities::makeMarkers(count($columns));
+	$query = 'INSERT INTO ' . $tableName . ' (';
+	$query .= implode(', ', $columns);
+	$query .= ') VALUES (' . $markers . ')';
+
+	$this->_gs->_traceStart();
+	$recordSet = $db->Execute($query, $data);
+	$this->_gs->_traceStop();
+	if ($recordSet === false) {
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	}
+
+	return null;
+    }
+
+    /**
+     * Add new entries to a map. This utility takes the values from entry array
+     * e.g., (parm1 => (p1val1, p1val2, p1val3), parm2 => (p2val1, p2val2, p2val3))
+     * and inserts them into the map similar to the following:
+     * INSERT INTO ... (PARM1, PARM2) VALUES (p1val1, p2val1), (p1val2, p2val2) ...
+     *
+     * @param array $mapInfo map we're working on
+     * @param string $tableName the translated table name
+     * @param array $entry an associative array of data about the entry
+     *              each data element is an array of values
+     * @param ADOdb $db the database connection to use
+     * @return GalleryStatus a status code
+     * @access private
+     */
+    function _addMapEntries($mapInfo, $tableName, $entry, $db) {
+	$columns = array();
+	foreach ($mapInfo as $memberName => $memberData) {
+	    $columns[$memberName] = $this->_gs->_translateColumnName($memberName);
+	}
+
+	/* Now we transpose the entry matrix */
+	$rows = count($entry[$memberName]);
+	$data = array();
+	for ($ind = 0; $ind < $rows; $ind++) {
+	    foreach ($mapInfo as $memberName => $memberData) {
+		$data[] = $this->_gs->_normalizeValue($entry[$memberName][$ind], $memberData);
+	    }
+	}
+
+	list ($ret, $query) =
+	    $this->_gs->getFunctionSql('MULTI_INSERT', array($tableName, $columns, $rows));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$this->_gs->_traceStart();
+	$recordSet = $db->Execute($query, $data);
+	$this->_gs->_traceStop();
+	if ($recordSet === false) {
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::removeMapEntry
+     */
+    function removeMapEntry($mapName, $match) {
+	$ret = $this->_dbInit(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $mapInfo) = $this->_gs->describeMap($mapName);
+	if ($ret) {
+	    return $ret;
+	}
+	list ($tableName, $unused) = $this->_gs->_translateTableName($mapName);
+	$data = $where = array();
+
+	foreach ($mapInfo as $memberName => $memberData) {
+	    if (array_key_exists($memberName, $match)) {
+		if (GalleryUtilities::isA($match[$memberName], 'GallerySqlFragment')) {
+		    $where[] = $this->_gs->_translateColumnName($memberName) . ' '
+			     . $this->_gs->_translateQuery($match[$memberName]->getFragment());
+		    foreach ($match[$memberName]->getValues() as $value) {
+			$data[] = $value;
+		    }
+		} else if (is_array($match[$memberName])) {
+		    $qs = array();
+		    foreach ($match[$memberName] as $value) {
+			$qs[] = '?';
+			$data[] = $this->_gs->_normalizeValue($value, $memberData);
+		    }
+		    $where[] = $this->_gs->_translateColumnName($memberName) . ' IN ('
+			     . implode(',', $qs) . ')';
+		} else {
+		    $value = $this->_gs->_normalizeValue($match[$memberName], $memberData);
+		    if (is_null($value)) {
+			$where[] = $this->_gs->_translateColumnName($memberName) . ' IS NULL';
+		    } else {
+			$where[] = $this->_gs->_translateColumnName($memberName) . '=?';
+			$data[] = $value;
+		    }
+		}
+	    }
+	}
+
+	if (empty($where)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					'Missing where clause');
+	}
+
+	$query = 'DELETE FROM ' . $tableName . ' WHERE '  . implode(' AND ', $where);
+
+	$this->_gs->_traceStart();
+	$recordSet = $this->_gs->_db->Execute($query, $data);
+	$this->_gs->_traceStop();
+	if (!$recordSet) {
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::removeAllMapEntries
+     */
+    function removeAllMapEntries($mapName, $useNonTransactionalConnection=false,
+				 $useTruncate=false) {
+	if ($useNonTransactionalConnection && $this->_gs->isTransactional()) {
+	    list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	    if ($ret) {
+		return $ret;
+	    }
+	} else {
+	    $ret = $this->_dbInit(true);
+	    if ($ret) {
+		return $ret;
+	    }
+	    $db = $this->_gs->_db;
+	}
+
+	list ($tableName, $unused) = $this->_gs->_translateTableName($mapName);
+	if ($useTruncate && (!$this->_gs->isTransactional() || $useNonTransactionalConnection)) {
+	    /* TRUNCATE is only safe outside of a transaction in most databases. */
+	    $query = 'TRUNCATE TABLE ' . $tableName;
+	} else {
+	    $query = 'DELETE FROM ' . $tableName;
+	}
+
+	$this->_gs->_traceStart();
+	$recordSet = $db->Execute($query);
+	$this->_gs->_traceStop();
+	if ($recordSet === false) {
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	}
+
+	return null;
+    }
+
+    /**
+     * Load up the table creation and alteration SQL files for the given module
+     * @param string $moduleId The id of the module of interest.
+     * @return array ('table' => array(), 'alter' => array(),
+     *		      'remove' => array(), 'test' => array())
+     */
+    function getModuleSql($moduleId) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$sqlFile = sprintf('%smodules/%s/classes/GalleryStorage/schema.tpl',
+	    GalleryCoreApi::getCodeBasePath(), $moduleId);
+
+	if ($platform->file_exists($sqlFile)) {
+	    $sqlData = $platform->file($sqlFile);
+	    $moduleSql = GalleryStorageExtras::parseSqlTemplate($sqlData, $this->_gs->getType());
+	} else {
+	    $moduleSql = array('table' => array(), 'alter' => array(),
+			       'remove' => array(), 'test' => array());
+	}
+
+	return $moduleSql;
+    }
+
+    /**
+     * Parse the SQL template file and break it down by database and sql file type and return the
+     * results in an array.  The best way to see how this is supposed to work is to look in the
+     * unit test.
+     *
+     * @param array $sqlData the raw template data
+     * @param string $dbType the database type
+     * @return array the parsed results
+     * @static
+     */
+    function parseSqlTemplate($sqlData, $dbType) {
+	$info = array('table' => array(), 'alter' => array(),
+		      'remove' => array(), 'test' => array());
+	$dbname = $tablename = null;
+	$record = false;
+	foreach ($sqlData as $line) {
+	    $line = rtrim($line);
+	    if (preg_match('/^## (.*)$/', $line, $matches)) {
+		$record = ($matches[1] == $dbType);
+		continue;
+	    }
+	    if (!$record) {
+		continue;
+	    }
+
+	    if (preg_match('/^# (.*)$/', $line, $matches)) {
+		$tablename = $matches[1];
+		if (preg_match('/^T_(.*)_(\d+)/', $tablename, $matches)) {
+		    if (!isset($info['test'][$matches[1]][$matches[2]])) {
+			$info['test'][$matches[1]][$matches[2]] = '';
+		    }
+		    $insertPointer =& $info['test'][$matches[1]][$matches[2]];
+		} else if (preg_match('/^A_(.*)_(\d+)\.(\d+)/', $tablename, $matches)) {
+		    if (!isset($info['alter'][$matches[1]][$matches[2]][$matches[3]])) {
+			$info['alter'][$matches[1]][$matches[2]][$matches[3]] = '';
+		    }
+		    $insertPointer =& $info['alter'][$matches[1]][$matches[2]][$matches[3]];
+		} else if (preg_match('/^R_(.*)_(\d+)\.(\d+)/', $tablename, $matches)) {
+		    if (!isset($info['remove'][$matches[1]][$matches[2]][$matches[3]])) {
+			$info['remove'][$matches[1]][$matches[2]][$matches[3]] = '';
+		    }
+		    $insertPointer =& $info['remove'][$matches[1]][$matches[2]][$matches[3]];
+		} else {
+		    if (!isset($info['table'][$tablename])) {
+			$info['table'][$tablename] = '';
+		    }
+		    $insertPointer =& $info['table'][$tablename];
+		}
+		continue;
+	    }
+	    $insertPointer .= $line . "\n";
+	}
+
+	return $info;
+    }
+
+    /**
+     * @see GalleryStorage::configureStore
+     */
+    function configureStore($moduleId, $upgradeInfo=array()) {
+	global $gallery;
+	$gallery->guaranteeTimeLimit(20);
+
+	$this->_clearEntityAndMapCache();
+
+	$ret = $this->_dbInit(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$moduleSql = $this->getModuleSql($moduleId);
+
+	list ($ret, $metatables) = $this->_metaTables();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Do the schema table first */
+	list ($schemaTableName, $unused, $unused2) = $this->_gs->_translateTableName('Schema');
+	if (!in_array(GalleryUtilities::strToLower($schemaTableName), $metatables)) {
+	    $ret = $this->_executeSql($moduleSql['table']['Schema']);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $ret = $this->_updateSchemaTableInfo(
+		'Schema', $moduleSql['table']['Schema'], $moduleId, null, null, true);
+	    if ($ret) {
+		return $ret;
+	    }
+	    unset($moduleSql['table']['Schema']);
+
+	    /* Create our sequences now */
+	    foreach (array(DATABASE_SEQUENCE_LOCK, DATABASE_SEQUENCE_ID,
+			   DATABASE_SEQUENCE_EVENT_LOG) as $sequenceId) {
+		$ret = $this->createSequence($sequenceId);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	/* Load all table versions */
+	list ($ret, $tableVersions) = $this->_loadTableVersions();
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($major, $minor) = $tableVersions['Schema'];
+	$canStoreSql = version_compare("$major.$minor", '1.1', '>=');
+	$canStoreTableInfo = version_compare("$major.$minor", '1.2', '>=');
+
+	if (!$canStoreTableInfo && $moduleId == 'core' && !in_array('Schema:1.1', $upgradeInfo)) {
+	    /* Ensure that the table info can be stored after the first configureStore() call */
+	    if (!in_array('Schema:1.0', $upgradeInfo)) {
+		$upgradeInfo[] = 'Schema:1.0';
+	    }
+	    $upgradeInfo[] = 'Schema:1.1';
+
+	    return $this->configureStore($moduleId, $upgradeInfo);
+	}
+
+	if ($canStoreTableInfo) {
+	    $mapInfo = $this->_getTableInfo($moduleId, 'map');
+	    $entityInfo = $this->_getTableInfo($moduleId, 'entity');
+	}
+
+	/*
+	 * Now take care of the rest of the tables.  If the table doesn't exist, apply the current
+	 * table definition.  If it already exists, check to see if there is an upgrade available
+	 * for the given table version that we should apply based on $upgradeInfo.
+	 */
+	foreach ($moduleSql['table'] as $rawTableName => $sql) {
+	    $gallery->guaranteeTimeLimit(20);
+	    list ($tableName, $unused, $tableNameInSchema) =
+		$this->_gs->_translateTableName($rawTableName);
+
+	    $type = $info = null;
+	    if ($canStoreTableInfo) {
+		if (isset($mapInfo[$rawTableName])) {
+		    $type = 'map';
+		    $info = serialize(array($rawTableName => $mapInfo[$rawTableName]));
+		} else if (isset($entityInfo[$rawTableName])) {
+		    $type = 'entity';
+		    $info = serialize(array($rawTableName => $entityInfo[$rawTableName]));
+		} else {
+		    if (!in_array($tableNameInSchema, array('Schema', 'Lock'))) {
+			return GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+					    "No map or entity description for: $tableNameInSchema");
+		    }
+		}
+	    }
+	    if (!in_array(GalleryUtilities::strToLower($tableName), $metatables)) {
+		$ret = $this->_executeSql($sql);
+		if ($ret) {
+		    return $ret;
+		}
+
+		if ($canStoreSql) {
+		    $ret = $this->_updateSchemaTableInfo($tableNameInSchema, $sql, $moduleId, $type,
+							 $info, $canStoreTableInfo);
+		    if ($ret) {
+		    	return $ret;
+		    }
+		}
+	    } else {
+		while (1) {
+		    /* The table exists -- see if we have an upgrade for it */
+		    if (empty($tableVersions[$tableNameInSchema])) {
+			/*
+			 * We've found a SQL file that matches a table in the
+			 * database, but has no matching version info in the
+			 * schema table.  How can this be?  Leave it alone.
+			 */
+			if ($gallery->getDebug()) {
+			    $gallery->debug("Table $rawTableName: missing entry in Schema table");
+			}
+			break;
+		    }
+
+		    /* If we locate an appropriate upgrade, apply it. */
+		    list ($major, $minor) = $tableVersions[$tableNameInSchema];
+		    if (!empty($moduleSql['alter'][$rawTableName][$major][$minor]) &&
+			    in_array("$rawTableName:$major.$minor", $upgradeInfo)) {
+			$sql = $moduleSql['alter'][$rawTableName][$major][$minor];
+			$ret = $this->_executeSql($sql);
+			if ($ret) {
+			    return $ret;
+			}
+
+			if ($canStoreSql) {
+			    /*
+			     * Note: this puts the end-state sql into the createSql column, so
+			     * there is a tiny possibility of getting a mismatch with the db if
+			     * this upgrade involves multiple alters and the upgrade fails before
+			     * executing the last one.
+			     */
+			    $ret = $this->_updateSchemaTableInfo($tableNameInSchema,
+				       $moduleSql['table'][$rawTableName], $moduleId, $type, $info,
+				       $canStoreTableInfo);
+			    if ($ret) {
+				return $ret;
+			    }
+			}
+			/* Remember altered tables for post-upgrade optimizations */
+			$altered = array($rawTableName);
+			$cacheKey = 'GalleryStorage::configureStore::alter';
+			if (GalleryDataCache::containsKey($cacheKey)) {
+			    $altered = array_merge(GalleryDataCache::get($cacheKey), $altered);
+			}
+			GalleryDataCache::put($cacheKey, $altered, true);
+
+			/* Reload all table versions, cause one has now changed */
+			list ($ret, $tableVersions) = $this->_loadTableVersions(true);
+			if ($ret) {
+			    return $ret;
+			}
+		    } else {
+			/* No upgrade available */
+			break;
+		    }
+		}
+	    }
+	}
+
+	/* Commit changes */
+	return $this->_gs->checkPoint();
+    }
+
+    /**
+     * Load the Entities or Maps.inc file.
+     * @param string $moduleId The module for which to retrieve the table information for.
+     * @param string $type String to describe the file to load. ('map' | 'entity')
+     * @return array An array describing either the maps or entities for the module
+     * @access private
+     */
+    function _getTableInfo($moduleId, $type) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$fileBase = $type == 'map' ? 'Maps' : 'Entities';
+	$tableInfoFile = GalleryCoreApi::getCodeBasePath("modules/$moduleId/classes/$fileBase.inc");
+	$mapInfo = array();
+	$entityInfo = array();
+	if ($platform->file_exists($tableInfoFile)) {
+	    include($tableInfoFile);
+	}
+
+	return $type == 'map' ? $mapInfo : $entityInfo;
+    }
+
+    /**
+     * Convenience function to update the Schema table with the creation SQL for a table.
+     * @param string $tableNameInSchema The name of the table in the schema.
+     * @param string $tableSql The sql that is used to create the table.
+     * @param string $moduleId
+     * @param string $type (optional) An indicator for table type ('map' | 'entity').
+     * @param string $info The serialized description of the map or entity.
+     * @param bool $canStoreTableInfo (optional)
+     * @return GalleryStatus
+     */
+    function _updateSchemaTableInfo($tableNameInSchema, $tableSql, $moduleId, $type=null,
+				    $info=null, $canStoreTableInfo=true) {
+	$data = array($tableSql);
+	$query = 'UPDATE [GallerySchema] SET [::createSql] = ?';
+	if ($canStoreTableInfo) {
+	    $query .= ', [::pluginId] = ?';
+	    $data[] = $moduleId;
+	}
+	if ($canStoreTableInfo && isset($type)) {
+	    $query .= ', [::type] = ?';
+	    $data[] = $type;
+	}
+	if ($canStoreTableInfo && isset($info)) {
+	    $query .= ', [::info] = ?';
+	    $data[] = $info;
+	}
+	$query .= ' WHERE [::name] = ?';
+	$data[] = $tableNameInSchema;
+
+	$ret = $this->execute($query, $data);
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::updateTableInfo
+     */
+    function _updateTableInfo($moduleId) {
+	$sql = $this->getModuleSql($moduleId);
+
+	if (empty($sql['table'])){
+	    return null;
+	}
+
+	list ($ret, $tableVersions) = $this->_loadTableVersions(false);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$mapInfo = $this->_getTableInfo($moduleId, 'map');
+	$entityInfo = $this->_getTableInfo($moduleId, 'entity');
+
+	foreach ($sql['table'] as $tableName => $tableSql) {
+	    list ($unused, $unused, $nameInSchema) = $this->_gs->_translateTableName($tableName);
+
+	    if (!array_key_exists($nameInSchema, $tableVersions)) {
+		continue;
+	    }
+
+	    /*
+	     * Check if there is a pending alter for the table and skip if there is.
+	     * Column will be populated when/if that module is upgraded.
+	     */
+	    list ($major, $minor) = $tableVersions[$nameInSchema];
+	    if (!empty($sql['alter'][$tableName][$major][$minor])) {
+		continue;
+	    }
+
+	    $data = array();
+	    $query = 'UPDATE [Schema] SET ';
+
+	    if (isset($mapInfo[$tableName])) {
+	    	$query .= '[::info] = ?, [::type] = ?,';
+		$data[] = serialize(array($tableName => $mapInfo[$tableName]));
+		$data[] = 'map';
+	    } else if (isset($entityInfo[$tableName])) {
+	    	$query .= '[::info] = ?, [::type] = ?,';
+		$data[] = serialize(array($tableName => $entityInfo[$tableName]));
+		$data[] = 'entity';
+	    } else {
+	    	/* Some tables don't have a map description (i.e. Lock). */
+	    	if (!in_array($nameInSchema, array('Schema', 'Lock'))) {
+		    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+				    "No map or entity description for: $nameInSchema");
+	    	}
+	    }
+
+	    $query .= '[::pluginId] = ? WHERE [::name] = ?';
+	    $data = array_merge($data, array($moduleId, $nameInSchema));
+
+	    $ret = $this->execute($query, $data);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::configureStoreCleanup
+     */
+    function configureStoreCleanup($moduleId) {
+	global $gallery;
+
+	$ret = $this->_dbInit(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$moduleSql = $this->getModuleSql($moduleId);
+
+	list ($ret, $metatables) = $this->_metaTables();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Load all table versions */
+	list ($ret, $tableVersions) = $this->_loadTableVersions();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Now locate any existing tables that should be removed and drop them. */
+	foreach (array_keys($moduleSql['remove']) as $rawTableName) {
+	    if ($rawTableName == 'Schema') {
+		continue;
+	    }
+
+	    list ($tableName, $unused, $tableNameInSchema) =
+		$this->_gs->_translateTableName($rawTableName);
+	    if (in_array(GalleryUtilities::strToLower($tableName), $metatables)) {
+		/* The table exists -- see if we should delete it */
+		if (empty($tableVersions[$tableNameInSchema])) {
+		    /*
+		     * We've found a SQL file that matches a table in the
+		     * database, but has no matching version info in the
+		     * schema table.  How can this be?  Leave it alone.
+		     */
+		    if ($gallery->getDebug()) {
+			$gallery->debug("Table $rawTableName: missing entry in Schema table");
+		    }
+		} else {
+		    $gallery->guaranteeTimeLimit(20);
+		    list ($major, $minor) = $tableVersions[$tableNameInSchema];
+		    if (!empty($moduleSql['remove'][$rawTableName][$major][$minor])) {
+			$ret = $this->_executeSql(
+			    $moduleSql['remove'][$rawTableName][$major][$minor]);
+			if ($ret) {
+			    return $ret;
+			}
+		    }
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::unconfigureStore
+     */
+    function unconfigureStore($moduleId) {
+	global $gallery;
+	$gallery->guaranteeTimeLimit(20);
+
+	$ret = $this->_dbInit(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$moduleSql = $this->getModuleSql($moduleId);
+
+	list ($ret, $metatables) = $this->_metaTables();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/*
+	 * Now take care of the rest of the tables.  If the table doesn't
+	 * exist, apply the current table definition.  If it already exists,
+	 * check to see if there is an upgrade available for the given table
+	 * version.  If so, apply it.
+	 */
+	list ($schemaTableName, $unused) = $this->_gs->_translateTableName('Schema');
+	$schemaColumnName = $this->_gs->_translateColumnName('name');
+	foreach ($moduleSql['table'] as $rawTableName => $ignored) {
+	    /* Don't drop the schema table, it's part of the core. */
+	    if ($rawTableName == 'Schema') {
+		continue;
+	    }
+
+	    $this->_gs->_traceStart();
+	    list ($tableName, $unused, $tableNameInSchema) =
+		$this->_gs->_translateTableName($rawTableName);
+	    if (in_array(GalleryUtilities::strToLower($tableName), $metatables)) {
+		/* Drop the table and yank it from the schema table */
+		$dropQuery = sprintf('DROP TABLE %s', $tableName);
+		$recordSet = $this->_gs->_db->Execute($dropQuery);
+		if (empty($recordSet)) {
+		    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+		}
+	    }
+
+	    $cleanQuery = sprintf('DELETE FROM %s where %s=?',
+				  $schemaTableName, $schemaColumnName);
+	    $recordSet = $this->_gs->_db->Execute($cleanQuery, array($tableNameInSchema));
+	    if (empty($recordSet)) {
+		return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	    }
+	    $this->_gs->_traceStop();
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::getTableVersions
+     */
+    function _loadTableVersions($ignoreCache=true) {
+	$cacheKey = 'GalleryStorageExtras::_loadTableVersions()';
+
+	/* If reset requested then ignore the cache and retrieve it again */
+	if (!$ignoreCache && GalleryDataCache::containsKey($cacheKey)) {
+	    return array(null, GalleryDataCache::get($cacheKey));
+	}
+
+	list ($schemaTableName) = $this->_gs->_translateTableName('Schema');
+	$query = 'SELECT ' . $this->_gs->_translateColumnName('name') . ', '
+	       . $this->_gs->_translateColumnName('major') . ', '
+	       . $this->_gs->_translateColumnName('minor') . ' FROM ' . $schemaTableName;
+
+	$this->_gs->_traceStart();
+	$recordSet = $this->_gs->_db->Execute($query);
+	$this->_gs->_traceStop();
+
+	if (empty($recordSet)) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+					      'Error reading schema table'), null);
+	}
+
+	$tableVersions = array();
+	while ($row = $recordSet->FetchRow()) {
+	    $tableVersions[$row[0]] = array($row[1], $row[2]);
+	}
+
+	GalleryDataCache::put($cacheKey, $tableVersions);
+
+	return array(null, $tableVersions);
+    }
+
+    /**
+     * Execute a given SQL against the database.  Prefix table and column names
+     * as necessary.  Split multiple commands in the file into separate Execute() calls.
+     *
+     * @return GalleryStatus a status code
+     * @access protected
+     */
+    function _executeSql($buffer) {
+	/*
+	 * Split the file where semicolons are followed by a blank line..
+	 * PL/SQL blocks will have other semicolons, so we can't split on every one.
+	 */
+	foreach (preg_split('/; *\r?\n *\r?\n/s', $buffer) as $query) {
+	    $query = trim($query);
+	    if (!empty($query)) {
+		$query = str_replace('DB_TABLE_PREFIX', $this->_gs->_tablePrefix, $query);
+		$query = str_replace('DB_COLUMN_PREFIX', $this->_gs->_columnPrefix, $query);
+
+		/* Perform database specific replacements */
+		$query = strtr($query, $this->_gs->_getSqlReplacements());
+
+		$this->_gs->_traceStart();
+		$recordSet = $this->_gs->_db->Execute($query);
+		$this->_gs->_traceStop();
+		if (empty($recordSet)) {
+		    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+						"Error trying to run query: $query");
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::executeSqlFile
+     */
+    function executeSqlFile($fileName) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	if (!$platform->file_exists($fileName)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PATH, __FILE__, __LINE__,
+					 "File $fileName does not exist");
+	}
+
+	if (($buffer = $platform->file_get_contents($fileName)) === false) {
+	    return GalleryCoreApi::error(ERROR_BAD_PATH, __FILE__, __LINE__,
+					 "Unable to read file $fileName");
+	}
+
+	$ret = $this->_dbInit(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = $this->_executeSql($buffer);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::cleanStore
+     */
+    function cleanStore() {
+	global $gallery;
+	$gallery->guaranteeTimeLimit(20);
+
+	$ret = $this->_dbInit(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $metatables) = $this->_metaTables();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* If the schema table exists then delete all the tables it lists */
+	list ($schemaTableName, $unused) = $this->_gs->_translateTableName('Schema');
+	if (in_array(GalleryUtilities::strToLower($schemaTableName), $metatables)) {
+	    /* Load all table versions */
+	    list ($ret, $tableVersions) = $this->_loadTableVersions();
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    foreach (array_keys($tableVersions) as $rawTableName) {
+		list ($tableName, $unused) = $this->_gs->_translateTableName($rawTableName);
+		$query = sprintf('DROP TABLE %s', $tableName);
+
+		$this->_gs->_traceStart();
+		$recordSet = $this->_gs->_db->Execute($query);
+		$this->_gs->_traceStop();
+		if (empty($recordSet)) {
+		    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+		}
+	    }
+
+	    /* Get rid of our sequences */
+	    foreach (array(DATABASE_SEQUENCE_LOCK, DATABASE_SEQUENCE_ID,
+			   DATABASE_SEQUENCE_EVENT_LOG) as $sequenceId) {
+		$ret = $this->dropSequence($sequenceId);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::getProfilingHtml
+     */
+    function getProfilingHtml() {
+	if (!isset($this->_gs->_db)) {
+	    return '';
+	}
+	$this->_gs->_traceStart();
+	$perf =& NewPerfMonitor($this->_gs->_db);
+	$buf = $perf->SuspiciousSQL();
+	$buf .= $perf->ExpensiveSQL();
+	$this->_gs->_traceStop();
+	return $buf;
+    }
+
+    /**
+     * @see GalleryStorage::isInstalled
+     */
+    function isInstalled() {
+	$ret = $this->_dbInit();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $metatables) = $this->_metaTables();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($schemaTableName) = $this->_gs->_translateTableName('Schema');
+	$schemaTableName = GalleryUtilities::strToLower($schemaTableName);
+	$isInstalled = preg_match("/\b$schemaTableName\b/", implode(' ', $metatables));
+	return array(null, $isInstalled);
+    }
+
+    /**
+     * @see GalleryStorage::optimize
+     */
+    function optimize($tableNames=null) {
+	global $gallery;
+
+	$ret = $this->_dbInit();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Load all table versions */
+	list ($ret, $tableVersions) = $this->_loadTableVersions();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Filter the list of tables if requested */
+	$tables = array_keys($tableVersions);
+	if (is_array($tableNames)) {
+	    $tables = array();
+	    foreach ($tableNames as $rawTableName) {
+		list ($tableName, $unused, $tableNameInSchema) =
+		    $this->_gs->_translateTableName($rawTableName);
+		if (isset($tableVersions[$tableNameInSchema])) {
+		    $tables[] = $tableNameInSchema;
+		}
+	    }
+	}
+
+	$statements = $this->_gs->_getOptimizeStatements();
+	if (!empty($statements)) {
+	    foreach ($statements as $statement) {
+		foreach ($tables as $tableName) {
+		    $query = sprintf($statement, $this->_gs->_tablePrefix . $tableName);
+		    $gallery->guaranteeTimeLimit(300);
+		    $this->_gs->_traceStart();
+		    $recordSet = $this->_gs->_db->Execute($query);
+		    $this->_gs->_traceStop();
+
+		    if (!$recordSet) {
+			return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+		    }
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::getAffectedRows
+     */
+    function getAffectedRows($useNonTransactionalConnection) {
+	if ($useNonTransactionalConnection && $this->_gs->isTransactional()) {
+	    list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	} else {
+	    $ret = $this->_dbInit(true);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $db = $this->_gs->_db;
+	}
+
+	$this->_gs->_traceStart();
+	$affectedRows = $db->Affected_Rows();
+	$this->_gs->_traceStop();
+
+	return array(null, $affectedRows);
+    }
+
+    /**
+     * Internal function to get clearance to acquire locks
+     *
+     * Request clearance to acquire locks and then wait until it's our turn.
+     *
+     * @param int $cutoffTime the time to stop trying to get clearance
+     * @return GalleryStatus a status code
+     */
+    function _getLockClearance($cutoffTime) {
+	/* Get the true name of the lock table */
+	list ($lockTable, $unused) = $this->_gs->_translateTableName('Lock');
+
+	/* Acquire a non-transactional connection to use for this request */
+	list ($ret, $db) = $this->_getNonTransactionalDatabaseConnection();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Get a new lock id */
+	$this->_gs->_traceStart();
+	$lockId = $db->GenId($this->_gs->_tablePrefix . DATABASE_SEQUENCE_LOCK);
+	$this->_gs->_traceStop();
+	if (empty($lockId)) {
+	    return array(GalleryCoreApi::error(
+			     ERROR_STORAGE_FAILURE, __FILE__, __LINE__, 'Empty sequence id!'),
+			 null);
+	}
+	$lockId = (int)$lockId;
+
+	/* Put in a lock request */
+	$lockIdCol = $this->_gs->_translateColumnName('lockId');
+	$requestCol = $this->_gs->_translateColumnName('request');
+	$freshUntilCol = $this->_gs->_translateColumnName('freshUntil');
+	$query = sprintf('INSERT INTO %s (%s, %s, %s) VALUES(?, 1, ?)',
+			 $lockTable, $lockIdCol, $requestCol, $freshUntilCol);
+	$data = array($lockId, time() + 30);
+
+	$this->_gs->_traceStart();
+	$recordSet = $db->Execute($query, $data);
+	$this->_gs->_traceStop();
+	if (!$recordSet) {
+	    $this->releaseLocks($lockId);
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	}
+
+	/* Wait till it's our turn */
+	while (true) {
+	    $query = 'SELECT ' . $lockIdCol . ' FROM ' . $lockTable
+		   . ' WHERE ' . $requestCol . '=1 ORDER BY ' . $lockIdCol . ' ASC';
+
+	    $this->_gs->_traceStart();
+	    $recordSet = $db->SelectLimit($query, 1);
+	    $this->_gs->_traceStop();
+	    if (!$recordSet) {
+		$this->releaseLocks($lockId);
+		return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE),
+			     null);
+	    }
+
+	    $row = $recordSet->FetchRow();
+	    if ($row[0] == $lockId) {
+		break;
+	    }
+
+	    /* Wait a second and try again */
+	    sleep(1);
+
+	    /* Expire any bogus locks */
+	    $ret = $this->_expireLocks();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    if (time() > $cutoffTime) {
+		$this->releaseLocks($lockId);
+		return array(GalleryCoreApi::error(ERROR_LOCK_TIMEOUT), null);
+	    }
+	}
+
+	return array(null, $lockId);
+    }
+
+    /**
+     * Identify the type of entity associated with the id provided
+     *
+     * @param mixed $ids array of ids or single int id
+     * @return array a GalleryStatus and a string class name
+     */
+    function _identifyEntities($ids) {
+	assert('!empty($ids)');
+
+	if (!is_array($ids)) {
+	    $ids = array($ids);
+	    $returnArray = false;
+	} else {
+	    $returnArray = true;
+	}
+
+	$checkIds = array();
+	foreach ($ids as $id) {
+	    if (!GalleryDataCache::containsKey("GalleryStorage::_identifyEntities($id)")) {
+		$checkIds[] = $id;
+	    }
+	}
+
+	$local = array();
+	if (!empty($checkIds)) {
+	    $idCol = $this->_gs->_translateColumnName('id');
+	    $entityTypeCol = $this->_gs->_translateColumnName('entityType');
+	    list ($table, $unused) = $this->_gs->_translateTableName('GalleryEntity');
+	    $markers = GalleryUtilities::makeMarkers(count($checkIds));
+	    $query = 'SELECT ' . $idCol . ', ' . $entityTypeCol
+		   . ' FROM ' . $table . ' WHERE ' . $idCol . ' IN (' . $markers . ')';
+
+	    $this->_gs->_traceStart();
+	    $recordSet = $this->_gs->_db->Execute($query, $checkIds);
+	    $this->_gs->_traceStop();
+
+	    if ($recordSet) {
+		while ($row = $recordSet->FetchRow()) {
+		    if (empty($row[1])) {
+			return array(
+			    GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+		    } else {
+			/*
+			 * Save a copy locally, in case the global cache is disabled
+			 * (like in the upgrader)
+			 */
+			$local[$row[0]] = $row[1];
+			GalleryDataCache::put("GalleryStorage::_identifyEntities($row[0])",
+					      $row[1], true);
+		    }
+		}
+	    } else {
+		return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE),
+			     null);
+	    }
+	}
+
+	if ($returnArray) {
+	    $results = array();
+	    foreach ($ids as $id) {
+		if (isset($local[$id])) {
+		    $results[] = $local[$id];
+		} else if (GalleryDataCache::containsKey(
+			       "GalleryStorage::_identifyEntities($id)")) {
+		    $results[] = GalleryDataCache::get("GalleryStorage::_identifyEntities($id)");
+		} else {
+		    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT, __FILE__, __LINE__,
+						       "Missing object for $id"), null);
+		}
+	    }
+	} else {
+	    $results = GalleryDataCache::get("GalleryStorage::_identifyEntities($ids[0])");
+	}
+
+	return array(null, $results);
+    }
+
+    /**
+     * Describe the members, modules and parent of an entity
+     *
+     * @param string $entityName a class name
+     * @param boolean $tryAllModules true if we should scan all modules, not just the active ones
+     * @access protected
+     * @return array GalleryStatus a status code
+     *               entity associative array
+     */
+    function describeEntity($entityName, $tryAllModules=false) {
+	global $gallery;
+
+	/* Note: keep this cache key in sync with GalleryStorageExtras::_clearEntityAndMapCache() */
+	$cacheKey = 'GalleryStorageExtras::describeEntity()';
+
+	/* We only cache the results for active modules */
+	if (!$tryAllModules && GalleryDataCache::containsKey($cacheKey)) {
+	    $entityInfo = GalleryDataCache::get($cacheKey);
+	}
+
+	if (!isset($entityInfo)) {
+	    list ($ret, $entityInfo) = $this->_gs->_getEntityOrMapInfo('entity', $tryAllModules);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    if (!$tryAllModules) {
+		GalleryDataCache::put($cacheKey, $entityInfo);
+	    }
+	}
+
+	/* Fall back to all available modules */
+	if (!$tryAllModules && !isset($entityInfo[$entityName])) {
+	    list ($ret, $entityInfo) = $this->describeEntity($entityName, true);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	/*
+	 * Fall back on the parent class for any entities we don't recognize.  This is mainly so
+	 * that tests can create lightweight subclasses.  Because PHP4 doesn't have case sensitive
+	 * class names we have to do a linear time lookup.
+	 * Don't use strcasecmp or strtolower because they are affected by locale.
+	 */
+	if (!isset($entityInfo[$entityName])) {
+	    $parentClass = get_parent_class($entityName);
+	    foreach (array_keys($entityInfo) as $candidate) {
+		if ($parentClass == $candidate
+			|| $parentClass == GalleryUtilities::strToLower($candidate)) {
+		    $entityInfo[$entityName] = array(
+			'members' => array(),
+			'parent' => $candidate,
+			'module' => 'unknown');
+		    break;
+		}
+	    }
+	}
+
+	if (!isset($entityInfo[$entityName])) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_VALUE, __FILE__, __LINE__,
+					       "Unknown entity type: $entityName"), null);
+	}
+
+	return array(null, $entityInfo);
+    }
+
+    /**
+     * Clear out the entity and map caches, which we should do any time we add or remove a table.
+     */
+    function _clearEntityAndMapCache() {
+	/* Note: keep this cache key in sync with GalleryStorage::describeMap() */
+	GalleryDataCache::remove('GalleryStorage::describeMap()');
+
+	/* Note: keep this cache key in sync with GalleryStorageExtras::describeEntity() */
+	GalleryDataCache::remove('GalleryStorageExtras::describeEntity()');
+    }
+
+    /**
+     * Get a list of all database tables (not limited to our table-prefix)
+     * @return array GalleryStatus
+     *               array of table names in lower-case
+     */
+    function _metaTables() {
+	$this->_gs->_traceStart();
+	$metatables = $this->_gs->_db->MetaTables();
+	$this->_gs->_traceStop();
+	if ($metatables === false) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	}
+
+	/*
+	 * Some databases (notably MySQL on Win32) don't support mixed case
+	 * table names.  So, when we get the meta table list back, it's lower
+	 * case.  Force all metatable listings to lower case and then expect
+	 * them to be lowercase so that we're consistent.
+	 */
+	foreach ($metatables as $key => $tableName) {
+	    $metatables[$key] = GalleryUtilities::strToLower($tableName);
+	}
+
+	return array(null, $metatables);
+    }
+
+    /**
+     * Create a sequence.
+     * @param string $sequenceId Name of the sequence to create.
+     * @param integer $startId (optional) The number to initialize the sequence to. (default 1)
+     * @return GalleryStatus
+     */
+    function createSequence($sequenceId, $startId=1) {
+	$this->_gs->_traceStart();
+	$result = $this->_gs->_db->CreateSequence($this->_gs->_tablePrefix . $sequenceId, $startId);
+	$this->_gs->_traceStop();
+	if (empty($result)) {
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE, null, null,
+					 'Create Sequence failed for sequence: ' . $sequenceId);
+	}
+	return null;
+    }
+
+    /**
+     * Drop a sequence.
+     * @param string $sequenceId Name of the sequence to drop.
+     * @return GalleryStatus
+     */
+    function dropSequence($sequenceId) {
+	$this->_gs->_traceStart();
+	$recordSet = $this->_gs->_db->DropSequence($this->_gs->_tablePrefix . $sequenceId);
+	$this->_gs->_traceStop();
+	if ($recordSet === false) {
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::validateConnection
+     */
+    function validateConnection() {
+	if (isset($this->_gs->_nonTransactionalDb)) {
+	    $this->_gs->_traceStart();
+	    $time = $this->_gs->_nonTransactionalDb->Time();
+	    $this->_gs->_traceStop();
+	    if (!$time) {
+		unset($this->_gs->_nonTransactionalDb);
+		list ($ret) = $this->_getNonTransactionalDatabaseConnection();
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	if (isset($this->_gs->_db)) {
+	    $this->_gs->_traceStart();
+	    $time = $this->_gs->_db->Time();
+	    $this->_gs->_traceStop();
+	    if (!$time) {
+		unset($this->_gs->_db);
+		list ($ret, $this->_gs->_db) = $this->_gs->_getConnection();
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	return null;
+    }
+}
+?>

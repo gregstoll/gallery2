@@ -1,0 +1,100 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A collection of useful mail-related utilities
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Jay Rossiter <cryptographite@users.sf.net>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class MailHelper_simple {
+
+    /**
+     * @see GalleryCoreApi::sendTemplatedEmail
+     */
+    function sendTemplatedEmail($file, $data, $from, $to, $subject, $headers='') {
+	global $gallery;
+
+	GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+	$template = new GalleryTemplate(dirname(__FILE__) . '/../../../..', true, false);
+
+	/* Set the smarty variables from the data array */
+	foreach ($data as $key => $value) {
+	    $template->setVariable($key, $value);
+	}
+
+	/* Default translation domain if none given */
+	if (!isset($data['l10Domain'])) {
+	    $template->setVariable('l10Domain', 'modules_core');
+	}
+
+	list ($ret, $emailText) = $template->fetch('gallery:' . $file);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* If no from address is given, try and get the SMTP from address */
+	if (empty($from)) {
+	    list ($ret, $smtpFrom) =
+		GalleryCoreApi::getPluginParameter('module', 'core', 'smtp.from');
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if (!empty($smtpFrom)) {
+		$from = $smtpFrom;
+	    }
+	}
+
+	if (strpos(strtolower($headers), 'content-type:') === false) {
+	    $headers = "Content-Type: text/plain; charset=\"utf-8\"\r\n" . $headers;
+	}
+	if (!empty($from)) {
+	    $headers = "From: $from\r\n" . $headers;
+	}
+	if (!empty($subject)) {
+	    for ($buf = '', $i = 0; $i < strlen($subject); $i++) {
+		$val = ord($subject{$i});
+		$buf .= ($val > 127) ? '=' . dechex($val) : $subject{$i};
+	    }
+	    if ($buf != $subject) {
+		/* Encode subject for UTF-8 display if any extended characters are present */
+		$subject = '=?utf-8?q?' . $buf . '?=';
+	    }
+	}
+
+	/* Add the date; not all mailers will do this for us */
+	$headers = 'Date: ' . date('r') . "\r\n" . $headers;
+
+	$platform =& $gallery->getPlatform();
+	foreach (explode(',', $to) as $mailTo) {
+	    $success = $platform->mail($mailTo, $subject, $emailText, $headers);
+	    if (!$success) {
+		return GalleryCoreApi::error(ERROR_UNKNOWN, __FILE__, __LINE__,
+		    'Could not send mail to ' . $mailTo);
+	    }
+	}
+
+	return null;
+    }
+}
+?>

@@ -1,0 +1,265 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A helper class for the URL Rewrite module
+ * @package Rewrite
+ * @subpackage Classes
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class RewriteApi {
+
+    /**
+     * If this is set an error has occured where we couldn't report it.
+     *
+     * @var GalleryStatus a status code
+     */
+    var $_error;
+
+    /**
+     * Holds the active parser.
+     *
+     * @var RewriteParser active parser
+     */
+    var $_parser;
+
+    function RewriteApi() {
+	GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
+	list ($ret, $this->_parser) = RewriteHelper::getRewriteParser();
+	if ($ret) {
+	    $this->_error = $ret;
+	}
+    }
+
+    /**
+     * When using this API you should first make sure that your code is compatible with it.
+     *
+     * @param array $version major, minor version
+     * @return array GalleryStatus a status code
+     *               boolean true if compatible with given version
+     */
+    function isCompatibleWithApi($version) {
+	if (isset($this->_error)) {
+	    return array($this->_error, null);
+	}
+
+	return array(null, GalleryUtilities::isCompatibleWithApi($version, $this->getApiVersion()));
+    }
+
+    /**
+     * Embedded configuration
+     *
+     * All embedded-related functions need to be called while Gallery is in embedded mode.
+     */
+
+    /**
+     * Checks if the parser needs configuration.
+     *
+     * @return array GalleryStatus a status code
+     *               boolean true if configuration is needed
+     */
+    function needsEmbedConfig() {
+	if (isset($this->_error)) {
+	    return array($this->_error, null);
+	}
+
+	if (!GalleryUtilities::isEmbedded()) {
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION, __FILE__, __LINE__,
+		'use in embedded mode'), null);
+	}
+
+	list ($ret, $status) = $this->_parser->needsEmbedConfig();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $status);
+    }
+
+    /**
+     * Returns the current active configuration values.
+     *
+     * @return array GalleryStatus a status code
+     *               array configuration settings (key => value)
+     */
+    function fetchEmbedConfig() {
+	if (isset($this->_error)) {
+	    return array($this->_error, null);
+	}
+
+	if (!GalleryUtilities::isEmbedded()) {
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION, __FILE__, __LINE__,
+		'use in embedded mode'), null);
+	}
+
+	list ($ret, $config) = $this->_parser->fetchEmbedConfig();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $config);
+    }
+
+    /**
+     * Saves the configuration.
+     *
+     * @param array $params settings to save (key => value)
+     * @return array GalleryStatus a status code
+     *               int Rewrite Status code
+     *               string translated error message
+     */
+    function saveEmbedConfig($params) {
+	if (isset($this->_error)) {
+	    return array($this->_error, null, null);
+	}
+
+	if (!GalleryUtilities::isEmbedded()) {
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION, __FILE__, __LINE__,
+		'use in embedded mode'), null, null);
+	}
+
+	list ($ret, $status, $errstr) = $this->_parser->saveEmbedConfig($params);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	return array(null, $status, $errstr);
+    }
+
+    /**
+     * Fetch the active rewrite rules for a specific module which can be inactive at the time of
+     * this call.
+     * @param string $moduleId id of the module
+     * @return array GalleryStatus a status code
+     *               array $ruleIds list of the active rewrite rule ids
+     */
+    function fetchActiveRulesForModule($moduleId) {
+	list ($ret, $activeRules) =
+	    GalleryCoreApi::getPluginParameter('module', 'rewrite', 'activeRules');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$activeRules = unserialize($activeRules);
+
+	if (isset($activeRules[$moduleId])) {
+	    return array(null, array_keys($activeRules[$moduleId]));
+	}
+
+	GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
+	list ($ret, $history) = RewriteHelper::getHistoryForModule($moduleId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, array_keys($history));
+    }
+
+    /**
+     * Activate the rewrite rules for a specific module which can be inactive at the time of this
+     * call.  Does not update active rules by default, only changes the list of active rules for the
+     * given module.
+     * @param string $moduleId id of the module
+     * @param array  $ruleIds (optional) list of rule ids to activate. If omitted, all rules get
+     *               activated
+     * @param bool   $replacePatterns (optional) whether to replace active rules and patterns from
+     *               the pattern history or to replace them. Defaults to false.
+     * @return array GalleryStatus a status code
+     *               boolean true if the operation was successful, false if not (e.g. if the
+     *               .htaccess could not be written or if the rules are invalid) 
+     */
+    function activateRewriteRulesForModule($moduleId, $ruleIds=null, $replacePatterns=false) {
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', $moduleId, true);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $activeRules) =
+		GalleryCoreApi::getPluginParameter('module', 'rewrite', 'activeRules');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$activeRules = unserialize($activeRules);
+
+	GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
+	list ($ret, $history) = RewriteHelper::getHistoryForModule($moduleId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$rules = $module->getRewriteRules();
+	foreach ($rules as $ruleId => $rule) {
+	    if ((!isset($activeRules[$moduleId][$ruleId]) || $replacePatterns)
+		    && (!isset($ruleIds) || in_array($ruleId, $ruleIds))) {
+		$activeRule = array();
+		if (isset($rule['pattern'])) {
+		    $activeRule['pattern'] = $rule['pattern'];
+		    if (!$replacePatterns && isset($activeRules[$moduleId][$ruleId]['pattern'])) {
+			$activeRule['pattern'] = $activeRules[$moduleId][$ruleId]['pattern'];
+		    }
+		    if (!$replacePatterns && isset($history[$ruleId]['pattern'])) {
+			$activeRule['pattern'] = $history[$ruleId]['pattern'];
+		    }
+		}
+		$activeRules[$moduleId][$ruleId] = $activeRule;
+		unset($history[$ruleId]);
+	    }
+	}
+
+	list ($ret, $code, $errorId) = $this->_parser->saveActiveRules($activeRules, $module);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Update the history */
+	if ($code == REWRITE_STATUS_OK) {
+	    $ret = RewriteHelper::setHistoryForModule($moduleId, $history);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, $code == REWRITE_STATUS_OK);
+    }
+
+    /* Getters below */
+
+    /**
+     * @return array api version
+     */
+    function getApiVersion() {
+	return array(1, 1);
+    }
+
+    /**
+     * @return string parser id
+     */
+    function getParserId() {
+	return $this->_parser->getParserId();
+    }
+
+    /**
+     * @return string parser type
+     */
+    function getParserType() {
+	return $this->_parser->getParserType();
+    }
+}
+?>

@@ -1,0 +1,123 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/AdminMaintenance.inc');
+
+/**
+ * This is a MaintenanceTask that will check the short style URL for file system conflicts
+ * through all Gallery items.
+ *
+ * @package Rewrite
+ * @subpackage Classes
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class RewriteCheckConflictTask extends MaintenanceTask {
+
+    /**
+     * @see MaintenanceTask::getInfo
+     */
+    function getInfo() {
+	global $gallery;
+
+	return array(
+	    'l10Domain' => 'modules_rewrite',
+	    'title' => $gallery->i18n('Check short style URLs for filesystem conflicts'),
+	    'description' =>
+	    $gallery->i18n('This will go through all your Gallery items and check if the short ' .
+			   'style URL links to an existing file or directory on your webserver.'));
+    }
+
+    /**
+     * @see MaintenanceTask::run
+     */
+    function run() {
+	global $gallery;
+	$templateAdapter =& $gallery->getTemplateAdapter();
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$platform =& $gallery->getPlatform();
+
+	$baseDir = rtrim(GalleryCoreApi::getCodeBasePath(), DIRECTORY_SEPARATOR);
+
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'rewrite');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$message = $module->translate('Processing...');
+	$templateAdapter->updateProgressBar('', $message, '');
+
+	list ($ret, $results) =
+	    $gallery->search('SELECT [Item::id] FROM [Item] ' .
+			     'ORDER BY [Item::id]');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$i = 0;
+	$badPath = 0;
+	$status = array('');
+	$total = $results->resultCount();
+	while ($result = $results->nextResult()) {
+	    $params = array('view' => 'core.ShowItem',
+			    'itemId' => (int)$result[0]);
+	    $path = substr($urlGenerator->generateUrl($params, array('forceFullUrl' => true)),
+		    strlen($urlGenerator->getCurrentUrlDir()) - 1);
+	    if (($query = strpos($path, '?')) !== false) {
+		$path = substr($path, 0, $query);
+	    }
+
+	    if ($platform->file_exists($baseDir . $path) && $path != ('/' . GALLERY_MAIN_PHP)) {
+		list ($ret, $item) =
+		    GalleryCoreApi::loadEntitiesById((int)$result[0], 'GalleryItem');
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+		$params = array('view' => 'core.ItemAdmin',
+				'subView' => 'core.ItemEdit',
+				'editPlugin' => 'ItemEditItem',
+				'itemId' => (int)$result[0]);
+
+		$status[++$badPath] = $module->translate('Bad path:') .
+			sprintf(' <a href="%s">%s</a>: %s',
+				$urlGenerator->generateUrl($params),
+				$item->getTitle(),
+				$urlGenerator->getCurrentUrlDir() . substr($path, 1));
+	    }
+
+	    if (++$i % 5 == 0 || $i == $total) {
+		$message = $module->translate(
+		    array('text' => 'Checking item %d of %d', 'arg1' => $i, 'arg2' => $total));
+		$templateAdapter->updateProgressBar($message, '', $i / $total);
+	    }
+	}
+
+	$status[0] = $module->translate(array('text' => 'Checked %d items and found %d conflicts',
+					   'arg1' => $total, 'arg2' => $badPath));
+	return array(null, true, $status);
+    }
+
+    /**
+     * @see MaintenanceTask::requiresProgressBar
+     */
+    function requiresProgressBar() {
+	return true;
+    }
+}
+?>

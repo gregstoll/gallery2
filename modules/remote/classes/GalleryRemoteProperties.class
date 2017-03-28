@@ -1,0 +1,98 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This class partially mirrors the functionality of the java class java.util.Properties.
+ * @package Remote
+ * @subpackage Classes
+ * @author Tim Miller
+ * @version $Revision: 17580 $
+ */
+class GalleryRemoteProperties {
+    /**
+     * Our internal hash map
+     * @access private
+     */
+    var $_map;
+
+    function GalleryRemoteProperties() {
+	$this->_map = array();
+    }
+
+    /**
+     * Retrieve a property, or null/given default if it doesn't exist
+     * @param string $key
+     * @param mixed $defaultValue
+     * @return mixed the actual value
+     */
+    function getProperty($key, $defaultValue=null) {
+	if (isset($this->_map[$key])) {
+	    return $this->_map[$key];
+	} else {
+	    return $defaultValue;
+	}
+    }
+
+    /**
+     * Return true if the key exists in the properties map
+     * @param string $key
+     * @return boolean true if it exists
+     */
+    function hasProperty($key) {
+	return isset($this->_map[$key]);
+    }
+
+    /**
+     * Export the properties according to the Gallery Remote Protocol 2.0 data format
+     *
+     * @return string the exported properties
+     */
+    function listProperties() {
+	$results = array();
+	$results[] = '#__GR2PROTO__';
+	foreach ($this->_map as $key => $value) {
+	    $results[] = $key . '=' . $value;
+	}
+
+	return join("\n", $results);
+    }
+
+    /**
+     * Store a key/value property.  Overwrite any existing property by the same name.  Ignore null
+     * keys.  Normalize and escape line endings (\n, \r\n and \r all become \\n)
+     *
+     * @param string $key
+     * @param string $value
+     */
+    function setProperty($key, $value) {
+	if ($key != null) {
+		/* perform replace in stages to avoid uncertainty on what gets done first */
+	    $value = str_replace('\\', '\\\\', $value);
+	    $value = str_replace("\r\n", '\n', $value);
+	    $value = str_replace(array("\r", "\n", "\t"), array('\n', '\n', '\t'), $value);
+	    $key = str_replace(array('#', '!', '=', ':'), array('\\#', '\\!', '\\=', '\\:'), $key);
+	    $value = str_replace(array('#', '!', '=', ':'),
+				 array('\\#', '\\!', '\\=', '\\:'), $value);
+
+	    $this->_map[$key] = $value;
+	}
+    }
+}
+?>

@@ -1,0 +1,53 @@
+    <h1><?php print _('Upgrade Plugins') ?></h1>
+
+    <?php if (isset($templateData['upgradedModule'])): ?>
+    <ul class="success">
+    <?php foreach ($templateData['upgradedModule'] as $moduleId => $moduleName): ?>
+      <li><?php printf(_("Upgraded the %s module successfully"), "<i>$moduleName</i>") ?></li>
+    <?php endforeach; ?>
+    </ul>
+    <?php endif; ?>
+
+    <?php if (isset($templateData['upgradedTheme'])): ?>
+    <ul class="success">
+    <?php foreach ($templateData['upgradedTheme'] as $themeId => $themeName): ?>
+      <li><?php printf(_("Upgraded the %s theme successfully"), "<i>$themeName</i>") ?></li>
+    <?php endforeach; ?>
+    </ul>
+    <?php endif; ?>
+
+    <?php if (!empty($templateData['needsConfig'])): ?>
+    <ul class="warning">
+    <?php foreach ($templateData['needsConfig'] as $warning): ?>
+      <li><?php print $warning; ?></li>
+    <?php endforeach; ?>
+    </ul>
+    <?php endif; ?>
+
+    <?php if (!empty($templateData['stackTrace'])): ?>
+    <h2>
+      <?php print _("Stack Trace:") ?>
+    </h2>
+    <div class="stack_trace">
+      <?php print $templateData['stackTrace']; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if (!empty($templateData['debug'])): ?>
+    <h2>
+      <?php print _("Debug Output:") ?>
+    </h2>
+    <div class="debug">
+      <pre>
+      <?php print $templateData['debug']; ?>
+      </pre>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($templateData['anyUpgradeable']): ?>
+    <div class="go">
+	  <a href="<?php generateUrl('index.php?step=' . $currentStep->getStepNumber()) ?>" class="btn continue"><i></i><span><span></span><i></i><?php print _('Upgrade More Plugins'); ?></span></a>
+      <?php $nextStep = $stepNumber + 1 ?>
+	  <a href="<?php generateUrl('index.php?step=' . $nextStep) ?>" class="btn continue"><i></i><span><span></span><i></i><?php printf(_('Continue to Step %d&raquo;'), $nextStep); ?></span></a>
+    </div>
+    <?php endif; ?>

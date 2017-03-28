@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!DOCTYPE change
+  SYSTEM "../../../../../lib/tools/dtd/DatabaseChangeDefinition2.0.dtd">
+<change>
+  <table-name>CacheMap</table-name>
+  <schema-from>
+    <schema-major>1</schema-major>
+    <schema-minor>0</schema-minor>
+  </schema-from>
+  <schema-to>
+    <schema-major>1</schema-major>
+    <schema-minor>1</schema-minor>
+  </schema-to>
+  <remove>
+    <index>
+      <column-name>type</column-name>
+    </index>
+  </remove>
+  <remove>
+    <index>
+      <column-name>timestamp</column-name>
+    </index>
+  </remove>
+  <remove>
+    <index>
+      <column-name>userId</column-name>
+    </index>
+  </remove>
+  <add>
+    <column>
+      <column-name>isEmpty</column-name>
+      <column-type>BOOLEAN</column-type>
+    </column>
+  </add>
+  <add>
+    <index>
+      <column-name>userId</column-name>
+      <column-name>timestamp</column-name>
+      <column-name>isEmpty</column-name>
+    </index>
+  </add>
+</change>

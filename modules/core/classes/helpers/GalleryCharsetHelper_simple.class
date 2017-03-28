@@ -1,0 +1,254 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A collection of useful charset related utilities
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryCharsetHelper_simple {
+
+    /**
+     * Detect the standard charset for this system
+     * @return string an encoding (eg. "UTF-8" or "Windows-1252")
+     */
+    function detectSystemCharset() {
+	static $cacheKey = 'GalleryCharsetHelper_simple::detectSystemCharset';
+	if (GalleryDataCache::containsKey($cacheKey)) {
+	    return GalleryDataCache::get($cacheKey);
+	}
+
+	global $gallery;
+	$phpVm = $gallery->getPhpVm();
+	$sourceEncoding = $gallery->getConfig('systemCharset');
+
+	/* Determine character set of current locale */
+	if (empty($sourceEncoding) && $phpVm->function_exists('nl_langinfo')
+		&& defined('CODESET')) {
+	    /* @suppress windows warning: "nl_langinfo() is not supported in this PHP build" */
+	    $sourceEncoding = @$phpVm->nl_langinfo(CODESET);
+
+	    /* OpenBSD may improperly return D_T_FMT value */
+	    if (isset($sourceEncoding) && strpos($sourceEncoding, '%') !== false
+		    && defined('D_T_FMT') && $sourceEncoding == $phpVm->nl_langinfo(D_T_FMT)) {
+		$sourceEncoding = null;
+	    }
+	}
+	if (empty($sourceEncoding)) {
+	    $lcTable = explode(';', $phpVm->setlocale(LC_ALL, '0'));
+	    /*
+	     * setlocale() returns a string like this:
+	     *    LC_CTYPE=en_US.UTF-8;LC_NUMERIC=C;LC_TIME=C;LC_COLLATE=C;LC_MONETARY=C;
+	     *    LC_MESSAGES=C;LC_PAPER=C;LC_NAME=C;LC_ADDRESS=C;LC_TELEPHONE=C;
+	     *    LC_MEASUREMENT=C;LC_IDENTIFICATION=C
+	     * or just
+	     *    French_France.1252
+	     */
+	    if (count($lcTable) == 1) {
+		$lcCandidate = $lcTable[0];
+	    } else {
+		foreach ($lcTable as $lc) {
+		    if (!strncmp($lc, "LC_CTYPE", 8)) {
+			$lcCandidate = $lc;
+			break;
+		    }
+		}
+	    }
+	    if (!empty($lcCandidate) && ($i = strpos($lcCandidate, '.')) !== false) {
+		$sourceEncoding = substr($lcCandidate, $i + 1);
+	    }
+
+	    if (empty($sourceEncoding)) {
+		/* Unable to determine source encoding - no conversion possible */
+		return $sourceEncoding;
+	    }
+	}
+
+	/*
+	 * Remap some known charset issues.
+	 * See http://cvsweb.xfree86.org/cvsweb/xc/nls/locale.alias?rev=1.44
+	 */
+	switch($sourceEncoding) {
+	case '646':   /* Solaris iconv returns "646" for ASCII */
+	    $sourceEncoding = 'ASCII';
+	    break;
+	default:
+	    /*
+	     * Windows XP has LC_CTYPE=English_United States.1252, LC_CTYPE=Russian_Russia.1251,
+	     * etc.  Convert all the .125x types to CP125x, except Windows-1252 which we'll preserve
+	     * for backwards compatibility with G2.1
+	     */
+	    $intEncoding = (int)$sourceEncoding;
+	    if ($intEncoding >= 1250 && $intEncoding <= 1259) {
+		if ($intEncoding == 1252) {
+		    $sourceEncoding = 'Windows-1252';
+		} else {
+		    $sourceEncoding = 'CP' . $intEncoding;
+		}
+	    }
+	}
+	/* FreeBSD may return charset with missing hyphen from nl_langinfo */
+	$sourceEncoding = str_replace('ISO8859', 'ISO-8859', $sourceEncoding);
+	/* Gentoo may return ANSI_X3.4-1968 */
+	if (preg_match('{^ANSI[_-]}', $sourceEncoding)) {
+	    $sourceEncoding = 'ASCII';
+	}
+
+	GalleryDataCache::put($cacheKey, $sourceEncoding);
+	return $sourceEncoding;
+    }
+
+    /**
+     * @see GalleryCoreApi::convertToUtf8
+     */
+    function convertToUtf8($string, $sourceEncoding=null) {
+	global $gallery;
+	$phpVm = $gallery->getPhpVm();
+
+	if (empty($sourceEncoding)) {
+	    $sourceEncoding = GalleryCharsetHelper_simple::detectSystemCharset();
+	}
+	if (empty($sourceEncoding) || !strcmp($sourceEncoding, 'UTF-8')) {
+	    return $string;
+	}
+
+	/* Iconv can return false, so try it first.  If it fails, continue */
+	if ($phpVm->function_exists('iconv')) {
+	    if (($result = $phpVm->iconv($sourceEncoding, 'UTF-8', $string)) !== false) {
+		return $result;
+	    }
+	}
+
+	if ($phpVm->function_exists('mb_convert_encoding')) {
+	    return $phpVm->mb_convert_encoding($string, 'UTF-8', $sourceEncoding);
+	} else if ($phpVm->function_exists('recode_string')) {
+	    return $phpVm->recode_string($sourceEncoding . '..UTF-8', $string);
+	} else {
+	    GalleryCoreApi::requireOnce(
+		'modules/core/classes/helpers/GalleryCharsetHelper_medium.class');
+	    $charset =& GalleryCharsetHelper_medium::getCharsetTable($sourceEncoding);
+	    if (isset($charset)) {
+		return preg_replace('/([\x80-\xFF])/se',
+				    '$charset[ord(\'$1\')]',
+				    $string);
+	    }
+	}
+	return $string;
+    }
+
+    /**
+     * @see GalleryCoreApi::convertFromUtf8
+     *
+     * Warning: If neither iconv, mb_convert_encoding, or recode_string is available
+     *          we will use a manual mapping from UTF-8 to the target encoding which is
+     *          INCOMPLETE. That is, we only convert the characters that are in our
+     *          charset tables from GalleryCharsetHelper_medium.
+     */
+    function convertFromUtf8($string, $targetEncoding=null) {
+	global $gallery;
+	$phpVm = $gallery->getPhpVm();
+
+	if (empty($targetEncoding)) {
+	    $targetEncoding = GalleryCharsetHelper_simple::detectSystemCharset();
+	}
+	if (empty($targetEncoding) || !strcmp($targetEncoding, 'UTF-8')) {
+	    return $string;
+	}
+
+	/* Iconv can return false, so try it first.  If it fails, continue */
+	if ($phpVm->function_exists('iconv')) {
+	    if (($result =
+		     $phpVm->iconv('UTF-8', $targetEncoding . '//IGNORE', $string)) !== false) {
+		return $result;
+	    }
+	}
+
+	if ($phpVm->function_exists('mb_convert_encoding')) {
+	    return $phpVm->mb_convert_encoding($string, $targetEncoding, 'UTF-8');
+	} else if ($phpVm->function_exists('recode_string')) {
+	    return $phpVm->recode_string('UTF-8..' . $targetEncoding, $string);
+	}  else {
+	    GalleryCoreApi::requireOnce(
+		'modules/core/classes/helpers/GalleryCharsetHelper_medium.class');
+	    $sourceCharset =& GalleryCharsetHelper_medium::getCharsetTable($targetEncoding);
+	    if (isset($sourceCharset)) {
+		/*
+		 * The charset table is organized for sourceEncoding -> UTF-8 conversion,
+		 * we need the inverse charset table, UTF-8 -> targetEncoding
+		 */
+		$search = $replace = array();
+		foreach ($sourceCharset as $key => $value) {
+		    if (empty($value)) {
+			continue;
+		    }
+		    /* Convert decimal value 128-255 to character */
+		    $search[] = $value;
+		    $replace[] = chr($key);
+		}
+		return str_replace($search, $replace, $string);
+	    }
+	}
+	return $string;
+    }
+
+    /**
+     * @see GalleryCoreApi::utf8Substring
+     */
+    function utf8Substring($string, $start, $length) {
+	static $hasMbSubstr;
+	if (!isset($hasMbSubstr)) {
+	    if (!($hasMbSubstr = function_exists('mb_substr'))) {
+		GalleryCoreApi::requireOnce(
+			'modules/core/classes/helpers/GalleryCharsetHelper_medium.class');
+	    }
+	}
+ 
+	$result = $hasMbSubstr
+	    ? (string)mb_substr($string, $start, $length, 'UTF-8')
+	    : GalleryCharsetHelper_medium::phpUtf8Substring($string, $start, $length);
+
+	/* Truncate partial HTML entity at end of result */
+	return preg_replace('/&[^;]{0,6}$/', '', $result);
+    }
+
+    /**
+     * @see GalleryCoreApi::utf8Strcut
+     */
+    function utf8Strcut($string, $start, $length) {
+	static $hasMbStrCut;
+	if (!isset($hasMbStrCut)) {
+	    if (!($hasMbStrCut = function_exists('mb_strcut'))) {
+		GalleryCoreApi::requireOnce(
+			'modules/core/classes/helpers/GalleryCharsetHelper_medium.class');
+	    }
+	}
+
+	$result = $hasMbStrCut
+	    ? (string)mb_strcut($string, $start, $length, 'UTF-8')
+	    : GalleryCharsetHelper_medium::phpUtf8Strcut($string, $start, $length);
+
+	/* Truncate partial HTML entity at end of result */
+	return preg_replace('/&[^;]{0,6}$/', '', $result);
+    }
+}
+?>

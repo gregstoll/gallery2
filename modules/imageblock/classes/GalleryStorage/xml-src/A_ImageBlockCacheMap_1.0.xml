@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!DOCTYPE change
+  SYSTEM "../../../../../lib/tools/dtd/DatabaseChangeDefinition2.0.dtd">
+<change>
+  <table-name>ImageBlockCacheMap</table-name>
+  <schema-from>
+    <schema-major>1</schema-major>
+    <schema-minor>0</schema-minor>
+  </schema-from>
+  <schema-to>
+    <schema-major>1</schema-major>
+    <schema-minor>1</schema-minor>
+  </schema-to>
+  <remove>
+    <!-- MySQL index name was out of date -->
+    <index name_mysql="DB_COLUMN_PREFIXuserId">
+      <column-name>userId</column-name>
+      <column-name>itemType</column-name>
+    </index>
+  </remove>
+  <add>
+    <index>
+      <column-name>userId</column-name>
+      <column-name>itemType</column-name>
+    </index>
+  </add>
+</change>

@@ -1,0 +1,87 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Clear caches
+ * @package Upgrade
+ */
+class CleanCacheStep extends UpgradeStep {
+    function stepName() {
+	return _('Empty Cache');
+    }
+
+    function loadTemplateData(&$templateData) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$cacheBaseDir = $gallery->getConfig('data.gallery.cache');
+
+	/* Keep the obsolete layout dir in the list for a while */
+	$cacheDirs = array('entity', 'layout', 'module', 'theme');
+	$error = false;
+
+	/*
+	 * Try multiple times to clean the cache because for busy gallery installs that are
+	 * getting upgraded when not in maintenance mode, it's possible for new entries to get
+	 * cached while we're cleaning out old ones.  The first round of cleaning takes a long
+	 * time so the window is big.  Subsequent runs are very fast, though so after 3 attempts
+	 * we should be good unless there's a real problem.
+	 */
+	$attempts = 3;
+	do {
+	    $templateData['unclean'] = array();
+	    foreach ($cacheDirs as $dir) {
+		$dir = sprintf('%s%s', $cacheBaseDir, $dir);
+		if ($platform->file_exists($dir)) {
+		    if (!$platform->recursiveRmDir($dir)) {
+			$templateData['unclean'][] = $dir;
+		    }
+		}
+	    }
+	    $attempts--;
+	} while ($attempts > 0 && !empty($templateData['unclean']));
+
+	$ret = GalleryCoreApi::removeAllMapEntries('GalleryCacheMap', true);
+	if ($ret) {
+	    $templateData['errors'][] = _('Unable to clear the page cache');
+	    $templateData['stackTrace'] .= $ret->getAsHtml();
+	}
+
+	$storage =& $gallery->getStorage();
+	$ret = $storage->checkPoint();
+	if ($ret) {
+	    $templateData['errors'][] = _('Unable to commit database transaction');
+	    $templateData['stackTrace'] .= $ret->getAsHtml();
+	}
+
+	/*
+	 * Delete the install.log file that's left over from 2.0 and 2.0.1 installs
+	 * since it's in a known location and contains potential information leaks.
+	 */
+	$dataBase = $gallery->getConfig('data.gallery.base');
+	$legacyInstallLogPath = sprintf('%s/install.log', $dataBase);
+	if ($platform->file_exists($legacyInstallLogPath)) {
+	    $platform->unlink($legacyInstallLogPath);
+	}
+
+	$templateData['bodyFile'] = 'CleanCache.html';
+	$this->setComplete(true);
+    }
+}
+?>

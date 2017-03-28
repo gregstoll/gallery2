@@ -1,0 +1,244 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This class provides an API for parsing Picasa 2 data files
+ * @package Picasa
+ * @subpackage Picasa2DataParser
+ * @author Waldemar Schlackow <gallery@schlackow.de>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class Picasa2DataParser {
+
+    /**
+     * Check whether the given directory contains an index.xml file
+     * (to be extended later)
+     *
+     * @param string $path the picasa export path
+     * @return boolean true if the picasa path is valid, false otherwise
+     */
+    function isValidPicasaXmlPath($path) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	if (($platform->file_exists($path . 'index.xml'))
+		&& ($platform->is_readable($path . 'index.xml'))) {
+	    return true;
+	}
+	return false;
+    }
+
+    /**
+     * Get the raw XML data from a given Picasa export Path.
+     *
+     * @param string $picasaXmlPath the picasa export path
+     * @return array a status code and an album/image array
+     */
+    function getRawXmlFromPicasaPath($picasaXmlPath) {
+	global $gallery;
+
+	$picasaXmlFile = $picasaXmlPath . 'index.xml';
+	/* check for file */
+	$platform =& $gallery->getPlatform();
+	if (!$platform->file_exists($picasaXmlFile) || !$platform->is_readable($picasaXmlFile)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+			 'Missing or not readable file: ' . $picasaXmlFile), null);
+	}
+	$rawXml = implode('', $platform->file($picasaXmlFile));
+	if (!is_string($rawXml)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+			 'Error reading XML File: ' . $picasaXmlFile), null);
+	}
+
+	return array(null, $rawXml);
+    }
+
+    /**
+     *  getXmlArray - an abstraction layer on xml_parse_into_struct that returns a
+     *  nice nested array. based on dudus at onet dot pl's:
+     *  http://www.php.net/manual/en/function.xml-parse-into-struct.php#49154
+     *
+     *  @param string $rawXml - xml which will be fed into xml_parse_into_struct()
+     *  @return array GalleryStatus a status code
+     *                array a nested php array containing xml data.
+     */
+    function getXmlArray($rawXml) {
+	if (!function_exists('xml_parser_create')) {
+	    return array(GalleryCoreApi::error(ERROR_CONFIGURATION_REQUIRED, __FILE__, __LINE__,
+					       'Need xml support in PHP'), null);
+	}
+
+	/* Workaround earlier Picasa versions */
+	if (substr(trim($rawXml),0,5) != '<?xml') {
+	    $rawXml = '<?xml version="1.0" encoding="iso-8859-1"?>' . $rawXml;
+	}
+	$xmlParser = xml_parser_create();
+	xml_parser_set_option($xmlParser, XML_OPTION_CASE_FOLDING, 0);
+	xml_parser_set_option($xmlParser, XML_OPTION_SKIP_WHITE, 1);
+	$vals = array();
+	xml_parse_into_struct($xmlParser, $rawXml, $vals);
+	xml_parser_free($xmlParser);
+	$_tmp = '';
+	foreach ($vals as $xmlElem) {
+	    $xTag = $xmlElem['tag'];
+	    $xLevel = $xmlElem['level'];
+	    $xType = $xmlElem['type'];
+	    if (($xLevel != 1) && ($xType == 'close')) {
+		if (isset($multiKey[$xTag][$xLevel])) {
+		    $multiKey[$xTag][$xLevel] = 1;
+		} else {
+		    $multiKey[$xTag][$xLevel] = 0;
+		}
+	    }
+	    if (($xLevel != 1) && ($xType == 'complete')) {
+		if ($_tmp == $xTag) {
+		    $multiKey[$xTag][$xLevel] = 1;
+		}
+		$_tmp = $xTag;
+	    }
+	}
+
+	foreach ($vals as $xmlElem) {
+	    $xTag = $xmlElem['tag'];
+	    $xLevel = $xmlElem['level'];
+	    $xType = $xmlElem['type'];
+	    if ($xType == 'open') {
+		$level[$xLevel] = $xTag;
+	    }
+	    $startLevel = 1;
+	    $phpStmt = '$xmlArray';
+	    if ($xType == 'close' && $xLevel != 1) {
+		$multiKey[$xTag][$xLevel]++;
+	    }
+	    while ($startLevel < $xLevel) {
+		$phpStmt .= '[$level[' . $startLevel . ']]';
+		if ((isset($multiKey[$level[$startLevel]][$startLevel])) &&
+			($multiKey[$level[$startLevel]][$startLevel])) {
+		    $phpStmt .= '[' . ($multiKey[$level[$startLevel]][$startLevel]-1) . ']';
+		}
+		$startLevel++;
+	    }
+	    $add = '';
+	    if ((isset($multiKey[$xTag][$xLevel])) && ($multiKey[$xTag][$xLevel]) &&
+		    (($xType == 'open') || ($xType == 'complete'))) {
+		if (!isset($multiKey2[$xTag][$xLevel])) {
+		    $multiKey2[$xTag][$xLevel] = 0;
+		} else {
+		    $multiKey2[$xTag][$xLevel]++;
+		}
+		$add = '[' . $multiKey2[$xTag][$xLevel] . ']';
+	    }
+	    if ((isset($xmlElem['value'])) && (trim($xmlElem['value']) != '') &&
+		    (!array_key_exists('attributes', $xmlElem))) {
+		if ($xType == 'open') {
+		    $phpStmtMain = $phpStmt . '[$xType]' . $add .
+			'[\'content\'] = $xmlElem[\'value\'];';
+		} else {
+		    $phpStmtMain = $phpStmt . '[$xTag]' . $add . ' = trim($xmlElem[\'value\']);';
+		}
+		eval($phpStmtMain);
+	    }
+	    if (array_key_exists('attributes', $xmlElem)) {
+		if (isset($xmlElem['value'])) {
+		    $phpStmtMain = $phpStmt . '[$xTag]' . $add .
+			'[\'content\'] = $xmlElem[\'value\'];';
+		    eval($phpStmtMain);
+		}
+		foreach ($xmlElem['attributes'] as $key => $value) {
+		    $phpStmtAtt = $phpStmt . '[$xTag]' . $add .
+			'[\'attributes\'][$key] = $value;';
+		    eval($phpStmtAtt);
+		}
+	    }
+	}
+	if (!isset($xmlArray)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+			 'Error parsing XML.'), null);
+	}
+	return array(null, $xmlArray);
+    }
+
+    /**
+     * Get the nested album and picture array from the Picasa export path.
+     *
+     * @param string $picasaXmlArray the picasa export path
+     * @return array a status code and an album/image array
+     */
+    function getAlbumFromArray($picasaXmlArray) {
+
+	$imageArray = $picasaXmlArray;
+
+	if (isset($imageArray['album']['albumName'])) {
+	    $albumArray['albumName'] = trim($imageArray['album']['albumName']);
+	} else {
+	     return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+			  'No albumName in Picasa export.'), null);
+	}
+
+	if (isset($imageArray['album']['albumCaption'])) {
+	    $albumArray['albumCaption'] = trim($imageArray['album']['albumCaption']);
+	} else {
+	    $albumArray['albumCaption'] = '';
+	}
+
+	$imageArray = $imageArray['album']['images']['image'];
+	/* Problem if there is no array */
+	if (!isset($imageArray[0])) {
+	    $tempArray = array();
+	    $tempArray[0] = $imageArray;
+	    $imageArray = $tempArray;
+	}
+	for ($i = 0; $i < count($imageArray); $i++) {
+	    $albumArray['images'][$i]['path'] = $imageArray[$i]['itemLargeImage'];
+	    $albumArray['images'][$i]['name'] = $imageArray[$i]['itemName'];
+	    $albumArray['images'][$i]['caption'] = $imageArray[$i]['itemCaption'];
+	    $albumArray['images'][$i]['width'] = $imageArray[$i]['itemWidth'];
+	    $albumArray['images'][$i]['height'] = $imageArray[$i]['itemHeight'];
+	    $albumArray['images'][$i]['thumbwidth'] = $imageArray[$i]['itemThumbnailWidth'];
+	    $albumArray['images'][$i]['thumbheight'] = $imageArray[$i]['itemThumbnailHeight'];
+	}
+	return array(null, $albumArray);
+    }
+
+    /**
+     * Get the nested album and picture array from the Picasa export path.
+     *
+     * @param string $picasaXmlPath the picasa export path
+     * @return array a status code and an album/image array
+     */
+    function getAlbum($picasaXmlPath) {
+	list ($ret, $rawXml) = Picasa2DataParser::getRawXmlFromPicasaPath($picasaXmlPath);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $picasaXmlArray) = Picasa2DataParser::getXmlArray($rawXml);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $albumArray) = Picasa2DataParser::getAlbumFromArray($picasaXmlArray);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	return array(null, $albumArray);
+    }
+}
+?>

@@ -1,0 +1,688 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+GalleryCoreApi::requireOnce('modules/imagemagick/classes/ImageMagickToolkitHelper.class');
+
+/**
+ * A ImageMagick version of GalleryToolkit
+ * @package ImageMagick
+ * @subpackage Classes
+ * @author Vallimar <vallimar@sexorcisto.net>
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 20954 $
+ */
+class ImageMagickToolkit extends GalleryToolkit {
+    /**
+     * @see GalleryToolkit::getProperty
+     */
+    function getProperty($mimeType, $propertyName, $sourceFilename) {
+
+	switch($propertyName) {
+	case 'dimensions':
+	    list ($ret, $width, $height) = $this->_getImageDimensions($mimeType, $sourceFilename);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $results = array((int)$width, (int)$height);
+	    break;
+
+	case 'page-count':
+	    list ($ret, $count) = $this->_getPageCount($sourceFilename, $mimeType);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $results = array($count);
+	    break;
+
+	case 'colorspace':
+	    list ($ret, $colorspace) = $this->_getColorspace($sourceFilename);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $results = array($colorspace);
+	    break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+	}
+
+	return array(null, $results);
+    }
+
+    /**
+     * @see GalleryToolkit::performOperation
+     */
+    function performOperation($mimeType, $operationName, $sourceFilename,
+			      $destFilename, $parameters, $context=array()) {
+	global $gallery;
+	static $convertOps = array('thumbnail', 'scale', 'resize', 'rotate',
+				   'crop', 'convert-to-image/jpeg', 'select-page');
+
+	/* Check context for any operations that have been queued up */
+	$outputMimeType = $mimeType;
+	if (isset($context['imagemagick.transform'])) {
+	    $transform = $context['imagemagick.transform'];
+	    $mimeType = $context['imagemagick.mime'];
+	    unset($context['imagemagick.transform']);
+	    unset($context['imagemagick.mime']);
+	} else {
+	    $transform = array();
+	}
+	if (isset($context['width'])) {
+	    $width = $context['width'];
+	    $height = $context['height'];
+	}
+
+	/* Use context look-ahead to see if we can queue up parameters to use later */
+	$queueIt = in_array($operationName, $convertOps) &&
+	    isset($context['next.toolkit']) && $context['next.toolkit'] == $this &&
+	    in_array($context['next.operation'], $convertOps);
+
+	/*
+	 * Some versions of ImageMagick (6.1.6) are broken if you try to do a -crop followed
+	 * by a -geometry, so if we look ahead and see a -geometry and we have a -crop in our
+	 * queue, then we can't queue the geometry.
+	 */
+	if ($queueIt &&
+	    in_array($context['next.operation'], array('thumbnail', 'scale', 'resize')) &&
+	    ($operationName == 'crop' || in_array('-crop', $transform))) {
+	    $queueIt = false;
+	}
+
+	$usePercent = in_array($operationName, array('thumbnail', 'scale', 'resize'))
+	    && (substr($parameters[0], -1) == '%'
+		    || (isset($parameters[1]) && substr($parameters[1], -1) == '%'));
+
+	if (!isset($width) && ($queueIt || $usePercent
+		    || in_array($operationName, array('thumbnail', 'crop', 'composite')))) {
+	    list ($ret, $width, $height) = $this->_getImageDimensions($mimeType, $sourceFilename);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	}
+
+	if ($usePercent) {
+	    /* Convert percentages to real image dimensions */
+	    if (substr($parameters[0], -1) == '%') {
+		$parameters[0] = (int)round($width * rtrim($parameters[0], '%') / 100);
+	    }
+	    if (isset($parameters[1]) && substr($parameters[1], -1) == '%') {
+		$parameters[1] = (int)round($height * rtrim($parameters[1], '%') / 100);
+	    }
+	}
+
+	if (preg_match('{^convert-to-(image/.*)$}', $operationName, $matches)) {
+	    $cmd = 'convert';
+	    $outputMimeType = $matches[1];
+	} else switch($operationName) {
+	case 'thumbnail':
+	    $cmd = 'convert';
+	    /* Don't enlarge images for a thumbnail */
+	    if ($width > $parameters[0] || $height > $parameters[0]) {
+		$this->_addResizeParam($transform, $parameters[0]);
+		list ($width, $height) =
+		    GalleryUtilities::scaleDimensionsToFit($width, $height, $parameters[0]);
+	    }
+	    /* Strip metadata to make derivative files smaller.. */
+	    list ($ret, $removeMetaDataSwitch) =
+		GalleryCoreApi::getPluginParameter('module', 'imagemagick', 'removeMetaDataSwitch');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    if (!empty($removeMetaDataSwitch)) {
+		$transform = array_merge($transform, explode('|', $removeMetaDataSwitch));
+	    }
+	    break;
+
+	case 'scale':
+	    $cmd = 'convert';
+	    $targetHeight = empty($parameters[1]) ? $parameters[0] : $parameters[1];
+	    $this->_addResizeParam($transform, $parameters[0], $targetHeight);
+	    if (isset($width)) {
+		list ($width, $height) = GalleryUtilities::scaleDimensionsToFit(
+					 $width, $height, $parameters[0], $targetHeight);
+	    }
+	    break;
+
+	case 'resize':
+	    $cmd = 'convert';
+	    $this->_addResizeParam($transform, $parameters[0], $parameters[1]);
+	    if (isset($width)) {
+		list ($width, $height) = GalleryUtilities::scaleDimensionsToFit(
+					 $width, $height, $parameters[0], $parameters[1]);
+	    }
+	    break;
+
+	case 'rotate':
+	    $cmd = 'convert';
+	    if (is_int($i = array_search('-size', $transform))) {
+		array_splice($transform, $i, 2);
+	    }
+	    $transform = array_merge($transform, array('-rotate', (string)$parameters[0]));
+	    if (isset($width) && ($parameters[0] == 90 || $parameters[0] == -90)) {
+		$tmp = $width;
+		$width = $height;
+		$height = $tmp;
+	    }
+	    break;
+
+	case 'crop':
+	    /* source dimensions are required to convert from percentages to pixels  */
+	    $pixelX = round($parameters[0] / 100 * $width);
+	    $pixelY = round($parameters[1] / 100 * $height);
+	    $width = round($parameters[2] / 100 * $width);
+	    $height = round($parameters[3] / 100 * $height);
+
+	    $cmd = 'convert';
+	    if (is_int($i = array_search('-size', $transform))) {
+		array_splice($transform, $i, 2);
+	    }
+	    $transform = array_merge($transform,
+			       array('-crop', sprintf('%sx%s+%s+%s',
+					      $width, $height, $pixelX, $pixelY)));
+	    break;
+
+	case 'select-page':
+	    $cmd = 'convert';
+	    $transform['page'] = $parameters[0];
+	    break;
+
+	case 'composite':
+	    list ($ret, $cmd) =
+		GalleryCoreApi::getPluginParameter('module', 'imagemagick', 'compositeCmd');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    if (empty($cmd)) {
+		$cmd = 'composite';
+	    }
+	    $compositeOverlayPath = $parameters[0];
+	    $compositeOverlayMimeType = $parameters[1];
+	    $compositeWidth = $parameters[2];
+	    $compositeHeight = $parameters[3];
+	    $compositeAlignmentType = $parameters[4];
+	    $compositeAlignX = $parameters[5];
+	    $compositeAlignY = $parameters[6];
+
+	    switch ($compositeAlignmentType) {
+	    case 'top-left': /* Top - Left */
+		$compositeAlignX = 0;
+		$compositeAlignY = 0;
+		break;
+
+	    case 'top': /* Top */
+		$compositeAlignX = 50;
+		$compositeAlignY = 0;
+		break;
+
+	    case 'top-right': /* Top - Right */
+		$compositeAlignX = 100;
+		$compositeAlignY = 0;
+		break;
+
+	    case 'left': /* Left */
+		$compositeAlignX = 0;
+		$compositeAlignY = 50;
+		break;
+
+	    case 'center': /* Center */
+		$compositeAlignX = 50;
+		$compositeAlignY = 50;
+		break;
+
+	    case 'right': /* Right */
+		$compositeAlignX = 100;
+		$compositeAlignY = 50;
+		break;
+
+	    case 'bottom-left': /* Bottom - Left */
+		$compositeAlignX = 0;
+		$compositeAlignY = 100;
+		break;
+
+	    case 'bottom': /* Bottom */
+		$compositeAlignX = 50;
+		$compositeAlignY = 100;
+		break;
+
+	    case 'bottom-right': /* Bottom Right */
+		$compositeAlignX = 100;
+		$compositeAlignY = 100;
+		break;
+
+	    case 'manual': /* Manual placement */
+		/* Use the alignments we received */
+		break;
+
+	    default:
+		return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+				    "Unknown composite alignment type: $compositeAlignmentType"),
+			     null, null);
+	    }
+
+	    /* Convert from percentages to pixels */
+	    $compositeAlignX = (int)($compositeAlignX / 100 * ($width - $compositeWidth));
+	    $compositeAlignY = (int)($compositeAlignY / 100 * ($height - $compositeHeight));
+
+	    /* Clip to our bounding box */
+	    $compositeAlignX = min($compositeAlignX, $width - $compositeWidth);
+	    $compositeAlignX = max(0, $compositeAlignX);
+	    $compositeAlignY = min($compositeAlignY, $height - $compositeHeight);
+	    $compositeAlignY = max(0, $compositeAlignY);
+
+	    $dataDir = $gallery->getConfig('data.gallery.base');
+	    $transform = array('-geometry', '+' . $compositeAlignX . '+' . $compositeAlignY,
+			       $dataDir . $compositeOverlayPath);
+	    break;
+
+	case 'compress':
+	    $targetSize = $parameters[0];
+	    $platform =& $gallery->getPlatform();
+	    $fileSize = $platform->filesize($sourceFilename) >> 10; /* Size in KB */
+	    if ($fileSize <= $targetSize) {
+		break;
+	    }
+	    /* Use module quality parameter as initial guess */
+	    list ($ret, $quality) =
+		GalleryCoreApi::getPluginParameter('module', 'imagemagick', 'jpegQuality');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    $maxQuality = 100;
+	    $minQuality = 5;
+	    do {
+		$ret = $this->_transformImage($mimeType, 'convert', array(), $sourceFilename,
+					      $destFilename, $outputMimeType, $quality);
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+		clearstatcache();
+		$fileSize = $platform->filesize($destFilename) >> 10;
+		if ($fileSize >= $targetSize) {
+		    $maxQuality = $quality;
+		}
+		if ($fileSize <= $targetSize) {
+		    $minQuality = $quality;
+		}
+		$quality = round(($minQuality + $maxQuality) / 2);
+	    } while ($maxQuality - $minQuality > 2
+		   && abs(($fileSize - $targetSize) / $targetSize) > 0.02);
+	    return array(null, $outputMimeType, $context);
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION, __FILE__, __LINE__,
+					       "$operationName $outputMimeType"), null, null);
+	}
+
+	if (isset($width)) {
+	    $context['width'] = $width;
+	    $context['height'] = $height;
+	}
+
+	if ($queueIt) {
+	    $context['imagemagick.transform'] = $transform;
+	    $context['imagemagick.mime'] = $mimeType;
+
+	    if ($sourceFilename != $destFilename) {
+		$platform =& $gallery->getPlatform();
+		if (!$platform->copy($sourceFilename, $destFilename)) {
+		    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE), null, null);
+		}
+	    }
+	    return array(null, $outputMimeType, $context);
+	}
+
+	if ($outputMimeType == $mimeType && empty($transform)) {
+	    /* Just copy the source to the destination */
+	    if ($sourceFilename != $destFilename) {
+		$platform =& $gallery->getPlatform();
+		if (!$platform->copy($sourceFilename, $destFilename)) {
+		    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE), null, null);
+		}
+	    }
+	} else {
+	    $ret = $this->_transformImage($mimeType, $cmd, $transform,
+					  $sourceFilename, $destFilename, $outputMimeType);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	}
+
+	return array(null, $outputMimeType, $context);
+    }
+
+    /**
+     * @see GalleryToolkit::getImageDimensions
+     */
+    function _getImageDimensions($mimeType, $filename) {
+	global $gallery;
+
+	/*
+	 * Run it through PHP first, it's faster and more portable.  If it runs afoul of
+	 * open_basedir it'll return false and we can try ImageMagick.
+	 */
+	$platform =& $gallery->getPlatform();
+	$results = $platform->getimagesize($filename);
+	if (($results != false) &&
+	    (($results[0] > 1) && ($results[1] > 1))) {
+	    return array(null, $results[0], $results[1]);
+	}
+
+	list ($ret, $cmd) = ImageMagickToolkitHelper::getCommand('identify');
+	if ($ret) {
+	    return array($ret, 0, 0);
+	}
+
+	$oldCwd = $platform->getcwd();
+	$platform->chdir($gallery->getConfig('data.gallery.tmp'));
+	list ($success, $output) = $platform->exec(array(array_merge($cmd, array($filename))));
+	if (!$success) {
+	    $platform->chdir($oldCwd);
+	    return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE), 0, 0);
+	}
+	$platform->chdir($oldCwd);
+
+	foreach ($output as $line) {
+	    if (preg_match('/([0-9]+)x([0-9]+)/', $line, $regs)) {
+		return array(null, $regs[1], $regs[2]);
+	    }
+	}
+
+	return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE), null, null);
+    }
+
+    /**
+     * Call 'identify' and count the pages
+     * @access private
+     */
+    function _getPageCount($filename, $mimeType) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $cmd) = ImageMagickToolkitHelper::getCommand('identify');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$oldCwd = $platform->getcwd();
+	$platform->chdir($gallery->getConfig('data.gallery.tmp'));
+
+	if ($mimeType == 'application/photoshop') {
+	    /* Identify only shows the number of photoshop layers in verbose output */
+	    list ($success, $output) =
+		$platform->exec(array(array_merge($cmd, array('-verbose', $filename))));
+	} else {
+	    list ($success, $output) = $platform->exec(array(array_merge($cmd, array($filename))));
+	}
+
+	$platform->chdir($oldCwd);
+	if (!$success) {
+	    return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE), null);
+	}
+
+	$count = 0;
+	if ($mimeType == 'application/photoshop') {
+	    foreach ($output as $line) {
+		if (preg_match('/^\s*Scene: \d+ of (\d+)/', $line, $matches)) {
+		    $count = $matches[1];
+		    break;
+		}
+	    }
+	} else {
+	    $match = '/' . preg_quote(basename($filename)) . '[[ =]/';
+	    foreach ($output as $line) {
+		if (preg_match($match, $line)) {
+		    $count++;
+		}
+	    }
+	}
+
+	return array(null, $count);
+    }
+
+    /**
+     * Call 'identify' to determine the image colorspace
+     * @access private
+     */
+    function _getColorspace($filename) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $cmd) = ImageMagickToolkitHelper::getCommand('identify');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($success, $output) =
+	    $platform->exec(array(array_merge($cmd, array('-format', '%r', $filename))));
+	if (!$success || empty($output)) {
+	    return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE), null);
+	}
+	foreach (array('RGB', 'CMYK') as $colorspace) {
+	    if (strpos($output[0], $colorspace) !== false) {
+		return array(null, $colorspace);
+	    }
+	}
+	return array(null, 'unknown');
+    }
+
+    /**
+     * Do the given transform on the source image
+     *
+     * @param string $mimeType source mime type
+     * @param string $cmd the command to execute
+     * @param array $args
+     * @param string $sourceFilename the path to a source file
+     * @param string $destFilename the path to a destination file
+     * @param string $outputMimeType
+     * @param string $jpegQuality (optional)
+     * @return GalleryStatus a status code
+     * @access private
+     */
+    function _transformImage($mimeType, $cmd, $args, $sourceFilename, $destFilename,
+			     $outputMimeType, $jpegQuality=null) {
+	global $gallery;
+
+	/* Get a temp file name and figure out our convert-from-pnm command */
+	$tmpDir = $gallery->getConfig('data.gallery.tmp');
+	$platform =& $gallery->getPlatform();
+	$tmpFilename = $platform->tempnam($tmpDir, 'imgk_');
+	if (empty($tmpFilename)) {
+	    /* This can happen if the $tmpDir path is bad */
+	    return GalleryCoreApi::error(ERROR_BAD_PATH);
+	}
+
+	list ($ret, $command) = ImageMagickToolkitHelper::getCommand($cmd);
+	if ($ret) {
+	    @$platform->unlink($tmpFilename);
+	    return $ret;
+	}
+	if (!isset($jpegQuality)) {
+	    list ($ret, $jpegQuality) =
+		GalleryCoreApi::getPluginParameter('module', 'imagemagick', 'jpegQuality');
+	    if ($ret) {
+		@$platform->unlink($tmpFilename);
+		return $ret;
+	    }
+	}
+	$jpegQuality = (int)$jpegQuality;
+
+	switch ($outputMimeType) {
+	case 'image/jpeg' :
+	    $command[] = '-quality';
+	    $command[] = $jpegQuality;
+	    break;
+
+	case 'image/png':
+	    /*
+	     * ImageMagick uses (quality/10) as the compression level and
+	     * (quality%10) as a filter type.  For now, use adaptive filtering
+	     * (5) since it's their default filter (default is normally 75)
+	     * but preserve the compression level.
+	     *
+	     * ref: http://www.imagemagick.org/www/ImageMagick.html
+	     */
+	    $command[] = '-quality';
+	    $command[] = (int)($jpegQuality / 10) * 10 + 5;
+	    break;
+	}
+
+	switch ($mimeType) {
+	case 'image/gif':
+	    /* In case it's an animated gif.. */
+	    if ($cmd == 'convert') {
+		/**
+		 * Bug 1703410
+		 * ImageMagick 6.2.6 and later needs different arguments for best results
+		 */
+		list ($ret, $useNewCoalesceOptions) = GalleryCoreApi::getPluginParameter(
+		    'module', 'imagemagick', 'useNewCoalesceOptions');
+		if ($ret) {
+		    return $ret;
+		}
+		if ($useNewCoalesceOptions) {
+		    $command[] = '%s';
+		    $command[] = '-coalesce'; /* Needs to be _after_ the filename */
+		    $command[] = '-layers'; /* Better than -deconstruct */
+		    $command[] = 'optimize';
+		} else {
+		    $command[] = '-coalesce'; /* Needs to be _before_ the filename */
+		    $command[] = '%s';
+		    $args[] = '-deconstruct';
+		}
+	    }
+	    if ($outputMimeType == 'image/gif') {
+		break;
+	    }
+	    /* If the output format isn't gif, pick a frame assuming it's an animated GIF. */
+	case 'image/tiff':
+	case 'application/pdf':
+	case 'application/postscript':
+	case 'application/photoshop':
+	    /*
+	     * PDF/postscript can be multi-paged, TIFF multi-scened, PSD multi-layered;
+	     * Grab the first page/scene/layer unless a specific one is requested
+	     */
+	    $page = 0;
+	    if (isset($args['page'])) {
+		$page = $args['page'] - 1;
+		unset($args['page']);
+	    }
+	    $sourceFilename .= '[' . $page . ']';
+	    break;
+
+	case 'image/jpeg-cmyk':
+	case 'image/tiff-cmyk':
+	case 'application/photoshop-cmyk':
+	    if (substr($outputMimeType, -5) != '-cmyk') {
+		$command[] = '-colorspace';
+		$command[] = 'RGB';
+	    }
+	    break;
+	}
+
+	/*
+	 * Prepare our command.  If one of the arguments is %s, then put the source file path
+	 * there, else put it at the end.
+	 */
+	if (!empty($args)) {
+	    $command = array_merge($command, $args);
+	}
+	$replaced = false;
+	for ($i = 0; $i < sizeof($command); $i++) {
+	    if ($command[$i] == '%s') {
+		$command[$i] = $sourceFilename;
+		$replaced = true;
+	    }
+	}
+	if (!$replaced) {
+	    $command[] = $sourceFilename;
+	}
+
+	list ($ret, $extensions) = GalleryCoreApi::convertMimeToExtensions($outputMimeType);
+	if ($ret) {
+	    @$platform->unlink($tmpFilename);
+	    return $ret;
+	}
+	if (empty($extensions)) {
+	    @$platform->unlink($tmpFilename);
+	    return GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE, __FILE__, __LINE__,
+		"Can't convert to unknown mime type: $outputMimeType");
+	}
+	$command[] = sprintf("%s:%s", $extensions[0], $tmpFilename);
+
+	$oldCwd = $platform->getcwd();
+	$platform->chdir($gallery->getConfig('data.gallery.tmp'));
+	list ($success, $output) = $platform->exec(array($command));
+	if (!$success) {
+	    @$platform->unlink($tmpFilename);
+	    $platform->chdir($oldCwd);
+	    return GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE);
+	}
+	$platform->chdir($oldCwd);
+
+	$success = $platform->rename($tmpFilename, $destFilename);
+	if (!$success) {
+	    @$platform->unlink($tmpFilename);
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					 "Failed renaming $tmpFilename -> $destFilename");
+	}
+
+	/* ImageMagick tends to write output files with 600 permission */
+	$platform->chmod($destFilename);
+
+	return null;
+    }
+
+    /**
+     * Return the full path to the ImageMagick command
+     * @param string $cmd an ImageMagick command (eg. "convert")
+     * @return mixed string/error?
+     * @access private
+     */
+    function _imageMagickCmd($cmd) {
+	list ($ret, $imageMagickPath) =
+	    GalleryCoreApi::getPluginParameter('module', 'imagemagick', 'path');
+	if ($ret) {
+	    return $ret;
+	}
+
+	return $imageMagickPath . $cmd;
+    }
+
+    /**
+     * Add parameters for resizing image.
+     * -size produces faster results when only resizing; incorrect results when
+     * combined with other operations like -crop
+     *
+     * @param array $transform parameters
+     * @param int $w target size
+     * @param int $h target height (optional)
+     * @access private
+     */
+    function _addResizeParam(&$transform, $w, $h=null) {
+	$size = isset($h) ? ($w . 'x' . $h) : ($w . 'x' . $w);
+	$transform = array_merge($transform, empty($transform)
+			  ? array('-size', $size, '-geometry', $size)
+			  : array('-geometry', $size));
+    }
+}
+?>

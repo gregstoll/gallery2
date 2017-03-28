@@ -1,0 +1,121 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper functions for users/groups
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryUserGroupHelper_simple {
+
+    /**
+     * @see GalleryCoreApi::isUserInSiteAdminGroup
+     */
+    function isUserInSiteAdminGroup($userId=null) {
+	global $gallery;
+	if (!isset($userId)) {
+	    $userId = $gallery->getActiveUserId();
+	}
+
+	list ($ret, $adminGroupId) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+	if ($ret) {
+	    return array($ret, false);
+	}
+
+	list ($ret, $result) = GalleryUserGroupHelper_simple::isUserInGroup($userId, $adminGroupId);
+	if ($ret) {
+	    return array($ret, false);
+	}
+
+	return array(null, $result);
+    }
+
+    /**
+     * @see GalleryCoreApi::isUserInGroup
+     */
+    function isUserInGroup($userId, $groupId) {
+	$userId = (int) $userId;
+	$groupId = (int) $groupId;
+
+	$cacheKey = "GalleryUserGroupHelper::isUserInGroup($userId,$groupId)";
+	if (GalleryDataCache::containsKey($cacheKey)) {
+	    return array(null, GalleryDataCache::get($cacheKey));
+	}
+
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryUserGroupMap',
+	    array('userId'), array('userId' => $userId, 'groupId' => $groupId),
+	    array('limit' => array('count' => 1)));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$result = $searchResults->resultCount() ? true : false;
+	GalleryDataCache::put($cacheKey, $result);
+	return array(null, $result);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchGroupsForUser
+     */
+    function fetchGroupsForUser($userId, $count=null, $offset=null) {
+	global $gallery;
+
+	$cacheKey = "GalleryUserGroupHelper::fetchGroupsForUser($userId,$count,$offset)";
+	if (GalleryDataCache::containsKey($cacheKey)) {
+	    $data = GalleryDataCache::get($cacheKey);
+	} else {
+	    $query = '
+	    SELECT
+	      [GalleryGroup::id],
+	      [GalleryGroup::groupName]
+	    FROM
+	      [GalleryUserGroupMap], [GalleryGroup]
+	    WHERE
+	      [GalleryGroup::id] = [GalleryUserGroupMap::groupId]
+	      AND
+	      [GalleryUserGroupMap::userId] = ?
+	    ORDER BY
+	      [GalleryGroup::groupName]
+	    ';
+	    list ($ret, $searchResults) =
+		$gallery->search($query,
+				  array((int) $userId),
+				  array('limit' => array('count' => $count,
+							 'offset' => $offset)));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $data = array();
+	    while ($result = $searchResults->nextResult()) {
+		$data[$result[0]] = $result[1];
+	    }
+
+	    GalleryDataCache::put($cacheKey, $data);
+	}
+
+	return array(null, $data);
+    }
+}
+?>

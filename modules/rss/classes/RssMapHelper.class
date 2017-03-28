@@ -1,0 +1,284 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Utility functions useful in managing Rss
+ * @package Rss
+ * @subpackage Classes
+ * @author Pierre-Luc Paour <gallery@paour.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class RssMapHelper {
+
+    /**
+     * Return the feeds defined for a given item
+     *
+     * @param int $itemId (optional) item id or null for all feeds
+     * @return array GalleryStatus a status code
+     *         array of array 'name' => feed name
+     *                        'itemId' => item associated with the feed
+     *                        'ownerId' => owner of the feed
+     *                        'params' => feed definition
+     */
+    function fetchFeedsForItem($itemId=null) {
+	global $gallery;
+
+	if (isset($itemId)) {
+	    list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('RssMap',
+		array('feedName', 'itemId', 'ownerId', 'params'),
+		array('itemId' => $itemId));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	} else {
+	    $query = '
+	    SELECT
+	      [RssMap::feedName], [RssMap::itemId], [RssMap::ownerId], [RssMap::params]
+	    FROM
+	      [RssMap]
+	    ';
+
+	    list ($ret, $searchResults) = $gallery->search($query);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	$feeds = $itemIds = array();
+	while ($result = $searchResults->nextResult()) {
+	    $params = unserialize($result[3]);
+
+	    if ($params != false) {
+		$feed = array('name' => $result[0],
+			      'itemId' => $result[1],
+			      'ownerId' => $result[2],
+			      'params' => $params);
+		$feeds[] = $feed;
+		$itemIds[] = $result[1];
+	    } else {
+		/* unserialization error */
+		return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE),
+			     null);
+	    }
+	}
+
+	if (!empty($itemIds)) {
+	    list ($ret, $permissions) = GalleryCoreApi::fetchPermissionsForItems($itemIds);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    foreach ($feeds as $id => $feed) {
+		if (!isset($permissions[$feed['itemId']]['core.view'])) {
+		    unset($feeds[$id]);
+		}
+	    }
+	}
+
+	return array(null, $feeds);
+    }
+
+    /**
+     * Return all the feed names
+     *
+     * @param int $limit optional limit to the number of feeds
+     * @return array GalleryStatus a status code
+     *         array of feed names
+     */
+    function fetchFeedNames($limit=0) {
+	global $gallery;
+
+	$query = '
+	SELECT
+	  [RssMap::feedName]
+	FROM
+	  [RssMap]
+	';
+
+	$params = array();
+	if (isset($limit)) {
+	    $params['limit'] = array('count' => $limit);
+	}
+
+	list ($ret, $searchResults) = $gallery->search($query, null, $params);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$names = array();
+	while ($result = $searchResults->nextResult()) {
+	    $names[] = $result[0];
+	}
+
+	return array(null, $names);
+    }
+
+    /**
+     * Fetch a feed
+     *
+     * @param string $feedName
+     * @return GalleryStatus a status code
+     */
+    function fetchFeed($feedName) {
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('RssMap',
+	    array('params'), array('feedName' => $feedName));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$params = array();
+	if ($result = $searchResults->nextResult()) {
+	    $params = unserialize($result[0]);
+
+	    if ($params != false) {
+	    	if (!empty($params['itemId'])) {
+		    list ($ret, $canView) =
+			GalleryCoreApi::hasItemPermission($params['itemId'], 'core.view');
+		    if ($ret) {
+			return array($ret, null);
+		    }
+		    if (!$canView) {
+			/* Avoid information disclosure, act as if the item didn't exist. */
+			return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+		    }
+	    	}
+		return array(null, $params);
+	    } else {
+		/* unserialization error */
+		return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE),
+			     null);
+	    }
+	} else {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	}
+    }
+
+    /**
+     * Create a feed
+     *
+     * @param string $feedName
+     * @param array $params parameters
+     * @return GalleryStatus a status code
+     */
+    function createFeed($feedName, $params) {
+	global $gallery;
+
+	/* first, check for collision */
+	list ($ret, $feed) = RssMapHelper::fetchFeed($feedName);
+	if (!$ret) {
+	    /* we expected an ERROR_MISSING_OBJECT, this means we have a collision. Throw it */
+	    return GalleryCoreApi::error(ERROR_COLLISION);
+	} else if (!$ret->getErrorCode() & ERROR_MISSING_OBJECT) {
+	    return $ret;
+	}
+
+	$ret = GalleryCoreApi::addMapEntry('RssMap',
+	    array('feedName' => $feedName,
+		  'itemId' => $params['itemId'],
+		  'ownerId' => $gallery->getActiveUserId(),
+		  'params' => serialize($params)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Update a feed
+     *
+     * @param string $feedName
+     * @param array $params parameters
+     * @return GalleryStatus a status code
+     */
+    function updateFeed($feedName, $params) {
+	$ret = GalleryCoreApi::updateMapEntry('RssMap',
+	    array('feedName' => $feedName),
+		  array('feedName' => $feedName,
+			'itemId' => $params['itemId'],
+			'params' => serialize($params)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Delete a feed
+     *
+     * @param string $feedName
+     * @return GalleryStatus a status code
+     */
+    function deleteFeed($feedName) {
+	$ret = GalleryCoreApi::removeMapEntry('RssMap', array('feedName' => $feedName));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Check whether configuring feeds is allowed.
+     *
+     * @param GalleryItem $item
+     * @param array $params module parameters
+     * @param int $userId
+     * @param boolean $assert (optional) if true, throw error if not allowed
+     * @return array GalleryStatus a status code
+     *               boolean true if allowed
+     */
+    function canConfigureFeed($item, $params, $userId, $assert=false) {
+	static $isAdmin;
+	if (!isset($isAdmin[$userId])) {
+	    list ($ret, $isAdmin[$userId]) = GalleryCoreApi::isUserInSiteAdminGroup($userId);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	/*
+	 * show the configure feeds link if:
+	 *   - the user is the item owner or the admin
+	 *   - configurable feeds are allowed
+	 *   - and the allowed feeds are appropriate for this item type
+	 */
+	if ($params['allowConfigurableFeed'] == 1
+		&& ($isAdmin[$userId] || $item->getOwnerId() == $userId)
+		&& (
+		    (GalleryUtilities::isA($item, 'GalleryAlbumItem')
+		     && ($params['allowAlbums'] == 1
+			 || $params['allowPhotos'] == 1
+			 || $params['allowPhotosRecursive'] == 1
+			 || $params['allowCommentsAlbum'] == 1))
+		    || (GalleryUtilities::isA($item, 'GalleryDataItem') &&
+			$params['allowCommentsPhoto'] == 1))) {
+	    return array(null, true);
+	}
+
+	if ($assert) {
+	    return array(GalleryCoreApi::error(ERROR_PERMISSION_DENIED), null);
+	} else {
+	    return array(null, false);
+	}
+    }
+}
+?>

@@ -1,0 +1,126 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper functions for eCards
+ * @package Ecard
+ * @subpackage Classes
+ * @author Nico Kaiser <nico@siriux.net>
+ * @author Dariush Molavi <dari@nukedgallery.net>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class EcardHelper {
+
+    /**
+     * Returns the smallest size of an item
+     * @param int $itemId
+     * @return array GalleryStatus a status code
+     *               GalleryItem an item
+     */
+    function getSmallestSize($itemId) {
+	list ($ret, $permissions) = GalleryCoreApi::getPermissions($itemId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (isset($permissions['core.viewResizes'])) {
+	    /* Try to get the smallest derivative */
+	    list ($ret, $resizes) = GalleryCoreApi::fetchResizesByItemIds(array($itemId));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if (!empty($resizes)) {
+		$currentDimensions = 0;
+		foreach ($resizes[$itemId] as $resize) {
+		    /* Rebuild the derivative if we don't have its dimensions */
+		    if ($resize->getWidth() == 0 || $resize->getHeight() == 0) {
+			list ($ret, $resize) =
+			    GalleryCoreApi::rebuildDerivativeCacheIfNotCurrent($resize->getId());
+			if ($ret) {
+			    return array($ret, null);
+			}
+		    }
+		    $dimensions = $resize->getWidth() + $resize->getHeight();
+		    if (!$currentDimensions || $dimensions < $currentDimensions) {
+			$currentDimensions = $dimensions;
+			$item = $resize;
+		    }
+		}
+		return array(null, $item);
+	    }
+	}
+	if (isset($permissions['core.viewSource'])) {
+	    list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId, 'GalleryItem');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    list ($ret, $preferred) = GalleryCoreApi::fetchPreferredsByItemIds(array($itemId));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    return array(null, empty($preferred) ? $item : $preferred[$itemId]);
+	}
+	if (isset($permissions['core.view'])) {
+	    list ($ret, $thumbnail) = GalleryCoreApi::fetchThumbnailsByItemIds(array($itemId));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if (isset($thumbnail[$itemId])) {
+		return array(null, $thumbnail[$itemId]);
+	    }
+	}
+	return array(GalleryCoreApi::error(ERROR_MISSING_VALUE, __FILE__, __LINE__), null);
+    }
+
+    /**
+     * Replaces keywords using given values
+     *
+     * @param string $str source string
+     * @param array $array the submitted form
+     * @return string output string
+     */
+    function replaceKeywords($str, $array) {
+	$result = $str;
+	foreach (array('from', 'fromName', 'to', 'toName',
+		       'text', 'header', 'footer', 'image', 'link') as $key) {
+	    if (isset($array[$key])) {
+		$result = str_replace('%' . $key . '%', $array[$key], $result);
+	    }
+	}
+	return $result;
+    }
+
+    /**
+     * Determine if we should use validation plugins.
+     *
+     * @return array GalleryStatus a status code
+     *               boolean true to use validation plugins
+     */
+    function useValidationPlugins() {
+	list ($ret, $level) =
+	    GalleryCoreApi::getPluginParameter('module', 'ecard', 'validation.level');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	return array(null, $level != 'OFF');
+    }
+}
+?>

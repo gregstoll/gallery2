@@ -1,0 +1,614 @@
+/* ********************************************************************************
+ * Classic Theme for Gallery 2
+ * by Ross A. Reyman, Jon Huang, and Chad Kieffer
+ * updated by Alan Harder
+ */
+
+/* ********************************************************************************
+ * Building blocks
+ * #gallery              Default font/color settings
+ * .gcBackground1,2..    Palette of backgrounds
+ * .gcBorder1,2..        Palette of borders
+ * a, h2, h3, etc        Standard html tags
+ * .giTitle, .giSubtitle, .giDescription, .giInfo, .giSuccess, .giWarning, .giError
+ *                       Palette of text styles
+ * div.gbBreadCrumb      List of links/path elements
+ * table.gbDataTable     Table for data/form elements with styles for shading rows
+ * div.gbTabBar          UI component for selectable tabs
+ * .autoComplete*        Styles for autoComplete popup lists
+ */
+
+/* ********************************************************************************
+ * Building blocks
+ * h2, h3, p, etc        Standard html tags
+ * div.gbBlock           Sidebar or content section with style for contained lists
+ * ul.gbBreadCrumb       List of links/path elements
+ * table.gbDataTable     Table for data/form elements with styles for shading rows
+ */
+
+#gallery h2, #gallery h3, #gallery h4, #gallery form {
+    margin: 0;
+    padding: 0;
+}
+
+#gallery p {
+    margin: 0.6em 0;
+    padding: 0;
+}
+
+
+.gbBlock {
+    padding: 0.7em;
+    border-width: 0 0 1px 0;
+    border-style: inherit;
+    border-color: inherit;
+    /* IE can't inherit these */
+    border-style: expression(parentElement.currentStyle.borderStyle);
+    border-color: expression(parentElement.currentStyle.borderColor);
+}
+
+.gbBlock ul {
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+}
+
+.gbBlock ul ul {
+    margin: 0 0 0.5em 1.0em;
+}
+
+.gbBlock li {
+    padding: 6px 0 0 0;
+}
+
+#gallery .gbBlock h3 {
+    margin-bottom: 0.5em;
+}
+
+#gallery .gbBlock h4 {
+    margin-top: 0.5em;
+}
+
+
+#gsNavBar div.gbBreadCrumb {
+    margin: 0;
+    padding: 4px 8px;
+}
+
+table.gbDataTable {
+    padding-bottom: 4px;
+}
+
+table.gbDataTable th, table.gbDataTable td {
+    padding: 4px;
+}
+
+
+.giBlockToggle {
+    padding: 0 0.4em 0.1em;
+}
+.giBlockToggle:hover {
+    cursor: pointer;
+}
+
+
+.gbMarkupBar {
+    margin: 4px 0;
+}
+
+#gallery .gbMarkupBar input {
+    margin: 0;
+    padding: 0;
+}
+
+
+/* ********************************************************************************
+ * Sections
+ * body.gallery     Page body in G2 standalone (doesn't apply to embedded)
+ * #gallery         Page container
+ * #gsNavBar   Top bar with breadcrumb and other links
+ * #gsSidebar       Sidebar
+ * #gsContent       Main content
+ */
+
+body.gallery {
+    margin: 0;
+    padding: 0;
+}
+
+#gallery {
+    padding: 8px;
+}
+#gallery.rtl {
+    direction: rtl;
+}
+
+#gsNavBar {
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+}
+
+#gsNavBar div.gbSystemLinks {
+    padding: 4px 6px;
+}
+
+#gsNavBar div.gbSystemLinks span {
+    padding: 0 4px;
+}
+
+#gsSidebar {
+    border-right-width: 1px;
+    width: 175px;
+    overflow: hidden;
+}
+#gsSidebarCol {
+    width: 1%; /* Expand to fit content ("0" bad4 firefox, "1px" bad4 opera) */
+}
+
+td.giAlbumCell, td.giItemCell {
+    padding: 1em;
+    text-align: center;
+    width: 1%;
+}
+
+#gallery td.giAlbumCell select, #gallery td.giItemCell select {
+    margin-top: 0.8em;
+}
+
+/* So imageframed thumbs can be centered */
+td.giAlbumCell table, td.giItemCell table {
+    margin: auto;
+}
+
+#gallery td.tree ul {
+    list-style-type: none;
+    margin: 0 0 0 8px;
+    padding: 0;
+}
+* html #gallery td.tree ul ul { margin-top: -1em; } /* Why does IE need this? */
+
+#gallery td.tree li {
+    padding: 0;
+}
+
+#gsPages span {
+    padding: 0 0.3em;
+}
+
+#gallery #gsSidebar ul {
+    font-size: 1em;
+}
+
+#gallery {
+    font-family: Verdana, Arial, Helvetica, sans-serif;
+    font-size: 62.5%;
+    color: #333;
+    background-color: #fff;
+}
+body.gallery {
+    background-color: #fff;
+}
+
+.gcBackground1 {
+    background-color: #eee;
+}
+
+.gcBackground2 {
+    background-color: #e7e7e7;
+}
+
+.gcBorder1 {
+    border: 0 solid #ccc;
+}
+
+.gcBorder2 {
+    border: 0 solid #888;
+}
+
+#gallery a {
+    font-weight: bold;
+    text-decoration: none;
+    color: #6b8cb7;
+}
+#gallery a:hover {
+    text-decoration: underline;
+    color: #f4560f;
+}
+#gallery a:active {
+    text-decoration: none;
+    color: #f9c190;
+}
+
+#gallery img {
+    border-width: 0;
+}
+
+#gallery h2, #gallery h3, #gallery h4 {
+    font-family: "Trebuchet MS", Arial, Verdana, Helvetica, sans-serif;
+}
+
+#gallery input:focus, #gallery textarea:focus {
+    background-color: #ffc;
+    color: #000;
+}
+
+#gallery input.inputTypeSubmit, #gallery input.inputTypeButton {  /* No input[type=submit] in IE */
+    color: #333;
+    background-color: #eee;
+    border-width: 2px;
+    border-style: solid;
+    border-color: #e7e7e7 #666 #666 #e7e7e7;
+}
+
+#gallery select {
+    font-size: 1em;
+}
+
+.giTitle, #gallery h2, #gallery h3, #gallery h4 {
+    font-size: 1.3em;
+    font-weight: bold;
+}
+
+#gallery pre, #gallery tt {
+    font-family: Courier New;
+    font-size: 1.2em;
+}
+
+.giSubtitle {
+    font-size: 0.9em;
+    font-weight: normal;
+    vertical-align: text-bottom;
+}
+
+.giDescription {
+    font-size: 1.1em;
+    line-height: 1.4em;
+}
+
+.gbEmptyAlbum {
+    height: 400px;
+}
+
+.giDescription h3.emptyAlbum {
+    line-height: 4.0em;
+    text-align: center;
+}
+
+.giInfo {
+    font-size: 0.9em;
+    color: #888;
+}
+
+.giSuccess, .giWarning, .giError  {
+    font-weight: bold;
+}
+
+.giSuccess { color: #5c0; }
+.giWarning { color: #c50; }
+.giError { color: #a44; }
+
+.giNew, .giUpdated {
+    border-width: 2px;
+    border-style: ridge;
+    padding: 0 6px;
+    line-height: 1.9em;
+}
+
+#gsNavBar div.gbBreadCrumb {
+    font-size: 1.1em;
+    font-weight: bold;
+}
+
+#gsNavBar div.gbBreadCrumb a, #gsNavBar div.gbBreadCrumb span {
+    padding: 0 0 0 14px;
+    background: url('images/icon_path_separator.gif') no-repeat left;
+}
+
+#gsNavBar div.gbBreadCrumb a.BreadCrumb-1 {   /* no :first-child in IE */
+    padding-left: 0;
+    background-image: none;
+    white-space: nowrap;
+}
+#gallery.IE div.gbBreadCrumb span {
+    display: inline-block;   /* IE loses padding-left on wrapped inline nowrap element */
+    padding-right: 4px;      /* IE has less space at right of each span */
+}
+
+#gsNavBar div.gbBreadCrumb span.BreadCrumb-1 {   /* no :first-child in IE */
+    padding-left: 0;
+    background-image: none;
+}
+
+#gsNavBar div.gbSystemLinks {
+  float: right;
+}
+
+table.gbDataTable th {
+    text-align: left;
+    background-color: #e7e7e7;
+}
+
+.gbEven {
+    background-color: #fff;
+}
+
+.gbBusy {
+    background-color: #ae9 !important;
+}
+
+.gbOdd {
+    background-color: #eee;
+}
+
+
+div.gbTabBar {
+    font-size: 0.9em;
+    font-weight: bold;
+    margin: 0.8em 0 0;
+    padding: 6px;
+    background: url('../classic/images/tab_bg.gif') repeat-x bottom;
+    white-space: nowrap;
+}
+
+div.gbTabBar span.o {
+    padding: 6px 0 5px 8px;
+    background: url('../classic/images/tab_left.jpg') no-repeat left top;
+}
+#gallery.IE div.gbTabBar span.o {
+    display: inline-block;   /* IE loses padding-left on wrapped inline nowrap element */
+    margin-bottom: 1px;      /* ..and then adds padding differently with inline-block.. */
+}
+/* IE may clip off the right end of a long set of tabs, so allow IE to wrap them */
+#gallery.IE div.gbTabBar { padding-bottom: 0; white-space: normal; }
+#gallery.IE div.gbTabBar span.giSelected { margin-bottom: 0; }
+
+#gallery div.gbTabBar span span {
+    padding: 6px 12px 5px 4px;
+    background: url('../classic/images/tab_right.jpg') no-repeat right top;
+}
+
+#gallery div.gbTabBar a {
+    color: #777;
+    text-decoration: none;
+}
+
+#gallery div.gbTabBar a:hover {
+    color: #333;
+}
+
+#gallery div.gbTabBar span.giSelected {
+    padding-bottom: 6px;
+    background-image: url('../classic/images/tab_left_on.jpg');
+}
+
+#gallery div.gbTabBar span.giSelected span {
+    color: #333;
+    padding-bottom: 6px;
+    background-image: url('../classic/images/tab_right_on.jpg');
+}
+
+.autoCompleteShadow {
+    background-color: #a0a0a0 !important;
+}
+
+.autoCompleteContainer {
+    border-color: #404040 #404040 #080;
+    background-color: #fff;
+}
+
+.autoCompleteContainer li.yui-ac-highlight {
+    background-color: #eee;
+}
+
+#gallery .gbMarkupBar input {
+    font-size: 1.1em;
+}
+
+
+.giSearchHighlight {
+    font-weight: bold;
+    background-color: #ff6;
+}
+
+/* ********************************************************************************
+ * Sections
+ * #gallery         Page container
+ * #gsNavBar   Top bar with breadcrumb and other links
+ * #gsSidebar       Sidebar
+ * #gsContent       Main content
+ */
+
+#gsNavBar div {
+    margin-top: 0.1em;  /* Align system links with breadcrumb */
+    font-weight: bold;
+}
+
+#gsSidebar div ul {   /* no > in IE */
+    font-size: 1.1em;
+    font-weight: bold;
+}
+#gsSidebar div ul ul { font-size: 1.0em; }
+
+#gsSidebar ul span {
+    color: #999;
+}
+
+div.gbNavigator div.next-and-last {
+  float: right;
+}
+div.gbNavigator div.next-and-last.no-previous {
+  float: none;
+  text-align: right;
+}
+
+div.gbNavigator a.first {
+  padding-left: 27px;
+  background: url("images/nav_first.gif") left no-repeat;
+}
+div.gbNavigator a.previous {
+  padding-left: 27px;
+  background: url("images/nav_prev.gif") left no-repeat;
+}
+div.gbNavigator a.next {
+  padding-right: 27px;
+  background: url("images/nav_next.gif") right no-repeat;
+}
+div.gbNavigator a.last {
+  padding-right: 27px;
+  background: url("images/nav_last.gif") right no-repeat;
+}
+
+div.gbNavigator div.first-and-previous img {
+  vertical-align: middle;
+  padding-right: 0.5em;
+}
+div.gbNavigator div.next-and-last img {
+  vertical-align: middle;
+  padding-left: 0.5em;
+}
+
+#gallery.rtl div.gbNavigator div.next-and-last {
+  float: left;
+}
+#gallery.rtl div.gbNavigator div.next-and-last.no-previous {
+  float: none;
+  text-align: left;
+}
+#gallery.rtl div.gbNavigator div.first-and-previous {
+  text-align: right;
+}
+/* Both IE and Gecko have bugs with omitting padding on rtl inline content */
+#gallery.IE.rtl div.gbNavigator a {
+  display: inline-block;
+}
+#gallery.gecko.rtl div.gbNavigator a {
+  display: -moz-inline-box;
+}
+
+#gallery.rtl div.gbNavigator a.first {
+  padding: 0 27px 0 0;
+  background: url("images/nav_last.gif") right no-repeat;
+}
+#gallery.rtl div.gbNavigator a.previous {
+  padding: 0 27px 0 0;
+  background: url("images/nav_next.gif") right no-repeat;
+}
+#gallery.rtl div.gbNavigator a.next {
+  padding: 0 0 0 27px;
+  background: url("images/nav_prev.gif") left no-repeat;
+}
+#gallery.rtl div.gbNavigator a.last {
+  padding: 0 0 0 27px;
+  background: url("images/nav_first.gif") left no-repeat;
+}
+#gallery.rtl div.gbNavigator div.first-and-previous img {
+  padding: 0 0 0 0.5em;
+}
+#gallery.rtl div.gbNavigator div.next-and-last img {
+  padding: 0 0.5em 0 0;
+}
+
+div.block-search-SearchBlock a.advanced {
+  display: block;
+  padding: 3px;
+}
+
+div.block-core-ItemLinks {
+  margin: 3px 0;
+}
+div.block-core-ItemLinks a {
+  padding: 3px;
+}
+div#gsSidebar div.block-core-ItemLinks a {
+  display: block;
+}
+
+div#gsSidebar div.block-core-PeerList a {
+  display: block;
+  padding: 3px;
+}
+
+div#gsSidebar div.block-core-PeerList span {
+  font-weight: bold;
+  display: block;
+  padding: 3px;
+}
+
+div#gsSidebar div.block-core-PeerList span.current {
+  color: #0b6cff;
+}
+
+/* ***************************************************** */
+/*                   Dynamic blocks                      */
+/* ***************************************************** */
+
+div.block-comment-ViewComments {
+  margin: 5px;
+}
+
+div.block-comment-ViewComments div.one-comment {
+  border: 1px solid #e7e7e7;
+  padding: 5px;
+  margin-bottom: 5px;
+}
+
+div.block-comment-ViewComments h3 {
+}
+
+div.block-comment-ViewComments span {
+  padding-right: 5px;
+}
+
+div.block-comment-ViewComments p.info {
+  font-style: italic;
+  text-align: right;
+  font-size: 0.95em;
+}
+
+div.block-core-GuestPreview {
+  float: right;
+}
+#gallery.rtl div.block-core-GuestPreview {
+  float: left;
+}
+
+span.block-core-SystemLink {
+}
+
+div.block-exif-ExifInfo {
+  margin: 5px;
+}
+
+span.bsw_ButtonDisabled {
+  color: #999;
+}
+
+span.bsw_ButtonEnabled {
+  color: #000;
+  cursor: pointer;
+}
+
+table.bsw_ParamTable {
+  width: 100%;
+  border: 1px solid #999;
+  border-collapse: collapse;
+}
+
+tr.bsw_ParamHeaderRow {
+  background-color: #EEE;
+}
+
+tr.bsw_ParamHeaderRow td {
+  font-weight: bold;
+  text-align: center;
+  border: 1px solid #999;
+}
+
+td.bsw_BlockCommands {
+  white-space: nowrap;
+  text-align: center;
+}
+
+#gsFooter {
+  padding-top: 4px;
+}

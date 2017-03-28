@@ -1,0 +1,66 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/httpauth/classes/HttpAuthHelper.class');
+
+/**
+ * Get active user from username authenticated by web server.
+ *
+ * With server authentication Gallery delegates authentication to the web server and Gallery trusts
+ * the given username from the 'REMOTE_USER' variable without doing any authentication on its own
+ * (same as in GalleryEmbed).  It's the web server's responsibility to do the authentication in some
+ * way.
+ *
+ * @package HttpAuth
+ * @subpackage Classes
+ * @author Jack Bates <ms419@freezone.co.uk>
+ * @version $Revision: 17580 $
+ */
+class ServerAuthPlugin /* extends GalleryAuthPlugin */ {
+
+    /**
+     * @see GalleryAuthPlugin::getUser
+     */
+    function getUser() {
+	$authtype = GalleryUtilities::getServerVar('AUTH_TYPE');
+	$username = GalleryUtilities::getServerVar('REMOTE_USER');
+
+	/* TODO: http://issues.apache.org/bugzilla/show_bug.cgi?id=38325 */
+	if (empty($username)) {
+	    $authtype = GalleryUtilities::getServerVar('REDIRECT_AUTH_TYPE');
+	    $username = GalleryUtilities::getServerVar('REDIRECT_REMOTE_USER');
+	}
+
+	list ($ret, $user) = HttpAuthHelper::getUser($authtype, $username);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (!empty($user)) {
+	    $ret = HttpAuthHelper::regenerateSessionIfNecessary($user);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, $user);
+    }
+}
+?>

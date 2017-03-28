@@ -1,0 +1,70 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is an interface for alternative notification methods for the notification module.
+ * @package Notification
+ * @subpackage Classes
+ * @author Zimzat <zimzat@zimzat.com>
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class NotificationHandler_1_0 {
+    /**
+     * Return a localized description of the handler.
+     * @return array GalleryStatus
+     * 		     string Localized description of the handler.
+     * @abstract
+     */
+    function getDescription() {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+    }
+
+    /**
+     * Handle the event.
+     * @param array $subscribers Array of userIds to send the notification to
+     * @param NotificationEvent_1_0 $notification The event notification descriptor
+     * @return GalleryStatus
+     * @abstract
+     */
+    function handleNotification($subscribers, $notification) {
+	return GalleryCoreApi::error(ERROR_UNIMPLEMENTED);
+    }
+
+    /**
+     * Provide a common routine to do translations of descriptions
+     * @param string $moduleId the module id
+     * @param mixed $translateParms parameters to the module translate method
+     * @return array GalleryStatus
+     *		     string A formatted and localized plain text message.
+     * @access protected
+     */
+    function _translateText($moduleId, $translateParms) {
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', $moduleId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$text = $module->translate($translateParms);
+	return array(null, $text);
+    }
+}
+?>

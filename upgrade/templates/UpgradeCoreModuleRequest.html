@@ -1,0 +1,70 @@
+    <h1><?php print _("Upgrading the Gallery Core Module") ?></h1>
+
+    <p>
+      <?php print _("The Gallery Core Module is the heart of the Gallery application.  You can upgrade most other modules using the Site Administration interface, but this module must be handled separately in order for the upgrade to go smoothly.") ?>
+    </p>
+
+    <table>
+      <tr>
+	<td width="175">
+	  <?php print _("Currently installed") ?>
+	</td>
+	<td>
+	  <b>
+	    <?php printf(_("Core Module version: %s (Gallery %s)"), $templateData['installed']['core'], $templateData['installed']['gallery']); ?>
+	  </b>
+	</td>
+      </tr>
+      <tr>
+	<td>
+	  <?php print _("New version") ?>
+	</td>
+	<td>
+	  <b>
+	    <?php printf(_("Core Module version: %s (Gallery %s)"), $templateData['coreVersion'], $templateData['galleryVersion']); ?>
+	  </b>
+	</td>
+      </tr>
+      <?php if ($templateData['isConfigUpgradeRequired'] && !isset($templateData['isTryingToDowngrade'])): ?>
+      <tr>
+	<td>
+	  <?php print _("Config.php upgrade") ?>
+	</td>
+	<td>
+	  <b> <?php print _("Required") ?> </b>
+	</td>
+      </tr>
+      <?php if (!$templateData['isConfigWriteable']): ?>
+      <tr>
+	<td colspan="2" class="error">
+	  <?php printf(_("Unable to write to config.php in your %s directory.  Please change its permissions."), basename(GALLERY_CONFIG_DIR)) ?>
+	  <?php if ($templateData['canChmod']) print _("You can do <i>chmod 666 config.php</i> to fix this.") ?>
+	</td>
+      </tr>
+      <?php endif; ?>
+      <?php endif; ?>
+    </table>
+
+    <?php if (isset($templateData['isTryingToDowngrade'])): ?>
+    <p class="error">
+      <?php print _("The installed version is newer than the version you are trying to upgrade to. You cannot downgrade G2. Please replace the gallery2 files with files from the currently installed version or later.") ?>
+    </p>
+    <?php else: ?>
+
+    <p>
+      <form method="post" action="<?php generateUrl('index.php?step=' . $stepNumber) ?>">
+	<input type="hidden" name="confirm" value="1"/>
+      </form>
+
+      <?php print _("Once the upgrade has begun, please be patient.  If you cancel or reload the page, you may interfere with the upgrade process.") ?>
+    </p>
+
+    <div class="go">
+	<?php if (!$templateData['isConfigUpgradeRequired']
+		  || $templateData['isConfigWriteable']): ?>
+	  <a href="javascript:document.forms[0].submit()" class="btn continue"><i></i><span><span></span><i></i><?php print _('Begin Upgrade') ?></span></a>
+	<?php else: ?>
+	  <a href="<?php generateUrl('index.php?step=' . $stepNumber) ?>" class="btn continue"><i></i><span><span></span><i></i><?php print _('Recheck config.php') ?></span></a>
+	<?php endif; ?>
+    </div>
+    <?php endif; ?>

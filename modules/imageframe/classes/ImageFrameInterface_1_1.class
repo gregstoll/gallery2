@@ -1,0 +1,69 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is an interface for the ImageFrame module.  Themes or modules that wish to display a frame
+ * around a photo can utilize an implementation of this interface.
+ *
+ * @package ImageFrame
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class ImageFrameInterface_1_1 {
+
+    /**
+     * Get list of available image frames
+     *
+     * @return array GalleryStatus a status code,
+     *               array(frame_id=>localized_frame_name)
+     */
+    function getImageFrameList() {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+    }
+
+    /**
+     * Prepare imageframe system.  Pass in list of ids that may be used in a view.
+     * Use {g->block type="imageframe" frame=".."} .. {/g->block} where needed, passing the frame
+     * to render and the frame contents.  The image in the content must have id="%ID%" and
+     * class="%CLASS%".  See example in SampleHead.tpl/SampleBody.tpl.
+     * This method may be called more than once in a request.
+     *
+     * @param GalleryTemplate $template
+     * @param mixed $frameIds array of frame ids to prepare for use or single frame id
+     * @return GalleryStatus a status code
+     */
+    function init(&$template, $frameIds) {
+	return GalleryCoreApi::error(ERROR_UNIMPLEMENTED);
+    }
+
+    /**
+     * Get url for displaying samples of all image frames.  Pass an itemId to the view to use the
+     * thumbnail of that item in the samples; otherwise a default image will be used.
+     *
+     * @return array GalleryStatus a status code,
+     *               string view url
+     */
+    function getSampleUrl($itemId=null) {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+    }
+}
+?>

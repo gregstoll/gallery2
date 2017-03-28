@@ -1,0 +1,165 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Utility functions useful in managing Carts
+ * @package Cart
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class CartHelper {
+
+    /**
+     * Return the ids of the items in the cart
+     *
+     * @return array GalleryStatus a status code
+     *               array (itemId => count, itemId => count, ..)
+     */
+    function fetchCartItemCounts() {
+	global $gallery;
+	$session =& $gallery->getSession();
+
+	$cartItemIds = $session->get('cart.itemIds');
+	if (empty($cartItemIds) || !is_array($cartItemIds)) {
+	    $cartItemIds = array();
+	}
+
+	return array(null, $cartItemIds);
+    }
+
+    /**
+     * Add the item ids to the user's cart
+     * (Note that view permission should be checked in advance; this function only checks
+     *  cart.add permission)
+     *
+     * @param array $ids int item ids
+     * @return GalleryStatus a status code
+     */
+    function addItemsToCart($ids) {
+	list ($ret, $cartItemIds) = CartHelper::fetchCartItemCounts();
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (!empty($ids)) {
+	    $ret = GalleryCoreApi::studyPermissions($ids);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	foreach ($ids as $id) {
+	    list ($ret, $canAdd) = GalleryCoreApi::hasItemPermission($id, 'cart.add');
+	    if ($ret) {
+		return $ret;
+	    }
+	    if ($canAdd) {
+		if (isset($cartItemIds[$id])) {
+		    $cartItemIds[$id]++;
+		} else {
+		    $cartItemIds[$id] = 1;
+		}
+	    }
+	}
+
+	$ret = CartHelper::setCartItemCounts($cartItemIds);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Store cart contents
+     *
+     * @param array $cartItemIds (itemId => count, itemId => count, ..)
+     * @return GalleryStatus a status code
+     */
+    function setCartItemCounts($cartItemIds) {
+	global $gallery;
+	$session =& $gallery->getSession();
+
+	if (empty($cartItemIds)) {
+	    $session->remove('cart.itemIds');
+	} else {
+	    $session->put('cart.itemIds', $cartItemIds);
+	}
+
+	return null;
+    }
+
+    /**
+     * Load entities for all cart items.
+     * Remove any invalid ids from cart.
+     *
+     * @return array GalleryStatus a status code
+     *               array of items
+     */
+    function loadCartItems() {
+	list ($ret, $cartItemIds) = CartHelper::fetchCartItemCounts();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$idList = array_keys($cartItemIds);
+	if (!empty($cartItemIds)) {
+	    $ret = GalleryCoreApi::studyPermissions($idList);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+	$changed = false;
+	$items = array();
+	foreach ($idList as $itemId) {
+	    list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId, 'GalleryItem');
+	    if ($ret) {
+		if ($ret->getErrorCode() & ERROR_MISSING_OBJECT) {
+		    /* Item deleted from the gallery; remove it from the cart */
+		    unset($cartItemIds[$itemId]);
+		    $changed = true;
+		    continue;
+		} else {
+		    return array($ret, null);
+		}
+	    }
+	    list ($ret, $canView) = GalleryCoreApi::hasItemPermission($itemId, 'core.view');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if ($canView) {
+		$items[] = $item;
+	    } else {
+		unset($cartItemIds[$itemId]);
+		$changed = true;
+	    }
+	}
+	if ($changed) {
+	    $ret = CartHelper::setCartItemCounts($cartItemIds);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, $items);
+    }
+}
+?>

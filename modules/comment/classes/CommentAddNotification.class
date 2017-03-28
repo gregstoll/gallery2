@@ -1,0 +1,115 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/notification/classes/NotificationEvent_1_0.class');
+
+/**
+ * The CommentAddNotification is used when new comments are added
+ * @package Comment
+ * @subpackage Classes
+ * @author Zimzat <zimzat@zimzat.com>
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 18120 $
+ */
+class CommentAddNotification extends NotificationEvent_1_0 {
+    /**
+     * @see NotificationEvent_1_0::getDescription
+     */
+    function getDescription() {
+	global $gallery;
+	return $this->_translateText('comment', $gallery->i18n('Comment Added'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	list ($ret, $item) = GalleryCoreApi::loadEntitiesById($this->getItemId(), 'GalleryItem');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$title = GalleryUtilities::markup($item->getTitle(), 'strip');
+	return $this->_translateText('comment', 
+		array('text' => $gallery->i18n('A new comment has been posted on %s. The full '
+			. 'comment is provided below. '. "\n\n" . '%s' 
+			. "\n\nTo view the new comment at the site click here:\n" . '%s'),
+		     'arg1' => $title, 'arg2' => $this->getComment(), 
+		     'arg3' => $this->getItemUrl()));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getItemId
+     */
+    function getItemId() {
+	$entity = $this->_event->getEntity();
+	return $entity->getParentId();
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getPermission
+     */
+    function getPermission() {
+	return 'comment.view';
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isAppropriateForItem
+     */
+    function isAppropriateForItem($item) {
+	return true;
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'GalleryEntity::save', 'entityType' => 'GalleryComment', 
+		     'persistentFlag' => STORAGE_FLAG_NEWLY_CREATED);
+    }
+
+    /**
+     * Get the comment text
+     * @return string Comment text
+     */
+    function getComment() {
+	$entity = $this->_event->getEntity();
+	return $entity->getComment();
+    }
+
+    /**
+     * Get the url of the item the comment was made against
+     *
+     * @param GalleryEvent A Comment Added Event
+     * @return string The url of the item
+     */
+    function getItemUrl() {
+	global $gallery;
+
+	$urlGenerator =& $gallery->getUrlGenerator();
+	return $urlGenerator->generateUrl(
+			array('view' => 'comment.ShowComments', 'itemId' => $this->getItemId()), 
+			array('forceFullUrl' => true, 'forceSessionId' => false,
+			      'htmlEntities' => false));
+    }
+}
+?>

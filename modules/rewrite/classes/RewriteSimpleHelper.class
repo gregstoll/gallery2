@@ -1,0 +1,170 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This class provides basic URL keyword functions
+ * @package Rewrite
+ * @subpackage Classes
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class RewriteSimpleHelper {
+
+    /**
+     * This is an onLoad function called by RewriteUrlGenerator::init if there's a path keyword
+     * that needs to be parsed to an itemId. Used by other modules that has %path%.
+     *
+     * @return GalleryStatus a status code
+     */
+    function loadItemIdFromPath() {
+	list ($path, $itemId) = GalleryUtilities::getRequestVariables('path', 'itemId');
+
+	if (!empty($path) && empty($itemId)) {
+	    if (substr($path, -5) == '.html') {
+		$path = substr($path, 0, -5);
+	    }
+
+	    list ($ret, $itemId) = GalleryCoreApi::fetchItemIdByPath($path);
+	    if ($ret) {
+		return $ret;
+	    }
+	    GalleryUtilities::putRequestVariable('itemId', $itemId);
+	}
+
+	return null;
+    }
+
+    /**
+     * Replace the keyword with expected value.
+     *
+     * @param string $url url passed by reference
+     * @param array $params of url params passed by reference
+     * @param GalleryEntity $entity loaded entity with item id = $params['itemId'], or null
+     * @return boolean true on success
+     */
+    function parsePath(&$url, &$params, &$entity) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	if (!isset($entity) && ($entity = $urlGenerator->loadEntity($params['itemId'])) == null
+		|| !GalleryUtilities::isA($entity, 'GalleryFileSystemEntity')) {
+	    return false;
+	}
+	list ($ret, $path) = $entity->fetchLogicalPath();
+	if ($ret) {
+	    return false;
+	}
+
+	/* We don't provide short URLs for the root album */
+	if ($path == '/') {
+	    return false;
+	}
+
+	if (substr($url, -6) != '%path%') {
+	    $path = rtrim($path, '/');
+	} else if (!GalleryUtilities::isA($entity, 'GalleryAlbumItem')) {
+	    /* Append .html suffix on non-album paths if rule has no suffix */
+	    $path .= '.html';
+	}
+
+	/* urlencode except for path separators(/) */
+	$url = str_replace('%path%',
+	    str_replace('%2F', '/', urlencode(substr($path, 1))), $url);
+	unset($params['itemId']);
+	/* If the generated url is built by old request variables unset the old path */
+	unset($params['path']);
+	return true;
+    }
+
+    /**
+     * @see RewriteSimpleHelper::parsePath
+     */
+    function parsePage(&$url, &$params, &$entity) {
+	$page = isset($params['page']) ? $params['page'] : '';
+	$url = str_replace('%page%', $page, $url);
+	unset($params['page']);
+	return true;
+    }
+
+    /**
+     * @see RewriteSimpleHelper::parsePath
+     */
+    function parseLanguage(&$url, &$params, &$entity) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	if (empty($urlGenerator->_language)) {
+	    list ($ret, $activeLanguage) = $gallery->getActiveLanguageCode();
+	    if ($ret) {
+		return false;
+	    }
+
+	    $language = explode('_', $activeLanguage);
+
+	    if (isset($language[0]) && isset($language[1])) {
+		list ($defaultLanguageCode, $null) =
+		    GalleryTranslator::getSupportedLanguageCode($language[0], false);
+		if ($defaultLanguageCode == $activeLanguage) {
+		    unset($language[1]);
+		}
+	    }
+
+	    $urlGenerator->_language = join('_', $language);
+	}
+
+	$url = str_replace('%language%', $urlGenerator->_language, $url);
+	return true;
+    }
+
+    /**
+     * @see RewriteSimpleHelper::parsePath
+     */
+    function parseSerialNumber(&$url, &$params, &$entity) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	if (!isset($entity) && ($entity = $urlGenerator->loadEntity($params['itemId'])) == null) {
+	    return false;
+	}
+	$url = str_replace('%serialNumber%', $entity->getSerialNumber(), $url);
+	unset($params['serialNumber']);
+	return true;
+    }
+
+    /**
+     * @see RewriteSimpleHelper::parsePath
+     */
+    function parseFileName(&$url, &$params, &$entity)  {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	if (!isset($entity) && ($entity = $urlGenerator->loadEntity($params['itemId'])) == null) {
+	    return false;
+	}
+	list ($ret, $pseudoFileName) = GalleryUtilities::getPseudoFileName($entity);
+	if ($ret) {
+	    return false;
+	}
+	$url = str_replace('%fileName%', urlencode($pseudoFileName), $url);
+	return true;
+    }
+}
+?>

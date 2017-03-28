@@ -1,0 +1,608 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryRepositoryUtilities.class');
+
+/**
+ * Provides all repository-related functionality.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Jozef Selesi <selesi at gmail dot com>
+ * @version $Revision: 17580 $
+ */
+class GalleryRepositoryIndex {
+
+    /**
+     * Indicates whether the index has been loaded from the filesystem.
+     * @var boolean
+     * @access private
+     */
+    var $_isLoaded;
+
+    /**
+     * Repository index.
+     * @var array
+     * @access private
+     */
+    var $_index;
+
+    /**
+     * The source of this index (released, experimental, community)
+     * @var string
+     * @access private
+     */
+    var $_source;
+
+    /**
+     * Repository utilities.
+     * @var GalleryRepositoryUtilities
+     * @access private
+     */
+    var $_utilities;
+
+
+    function GalleryRepositoryIndex($source) {
+	$this->_utilities = new GalleryRepositoryUtilities();
+	$this->_source = $source;
+    }
+
+    /**
+     * Downloads the repostory index from the Gallery server and
+     * writes it to the local repository cache.
+     * @return GalleryStatus a status code
+     */
+    function update() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$indexUrl = $gallery->getConfig('repository.url') . $this->_source . '/index';
+	$indexHashUrl = $indexUrl . '.hash';
+
+	$path = $this->getRepositoryCacheDir();
+	list ($success1, $ignored) = GalleryUtilities::guaranteeDirExists($path . 'modules');
+	list ($success2, $ignored) = GalleryUtilities::guaranteeDirExists($path . 'themes');
+	if (!$success1 || !$success2) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, null, null,
+					 'Unable to create repository cached paths');
+	}
+
+	/* Download index from the Gallery server and verify its integrity. */
+	list ($wasDownloaded, $indexContents) = $this->_utilities->downloadFile($indexUrl);
+	if (!$wasDownloaded) {
+	    $errorMessage = $gallery->i18n('Error downloading index from \'%s\'.');
+	    return GalleryCoreApi::error(
+		ERROR_STORAGE_FAILURE, __FILE__, __LINE__, sprintf($errorMessage, $indexUrl));
+	}
+
+	list ($wasDownloaded, $indexHash) = $this->_utilities->downloadFile($indexHashUrl, true);
+	if (!$wasDownloaded) {
+	    $errorMessage = $gallery->i18n('Error downloading index hash from \'%s\'.');
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+					sprintf($errorMessage, $indexHashUrl));
+	}
+
+	if (md5($indexContents) != $indexHash) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					$gallery->i18n('Index integrity check failed.'));
+	}
+
+	/* Write index to the filesystem. */
+	$indexPath = $this->getRepositoryCacheDir() . 'index.repository';
+	if (false === $platform->file_put_contents($indexPath, $indexContents)) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					'Error writing index to the filesystem.');
+	}
+
+	/* Save update time and unserialize the index. */
+	$ret = GalleryCoreApi::setPluginParameter('module', 'core',
+						  'repository.updateTime', time());
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = $this->unserializeIndex($indexContents);
+	if ($ret) {
+	    if ($ret->getErrorCode() & ERROR_BAD_PARAMETER) {
+		$ret = GalleryCoreApi::error(
+		    ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+		    "Error unserializing index [$indexPath]");
+	    }
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * Gets index meta data, which currently includes the local index timestamp (set when the index
+     * has been downloaded) and each plugin type count.
+     *
+     * @return array GalleryStatus a status code
+     *		     array 'timestamp' => integer (Unix timestamp)
+     *			   'moduleCount' => integer
+     *			   'themeCount' => integer
+     */
+    function getMetaData() {
+	if (!$this->_isLoaded) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+					      'Index must be loaded.'),
+		    null);
+	}
+
+	/* Get timestamp */
+	list ($ret, $timestamp) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'repository.updateTime');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, array('timestamp' => $timestamp,
+				 'moduleCount' => count($this->_index['modules']),
+				 'themeCount' => count($this->_index['themes'])));
+    }
+
+    /**
+     * Checks whether an index file exists in the local repository cache.
+     * @return boolean
+     */
+    function existsInCache() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	return $platform->file_exists($this->getRepositoryCacheDir() . 'index.repository');
+    }
+
+    /**
+     * Loads and unserializes the index from the local filesystem into memory.
+     * @return GalleryStatus a status code
+     */
+    function load() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$indexPath = $this->getRepositoryCacheDir() . 'index.repository';
+	if (false === ($index = $platform->file_get_contents($indexPath))) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__, sprintf(
+					     'Error reading index [%s]', $indexPath));
+	}
+
+	$ret = $this->unserializeIndex($index);
+	if ($ret) {
+	    if ($ret->getErrorCode() & ERROR_BAD_PARAMETER) {
+		/* Remove the broken index so that a subsequent download will fix it */
+		$platform->unlink($indexPath);
+		$ret = GalleryCoreApi::error(
+		    ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+		    "Error unserializing index [$indexPath]");
+	    }
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * Unserializes the index into memory.
+     * @return GalleryStatus a status code
+     */
+    function unserializeIndex(&$index) {
+	if (false === ($this->_index = @unserialize($index))) {
+	    $this->_index = array('modules' => array(), 'themes' => array());
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+	$this->_isLoaded = true;
+	return null;
+    }
+
+    /**
+     * Returns the specified plugin's build.
+     *
+     * @param string $pluginType
+     * @param string $pluginId
+     * @return array GalleryStatus a status code
+     *		     string plugin build
+     */
+    function getPluginHeader($pluginType, $pluginId) {
+	if (!$this->_isLoaded) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+					      'Index must be loaded.'),
+		    null);
+	}
+
+	if (!isset($this->_index[$pluginType . 's'][$pluginId]['header'])) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					      "No header found for [$pluginId] [$pluginType]"),
+			 null);
+	}
+	return array(null,
+	    $this->_index[$pluginType . 's'][$pluginId]['header']);
+    }
+
+    /**
+     * Returns available languages for the specified plugin.
+     *
+     * @param string $pluginType
+     * @param string $pluginId
+     * @return array GalleryStatus a status code
+     *		     array languageCode => revision
+     */
+    function getAvailableLanguagesInPlugin($pluginType, $pluginId) {
+	if (!$this->_isLoaded) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+					      'Index must be loaded.'),
+		    null);
+	}
+
+	list ($ret, $isAvailable) = $this->_utilities->isPluginAvailable($pluginType, $pluginId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/*
+	 * Return the latest set of translations from the repository. However, since we know the
+	 * revision of the strings.raw file we could in the future check to make sure that the
+	 * language packs are going to be compatible.  We used to do this, but it was deemed too
+	 * complex so it got axed.
+	 */
+	$data = $this->_index[$pluginType . 's'][$pluginId];
+	if (!empty($data['header']['stringsRevision'])) {
+	    $stringRevision = $data['header']['stringsRevision'];
+	    $languages = GalleryCoreApi::getSupportedLanguages();
+	    $languageData = array();
+	    foreach ($data['languages'][$stringRevision] as $langCode => $version) {
+		list ($language, $country) = explode ('_', $langCode . '_');
+		$installed = empty($country) ? !empty($languages[$language]) 
+					     : !empty($languages[$language][$country]);
+		if ($installed) {
+		    $languageData[$langCode] = $version;
+		}
+	    }
+	    return array(null, $languageData);
+	} else {
+	    return array(null, array());
+	}
+    }
+
+    /**
+     * Determines if the specified plugin exists in the index.
+     *
+     * @param string $pluginType
+     * @param string $pluginId
+     * @return boolean
+     */
+    function containsPlugin($pluginType, $pluginId) {
+	return isset($this->_index[$pluginType . 's'][$pluginId]);
+    }
+
+    /**
+     * Returns the specified plugin's name in the active language.
+     * If it's not available in the active language, fall back to 'en_US'.
+     *
+     * @param string $pluginType
+     * @param string $pluginId
+     * @return array GalleryStatus a status code
+     *		     string the plugin name
+     */
+    function getPluginName($pluginType, $pluginId) {
+	global $gallery;
+
+	if (!$this->_isLoaded) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+					      'Index must be loaded.'),
+		    null);
+	}
+
+	/* Make sure description exists in current language. */
+	list ($ret, $language) = $gallery->getActiveLanguageCode();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Fall back to en_US if the description is not available in the active language. */
+	if (!isset($this->_index[$pluginType . 's'][$pluginId]['descriptions'][$language])) {
+	    $language = 'en_US';
+	}
+
+	if (!isset($this->_index[$pluginType . 's'][$pluginId]
+		['descriptions'][$language]['name'])) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					      "Name attribute missing from meta data [$language]"),
+		    null);
+	}
+
+	return array(null,
+	    $this->_index[$pluginType . 's'][$pluginId]['descriptions'][$language]['name']);
+    }
+
+    /**
+     * Returns the specified plugin's descriptor URL relative to the repository root URL.
+     *
+     * @param string $pluginType
+     * @param string $pluginId
+     * @return array GalleryStatus a status code
+     *		     string descriptor URL
+     */
+    function getDescriptorUrl($pluginType, $pluginId) {
+	if (!$this->_isLoaded) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+					      'Index must be loaded.'),
+		    null);
+	}
+
+	list ($ret, $header) = $this->getPluginHeader($pluginType, $pluginId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, sprintf('%ss/%s-%s-%s.descriptor',
+	    $pluginType, $pluginId, $header['version'], $header['buildTimestamp']));
+    }
+
+    /**
+     * Returns the specified plugin package's URL relative to the repository root URL.
+     *
+     * @param string $pluginType
+     * @param string $pluginId
+     * @param string $package package name
+     * @return array GalleryStatus a status code
+     *		     string package URL
+     */
+    function getPackageUrl($pluginType, $pluginId, $package) {
+	list ($ret, $version, $build) =
+	    $this->getPackageVersionAndBuild($pluginType, $pluginId, $package);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (preg_match('/^lang-(.*)$/', $package)) {
+	    $packageUrl = sprintf(
+		'%ss/%s-%s-%s-%s.package', $pluginType, $pluginId, $package, $version, $build);
+	} else {
+	    $packageUrl = sprintf(
+		'%ss/%s-%s-%s-%s.package', $pluginType, $pluginId, $version, $build, $package);
+	}
+
+	return array(null, $packageUrl);
+    }
+
+    /**
+     * Returns the version and build of the specified plugin package.
+     *
+     * If a language package is specified, the strings.raw and po revision are returned.
+     *
+     * @param string $pluginType
+     * @param string $pluginId
+     * @param string $package package name
+     * @return array GalleryStatus a status code
+     *		     string version/revision
+     *		     string build/revision
+     */
+    function getPackageVersionAndBuild($pluginType, $pluginId, $package) {
+	if (!$this->_isLoaded) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+					      'Index must be loaded.'),
+		    null, null);
+	}
+
+	list ($ret, $header) = $this->getPluginHeader($pluginType, $pluginId);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	if (preg_match('/^lang-(.*)$/', $package, $languageCode)) {
+	    /*
+	     * At some future date we may have more than one set of revisions in an index, at
+	     * which point we could return the set of languages that match what we have installed,
+	     * instead of just returning the latest version from the repository.
+	     */
+	    $languages = $this->_index[$pluginType . 's'][$pluginId]['languages'];
+	    $version = $header['stringsRevision'];
+	    $build = $languages[$header['stringsRevision']][$languageCode[1]];
+	} else {
+	    $version = $header['version'];
+	    $build = $header['buildTimestamp'];
+	}
+
+	return array(null, $version, $build);
+    }
+
+    /**
+     * Returns a list of plugins from the index of the specified type.
+     *
+     * The list can include only plugins that are compatible with the specified core APIs
+     * (core and theme/module) if the second parameter is set. If no APIs are specified for the
+     * compatibility check, the currently installed API versions are used.
+     *
+     * @param string $pluginType 'module' or 'theme'
+     * @param boolean $showAllPlugins return all plugins, even incompatible ones
+     * @param array $coreApis core APIs to base compatibility check on
+     *		    'core'/'module'/'theme' => array(versionMajor, versionMinor)
+     * @return array plugin list
+     */
+    function getPlugins($pluginType, $showAllPlugins = false, $coreApis = null) {
+	$pluginList = array($pluginType => array());
+
+	foreach ($this->_index[$pluginType . 's'] as $pluginId => $plugin) {
+	    /* Skip core module. */
+	    if ($pluginType == 'module' && $pluginId == 'core') {
+		continue;
+	    }
+
+	    /* Check compatibility. */
+	    $isCompatible = $this->_utilities->isPluginCompatible($pluginType,
+		    $plugin['header']['requiredCoreApi'], $plugin['header']['requiredPluginApi'],
+		    $coreApis);
+
+	    if ($showAllPlugins || $isCompatible) {
+		$pluginList[$pluginType][$pluginId] = $plugin;
+		$pluginList[$pluginType][$pluginId]['isCompatible'] = $isCompatible;
+
+		/* If plugin is locally available, get its version. */
+		list ($ret, $isPluginAvailable) =
+		    $this->_utilities->isPluginAvailable($pluginType, $pluginId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+
+		if ($isPluginAvailable) {
+		    list ($ret, $version) =
+			$this->_utilities->getPluginVersion($pluginType, $pluginId);
+		    if ($ret) {
+			return array($ret, null);
+		    }
+		    $pluginList[$pluginType][$pluginId]['localVersion'] = $version;
+		}
+	    }
+	}
+
+	return array(null, $pluginList);
+    }
+
+    /**
+     * Returns the complete index array.  Used for testing purposes.
+     *
+     * @return array the index
+     * @access private
+     */
+    function &getRawData() {
+	return $this->_index;
+    }
+
+    /**
+     * Returns the path of the local repository cache.
+     *
+     * @return string index path
+     */
+    function getRepositoryCacheDir() {
+	global $gallery;
+	return $gallery->getConfig('repository.cache') . $this->_source . '/';
+    }
+
+    /**
+     * The purpose of this method is to determine which language packages should be downloaded from
+     * the repository for the supplied locale(s).  To be included as a downloadable language
+     * package, two conditions must be met. 1) The plugin must be locally available and 2) the local
+     * module's requiredCoreApi and requiredPluginApi must be less than (<) the repository index's
+     * requiredCoreApi and requiredPluginApi respectively.  The repository index's required api's 
+     * are on a per plugin basis.  If the plugin status does not contain the required api's (not 
+     * installed), then the plugin is loaded and the values extracted from the class directly.
+     * A further check is made to insure that the language pack is an older build to prevent over-
+     * riding local modifications.
+     * An exact check of language package compatibility is not possible at the moment, so this check
+     * is primarily to ensure that plugins from a release branch get lang updates/packages from the 
+     * release branch and not from the experimental branch repository.
+     *
+     * @param mixed $locales a single or an array of locale identifiers.
+     * @return array GalleryStatus a status code
+     *		     array[$pluginType] => 
+     *			array($pluginId => array('name' => $pluginName, 
+     * 			    'files' => array('descriptor' => $descriptorUrl,
+     * 				'en_gb' => url, 'pt_BR' => url...))
+     */
+    function getLanguagePackageFiles($locales) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$files = array();
+	if (!is_array($locales)) {
+	    $locales = array($locales);
+	}
+
+	foreach (array('module', 'theme') as $pluginType) {
+	    list ($ret, $pluginStatus) = GalleryCoreApi::fetchPluginStatus($pluginType);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    foreach ($this->_index[$pluginType . 's'] as $pluginId => $entry) {
+		if (empty($entry['header']['stringsRevision']) 
+			|| empty($entry['header']['requiredCoreApi'])
+			|| empty($entry['header']['requiredPluginApi'])) {
+		    continue;
+		}
+		if (!empty($pluginStatus[$pluginId]) 
+			&& !empty($pluginStatus[$pluginId]['available'])) {
+		    if (empty($pluginStatus[$pluginId]['requiredCoreApi'])) {
+			list ($ret, $plugin) = 
+			    GalleryCoreApi::loadPlugin($pluginType, $pluginId, true);
+			if ($ret) {
+			    return array($ret, null);
+			}
+			$requiredCoreApi = $plugin->getRequiredCoreApi();
+			$requiredPluginApi = $pluginType == 'module' 
+			    ? $plugin->getRequiredModuleApi() : $plugin->getRequiredThemeApi();
+		    } else {
+			$requiredCoreApi = $pluginStatus[$pluginId]['requiredCoreApi'];
+			$requiredPluginApi = $pluginType == 'module' 
+			    ? $pluginStatus[$pluginId]['requiredModuleApi'] 
+			    : $pluginStatus[$pluginId]['requiredThemeApi'];
+		    }
+		    if ((version_compare(implode('.', $requiredCoreApi), 
+				implode('.', $entry['header']['requiredCoreApi']), '<')) 
+			    || (version_compare(implode('.', $requiredPluginApi),
+				implode('.', $entry['header']['requiredPluginApi']), '<'))) {
+			continue;
+		    }
+
+		    $stringsRevision = $entry['header']['stringsRevision'];
+		    list ($ret, $pluginName) = $this->getPluginName($pluginType, $pluginId);
+		    if ($ret) {
+			return array($ret, null);
+		    }
+
+		    list ($ret, $descriptorUrl) = $this->getDescriptorUrl($pluginType, $pluginId);
+		    if ($ret) {
+			return array($ret, null);
+		    }
+
+		    list ($ret, $pluginPackages) =
+	  		$this->_utilities->getPluginPackages($pluginType, $pluginId);
+	  	    if ($ret) {
+	  		return array($ret, null);
+	  	    }
+
+		    $revision = $entry['languages'][$stringsRevision];
+		    foreach ($locales as $locale) {
+			$packageName = 'lang-' . $locale;
+			$hasPackage = !empty($pluginPackages[$packageName]);
+			if ($hasPackage) {
+			    $package = $pluginPackages[$packageName];
+			    $includePackage = !$package['locked']
+						  && (empty($revision[$locale])
+						      || $package['version'] < $revision[$locale]);
+			}
+			/*
+			 * We want this pack if it is not installed or if the the local revision is
+			 * older than the repository revision
+			 */
+			if (!empty($revision[$locale]) && (!$hasPackage || $includePackage)) {
+			    list ($ret, $packageUrl) = 
+				$this->getPackageUrl($pluginType, $pluginId, $packageName);
+			    if ($ret) {
+				return array($ret, null);
+			    }
+			    $files[$pluginType][$pluginId]['name'] = $pluginName;
+			    $files[$pluginType][$pluginId]['files']['descriptor'] = $descriptorUrl;
+			    $files[$pluginType][$pluginId]['files'][$locale] = $packageUrl;
+			}
+		    }
+		}
+	    }
+	}
+	return array(null, $files);
+    }
+}
+?>

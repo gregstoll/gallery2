@@ -1,0 +1,101 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Progress bar status
+ * @package Support
+ */
+class SupportStatusTemplate {
+    var $_title;
+
+    /**
+     * Create a SupportStatusTemplate.
+     * @param string $title the status title
+     */
+    function SupportStatusTemplate($title) {
+    	$this->_title = $title;
+    }
+
+    /**
+     * Render the header (from <html> to the statusblock or the navbar)
+     * @param boolean $renderStatusBlock (optional) Flag to show status block (default: false).
+     */
+    function renderHeader($renderStatusBlock=false) {
+	$templateData = array();
+	$templateData['showHeader'] = 1;
+	$templateData['title'] = $this->_title;
+	if ($renderStatusBlock) {
+	    $templateData['showStatusBlock'] = 1;
+	}
+	include(dirname(__FILE__) . '/templates/SupportStatus.html');
+    }
+
+    /**
+     * Render a single status message
+     * @param string $title the status title
+     * @param string $description the status description
+     * @param float $percentComplete ranging from 0 to 1
+     * @return GalleryStatus a status code
+     */
+    function renderStatusMessage($title, $description, $percentComplete) {
+	$templateData = array();
+	$templateData['showStatus'] = 1;
+	$templateData['status'] = array('title' => $title,
+					'description' => $description,
+					'percentComplete' =>
+					      GalleryUtilities::roundToString($percentComplete, 2));
+	include(dirname(__FILE__) . '/templates/SupportStatus.html');
+	flush();
+
+	return null;
+    }
+
+    /**
+     * Render the body and footer (everything below the status message)
+     * @param array $templateData
+     */
+    function renderBodyAndFooter($templateData) {
+	$templateData['showBodyAndFooter'] = 1;
+	$templateData['title'] = $this->_title;
+	include(dirname(__FILE__) . '/templates/SupportStatus.html');
+    }
+
+    /**
+     * Hide the status block
+     */
+    function hideStatusBlock() {
+	$templateData = array();
+	$templateData['hideStatusBlock'] = 1;
+	include(dirname(__FILE__) . '/templates/SupportStatus.html');
+    }
+
+    /**
+     * Render the whole page, except for the status block and messages.  This is the way
+     * that we render most pages that don't have interactive status messages.
+     * @param array $templateData
+     */
+    function renderHeaderBodyAndFooter($templateData) {
+	$templateData['showHeader'] = 1;
+	$templateData['title'] = $this->_title;
+	$templateData['showBodyAndFooter'] = 1;
+	include(dirname(__FILE__) . '/templates/SupportStatus.html');
+    }
+}
+?>

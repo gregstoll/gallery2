@@ -1,0 +1,1891 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+/**
+ * Database storage mechanism.  This object provides the hooks for saving and restoring objects in
+ * the persistent store.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 20954 $
+ */
+
+/* Require the ADOdb libraries */
+GalleryCoreApi::requireOnce('lib/adodb/adodb.inc.php');
+
+/**
+ * This will let ADOdb know which error handler function we want to use.
+ * (if embedded in an application also using ADOdb it may be defined already)
+ */
+if (!defined('ADODB_ERROR_HANDLER')) {
+    define('ADODB_ERROR_HANDLER', 'GalleryAdodbErrorHandler');
+}
+
+/**
+ * Name of the sequence we'll use for GalleryEntity ids
+ */
+define('DATABASE_SEQUENCE_ID', 'SequenceId');
+
+/**
+ * Name of the sequence we'll use for lock ids
+ */
+define('DATABASE_SEQUENCE_LOCK', 'SequenceLock');
+
+/**
+ * Name of the sequence we'll use for event log records
+ */
+define('DATABASE_SEQUENCE_EVENT_LOG', 'SequenceEventLog');
+
+/**
+ * Default prefix to prepend to table names
+ */
+define('DATABASE_TABLE_PREFIX', 'g2_');
+
+/**
+ * Default prefix to prepend to column names
+ */
+define('DATABASE_COLUMN_PREFIX', 'g_');
+
+/**
+ * Database storage mechanism.  This object provides the hooks for saving and restoring objects in
+ * the persistent store.
+ */
+class GalleryStorage {
+
+    /**
+     * Internal pointer to ADOdb database object
+     * @var ADOdb
+     * @access protected
+     */
+    var $_db;
+
+    /**
+     * Internal pointer to a non-transactional ADOdb database object
+     * @var ADOdb
+     * @access protected
+     */
+    var $_nonTransactionalDb;
+
+    /**
+     * Internal pointer to our DatabaseStorageExtras object
+     * @var DatabaseStorageExtras
+     * @access protected
+     */
+    var $_extras;
+
+    /**
+     * Database type (ADOdb driver name)
+     * @var string
+     * @access protected
+     */
+    var $_type;
+
+    /**
+     * Name of the database user
+     * @var string
+     * @access protected
+     */
+    var $_username;
+
+    /**
+     * Password for the database user
+     * @var string
+     * @access protected
+     */
+    var $_password;
+
+    /**
+     * Name of the database to use
+     * @var string
+     * @access protected
+     */
+    var $_database;
+
+    /**
+     * Host the database runs on
+     * @var string
+     * @access protected
+     */
+    var $_hostname;
+
+    /**
+     * Are we attempting to be transactional?
+     * @var boolean
+     * @access protected
+     */
+    var $_isTransactional;
+
+    /**
+     * Database schema to use (not used by all db types)
+     * @var string
+     * @access protected
+     */
+    var $_schema;
+
+    /**
+     * A string to prepend to table names
+     * @var string
+     * @access protected
+     */
+    var $_tablePrefix;
+
+    /**
+     * A string to prepend to column names
+     * @var string
+     * @access protected
+     */
+    var $_columnPrefix;
+
+    /**
+     * A cache of member info that we've discovered about various classes
+     * @var array
+     * @access protected
+     */
+    var $_entityInfoCache;
+
+    /**
+     * Whether or not we should use persistent database connections
+     * @var boolean
+     * @access protected
+     */
+    var $_usePersistentConnections;
+
+    /**
+     * Whether this storage accepts empty (string) values for NOT NULL columns.  Some DBMS
+     * implicitly converts empty values to NULL on INSERT/UPDATE and then the value would violate a
+     * NOT NULL condition.
+     * @var boolean
+     * @access protected
+     */
+    var $_isEmptyAllowedForNotNullColumn;
+
+
+    /**
+     * @param array $config database configuration values
+     */
+    function GalleryStorage($config) {
+	$this->_type = $config['type'];
+	$this->_username = $config['username'];
+	$this->_password = $config['password'];
+	$this->_hostname = $config['hostname'];
+	$this->_database = $config['database'];
+	$this->_isTransactional = false;
+	$this->_isEmptyAllowedForNotNullColumn = true;
+	$this->_entityInfoCache = array();
+
+	/* We use persistent connections if the value is left out, or if it's non empty. */
+	$this->_usePersistentConnections = !isset($config['usePersistentConnections'])
+	    || !empty($config['usePersistentConnections']);
+
+	$this->_schema = isset($config['schema']) ? $config['schema'] : '';
+	$this->_tablePrefix = isset($config['tablePrefix']) ? $config['tablePrefix']
+							    : DATABASE_TABLE_PREFIX;
+	$this->_columnPrefix = isset($config['columnPrefix']) ? $config['columnPrefix']
+							      : DATABASE_COLUMN_PREFIX;
+    }
+
+    /**
+     * Connect to the database
+     *
+     * @return array GalleryStatus a status code
+     *               object a database resource
+     * @access protected
+     */
+    function _getConnection($forceNew=false) {
+	global $gallery;
+
+	$this->_traceStart();
+	$db =& ADONewConnection($this->getAdoDbType());
+	$this->_traceStop();
+	if (empty($db)) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	}
+
+	/* Turn on debugging in the database connection if Gallery is in debug mode */
+	if ($gallery->getDebug()) {
+	    $db->debug = true;
+	}
+
+	/* Configure transliteration for COM based DB drivers */
+	if (defined('CP_UTF8')) {
+	    $db->charPage = CP_UTF8;
+	}
+
+	$this->_traceStart();
+	$connectMethod = ($forceNew || !$this->_usePersistentConnections) ? 'NConnect' : 'PConnect';
+	$ret = $db->$connectMethod($this->_hostname,
+				   $this->_username,
+				   $this->_password,
+				   $this->_database);
+	$this->_traceStop();
+
+	if (!$ret) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	}
+
+	if ($gallery->isProfiling('sql')) {
+	    $this->_traceStart();
+	    $db->LogSQL();
+	    $this->_traceStop();
+	}
+
+	$ret = $this->_setConnectionSettings($db);
+	if ($ret) {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	}
+
+	$db->SetFetchMode(ADODB_FETCH_NUM);
+
+	return array(null, $db);
+    }
+
+    /**
+     * Return the type of this database (ADOdb driver name)
+     *
+     * @return string
+     */
+    function getAdoDbType() {
+	return $this->_type;
+    }
+
+    /**
+     * Set runtime settings for the given database connection.
+     * Set the connection/client/server encoding and other parameters
+     *
+     * @param object adodb $db database handle
+     * @return GalleryStatus a status code
+     * @access protected
+     */
+    function _setConnectionSettings(&$db) {
+	return null;
+    }
+
+    /**
+     * Get the reference to our GalleryStorageExtras instance where we put less frequently used code
+     * (most code that's used to modify the database).
+     *
+     * @return GalleryStorageExtras
+     * @access protected
+     */
+    function &_getExtras() {
+	if (!isset($this->_extras)) {
+	    GalleryCoreApi::requireOnce(
+		'modules/core/classes/GalleryStorage/GalleryStorageExtras.class', true);
+	    $tmp = new GalleryStorageExtras($this);
+	    $this->_extras =& $tmp;
+	}
+	return $this->_extras;
+    }
+
+    /**
+     * Is the database transactional?
+     *
+     * @return boolean true if transactional
+     */
+    function isTransactional() {
+	return $this->_isTransactional;
+    }
+
+    /**
+     * Load the GalleryEntities with the ids specified
+     *
+     * @param mixed $ids array of ids of the GalleryEntities to load or a single int id
+     * @return array GalleryStatus a status code,
+     *               mixed one GalleryEntity or an array of GalleryEntities
+     */
+    function loadEntities($ids) {
+	$extras =& $this->_getExtras();
+	return $extras->loadEntities($ids);
+    }
+
+    /**
+     * Save the changes to the GalleryEntity
+     *
+     * @param GalleryEntity $entity the GalleryEntity to save
+     * @return GalleryStatus a status code
+     */
+    function saveEntity(&$entity) {
+	$extras =& $this->_getExtras();
+	return $extras->saveEntity($entity);
+    }
+
+    /**
+     * Delete the GalleryEntity
+     *
+     * @param GalleryEntity $entity the GalleryEntity to delete
+     * @return GalleryStatus a status code
+     */
+    function deleteEntity(&$entity) {
+	$extras =& $this->_getExtras();
+	return $extras->deleteEntity($entity);
+    }
+
+    /**
+     * Create a new GalleryEntity
+     *
+     * @param GalleryEntity $entity the GalleryEntity to put the data in
+     * @return GalleryStatus a status code
+     */
+    function newEntity(&$entity) {
+	$extras =& $this->_getExtras();
+	return $extras->newEntity($entity);
+    }
+
+    /**
+     * Get a new, unique id
+     *
+     * @param string $sequence An optional sequence name, DATABASE_SEQUENCE_ID by default.
+     * @return array GalleryStatus a status code
+     *               int an id
+     */
+    function getUniqueId($sequence=DATABASE_SEQUENCE_ID) {
+	$extras =& $this->_getExtras();
+	return $extras->getUniqueId($sequence);
+    }
+
+    /**
+     * Refresh a GalleryEntity from the database if it has changed
+     *
+     * @param GalleryEntity $entity the object to refresh
+     * @return array GalleryStatus a status code,
+     *               GalleryEntity the fresh entity
+     */
+    function refreshEntity($entity) {
+	$extras =& $this->_getExtras();
+	return $extras->refreshEntity($entity);
+    }
+
+    /**
+     * Acquire read locks on the given items
+     *
+     * @param mixed $entityIds array of ids or single int id
+     * @param int $timeout timeout before giving up on the lock
+     * @return array GalleryStatus a status code
+     *               array lock data
+     */
+    function acquireReadLock($entityIds, $timeout) {
+	$extras =& $this->_getExtras();
+	return $extras->acquireReadLock($entityIds, $timeout);
+    }
+
+    /**
+     * Acquire write locks on the given items
+     *
+     * @param mixed $entityIds array of ids or single int id
+     * @param int $timeout timeout before giving up on the lock
+     * @return array GalleryStatus a status code
+     *               array lock data
+     */
+    function acquireWriteLock($entityIds, $timeout) {
+	$extras =& $this->_getExtras();
+	return $extras->acquireWriteLock($entityIds, $timeout);
+    }
+
+    /**
+     * Refresh all the locks that we hold so that they aren't accidentally considered expired
+     *
+     * @param array $lockIds the lock ids
+     * @param int $freshUntil the new "fresh until" timestamp
+     * @return GalleryStatus a status code
+     */
+    function refreshLocks($lockIds, $freshUntil) {
+	$extras =& $this->_getExtras();
+	return $extras->refreshLocks($lockIds, $freshUntil);
+    }
+
+    /**
+     * Release the given locks.
+     *
+     * @param mixed $lockIds array of lock ids or single id
+     * @return GalleryStatus a status code
+     */
+    function releaseLocks($lockIds) {
+	$extras =& $this->_getExtras();
+	return $extras->releaseLocks($lockIds);
+    }
+
+    /**
+     * Remove ids from a lock.
+     *
+     * @param array $lock lock data
+     * @param array $ids ids to remove
+     * @return GalleryStatus a status code
+     */
+    function removeIdsFromLock($lock, $ids) {
+	$extras =& $this->_getExtras();
+	return $extras->removeIdsFromLock($lock, $ids);
+    }
+
+    /**
+     * Move ids between locks.
+     *
+     * @param array $relock of lockId => object ids
+     * @param int $newLockId the new lockId
+     * @param int $lockType LOCK_READ or LOCK_WRITE
+     * @return GalleryStatus a status code
+     */
+    function moveIdsBetweenLocks($relock, $newLockId, $lockType) {
+	$extras =& $this->_getExtras();
+	return $extras->moveIdsBetweenLocks($relock, $newLockId, $lockType);
+    }
+
+    /**
+     * Generate a new lock id.
+     *
+     * @return array GalleryStatus a status code
+     *               int lock id
+     */
+    function newLockId() {
+	$extras =& $this->_getExtras();
+	return $extras->newLockId();
+    }
+
+    /**
+     * Search the persistent store for the target values matching the given criteria
+     *
+     * @param string $query the search query
+     * @param array $data any explicit data values required by the query
+     * @param array $optional optional arguments (eg. limits)
+     * @return array GalleryStatus a status code,
+     *               GallerySearchResults the result values
+     */
+    function search($query, $data=array(), $optional=array()) {
+	if (!isset($this->_db)) {
+	    list ($ret, $this->_db) = $this->_getConnection();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	$query = $this->_translateQuery($query);
+
+	/* Run it with the right limits and return the results */
+	if (!empty($optional['limit'])) {
+	    $count = empty($optional['limit']['count']) ? -1 : $optional['limit']['count'];
+	    $offset = empty($optional['limit']['offset']) ? -1 : $optional['limit']['offset'];
+
+	    $this->_traceStart();
+	    $recordSet = $this->_db->SelectLimit($query, $count, $offset, $data);
+	    $this->_traceStop();
+	} else {
+	    $this->_traceStart();
+	    $recordSet = $this->_db->Execute($query, $data);
+	    $this->_traceStop();
+	}
+
+	if ($recordSet) {
+	    return array(null, new GallerySearchResults($recordSet));
+	} else {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	}
+    }
+
+    /**
+     * Execute a database statement
+     *
+     * @param string $statement the SQL statement
+     * @param array $data any explicit data values required by the query
+     * @return GalleryStatus a status code,
+     */
+    function execute($statement, $data=array()) {
+	$extras =& $this->_getExtras();
+	return $extras->execute($statement, $data);
+    }
+
+    /**
+     * Add a new entry to a map
+     *
+     * @param string $mapName the map we're working on
+     * @param array $entry an associative array of data about the entry
+     * @param boolean $useNonTransactionalConnection (optional) set to true if we should use a new
+     *                non transactional database connection for this operation.  Default is false.
+     * @return GalleryStatus a status code
+     */
+    function addMapEntry($mapName, $entry, $useNonTransactionalConnection=false) {
+	$extras =& $this->_getExtras();
+	return $extras->addMapEntry($mapName, $entry, $useNonTransactionalConnection);
+    }
+
+    /**
+     * Remove entries from a map
+     *
+     * @param string $mapName the map we're working on
+     * @param array $entry an associative array of data about the entries to match
+     * @return GalleryStatus a status code
+     */
+    function removeMapEntry($mapName, $entry) {
+	$extras =& $this->_getExtras();
+	return $extras->removeMapEntry($mapName, $entry);
+    }
+
+    /**
+     * Remove ALL entries from a map.  Use with caution!
+     *
+     * @param string $mapName the map we're working on
+     * @param bool $useNonTransactionalConnection (optional) set to true if we should do this
+     *             operation outside of a transaction (which will let some databases use the
+     *             TRUNCATE statement).
+     * @return GalleryStatus a status code
+     */
+    function removeAllMapEntries($mapName, $useNonTransactionalConnection=false) {
+	$extras =& $this->_getExtras();
+	return $extras->removeAllMapEntries($mapName, $useNonTransactionalConnection, true);
+    }
+
+    /**
+     * Get entries in a map that match a criteria and return selected fields
+     *
+     * @param string $mapName the map we're working on
+     * @param array $select the columns to return
+     * @param array $match the entries to match
+     * @param array $optional optional arguments (eg. limit, orderBy)
+     *              array('limit' => array('count' => #, 'offset' => #),
+     *                    'orderBy' => array(columnName => ORDER_ASCENDING|ORDER_DESCENDING, ...))
+     * @return array GalleryStatus a status code
+     *               GallerySearchResults the results
+     */
+    function getMapEntry($mapName, $select, $match=array(), $optional=array()) {
+	if (!isset($this->_db)) {
+	    list ($ret, $this->_db) = $this->_getConnection();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	/* Get Map information to check against */
+	list ($ret, $mapInfo) = $this->describeMap($mapName);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	list ($tableName, $unused) = $this->_translateTableName($mapName);
+	$data = $selectColumns = $where = $wheredata = $orderBy = array();
+
+	/* SELECT */
+	foreach ($select as $columnName) {
+	    if (!array_key_exists($columnName, $mapInfo)) {
+		break;
+	    }
+	    $selectColumns[] = $this->_translateColumnName($columnName);
+	}
+
+	/* WHERE */
+	foreach ($match as $columnName => $matchValue) {
+	    if (!array_key_exists($columnName, $mapInfo)) {
+		break;
+	    }
+	    $this->_getWhereSql($columnName, $mapInfo[$columnName], $matchValue,
+		    $where, $wheredata);
+	}
+
+	/* ORDER BY */
+	if (!empty($optional['orderBy'])) {
+	    foreach ($optional['orderBy'] as $columnName => $orderDirection) {
+		if (!array_key_exists($columnName, $mapInfo)) {
+		    break;
+		}
+		$orderDirection = ($orderDirection == ORDER_DESCENDING) ? 'DESC' : 'ASC';
+		$orderBy[] = $this->_translateColumnName($columnName) . ' ' . $orderDirection;
+	    }
+	}
+
+	/* Check if all parameters are correct */
+	if (empty($selectColumns) || count($selectColumns) != count($select)
+		|| count($where) != count($match)
+		|| (!empty($optional['orderBy'])
+		    && count($optional['orderBy']) != count($orderBy))) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	/* Generate SQL query */
+	$query = 'SELECT ' . implode(', ', $selectColumns) . ' FROM ' . $tableName;
+	if (!empty($where)) {
+	    $query .= ' WHERE '  . implode(' AND ', $where);
+	    $data = array_merge($data, $wheredata);
+	}
+	if (!empty($orderBy)) {
+	    $query .= ' ORDER BY ' . implode(', ', $orderBy);
+	}
+
+	/* Run it with the right limits and return the results */
+	if (!empty($optional['limit'])) {
+	    $count = empty($optional['limit']['count']) ? -1 : $optional['limit']['count'];
+	    $offset = empty($optional['limit']['offset']) ? -1 : $optional['limit']['offset'];
+
+	    $this->_traceStart();
+	    $recordSet = $this->_db->SelectLimit($query, $count, $offset, $data);
+	    $this->_traceStop();
+	} else {
+	    $this->_traceStart();
+	    $recordSet = $this->_db->Execute($query, $data);
+	    $this->_traceStop();
+	}
+
+	if ($recordSet) {
+	    return array(null, new GallerySearchResults($recordSet, $select, $mapInfo));
+	} else {
+	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+	}
+    }
+
+    /**
+     * Update entries in a map
+     *
+     * @param string $mapName the map we're working on
+     * @param array $match the entries to match
+     * @param array $change the values to change
+     * @param boolean $useNonTransactionalConnection (optional) set to true if we should use a new
+     *                non transactional database connection for this operation.  Default is false.
+     * @return GalleryStatus a status code
+     */
+    function updateMapEntry($mapName, $match, $change, $useNonTransactionalConnection=false) {
+	if ($useNonTransactionalConnection && $this->isTransactional()) {
+	    $extras =& $this->_getExtras();
+	    list ($ret, $db) = $extras->_getNonTransactionalDatabaseConnection();
+	    if ($ret) {
+		return $ret;
+	    }
+	} else {
+	    if (!isset($this->_db)) {
+		list ($ret, $this->_db) = $this->_getConnection();
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	    $db = $this->_db;
+
+	    $ret = $this->_guaranteeTransaction();
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	list ($ret, $mapInfo) = $this->describeMap($mapName);
+	if ($ret) {
+	    return $ret;
+	}
+	list ($tableName, $unused) = $this->_translateTableName($mapName);
+	$data = $set = $where = $wheredata = array();
+
+	foreach ($mapInfo as $memberName => $memberData) {
+	    if (array_key_exists($memberName, $match)) {
+		$this->_getWhereSql($memberName, $memberData, $match[$memberName],
+			$where, $wheredata);
+	    }
+
+	    if (array_key_exists($memberName, $change)) {
+		if (GalleryUtilities::isA($change[$memberName], 'GallerySqlFragment')) {
+		    $set[] = $this->_translateColumnName($memberName) . ' ' .
+			     $this->_translateQuery($change[$memberName]->getFragment());
+		    foreach ($change[$memberName]->getValues() as $value) {
+			$setdata[] = $value;
+		    }
+		} else {
+		    $set[] = $this->_translateColumnName($memberName) . '=?';
+		    $setdata[] = $this->_normalizeValue($change[$memberName], $memberData);
+		}
+	    }
+	}
+
+	if (count($set) == 0 || count($where) == 0) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	$query = 'UPDATE ' . $tableName . ' SET ' . implode(', ', $set) . ' ';
+	$data = array_merge($data, $setdata);
+
+	$query .= 'WHERE '  . implode(' AND ', $where);
+	$data = array_merge($data, $wheredata);
+
+	$this->_traceStart();
+	$recordSet = $db->Execute($query, $data);
+	$this->_traceStop();
+	if (!$recordSet) {
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	}
+
+	return null;
+    }
+
+    /**
+     * Accepts a $mapInfo pair and $match value to add match information to supplied array.
+     *
+     * @param string $memberName Name of map field
+     * @param array $memberData Data about map field
+     * @param mixed $matchValue Values that the map should match on
+     * @param array $where All match keys
+     * @param array $wheredata All match values
+     */
+    function _getWhereSql($memberName, $memberData, $matchValue, &$where, &$wheredata) {
+	if (GalleryUtilities::isA($matchValue, 'GallerySqlFragment')) {
+	    $where[] = $this->_translateColumnName($memberName) . ' ' .
+			$this->_translateQuery($matchValue->getFragment());
+	    foreach ($matchValue->getValues() as $value) {
+		$wheredata[] = $value;
+	    }
+	} else if (is_array($matchValue)) {
+	    $qs = array();
+	    foreach ($matchValue as $value) {
+		$qs[] = '?';
+		$wheredata[] = $this->_normalizeValue($value, $memberData);
+	    }
+	    $where[] = $this->_translateColumnName($memberName) . ' IN ('
+			. implode(',', $qs) . ')';
+	} else {
+	    $value = $this->_normalizeValue($matchValue, $memberData);
+	    if (is_null($value)) {
+		$where[] = $this->_translateColumnName($memberName) . ' IS NULL';
+	    } else {
+		$where[] = $this->_translateColumnName($memberName) . '=?';
+		$wheredata[] = $value;
+	    }
+	}
+    }
+
+    /**
+     * Configure the persistent store for this strategy, for the given module.
+     *
+     * @param string $moduleId
+     * @param array $upgradeInfo (optional) of (classname => old schema version)
+     * @return GalleryStatus a status code
+     */
+    function configureStore($moduleId, $upgradeInfo=array()) {
+	$extras =& $this->_getExtras();
+	return $extras->configureStore($moduleId, $upgradeInfo);
+    }
+
+    /**
+     * Perform any cleanup necessary after installing or upgrading the given module.
+     *
+     * @param string $moduleId
+     * @return GalleryStatus a status code
+     */
+    function configureStoreCleanup($moduleId) {
+	$extras =& $this->_getExtras();
+	return $extras->configureStoreCleanup($moduleId);
+    }
+
+    /**
+     * Uninstall the database schema for the given module
+     *
+     * @return GalleryStatus a status code
+     */
+    function unconfigureStore($moduleId) {
+	$extras =& $this->_getExtras();
+	return $extras->unconfigureStore($moduleId);
+    }
+
+    /**
+     * Clean out and reset the persistent store for this strategy.
+     *
+     * @return GalleryStatus a status code
+     */
+    function cleanStore() {
+	$extras =& $this->_getExtras();
+	return $extras->cleanStore();
+    }
+
+    /**
+     * Begin a new transaction, if the storage layer supports them.
+     *
+     * @return GalleryStatus a status code
+     */
+    function beginTransaction() {
+	if (!isset($this->_db)) {
+	    list ($ret, $this->_db) = $this->_getConnection();
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	if ($this->_isTransactional) {
+	    $this->_traceStart();
+	    $ok = $this->_db->BeginTrans();
+	    $this->_traceStop();
+
+	    if (!$ok) {
+		return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Commit our transaction, if the storage layer supports them.
+     *
+     * @return GalleryStatus a status code
+     */
+    function commitTransaction() {
+	if ($this->_isTransactional && isset($this->_db) && $this->_db->transCnt > 0) {
+	    $this->_traceStart();
+	    $ok = $this->_db->CommitTrans();
+	    $this->_traceStop();
+
+	    if (!$ok) {
+		return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	    }
+	}
+
+	if ($this->_isTransactional) {
+	    /* Release any queued locks */
+	    global $gallery;
+	    $result =& $gallery->getLockSystem(false);
+	    $ret = $result[0];
+	    if ($ret) {
+		return $ret;
+	    }
+	    $lockSystem =& $result[1];
+	    if (isset($lockSystem)) {
+		$ret = $lockSystem->releaseQueue();
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Mark a storage checkpoint, which will commit pending transactions and perform any future
+     * tied-tasks
+     *
+     * @return GalleryStatus a status code
+     */
+    function checkPoint() {
+	if (!isset($this->_db)) {
+	    return null;
+	}
+
+	$ret = $this->commitTransaction();
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Rollback our transaction, if the storage layer supports them.
+     *
+     * @return GalleryStatus a status code
+     */
+    function rollbackTransaction() {
+	if ($this->_isTransactional && isset($this->_db) && $this->_db->transCnt > 0) {
+	    $this->_traceStart();
+	    $ok = $this->_db->RollbackTrans();
+	    $this->_traceStop();
+
+	    if (!$ok) {
+		return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	    }
+	}
+
+	if ($this->_isTransactional) {
+	    /* Release any queued locks */
+	    global $gallery;
+	    $result =& $gallery->getLockSystem(false);
+	    $ret = $result[0];
+	    if ($ret) {
+		return $ret;
+	    }
+	    $lockSystem =& $result[1];
+	    if (isset($lockSystem)) {
+		$ret = $lockSystem->releaseQueue();
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Begin transaction if not already in one.
+     *
+     * @return GalleryStatus a status code
+     * @access protected
+     */
+    function _guaranteeTransaction() {
+	if ($this->_isTransactional && !$this->_db->transCnt) {
+	    $ret = $this->beginTransaction();
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Convert an integer into something that the database will accept into a bit column
+     *
+     * @param int $intVal integer value
+     * @return mixed  bit value
+     */
+    function convertIntToBits($intVal) {
+	return $intVal;
+    }
+
+    /**
+     * Convert value from a database bit column into an integer
+     *
+     * @param mixed $bitsVal bit value
+     * @return int  integer value
+     */
+    function convertBitsToInt($bitsVal) {
+	return $bitsVal;
+    }
+
+    /**
+     * Return database specific syntax to replace in schema SQL
+     *
+     * @return array (string => replacement)
+     * @access protected
+     */
+    function _getSqlReplacements() {
+	return array();
+    }
+
+    /**
+     * Get sql to optimize a table
+     *
+     * @return array(string sql statement with %s token for table name, ...)
+     * @access protected
+     */
+    function _getOptimizeStatements() {
+	return array();
+    }
+
+    /**
+     * Return a customized function for this database platform
+     *
+     * Available functions:
+     *  - AS: Column alias Syntax, e.g. SELECT foo $as somename FROM BAR;
+     *  - AVG(statement): Aggregate function to average the values of the selected rows.
+     *  - BITAND($a, $b): Binary AND operation on two bit-sequences (or integers)
+     *  - BIT_OR(columnName): Binary OR operation of multiple bit-sequences (aggregate function)
+     *                        e.g. SELECT [::foo], BIT_OR([::bar]) FROM [BAZ] GROUP BY [::foo];
+     *       WARNING: Not all backends support BIT_OR.  Check the returned status for
+     *                ERROR_UNSUPPORTED_OPERATION and implement fallback code in PHP.
+     *  - CASE($condition0, $value0, $condition1, $value1, ..., $elseValue):
+     *             Conditional selection of a value, condition value (condition value)* else-value.
+     *  - CONCAT($string0, $string1, ...): Concatenate two or more strings
+     *  - LIKE(columnName, $string): SQL LIKE operator with SQL LIKE wildcards '_' and '%'.
+     *  - LIMIT($count, $query): Returns the same query with an intrinsic limit on the returned
+     *                           rows.
+     *       WARNING: This code is suboptimal for some backends (e.g. Oracle).
+     *                Instead use $gallery->search($query, $data,
+     *                                            array('limit' => array('count' => $count));
+     *  - MULTI_INSERT(tableName, $columnList, $rowCount): Generates the SQL to insert multiple rows
+     *                                                     with a single query.
+     *  - RAND($seed): Returns a random identifier that can be used for ORDER BY RAND().
+     *                 Most DBMS return a float in the range of 0.0 and 1.0, but some return an
+     *                 integer or even a database-specific uniqueidentifier. 
+     *       WARNING: $seed is optional and is not supported by all backends.
+     *  - RANDOM_INTEGER(): Returns a random integer between 0 and 2^31-1 (2147483647)
+     *  - SUBSTRING($str, $pos, $len): Returns a substring of $string starting from position $pos.
+     *                             $len is optional and limits the string to the specified length.
+     *  - UNIX_TIMESTAMP('2007-11-30 10:30:19'): Converts a database specific timestamp to a
+     *                                           unix timestamp
+     *
+     * @param string $functionName
+     * @param array $args mixed the function arguments
+     * @return array GalleryStatus a status code
+     *               string the function SQL
+     */
+    function getFunctionSql($functionName, $args) {
+	return array(GalleryCoreApi::error(ERROR_NOT_IMPLEMENTED), null);
+    }
+
+    /**
+     * Extracts the class names from a given query
+     *
+     * Query should be something like
+     * '[GalleryItem::id] = ? AND [GalleryPhotoItem::id] = ?'
+     * Results would be: array('[GalleryItem]', '[GalleryPhotoItem]')
+     *
+     * @param string $query
+     * @return array GalleryStatus a status code
+     *               array strings table names
+     */
+    function extractClasses($query) {
+	preg_match_all('/\[([^:]*)::[^\]]*\]/', $query, $matches, PREG_PATTERN_ORDER);
+	$classes = array();
+	foreach ($matches[1] as $match) {
+	    $classes['[' . $match . ']'] = 1;
+	}
+	return array(null, array_keys($classes));
+    }
+
+    /**
+     * Return storage profiling information in HTML format
+     * @return string HTML
+     */
+    function getProfilingHtml() {
+	$extras =& $this->_getExtras();
+	return $extras->getProfilingHtml();
+    }
+
+    /**
+     * Return true if enough of this storage system is installed that there'll be a conflict if you
+     * try to do another install.
+     *
+     * @return array GalleryStatus a status code
+     *               boolean true if the tables are installed
+     */
+    function isInstalled() {
+	$extras =& $this->_getExtras();
+	return $extras->isInstalled();
+    }
+
+    /**
+     * Optimize the database.
+     * @param array $tableNames (optional) of string tableName 1, tableName 2. Leave null to
+     *        optimize all tables.
+     * @return GalleryStatus a status code
+     */
+    function optimize($tableNames=null) {
+	$extras =& $this->_getExtras();
+	return $extras->optimize($tableNames);
+    }
+
+    /**
+     * Return the number of rows that were affected by the last UPDATE/DELETE.  Note that MySQL
+     * treats this a little differently than other databases; if you do an UPDATE operation and
+     * nothing is actually changed (eg. in the situation where the SET clauses in your UPDATE match
+     * the existing values) then mysql will return 0 affected rows.
+     *
+     * @param boolean $useNonTransactionalConnection (optional) set to true if we should check the
+     *                non transactional database connection for this operation.  Default is false.
+     * @return array GalleryStatus a status code
+     *               int the number of affected rows
+     */
+    function getAffectedRows($useNonTransactionalConnection=false) {
+	$extras =& $this->_getExtras();
+	return $extras->getAffectedRows($useNonTransactionalConnection);
+    }
+
+    /**
+     * Describe the members, modules and parent of an entity
+     *
+     * @param string $entityName a class name
+     * @param boolean $tryAllModules true if we should scan all modules, not just the active ones
+     * @return array GalleryStatus a status code
+     *               entity associative array
+     */
+    function describeEntity($entityName, $tryAllModules=false) {
+	$extras =& $this->_getExtras();
+	return $extras->describeEntity($entityName);
+    }
+
+    /**
+     * Execute a given SQL file against the database.  Prefix table and column names as necessary.
+     * Split multiple commands in the file into separate Execute() calls.
+     *
+     * @param string $fileName absolute path of the sql file
+     * @return GalleryStatus a status code
+     * @access protected
+     */
+    function _executeSqlFile($fileName) {
+	$extras =& $this->_getExtras();
+	return $extras->executeSqlFile($fileName);
+    }
+
+    /**
+     * Translate all table and column names from [Entity::member] notation to table.column notation.
+     *
+     * @param string $query the raw query
+     * @return string the translated query
+     * @access protected
+     */
+    function _translateQuery($query) {
+	/* Change '[Class::member]' to 'table.column' or 'alias.column' */
+	while (preg_match('#\[([\w_=]*)::([\w_]*)\]#', $query, $regs)) {
+	    $class = $regs[1];
+	    $member = $regs[2];
+	    list ($table, $alias) = $this->_translateTableName($class);
+
+	    $column = $this->_translateColumnName($member);
+	    if ($alias) {
+		$query = str_replace("[${class}::${member}]", "$alias.$column", $query);
+	    } else if ($class) {
+		$query = str_replace("[${class}::${member}]", "$table.$column", $query);
+	    } else {
+		$query = str_replace("[::${member}]", "$column", $query);
+	    }
+	}
+
+	/* Change '[Class]' to 'table' */
+	while (preg_match('#\[([\w_=]*)\]#', $query, $regs)) {
+	    $class = $regs[1];
+	    list ($table, $alias) = $this->_translateTableName($class);
+	    if ($alias == null) {
+		$query = str_replace("[${class}]", "$table", $query);
+	    } else {
+		list ($ret, $as) = $this->getFunctionSql('AS', array());
+		if ($ret) {
+		    /* XXX TODO: propagate this back up as a GalleryStatus */
+		    return 'QUERY ERROR';
+		}
+		$query = str_replace("[${class}]", "$table $as $alias", $query);
+	    }
+	}
+
+	return $query;
+    }
+
+    /**
+     * Translate a potentially unsafe column name into a safe one
+     *
+     * @param string $columnName the name of a column
+     * @return string a safe column name
+     * @access protected
+     */
+    function _translateColumnName($columnName) {
+	return $this->_columnPrefix . $columnName;
+    }
+
+    /**
+     * Translate a potentially unsafe table name into a safe one by adding a prefix or suffix to
+     * avoid conflicting with a reserved word.
+     *
+     * eg:
+     * Comment   => array(g2_Comment, null, Comment)
+     * Comment=1 => array(g2_Comment, C0, Comment)
+     *
+     * @param string $tableName the name of a table
+     * @return array string a safe table name
+     *               an alias for this table
+     *               the unsafe, but translated, table name
+     * @access protected
+     */
+    function _translateTableName($tableName) {
+	/*
+	 * Remove the the ubiquitous "Gallery" prefix, since it's not part of the schema name.  For
+	 * now we automatically translate the class name into the schema name by doing this.  If
+	 * this ever becomes a problem, we should start hand-writing the schema name instead and
+	 * then pushing that into the interface classes so that we don't have to automatically
+	 * generate the schema name (and get it wrong).
+	 */
+	$tableName = str_replace('Gallery', '', $tableName);
+
+	/* Other abbreviations to keep table names under Oracle's 30 character limit. */
+	$tableName = str_replace('Preferences', 'Prefs', $tableName);
+	$tableName = str_replace('Toolkit', 'Tk', $tableName);
+	$tableName = str_replace('TkOperation', 'TkOperatn', $tableName);
+
+	/*
+	 * Deal with aliases, which will be in the form of "table=1", "table=2",
+	 * etc.  Translate "1" into "A", "2" into "B", etc.
+	 */
+	$split = explode('=', $tableName);
+	$alias = '';
+	if (count($split) > 1) {
+	    list ($tableName, $number) = $split;
+	    for ($i = 0; $i < strlen($tableName); $i++) {
+		$chr = $tableName[$i];
+		if ($chr >= 'A' && $chr <= 'Z') {
+		    $alias .= $chr;
+		}
+	    }
+	    $alias = GalleryUtilities::strToLower($alias) . ($number - 1);
+	} else {
+	    $tableName = $split[0];
+	    $alias = null;
+	}
+
+	return array($this->_tablePrefix . $tableName, $alias, $tableName);
+    }
+
+    /**
+     * Describe all the members of a map
+     *
+     * @param string $mapName a map name
+     * @param boolean $tryAllModules try all modules, not just active ones
+     * @return array GalleryStatus a status code,
+     *               array member name => member type
+     */
+    function describeMap($mapName, $tryAllModules=false) {
+	global $gallery;
+
+	/* Note: keep these cache keys in sync with _clearMapMemberCache() */
+	$cacheKey = 'GalleryStorage::describeMap()';
+
+	/* We only cache the results for active modules */
+	if (!$tryAllModules && GalleryDataCache::containsKey($cacheKey)) {
+	    $mapInfo = GalleryDataCache::get($cacheKey);
+	}
+
+	if (!isset($mapInfo)) {
+	    list ($ret, $mapInfo) = $this->_getEntityOrMapInfo('map', $tryAllModules);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    if (!$tryAllModules) {
+		GalleryDataCache::put($cacheKey, $mapInfo);
+	    }
+	}
+
+	if (!$tryAllModules && !isset($mapInfo[$mapName])) {
+	    list ($ret, $mapInfo[$mapName]) = $this->describeMap($mapName, true);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	if (!isset($mapInfo[$mapName])) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_VALUE, __FILE__, __LINE__,
+					       "Undefined map: $mapName"), null);
+	}
+
+	return array(null, $mapInfo[$mapName]);
+    }
+
+    /**
+     * Retrieve the entity or map information from the Schema table. If tryAllModules is false
+     * then only consider plugins that are active.
+     * @param string $type type of table to retrieve (map | entity)
+     * @param boolean $tryAllModules try all modules, not just active ones
+     * @return array GalleryStatus a status code,
+     *               array member name => member type
+     * @access protected
+     */
+    function _getEntityOrMapInfo($type, $tryAllModules) {
+	global $gallery;
+	$session =& $gallery->getSession();
+
+	$isInstallOrUpgrade = empty($session) ? false 
+		: $session->exists('isInstall') || $session->exists('isUpgrade');
+	/* @todo Remove the type constraint from selects and have describeXXX use the same map */
+	$typeInfo = array();
+	/* If this is an install or upgrade force the use all plugins including non-active. */
+	if (!$tryAllModules && !$isInstallOrUpgrade) {
+	    $query = 'SELECT [Schema::info] FROM [GalleryPluginMap], [Schema]
+		       WHERE [GalleryPluginMap::pluginId] = [Schema::pluginId]
+			 AND [Schema::type] = ? AND [GalleryPluginMap::active] = ?';
+	    $data = array($type, 1);
+	} else {
+	    $query = 'SELECT [Schema::info] FROM [Schema] WHERE [Schema::type] = ?';
+	    $data = array($type);
+	}
+
+	list ($ret, $results) = $this->search($query, $data);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$tableInfo = array();
+	while ($row = $results->nextResult()) {
+	    $tableInfo = array_merge($tableInfo, unserialize($row[0]));
+	}
+    	return array(null, $tableInfo);
+    }
+
+    /**
+     * Encode a blob of binary data into a form that's safe for a varchar column
+     *
+     * @param string $blob binary data
+     * @return database safe string
+     */
+    function encodeBlob($blob) {
+	return $blob;
+    }
+
+    /**
+     * Decode a blob of binary data into a form that's safe for a varchar column
+     *
+     * @param string $blob database safe string
+     * @return binary data
+     */
+    function decodeBlob($blob) {
+	return $blob;
+    }
+
+    /**
+     * Start tracing.  If Gallery is in debug, this method will begin storing all output and routing
+     * it into Gallery's debug system.
+     * @access protected
+     */
+    function _traceStart() {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    ob_start();
+	}
+    }
+
+    /**
+     * Stop tracing.  If Gallery is in debug, this will method will stop tracing.
+     * @access protected
+     */
+    function _traceStop() {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $buf = ob_get_contents();
+	    ob_end_clean();
+	    $gallery->debug($buf);
+	}
+    }
+
+    /**
+     * Set Adodb debug mode.
+     * @param bool $debug
+     */
+    function setDebug($debug) {
+	if (isset($this->_db)) {
+	    $this->_db->debug = $debug;
+	}
+	if (isset($this->_nonTransactionalDb)) {
+	    $this->_nonTransactionalDb->debug = $debug;
+	}
+    }
+
+    /**
+     * Cast the value to the proper member type when interacting with the database.  Optionally also
+     * perform a UTF-8-safe truncation for strings.
+     *
+     * @todo CAST empty to NULL ? values from DB too?
+     *
+     * @param mixed $value the value
+     * @param array $memberData ('type' => STORAGE_TYPE_XXX constant,
+     *               'size' => STORAGE_SIZE_XXX constant)
+     * @param boolean $fromDb (optional) false if value is for SQL, true if value is from the DB
+     * @return mixed correctly typed value
+     * @access protected
+     */
+    function _normalizeValue($value, $memberData, $fromDb=false) {
+	$notNull = !empty($memberData['notNull']) ||
+	   ( !empty($memberData['notNullEmptyAllowed']) && $this->_isEmptyAllowedForNotNullColumn);
+
+	if (is_null($value) && !$notNull) {
+	    return $value;
+	}
+
+	$type = $memberData['type'];
+	if ($type & STORAGE_TYPE_BOOLEAN) {
+	    /* Convert booleans to 1 : 0 */
+	    return (int)!empty($value);
+	} else if ($type & STORAGE_TYPE_TIMESTAMP) {
+	    /* Convert timestamps to the database representation */
+	    return $this->_db->DBTimeStamp($value);
+	} else if ($type & STORAGE_TYPE_INTEGER) {
+	    return (int)$value;
+	} else if ($type & STORAGE_TYPE_STRING) {
+	    if (isset($value) && !$fromDb) {
+		$value = $this->_truncateString($value, $memberData['size']);
+	    }
+	    return (string)$value;
+	} else if ($type & STORAGE_TYPE_TEXT) {
+	    return (string)$value;
+	} else if ($type & STORAGE_TYPE_BIT) {
+	    if ($fromDb) {
+		return (int)$this->convertBitsToInt($value);
+	    } else {
+		return $this->convertIntToBits((int)$value);
+	    }
+	} else {
+	    return $value;
+	}
+    }
+
+    /**
+     * Perform a UTF-8-safe truncation of the string to a size
+     *
+     * @param string $value the value
+     * @param int $size (as a STORAGE_SIZE_XXX constant)
+     * @param bool $lengthInBytes (optional) whether to interpret the size in bytes or in characters
+     * @return the truncated string
+     */
+    function _truncateString($value, $size, $lengthInBytes=false) {
+	switch ($size) {
+	case STORAGE_SIZE_SMALL:
+	    $size = 32;
+	    break;
+
+	case STORAGE_SIZE_MEDIUM:
+	    $size = 128;
+	    break;
+
+	case STORAGE_SIZE_LARGE:
+	    $size = 255;
+	    break;
+	}
+	if ($lengthInBytes) {
+	    return GalleryCoreApi::utf8Strcut($value, 0, $size);
+	} else {
+	    return GalleryCoreApi::utf8Substring($value, 0, $size);
+	}
+    }
+
+    /**
+     * This method gets a Gallery Database Exporter object.
+     * @return A GalleryDatabaseExport object.
+     */
+    function getDatabaseExporter() {
+	GalleryCoreApi::requireOnce(
+				'modules/core/classes/GalleryStorage/GalleryDatabaseExport.class');
+	return new GalleryDatabaseExport();
+    }
+
+    /**
+     * This method gets a Gallery Database Importer object.
+     * @return A GalleryDatabaseImport object.
+     */
+    function getDatabaseImporter() {
+	GalleryCoreApi::requireOnce(
+				'modules/core/classes/GalleryStorage/GalleryDatabaseImport.class');
+	return new GalleryDatabaseImport();
+    }
+
+    /**
+     * Examine the schema table and return the version of all the Gallery tables
+     * @return array GalleryStatus a status code
+     *               array (name => (major, minor))
+     */
+    function getTableVersions() {
+	$extras =& $this->_getExtras();
+	return $extras->_loadTableVersions();
+    }
+
+    /**
+     * Load the Maps.inc and Entities.inc into the schema table for the specified module
+     * @param string $moduleId
+     * @return GalleryStatus a status code
+     */
+    function updateTableInfo($moduleId) {
+	$extras =& $this->_getExtras();
+	return $extras->_updateTableInfo($moduleId);
+    }
+
+    /**
+     * Test whether the current connection and non transactional connection are still valid.  If
+     * the connections are not valid then reconnect the connection.
+     * @return GalleryStatus
+     */
+    function validateConnection() {
+	$extras =& $this->_getExtras();
+	return $extras->validateConnection();
+    }
+}
+
+/**
+ * Container for database result set
+ * @package GalleryCore
+ * @subpackage Storage
+ */
+class GallerySearchResults {
+
+    /**
+     * Internal record set object
+     *
+     * @access private
+     * @var ADORecordSet $_recordSet
+     */
+    var $_recordSet;
+
+    /**
+     * Field names describing the record set
+     *
+     * @access private
+     * @var array(string name of field 1, ...) $fieldNames
+     */
+    var $_fieldNames;
+
+    /**
+     * Gallery data type info array
+     *
+     * @access private
+     * @var array (string columnName => array data type info, ...) $mapInfo
+     */
+    var $_mapInfo;
+
+    function GallerySearchResults($recordSet, $fieldNames=null, $mapInfo=null) {
+	$this->_recordSet = $recordSet;
+	$this->_fieldNames = $fieldNames;
+	$this->_mapInfo = $mapInfo;
+    }
+
+    /**
+     * The number of results from this search
+     *
+     * @return int the number of results
+     */
+    function resultCount() {
+	return $this->_recordSet->RecordCount();
+    }
+
+    /**
+     * Return the next search result, as an associative array
+     *
+     * @return array the next result or false if EOF
+     */
+    function nextResult() {
+	$row =& $this->_recordSet->FetchRow();
+	if (!empty($row) && !empty($this->_fieldNames) && !empty($this->_mapInfo)) {
+	    /* Normalize fetched values */
+	    global $gallery;
+	    $storage =& $gallery->getStorage();
+	    for ($i = 0; $i < count($row) && $i < count($this->_fieldNames); $i++) {
+		$field = $this->_fieldNames[$i];
+		$row[$i] = $storage->_normalizeValue($row[$i], $this->_mapInfo[$field], true);
+	    }
+	}
+	return $row;
+    }
+}
+
+/**
+ * Container to store an sql fragment that can be passed to the db abstraction layer.
+ * @package GalleryCore
+ * @subpackage Storage
+ */
+class GallerySqlFragment {
+
+    /**
+     * Internal sql fragment
+     * @var string
+     * @access private
+     */
+    var $_fragment;
+
+    /**
+     * Internal sql values
+     * @var array
+     * @access private
+     */
+    var $_values;
+
+
+    /**
+     * @param string $fragment sql fragment
+     * @param array $values values.. variable number of parameters must match
+     *                        number of ? markers in sql fragment
+     */
+    function GallerySqlFragment($fragment, $values) {
+	$this->_values = func_get_args();
+	$this->_fragment = array_shift($this->_values);
+    }
+
+    /**
+     * The sql fragment
+     * @return string
+     */
+    function getFragment() {
+	return $this->_fragment;
+    }
+
+    /**
+     * Return the values that map into the sql fragment's ? markers
+     * @return array
+     */
+    function getValues() {
+	return $this->_values;
+    }
+}
+
+/**
+ * Default Error Handler for ADOdb.  Derived from adodb-errorhandler.inc.php which is
+ * (c) 2000, 2001 John Lim (jlim@natsoft.com.my).  All rights reserved.
+ *
+ * @param string $dbms         the RDBMS you are connecting to
+ * @param string $fn           the name of the calling function (in uppercase)
+ * @param    int $errno        the native error number from the database
+ * @param string $errmsg       the native error msg from the database
+ * @param  mixed $p1           $fn specific parameter - see below
+ * @param  mixed $p2           $fn specific parameter - see below
+ */
+function GalleryAdodbErrorHandler($dbms, $fn, $errno, $errmsg, $p1=false, $p2=false) {
+    switch($fn) {
+    case 'EXECUTE':
+	$sql = $p1;
+	$inputparams = $p2;
+	$s = "$dbms error: [$errno: $errmsg] in $fn(\"$sql\")\n";
+	break;
+
+    case 'PCONNECT':
+    case 'CONNECT':
+	$host = $p1;
+	$database = $p2;
+	$s = "$dbms error: [$errno: $errmsg] in $fn($host, ?, ?, $database)\n";
+	break;
+
+    default:
+	$s = "$dbms error: [$errno: $errmsg] in $fn($p1, $p2)\n";
+	break;
+    }
+
+    /*
+     * Log connection error somewhere
+     *  0 message is sent to PHP's system logger, using the Operating System's system
+     *          logging mechanism or a file, depending on what the error_log configuration
+     *          directive is set to.
+     *  1 message is sent by email to the address in the destination parameter.
+     *          This is the only message type where the fourth parameter, extra_headers is used.
+     *          This message type uses the same internal function as mail() does.
+     *  2 message is sent through the PHP debugging connection.
+     *          This option is only available if remote debugging has been enabled.
+     *          In this case, the destination parameter specifies the host name or IP address
+     *          and optionally, port number, of the socket receiving the debug information.
+     *  3 message is appended to the file destination
+     */
+    if (defined('ADODB_ERROR_LOG_TYPE')) {
+	$t = date('Y-m-d H:i:s');
+	if (defined('ADODB_ERROR_LOG_DEST'))
+	    error_log("($t) $s", ADODB_ERROR_LOG_TYPE, ADODB_ERROR_LOG_DEST);
+	else
+	    error_log("($t) $s", ADODB_ERROR_LOG_TYPE);
+    }
+
+    global $gallery;
+    if ($gallery->getDebug()) {
+	$gallery->debug($s);
+    }
+}
+
+/**
+ * MySQL extension of the GalleryStorage class.
+ * This object implements the hooks for saving and restoring objects in a MySQL database.
+ *
+ * @package GalleryCore
+ * @subpackage Storage
+ */
+class MySqlStorage extends GalleryStorage {
+
+    function MySqlStorage($config) {
+	$this->GalleryStorage($config);
+	if ($this->_type != 'mysql' /* mysqlt and mysqli are transactional */) {
+	    $this->_isTransactional = true;
+	}
+    }
+
+    /**
+     * Return the type of this database
+     * @return string
+     */
+    function getType() {
+	return 'mysql';
+    }
+
+    /**
+     * @see GalleryStorage::_setConnectionSettings
+     */
+    function _setConnectionSettings(&$db) {
+	/* MySQL 4.1.0+ support UTF-8, for details, see: http://drupal.org/node/40515 */
+	$this->_serverInfo = ($this->_type == 'mysqli')
+	    ? mysqli_get_server_info($db->_connectionID) : mysql_get_server_info();
+	if ($this->_serverInfo && version_compare($this->_serverInfo, '4.1.0', '>=')) {
+	    $this->_traceStart();
+	    $recordSet = $db->execute('SET NAMES "utf8"');
+	    $this->_traceStop();
+
+	    if (!$recordSet) {
+		return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::_getSqlReplacements
+     */
+    function _getSqlReplacements() {
+	/* 3.23.0-4.0.17 used TYPE, 5.1+ only accepts ENGINE, between accepts either */
+	$typeKeyword = ($this->_serverInfo && version_compare($this->_serverInfo, '4.0.18', '>='))
+		     ? 'ENGINE' : 'TYPE';
+
+	/* Use InnoDB for transactional tables */
+	$tableType = $this->_isTransactional ? 'InnoDB' : 'MyISAM';
+
+	/**
+	 * @todo On next major bump of Module API, remove 'TYPE=DB_TABLE_TYPE' entry below.
+	 * In revision 14158, we switched from replacing DB_TABLE_TYPE with the tableType to
+	 * replacing it with {ENGINE|TYPE}=tableType. Handle both cases else installing older
+	 * modules will fail.
+	 */
+	return array('TYPE=DB_TABLE_TYPE' => $typeKeyword . '=' . $tableType,
+		     'DB_TABLE_TYPE' => $typeKeyword . '=' . $tableType);
+    }
+
+    /**
+     * @see GalleryStorage::getFunctionsSql
+     */
+    function getFunctionSql($functionName, $args) {
+	switch($functionName) {
+	case 'CONCAT':
+	    $sql = sprintf('CONCAT(%s)', implode(', ', $args));
+	    break;
+
+	case 'BITAND':
+	    $sql = $args[0] . ' & ' . $args[1];
+	    break;
+
+	case 'BIT_OR':
+	    $sql = 'BIT_OR(' . $args[0] . ')';
+	    break;
+
+	case 'UNIX_TIMESTAMP':
+	    $sql = sprintf('UNIX_TIMESTAMP(%s)', $args[0]);
+	    break;
+
+	case 'AS':
+	    $sql = 'AS';
+	    break;
+
+	case 'SUBSTRING':
+	    $sql = sprintf('SUBSTRING(%s)', implode(', ', $args));
+	    break;
+
+	case 'RAND':
+	    $sql = sprintf('RAND(%s)', empty($args) ? '' : $args[0]);
+	    break;
+
+	case 'RANDOM_INTEGER':
+	    $sql = 'FLOOR(RAND() * 2147483647)';
+	    break;
+
+	case 'LIMIT':
+	    $sql = $args[1] . ' LIMIT ' . $args[0];
+	    break;
+
+	case 'CASE': // condition value (condition value)* else-value
+	    if (count($args) == 3) {
+		$sql = sprintf('IF(%s)', implode(', ', $args));
+	    } else {
+		$sql = array();
+		while (count($args) > 1) {
+		    $sql[] = 'WHEN ' . array_shift($args) . ' THEN ' . array_shift($args);
+		}
+		$sql = 'CASE ' . implode(' ', $sql) . ' ELSE ' . $args[0] . ' END';
+	    }
+	    break;
+
+	case 'LIKE':
+	    $sql = $args[0] . ' LIKE ' . $args[1];
+	    break;
+
+	case 'MULTI_INSERT':
+	    /*
+	     * 0 - table name
+	     * 1 - array of column names
+	     * 2 - number of rows
+	     */
+	    $markers = GalleryUtilities::makeMarkers(sizeof($args[1]));
+	    $rowList = rtrim(str_repeat('(' . $markers . '), ', $args[2]), ', ');
+	    $sql = 'INSERT INTO ' . $args[0] . ' (';
+	    $sql .= join(', ', $args[1]);
+	    $sql .= ') VALUES ' . $rowList;
+	    break;
+
+	case 'AVG':
+	    $sql = sprintf('AVG(%s)', $args[0]);
+	    break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED, __FILE__, __LINE__,
+					      $functionName . ' ' . implode(' ', $args)), null);
+	}
+
+	return array(null, $sql);
+    }
+
+    /**
+     * @see GalleryStorage::encodeBlob
+     */
+    function encodeBlob($blob) {
+	if (!isset($this->_db)) {
+	    list ($ret, $this->_db) = $this->_getConnection();
+	}
+	if ($this->_serverInfo && version_compare($this->_serverInfo, '4.1.0', '>=')) {
+	    /* See: http://www.postgresql.org/docs/8.1/interactive/datatype-binary.html */
+	    $blob = addcslashes($blob, "\000..\037\047\134\177..\377");
+	}
+
+	return $blob;
+    }
+
+    /**
+     * @see GalleryStorage::decodeBlob
+     */
+    function decodeBlob($blob) {
+	if (!isset($this->_db)) {
+	    list ($ret, $this->_db) = $this->_getConnection();
+	}
+	if ($this->_serverInfo && version_compare($this->_serverInfo, '4.1.0', '>=')) {
+	    $blob = stripcslashes($blob);
+	}
+
+	return $blob;
+    }
+
+    /**
+     * Get database version.
+     * @return string version
+     */
+    function getVersion() {
+	if (!isset($this->_db)) {
+	    list ($ret, $this->_db) = $this->_getConnection();
+	    if ($ret) {
+		return ($this->_type == 'mysqli'
+			? mysqli_get_client_info() : mysql_get_client_info()) . ' client';
+	    }
+	}
+	return $this->_serverInfo;
+    }
+
+    /**
+     * @see GalleryStorage::_getOptimizeStatements
+     */
+    function _getOptimizeStatements() {
+	return array('OPTIMIZE TABLE `%s`;', 'ANALYZE TABLE `%s`;');
+    }
+
+    /**
+     * @see GalleryStorage::getUniqueId
+     */
+    function getUniqueId($sequence=DATABASE_SEQUENCE_ID) {
+	/* Make sure we're using a non-transactional connection to avoid duplicating sequence ids */
+	$extras =& $this->_getExtras();
+	list ($ret, $db) = $extras->_getNonTransactionalDatabaseConnection();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return $extras->_getUniqueIdWithConnection($db, $sequence);
+    }
+
+    /**
+     * Truncate UTF-8 strings either to given character or to byte length depending on the MySQL
+     * version.
+     * @see GalleryStorage::_truncateString
+     */
+    function _truncateString($value, $size, $lengthInBytes=false) {
+	static $lengthInBytes;
+
+	if (!isset($lengthInBytes)) {
+	    $lengthInBytes =
+	    	$this->_serverInfo && version_compare($this->_serverInfo, '4.1.0', '<');
+	}
+
+	return parent::_truncateString($value, $size, $lengthInBytes);
+    }
+}
+?>

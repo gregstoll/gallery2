@@ -1,0 +1,81 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Utility functions useful in managing GalleryDerivatives
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryDerivativeHelper_medium {
+
+    /**
+     * @see GalleryCoreApi::fetchResizesByItemIds
+     */
+    function fetchResizesByItemIds($ids) {
+	if (!is_array($ids)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	if (empty($ids)) {
+	    return array(null, array());
+	}
+
+	GalleryCoreApi::requireOnce(
+	    'modules/core/classes/helpers/GalleryDerivativeHelper_simple.class');
+	list ($ret, $results) = GalleryDerivativeHelper_simple::_loadDerivatives(
+	    $ids, null, DERIVATIVE_TYPE_IMAGE_RESIZE);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	return array(null, $results);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchPreferredsByItemIds
+     */
+    function fetchPreferredsByItemIds($ids) {
+	if (!is_array($ids)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	if (empty($ids)) {
+	    return array(null, array());
+	}
+
+	GalleryCoreApi::requireOnce(
+	    'modules/core/classes/helpers/GalleryDerivativeHelper_simple.class');
+	list ($ret, $results) = GalleryDerivativeHelper_simple::_loadDerivatives(
+	    $ids, null, DERIVATIVE_TYPE_IMAGE_PREFERRED);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Only one preferred per item, so simplify the results */
+	foreach ($results as $id => $value) {
+	    $results[$id] = $value[0];
+	}
+
+	return array(null, $results);
+    }
+}
+?>

@@ -1,0 +1,188 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A helper class for the JpegtranToolkit class
+ *
+ * @package Jpegtran
+ * @subpackage Classes
+ * @author Matthew Miller <mattdm@mattdm.org>
+ * @author Andy Staudacher <ast@gmx.ch>
+ * @version $Revision: 17777 $
+ */
+class JpegtranToolkitHelper {
+
+    /**
+     * Return the operations currently supported by JpegtranToolkit.
+     *
+     * @return array GalleryStatus a status code
+     *               array('operations' => ...)
+     * @static
+     */
+    function getOperations() {
+	global $gallery;
+
+	/* Detect and test the binary */
+	list ($ret, $path) = GalleryCoreApi::getPluginParameter('module', 'jpegtran', 'path');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $testResults) = JpegtranToolkitHelper::testBinary($path);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$mimeTypes = array('image/jpeg', 'image/pjpeg');
+	$operations = array();
+	foreach ($testResults as $result) {
+	    if ($result['name'] == 'rotate' && $result['success']) {
+		$operations['rotate'] = array(
+			'params' => array(
+				array('type' => 'int',
+				      'description' => $gallery->i18n('rotation degrees'))),
+			'description' => $gallery->i18n('Rotate the image'),
+			'mimeTypes' => $mimeTypes);
+	    } else if ($result['name'] == 'crop' && $result['success']) {
+		$operations['crop'] = array(
+			'params' => array(
+				array('type' => 'float',
+				      'description' => $gallery->i18n('left edge %')),
+				array('type' => 'float',
+				      'description' => $gallery->i18n('top edge %')),
+				array('type' => 'float',
+				      'description' => $gallery->i18n('width %')),
+				array('type' => 'float',
+				      'description' => $gallery->i18n('height %'))),
+			'description' => $gallery->i18n('Crop the image'),
+			'mimeTypes' => $mimeTypes);
+	    }
+	}
+
+	return array(null, array('operations' => $operations));
+    }
+
+    /**
+     * Test if the given path has a working jpegtran binary.
+     *
+     * @param string path to the jpegtran binary
+     * @return array GalleryStatus general status of tests
+     *               array ('name' => string: the name of the operation,
+     *                      'success' => boolean: test successful?
+     *                      'message' => string: the error message
+     *
+     * @static
+     */
+    function testBinary($jpegtranPath) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$slash = $platform->getDirectorySeparator();
+	$dataPath = dirname(dirname(__FILE__)) . "${slash}data${slash}";
+
+	/*
+	 * If the path is not restricted by open_basedir, then verify that it's legal.  Else just
+	 * hope that it's valid and use it.
+	 */
+	if ($platform->isRestrictedByOpenBaseDir($jpegtranPath)
+		|| !@$platform->is_file($jpegtranPath)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH, null, null, '"' . $jpegtranPath 
+			. '" is not a file or is not specified in open_basedir.'), null);
+	}
+
+	/* Only used for translation, so ignore version mismatch during upgrade */
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'jpegtran', true);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* To test the binary we'll try to rotate a small jpeg file. */
+	$tmpDir = $gallery->getConfig('data.gallery.tmp');
+	$tmpFilename = $platform->tempnam($tmpDir, 'jpgt_');
+	$command = array($jpegtranPath, '-verbose', '-copy', 'all', '-rotate', '90',
+			 '-outfile', $tmpFilename, $dataPath . 'test.jpg');
+
+	list ($success, $stdout, $stderr) = $platform->exec(array($command));
+
+	$testArray = array();
+	if (!$success) {
+	    $message = $module->translate('Incorrect exit status for jpegtran command.');
+	    $testArray[] = array('name' => 'rotate',
+				 'success' => false,
+				 'message' => array($message));
+	} else if (!$platform->file_exists($tmpFilename)) {
+	    $message = $module->translate('Output file was not generated.');
+	    $testArray[] = array('name' => 'rotate',
+				 'success' => false,
+				 'message' => array($message));
+	} else if (empty($stderr) || !is_array($stderr)){
+	    $message = $module->translate('Missing version information.');
+	    $testArray[] = array('name' => 'rotate',
+				 'success' => false,
+				 'message' => array($message));
+	} else {
+	    $isJpegtran = false;
+	    $detectsDimensions = false;
+	    $isFinished = false;
+	    while (null !== ($line = array_shift($stderr))) {
+		if (preg_match("/Independent JPEG Group's JPEGTRAN/", $line)) {
+		    $isJpegtran = true;
+		} else if (preg_match('/Start Of Frame 0xc0: width=50, height=50, components=3/',
+				      $line)) {
+		    $detectsDimensions = true;
+		} else if (preg_match('/End Of Image/', $line)) {
+		    $isFinished = true;
+		}
+	    }
+
+	    if ($isJpegtran && $detectsDimensions && $isFinished) {
+		$testArray[] = array('name' => 'rotate', 'success' => true, 'messages' => array());
+	    } else {
+		$message = $module->translate('Unexpected results.');
+		$testArray[] = array('name' => 'rotate',
+				     'success' => false,
+				     'message' => array($message));
+	    }
+	}
+
+	/* Test the optional crop support (only patched versions of jpegtran can crop) */
+	$command = array($jpegtranPath, '-verbose', '-copy', 'all', '-crop', '20x20+5+5',
+			 '-outfile', $tmpFilename, $dataPath . 'test.jpg');
+	list ($success, $stdout, $stderr) = $platform->exec(array($command));
+	if (!$success) {
+	    $message = $module->translate('Incorrect exit status for jpegtran command.');
+	    $testArray[] = array('name' => 'crop',
+				 'success' => false,
+				 'message' => array($message));
+	} else if (!$platform->file_exists($tmpFilename)) {
+	    $message = $module->translate('Output file was not generated.');
+	    $testArray[] = array('name' => 'crop',
+				 'success' => false,
+				 'message' => array($message));
+	} else {
+	    $testArray[] = array('name' => 'crop', 'success' => true,
+				     'messages' => array());
+	}
+
+	@$platform->unlink($tmpFilename);
+
+	return array(null, $testArray);
+    }
+}
+?>

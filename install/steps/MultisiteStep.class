@@ -1,0 +1,200 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Select install type
+ * @package Install
+ */
+class MultisiteStep extends InstallStep {
+    var $_isMultisite;
+    var $_configPath;
+    var $_baseUri;
+
+    function stepName() {
+	return _('Installation Type');
+    }
+
+    function isRedoable() {
+	return true;
+    }
+
+    function processRequest() {
+	global $galleryStub;
+
+	if (!empty($_GET['doAutoComplete'])) {
+	    processAutoCompleteRequest();
+	    return false;
+	} else if (isset($_POST['isMultisite'])) {
+	    $baseDir = dirname(dirname(dirname(__FILE__)));
+	    require_once($baseDir . '/modules/core/classes/GalleryUrlGenerator.class');
+	    if ($_POST['isMultisite'] == '0') {
+		$this->_isMultisite = false;
+		$_SESSION['configPath'] = $baseDir;
+		$_SESSION['baseUri'] = getGalleryDirUrl()  . GALLERY_MAIN_PHP;
+		$this->setComplete(true);
+		$this->readConfigFile();
+		/* Remember the value also for the storage and database setup steps */
+		$galleryStub->setConfig('isMultisite', false);
+		$uri = preg_replace('{\?.*}', '', GalleryUrlGenerator::getCurrentRequestUri());
+		$uri .= '?step=' . ($this->getStepNumber() + 1);
+		/* Cookieless browsing (see index.php), 'session.use_trans_sid' won't help here */
+		if (!GallerySetupUtilities::areCookiesSupported()) {
+		    $uri .= sprintf('&%s=%s', session_name(), session_id());
+		}
+
+		header('Location: ' . getBaseUrl() . $uri);
+		return false;
+	    } else {
+		$this->_configPath = rtrim($this->sanitize($_POST['configPath']),
+					   ' ' . DIRECTORY_SEPARATOR);
+		$this->_baseUri = isset($_POST['baseUri']) ? $_POST['baseUri'] : '';
+
+		if (substr($this->_baseUri, -4) != '.php'
+		        && substr($this->_baseUri, -1) != '/') {
+		    $this->_baseUri .= '/' . GALLERY_MAIN_PHP;
+		}
+	    }
+	}
+	return true;
+    }
+
+    function loadTemplateData(&$templateData) {
+	global $galleryStub;
+
+	if (!isset($this->_isMultisite)) {
+	    $this->_isMultisite = false;
+	    $this->_configPath = '';
+	    $this->_baseUri = '';
+	}
+
+	$galleryDir = dirname(dirname(dirname(__FILE__))) . DIRECTORY_SEPARATOR;
+
+	if (isset($_POST['isMultisite']) && $_POST['isMultisite'] == '1') {
+	    $this->_isMultisite = true;
+	    if (empty($this->_configPath)) {
+		$templateData['error']['dir']['empty'] = 1;
+	    } else if (!is_dir($this->_configPath)) {
+		$templateData['error']['dir']['missing'] = 1;
+	    } else if ($this->_configPath == $galleryDir ||
+		       $this->_configPath . DIRECTORY_SEPARATOR == $galleryDir) {
+		$templateData['error']['dir']['codebase'] = 1;
+	    } else if (!is_readable($this->_configPath)) {
+		$templateData['error']['dir']['inaccessible'] = 1;
+	    } else if (!MultisiteStep::populateMultisiteDirectory($this->_configPath)) {
+		$templateData['error']['dir']['creation_error'] = 1;
+	    }
+
+	    if (empty($this->_baseUri)) {
+		$templateData['error']['uri']['missing'] = 1;
+	    }
+
+	    if (empty($templateData['error'])) {
+		$_SESSION['configPath'] = $this->_configPath;
+		$_SESSION['baseUri'] = $this->_baseUri;
+		$this->setComplete(true);
+		$this->readConfigFile();
+		$galleryStub->setConfig('isMultisite', true);
+	    }
+	} else {
+	    $_SESSION['baseUri'] = getGalleryDirUrl() . GALLERY_MAIN_PHP;
+	}
+
+	/*
+	 * Show full filesystem path and the full URL to config file dir.
+	 */
+	$openBasedir = ini_get('open_basedir');
+	if (!empty($openBasedir)) {
+	    $separator = strncasecmp(PHP_OS, 'win', 3) ? ':' : ';';
+	    $templateData['openBasedir'] = explode($separator, $openBasedir);
+	} else {
+	    $templateData['openBasedir'] = array();
+	}
+
+	$templateData['isMultisite'] = $this->_isMultisite;
+	$templateData['configPath'] = $this->_configPath;
+	$templateData['baseUri'] = $this->_baseUri;
+	$templateData['galleryDir'] = $galleryDir;
+	$templateData['galleryUrl'] = getGalleryDirUrl();
+	$templateData['bodyFile'] = $this->isComplete() ? 'MultisiteSuccess.html'
+							: 'Multisite.html';
+    }
+
+    function populateMultisiteDirectory($dir) {
+	umask(0022);
+	$galleryDir = dirname(dirname(dirname(__FILE__))) . DIRECTORY_SEPARATOR;
+	if (!$out = @fopen("$dir/main.php", 'w')) {
+	    return false;
+	}
+	fwrite($out, "<?php\ndefine('GALLERY_CONFIG_DIR', dirname(__FILE__));\nrequire('" .
+		     $galleryDir . "main.php');\n?>\n");
+	fclose($out);
+	if (!$out = @fopen("$dir/embed.php", 'w')) {
+	    return false;
+	}
+	fwrite($out, "<?php\ndefine('GALLERY_CONFIG_DIR', dirname(__FILE__));\nrequire('" .
+		     $galleryDir . "embed.php');\n?>\n");
+	fclose($out);
+	if (!$out = @fopen("$dir/index.php", 'w')) {
+	    return false;
+	}
+	fwrite($out, "<?php\ndefine('GALLERY_CONFIG_DIR', dirname(__FILE__));\nrequire('" .
+		     $galleryDir . "index.php');\n?>\n");
+	fclose($out);
+	if (!is_dir("$dir/upgrade") && !mkdir("$dir/upgrade", 0755)) {
+	    return false;
+	}
+	if (!$out = @fopen("$dir/upgrade/index.php", 'w')) {
+	    return false;
+	}
+	fwrite($out, "<?php\ndefine('GALLERY_CONFIG_DIR', dirname(dirname(__FILE__)));\nrequire('" .
+		     $galleryDir . 'upgrade' . DIRECTORY_SEPARATOR . "index.php');\n?>\n");
+	fclose($out);
+	/* lib/support/index.php is optional; ignore errors */
+	if ((is_dir("$dir/lib") || mkdir("$dir/lib", 0755))
+		&& (is_dir("$dir/lib/support") || mkdir("$dir/lib/support", 0755))
+		&& $out = @fopen("$dir/lib/support/index.php", 'w')) {
+	    fwrite($out, "<?php\ndefine('GALLERY_CONFIG_DIR', dirname(dirname(dirname(__FILE__)" .
+		")));\nrequire('" . $galleryDir . 'lib' . DIRECTORY_SEPARATOR . 'support' .
+		DIRECTORY_SEPARATOR . "index.php');\n?>\n");
+	    fclose($out);
+	}
+	return true;
+    }
+
+    function readConfigFile() {
+	/* Load existing config.php (if found), which requires $gallery to be valid */
+	$configFile = $_SESSION['configPath'] . DIRECTORY_SEPARATOR . 'config.php';
+	$gallery = new GalleryStub();
+	if (@is_file($configFile) && is_readable($configFile)) {
+	    ob_start();
+	    @include($configFile);
+	    ob_end_clean();
+	}
+	global $galleryStub;
+	/* Copy config data from system checks step which will be used in the install log */
+	$gallery->setConfig('systemchecks.fileintegrity',
+			    $galleryStub->getConfig('systemchecks.fileintegrity'));
+	$gallery->setConfig('systemchecks.issvninstall',
+			    $galleryStub->getConfig('systemchecks.issvninstall'));
+	/* Replace galleryStub */
+	$galleryStub = $gallery;
+    }
+}
+?>

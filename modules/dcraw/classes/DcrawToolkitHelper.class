@@ -1,0 +1,107 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A helper class for the DcrawToolkit class
+ * @package Dcraw
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17780 $
+ * @static
+ */
+class DcrawToolkitHelper {
+
+    /**
+     * Figure out what operations and properties are supported by the DcrawToolkit and return them.
+     *
+     * @return array GalleryStatus a status code
+     *               array('operations' => ..., 'properties' => ...)
+     */
+    function getOperationsAndProperties() {
+	global $gallery;
+
+	$results = array('operations' => array(
+			     'convert-to-image/x-portable-pixmap' => array(
+				 'params' => array(),
+				 'description' => $gallery->i18n('Convert to a PPM'),
+				 'mimeTypes' => array('image/x-dcraw'),
+				 'outputMimeType' => 'image/x-portable-pixmap')),
+			 'properties' => array(
+			     'dimensions' => array(
+				 'type' => 'int,int',
+				 'description' => $gallery->i18n(
+				     'Get the width and height of the image'),
+				 'mimeTypes' => 'image/x-dcraw')));
+
+	return array(null, $results);
+    }
+
+    /**
+     * Test if the given path has a working dcraw binary.
+     *
+     * @param string $dcrawPath path to the dcraw binary
+     * @return array GalleryStatus general status of tests
+     *               array ('name' => string: the name of the binary,
+     *                      'success' => boolean: test successful?
+     *                      'message' => string: the error message
+     */
+    function testBinary($dcrawPath) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	/*
+	 * If the path is not restricted by open_basedir, then verify that it's
+	 * legal.  Else just hope that it's valid and use it.
+	 */
+	if ($platform->isRestrictedByOpenBaseDir($dcrawPath)
+		|| !@$platform->is_file($dcrawPath)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH, null, null, '"' . $dcrawPath 
+			. '" is not a file or is not specified in open_basedir.'), null, null);
+	}
+
+	/* Only used for translation, so ignore version mismatch during upgrade */
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'dcraw', true);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	list ($success, $stdout, $stderr) = $platform->exec(array(array($dcrawPath)));
+	/* $success will be 0 here, since we gave no arguments */
+	$verCheck = implode(' ', array_merge($stdout, $stderr));
+	$version = null;
+	if (preg_match('/Raw [Pp]hoto [Dd]ecoder(?: "dcraw")? v(\S+)/', $verCheck, $matches)) {
+	    $version = $matches[1];
+	    if (version_compare($version, '5.40', '>=')) {
+		$testArray[] = array('name' => 'dcraw', 'success' => true);
+	    }
+	}
+
+	if (empty($testArray)) {
+	    $testArray[] = array('name' => 'dcraw',
+				 'success' => false,
+				 'message' => array_merge(
+				     array($module->translate('Binary output:')),
+				     $stdout, $stderr));
+	}
+
+	return array(null, $testArray, $version);
+    }
+}
+?>

@@ -1,0 +1,115 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper class for downloading PicLens code.
+ *
+ * @package Slideshow
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class PicLensHelper {
+
+    /**
+     * Download the latest Javascript and Shockwave code from the PicLens site.
+     * @return array object GalleryStatus a status code
+     *               string the version of PicLens we just installed
+     * @static
+     */
+    function install() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$info = PicLensHelper::getLatestPicLensInfo();
+	if (empty($info)) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE), null);
+	}
+
+	if (empty($info['version']) || empty($info['jsUrl']) || empty($info['swfUrl'])) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_VALUE), null);
+	}
+
+	$codeDir = $gallery->getConfig('data.gallery.plugins_data') . 'modules/slideshow/';
+	$jsPath = "${codeDir}piclens.js";
+	$swfPath = "${codeDir}PicLensLite.swf";
+	list($success1) = GalleryCoreApi::fetchWebFile($info['jsUrl'], "$jsPath.new");
+	list($success2) = GalleryCoreApi::fetchWebFile($info['swfUrl'], "$swfPath.new");
+	if ($success1 && $success2) {
+	    if (!$platform->rename("$jsPath.new", $jsPath)
+		    || !$platform->rename("$swfPath.new", $swfPath)) {
+		return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE), null);
+	    }
+	} else {
+	    foreach (array($jsPath, $swfPath) as $path) {
+		if ($platform->file_exists("$path.new")) {
+		    $platform->unlink("$path.new");
+		}
+	    }
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE), null);
+	}
+
+	return array(null, $info['version']);
+    }
+
+    /**
+     * Get information about the latest version of the PicLens code.
+     *
+     * @return array('version' => version number,
+     *               'jsUrl' => url to the JS file,
+     *               'swfUrl' => url to the SWF file)
+     * @static
+     */
+    function getLatestPicLensInfo() {
+	$url = 'http://gallery.menalto.com/versioncheck/piclens/release';
+	list ($success, $body) = GalleryCoreApi::fetchWebPage($url);
+	if (!$success) {
+	    return null;
+	}
+
+	$info = array();
+	foreach (explode("\n", $body) as $line) {
+	    $pair = explode("=", $line, 2);
+	    GalleryUtilities::sanitizeInputValues($pair);
+	    if (count($pair) == 2) {
+		$info[$pair[0]] = $pair[1];
+	    }
+	}
+
+	return $info;
+    }
+
+    /**
+     * Remove PicLens.
+     */
+    function uninstall() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$codeDir = $gallery->getConfig('data.gallery.plugins_data') . 'modules/slideshow/';
+	foreach (array('piclens.js', 'PicLensLite.swf') as $file) {
+	    $path = "{$codeDir}$file";
+	    if ($platform->file_exists($path)) {
+		@$platform->unlink($path);
+	    }
+	}
+    }
+}
+?>

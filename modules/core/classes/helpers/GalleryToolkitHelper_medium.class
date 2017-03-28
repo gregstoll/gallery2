@@ -1,0 +1,625 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is a helper class that provides an interface to the GalleryToolkit api.  Modules that
+ * implement a GalleryToolkit interface can register their various operations and properties
+ * using this class, and then classes that want to use a toolkit operation or property can locate
+ * the appropriate toolkit by operation/property and mime type.
+ *
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 20954 $
+ * @static
+ */
+class GalleryToolkitHelper_medium {
+
+    /**
+     * @see GalleryCoreApi::registerToolkitOperation
+     */
+    function registerOperation($toolkitId, $mimeTypes, $operationName,
+			       $parameterTypesArray, $description,
+			       $outputMimeType='', $priority=5) {
+	global $gallery;
+
+	/*
+	 * Calculate a crc of the parameters which we'll use to make sure that
+	 * the operation we're registering matches one that we already have in
+	 * the database.
+	 */
+	$signature = '';
+	foreach ($parameterTypesArray as $parameterType) {
+	    if (!empty($signature)) {
+		$signature .= ',';
+	    }
+	    $signature .= $parameterType['type'];
+	}
+	$crc = sprintf('%u', crc32($signature));
+
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryToolkitOperationMap',
+	    array('parametersCrc', 'outputMimeType'),
+	    array('name' => $operationName), array('limit' => array('count' => 1)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($searchResults->resultCount() > 0) {
+	    $result = $searchResults->nextResult();
+	    if ($result[0] != $crc || $result[1] != $outputMimeType) {
+		/*
+		 * We have an operation with the same name, but different
+		 * parameters or output mime type.  We can't allow this
+		 * operation to be registered since it conflicts with an
+		 * existing one.  Bounce it.
+		 */
+		return GalleryCoreApi::error(ERROR_COLLISION, __FILE__, __LINE__,
+					    sprintf("CRC mismatch: %s != %s, or Mime type " .
+						    "mismatch: %s != %s",
+						    $result[0],
+						    $crc,
+						    $result[1],
+						    $outputMimeType));
+	    }
+	} else {
+	    /*
+	     * The operation doesn't already exist: create it.  First, add it
+	     * to the operation map
+	     */
+	    $ret = GalleryCoreApi::addMapEntry(
+		'GalleryToolkitOperationMap',
+		array('name' => $operationName,
+		      'parametersCrc' => $crc,
+		      'outputMimeType' => $outputMimeType,
+		      'description' => $description));
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    /* Add all of its parameters also */
+	    for ($i = 0; $i < sizeof($parameterTypesArray); $i++) {
+		$parameterType = $parameterTypesArray[$i];
+		$ret = GalleryCoreApi::addMapEntry(
+		    'GalleryToolkitOperationParameterMap',
+		    array('operationName' => $operationName,
+			  'position' => $i,
+			  'type' => $parameterType['type'],
+			  'description' => $parameterType['description']));
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	/* Associate all the mime types */
+	foreach ($mimeTypes as $mimeType) {
+	    $ret = GalleryCoreApi::addMapEntry(
+		'GalleryToolkitOperationMimeTypeMap',
+		array('operationName' => $operationName,
+		      'toolkitId' => $toolkitId,
+		      'mimeType' => $mimeType,
+		      'priority' => $priority));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	/* Invalidate our cache */
+	GalleryDataCache::removeByPattern('GalleryToolkitHelper::');
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::registerToolkitProperty
+     */
+    function registerProperty($toolkitId, $mimeTypes, $propertyName, $type, $description) {
+	global $gallery;
+
+	/* Check to see if the property name exists, but with a different unique id. */
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryToolkitPropertyMap',
+	    array('type'),
+	    array('name' => $propertyName), array('limit' => array('count' => 1)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($searchResults->resultCount() > 0) {
+	    $result = $searchResults->nextResult();
+	    if ($result[0] != $type) {
+		/*
+		 * We have a property with the same name, but a different type.
+		 * We can't allow this property to be registered since it
+		 * conflicts with an existing one.  Bounce it.
+		 */
+		return GalleryCoreApi::error(ERROR_COLLISION);
+	    }
+	} else {
+	    /*
+	     * The property doesn't already exist: create it.  First, add it
+	     * to the property map
+	     */
+	    $ret = GalleryCoreApi::addMapEntry(
+		'GalleryToolkitPropertyMap',
+		array('name' => $propertyName,
+		      'type' => $type,
+		      'description' => $description));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	/* Associate our mime types */
+	foreach ($mimeTypes as $mimeType) {
+	    $ret = GalleryCoreApi::addMapEntry(
+		'GalleryToolkitPropertyMimeTypeMap',
+		array('propertyName' => $propertyName,
+		      'toolkitId' => $toolkitId,
+		      'mimeType' => $mimeType));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::unregisterToolkitOperation
+     */
+    function unregisterOperation($toolkitId, $operationName, $mimeTypes=array()) {
+	$entry = array('toolkitId' => $toolkitId, 'operationName' => $operationName);
+	if (!empty($mimeTypes)) {
+	    $entry['mimeType'] = $mimeTypes;
+	}
+	$ret = GalleryCoreApi::removeMapEntry('GalleryToolkitOperationMimeTypeMap', $entry);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Invalidate our cache */
+	GalleryDataCache::removeByPattern('GalleryToolkitHelper::');
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::unregisterToolkit
+     */
+    function unregisterToolkit($toolkitId) {
+	global $gallery;
+
+	/* Remove our toolkit/operation mappings */
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'GalleryToolkitOperationMimeTypeMap', array('toolkitId' => $toolkitId));
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Find and remove any unused operations */
+	$query = '
+	SELECT DISTINCT
+	  [GalleryToolkitOperationMap::name]
+	FROM
+	  [GalleryToolkitOperationMap]
+	LEFT JOIN
+	  [GalleryToolkitOperationMimeTypeMap]
+	ON
+	  [GalleryToolkitOperationMap::name] = [GalleryToolkitOperationMimeTypeMap::operationName]
+	WHERE
+	  [GalleryToolkitOperationMimeTypeMap::toolkitId] IS NULL
+	';
+	list($ret, $searchResults) = $gallery->search($query);
+	if ($ret) {
+	    return $ret;
+	}
+
+	while ($result = $searchResults->nextResult()) {
+	    $ret = GalleryCoreApi::removeMapEntry(
+		'GalleryToolkitOperationMap', array('name' => $result[0]));
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $ret = GalleryCoreApi::removeMapEntry(
+		'GalleryToolkitOperationParameterMap', array('operationName' => $result[0]));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	/* Remove our toolkit/property mappings */
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'GalleryToolkitPropertyMimeTypeMap', array('toolkitId' => $toolkitId));
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Find and remove any unused properties */
+	$query = '
+	SELECT DISTINCT
+	  [GalleryToolkitPropertyMap::name]
+	FROM
+	  [GalleryToolkitPropertyMap]
+	LEFT JOIN
+	  [GalleryToolkitPropertyMimeTypeMap]
+	ON
+	  [GalleryToolkitPropertyMap::name] = [GalleryToolkitPropertyMimeTypeMap::propertyName]
+	WHERE
+	  [GalleryToolkitPropertyMimeTypeMap::toolkitId] IS NULL
+	';
+	list($ret, $searchResults) = $gallery->search($query);
+	if ($ret) {
+	    return $ret;
+	}
+
+	while ($result = $searchResults->nextResult()) {
+	    $ret = GalleryCoreApi::removeMapEntry(
+		'GalleryToolkitPropertyMap', array('name' => $result[0]));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	$ret = GalleryCoreApi::unregisterFactoryImplementation('GalleryToolkit', $toolkitId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Invalidate our cache */
+	GalleryDataCache::removeByPattern('GalleryToolkitHelper::');
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::unregisterToolkitsByModuleId
+     */
+    function unregisterToolkitsByModuleId($moduleId) {
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryFactoryMap',
+	    array('implId'), array('implModuleId' => $moduleId));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$implIds = array();
+	while ($result = $searchResults->nextResult()) {
+	    $implIds[] = $result[0];
+	}
+
+	foreach ($implIds as $implId) {
+	    $ret = GalleryToolkitHelper_medium::unregisterToolkit($implId);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::getToolkitOperations
+     * @todo use priorities for choosing the correct toolkit
+     */
+    function getOperations($mimeType) {
+	global $gallery;
+
+	$cacheKey = "GalleryToolkitHelper::getOperations($mimeType)";
+	if (empty($mimeType)) {
+	    $data = array();
+	} else if (!GalleryDataCache::containsKey($cacheKey)) {
+	    $query = '
+	    SELECT DISTINCT
+	      [GalleryToolkitOperationMap::name],
+	      [GalleryToolkitOperationMap::outputMimeType],
+	      [GalleryToolkitOperationMap::description],
+	      [GalleryToolkitOperationParameterMap::type],
+	      [GalleryToolkitOperationParameterMap::description],
+	      [GalleryToolkitOperationParameterMap::position]
+	    FROM
+	      [GalleryToolkitOperationMap],
+	      [GalleryToolkitOperationMimeTypeMap],
+	      [GalleryToolkitOperationParameterMap]
+	    WHERE
+	      [GalleryToolkitOperationMap::name] =
+		  [GalleryToolkitOperationParameterMap::operationName]
+	      AND
+	      [GalleryToolkitOperationMap::name] =
+		  [GalleryToolkitOperationMimeTypeMap::operationName]
+	      AND
+	      [GalleryToolkitOperationMimeTypeMap::mimeType] = ?
+	    ORDER BY
+	      [GalleryToolkitOperationParameterMap::position] ASC
+	    ';
+
+	    list ($ret, $searchResults) = $gallery->search($query, array($mimeType));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $data = array();
+	    $pointers = array();
+	    while ($result = $searchResults->nextResult()) {
+		if (empty($pointers[$result[0]])) {
+		    $pointers[$result[0]] =
+			array('name' => $result[0],
+			      'outputMimeType' => empty($result[1]) ? $mimeType : $result[1],
+			      'description' => $result[2]);
+		    $data[] =& $pointers[$result[0]];
+		}
+
+		$pointers[$result[0]]['parameters'][] =
+		    array('type' => $result[3], 'description' => $result[4]);
+	    }
+
+	    GalleryDataCache::put($cacheKey, $data);
+	} else {
+	    $data = GalleryDataCache::get($cacheKey);
+	}
+
+	return array(null, $data);
+    }
+
+    /**
+     * @see GalleryCoreApi::getToolkitProperties
+     * @todo use priorities for choosing the correct toolkit
+     */
+    function getProperties($mimeType) {
+	global $gallery;
+
+	$cacheKey = "GalleryToolkitHelper::getProperties($mimeType)";
+	if (empty($mimeType)) {
+	    $data = array();
+	} else if (!GalleryDataCache::containsKey($cacheKey)) {
+	    $query = '
+	    SELECT
+	      [GalleryToolkitPropertyMap::name],
+	      [GalleryToolkitPropertyMap::type],
+	      [GalleryToolkitPropertyMap::description]
+	    FROM
+	      [GalleryToolkitPropertyMap], [GalleryToolkitPropertyMimeTypeMap]
+	    WHERE
+	      [GalleryToolkitPropertyMap::name] = [GalleryToolkitPropertyMimeTypeMap::propertyName]
+	      AND
+	      [GalleryToolkitPropertyMimeTypeMap::mimeType] = ?
+	    ';
+
+	    list ($ret, $searchResults) = $gallery->search($query, array($mimeType));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $data = array();
+	    while ($result = $searchResults->nextResult()) {
+		$data[] = array('name' => $result[0],
+				'type' => $result[1],
+				'description' => $result[2]);
+	    }
+	    GalleryDataCache::put($cacheKey, $data);
+	} else {
+	    $data = GalleryDataCache::get($cacheKey);
+	}
+
+	return array(null, $data);
+    }
+
+    /**
+     * @see GalleryCoreApi::getToolkitOperationMimeTypes
+     */
+    function getOperationMimeTypes($operationName) {
+	global $gallery;
+
+	$cacheKey = "GalleryToolkitHelper::getOperationMimeTypes($operationName)";
+	if (empty($operationName)) {
+	    $data = array();
+	} else if (!GalleryDataCache::containsKey($cacheKey)) {
+	    list ($ret, $searchResults) =
+		GalleryCoreApi::getMapEntry('GalleryToolkitOperationMimeTypeMap',
+		array('mimeType', 'toolkitId', 'priority'),
+		array('operationName' => $operationName),
+		array('orderBy' => array('mimeType' => ORDER_ASCENDING,
+					 'priority' => ORDER_ASCENDING)));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $data = array();
+	    while ($result = $searchResults->nextResult()) {
+		$data[$result[0]][] = $result[1];
+	    }
+	    GalleryDataCache::put($cacheKey, $data);
+	} else {
+	    $data = GalleryDataCache::get($cacheKey);
+	}
+
+	return array(null, $data);
+    }
+
+    /**
+     * @see GalleryCoreApi::getRedundantToolkitPriorities
+     */
+    function getRedundantPriorities() {
+	global $gallery;
+
+	$cacheKey = "GalleryToolkitHelper::getRedundantPriorities()";
+	if (!GalleryDataCache::containsKey($cacheKey)) {
+
+	    $query = '
+	    SELECT
+	      [GalleryToolkitOperationMimeTypeMap::operationName],
+	      [GalleryToolkitOperationMimeTypeMap::mimeType],
+	      [GalleryToolkitOperationMimeTypeMap::toolkitId],
+	      [GalleryToolkitOperationMimeTypeMap::priority]
+	    FROM
+	      [GalleryToolkitOperationMimeTypeMap]
+	    WHERE
+	      [GalleryToolkitOperationMimeTypeMap::priority] >= 20
+	      AND [GalleryToolkitOperationMimeTypeMap::priority] <= 40
+	    ';
+	    list ($ret, $results) = $gallery->search($query);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $data = $priorityList = array();
+	    while ($result = $results->nextResult()) {
+		$data[$result[0] . '::' . $result[1]][$result[2]] = (int)$result[3];
+	    }
+	    foreach ($data as $opMime => $list) {
+		if (count($list) > 1) {
+		    foreach ($list as $toolkit => $priority) {
+			$priorityList[$toolkit] = $priority;
+		    }
+		}
+	    }
+	    GalleryDataCache::put($cacheKey, $priorityList);
+	} else {
+	    $priorityList = GalleryDataCache::get($cacheKey);
+	}
+	return array(null, $priorityList);
+    }
+
+    /**
+     * @see GalleryCoreApi::isSupportedOperationSequence
+     */
+    function isSupportedOperationSequence($mimeType, $operations) {
+
+	$isSupported = true;
+	foreach (explode(';', $operations) as $operation) {
+	    if (strpos($operation, '|') === false) {
+		list($operationName, $operationArgs) = array($operation, null);
+	    } else {
+		list($operationName, $operationArgs) = explode('|', $operation);
+	    }
+
+	    /* Get the appropriate toolkit */
+	    list ($ret, $toolkit, $mimeType) =
+		GalleryCoreApi::getToolkitByOperation($mimeType, $operationName);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+	    if (!isset($toolkit)) {
+		$isSupported = false;
+		break;
+	    }
+	}
+
+	return array(null, $isSupported, $mimeType);
+    }
+
+    /**
+     * @see GalleryCoreApi::makeSupportedViewableOperationSequence
+     */
+    function makeSupportedViewableOperationSequence($mimeType, $operations,
+						    $prependConversion=true) {
+	if (empty($operations)) {
+	    $isSupported = true;
+	    $outputMimeType = $mimeType;
+	} else {
+	    list ($ret, $isSupported, $outputMimeType) =
+		GalleryToolkitHelper_medium::isSupportedOperationSequence($mimeType, $operations);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	}
+
+	if (!$isSupported && $prependConversion) {
+	    /* See if we can convert the input type into a format we can deal with first. */
+	    foreach (array('convert-to-image/jpeg;' . $operations,
+			   'convert-to-image/x-portable-pixmap;convert-to-image/jpeg;' .
+			   $operations)
+		     as $tmpOperations) {
+		/* Remove trailing ';' on empty $operations */
+		$tmpOperations = preg_replace('/;$/', '', $tmpOperations);
+		list ($ret, $isSupported, $outputMimeType) =
+		    GalleryToolkitHelper_medium::isSupportedOperationSequence(
+			$mimeType, $tmpOperations);
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+		if ($isSupported) {
+		    $operations = $tmpOperations;
+		    break;
+		}
+	    }
+	}
+	if (!$isSupported) {
+	    return array(null, null, null);
+	}
+
+	/* If the output type isn't viewable, then try to turn it into a form that *is* viewable. */
+	list ($ret, $isViewable) = GalleryCoreApi::isViewableMimeType($outputMimeType);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	if (!$isViewable) {
+	    foreach (array($operations . ';convert-to-image/jpeg',
+			 $operations . ';convert-to-image/x-portable-pixmap;convert-to-image/jpeg')
+		     as $tmpOperations) {
+		/* Remove leading ';' on empty $operations */
+		$tmpOperations = preg_replace('/^;/', '', $tmpOperations);
+		list ($ret, $isSupported, $tmpOutputMimeType) =
+		    GalleryToolkitHelper_medium::isSupportedOperationSequence(
+			$mimeType, $tmpOperations);
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+		if ($isSupported) {
+		    $operations = $tmpOperations;
+		    $outputMimeType = $tmpOutputMimeType;
+		    break;
+		} else {
+		    /* Try the next, or give up if we run out of options. */
+		}
+	    }
+	}
+
+	return array(null, $operations, $outputMimeType);
+    }
+
+    /**
+     * @see GalleryCoreApi::estimateDerivativeDimensions
+     */
+    function estimateDerivativeDimensions(&$derivative, $source) {
+	if (preg_match('/^(thumbnail|scale|resize)\|/',
+		       $derivative->getDerivativeOperations(), $matches)) {
+	    if (!empty($matches[1])) {
+		list ($ret, $toolkit) =
+		    GalleryCoreApi::getToolkitByOperation($source->getMimeType(), $matches[1]);
+		if ($ret) {
+		    return $ret;
+		}
+
+		if (isset($toolkit)) {
+		    $toolkit->estimateDimensions($derivative, $source);
+		} else {
+		    /* Fall back on the best-guess behaviour */
+		    GalleryCoreApi::requireOnce(
+			'modules/core/classes/GalleryToolkit.class');
+		    GalleryToolkit::estimateDimensions($derivative, $source);
+		}
+	    }
+	}
+
+	return null;
+    }
+}
+?>

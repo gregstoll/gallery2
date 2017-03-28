@@ -1,0 +1,14 @@
+<?php if ($isWindows): ?>
+<?php foreach ($removeList as $file => $isDir): ?>
+<?php if ($isDir): ?>rmdir <?php else: ?>del <?php endif; ?>
+<?php print str_replace('/', '\\', $file); ?>
+
+<?php endforeach; ?>
+<?php else: ?>
+#!/bin/sh
+<?php foreach ($removeList as $file => $isDir): ?>
+<?php if ($isDir): ?>rmdir <?php else: ?>rm <?php endif; ?>
+<?php print $file ?>
+
+<?php endforeach; ?>
+<?php endif; ?>

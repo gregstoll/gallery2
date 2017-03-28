@@ -1,0 +1,118 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteUrlGenerator.class');
+
+/**
+ * URL Generator for IIS ISAPI_Rewrite parser.
+ *
+ * @package Rewrite
+ * @subpackage Parsers
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class IsapiRewriteUrlGenerator extends RewriteUrlGenerator {
+
+    /**
+     * @see GalleryUrlGenerator::init
+     */
+    function init($baseUri=null, $g2Uri=null, $embedSessionString=null) {
+	/* Verify that we're configured to work in this mode.  Else disable short-URLs. */
+	$location = GalleryUtilities::isEmbedded() ? 'embeddedLocation' : 'galleryLocation';
+	list ($ret, $configuredLocation) =
+	    GalleryCoreApi::getPluginParameter('module', 'rewrite', 'isapirewrite.' . $location);
+	if ($ret) {
+	    return $ret;
+	}
+	if (empty($configuredLocation)) {
+	    /* Disable short-URLs */
+	    $this->_error = true;
+	}
+
+	return parent::init($baseUri, $g2Uri, $embedSessionString);
+    }
+
+    /**
+     * @see GalleryUrlGenerator::initNavigation
+     */
+    function initNavigation() {
+	$ret = $this->_onLoad();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = parent::initNavigation();
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryUrlGenerator::generateUrl
+     */
+    function generateUrl($params=array(), $options=array()) {
+	if ($this->_error) {
+	    return parent::generateUrl($params, $options);
+	}
+
+	/* Make all URLs server relative (if relative at all) and not relative to the current dir */
+	$options['forceServerRelativeUrl'] = true;
+	return parent::generateUrl($params, $options);
+    }
+
+    /**
+     * @see GalleryUrlGenerator::getCurrentUrlDir
+     *
+     * We don't have to override neither GalleryUrlGenerator::getCurrentUrl() or
+     * GalleryUrlGenerator::getCurrentUrlDir() because REQUEST_URI gets rewritten correctly by
+     * isapi_rewrite. (REQUEST_URI is only non-empty on IIS if isapi_rewrite is used!)
+     *
+     * But we want to add a check if the RewriteUrlGenerator has been configured
+     * and force a fallback if that is not the case.
+     */
+    function getCurrentUrlDir($forceDirect=false) {
+	if ($this->_error) {
+	    return parent::getCurrentUrlDir($forceDirect);
+	}
+
+	if (!isset($this->_currentUrlBaseDir[$forceDirect])) {
+	    /* Just check if the rewrite module has been configured already */
+	    $location = GalleryUtilities::isEmbedded() ? 'embeddedLocation' : 'galleryLocation';
+	    list ($ret, $path) = GalleryCoreApi::getPluginParameter('module', 'rewrite',
+								    'isapirewrite.' . $location);
+	    if ($ret || empty($path)) {
+		/*
+		 * We dont know where we're at. This could happen if rewrite was installed
+		 * in G2 standalone, and now is accessed as G2 embedded. Turn off short URLs
+		 * for the embedded mode and wait until the user has set it up corectly.
+		 */
+		$this->_error = true;
+	    }
+
+	    /* Let the GalleryUrlGenerator::getCurrentUrlDir() handle the request anyway */
+	    return parent::getCurrentUrlDir($forceDirect);
+	}
+
+	return $this->_currentUrlBaseDir[$forceDirect];
+    }
+}
+?>

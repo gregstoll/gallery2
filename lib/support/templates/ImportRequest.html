@@ -1,0 +1,55 @@
+    <script type="text/javascript">
+      // <![CDATA[
+      function enableSubmit(optionValue, formObj) {
+        var bttnEnabled = document.getElementById('importDatabaseEnabled');
+        var bttnDisabled = document.getElementById('importDatabaseDisabled');
+        if (optionValue != -1) {
+	  bttnEnabled.style.display = 'block';
+	  bttnDisabled.style.display = 'none';
+        } else {
+	  bttnEnabled.style.display = 'none';
+	  bttnDisabled.style.display = 'block';
+        }
+      }
+      // ]]>
+    </script>
+
+    <?php startForm('index.php?import') ?>
+      <h2>Choose a file to import from.</h2>
+       <select name="importFile"
+	    onchange="enableSubmit(this.options[this.selectedIndex].value, this.form)">
+        <option value="-1">&laquo; select a backup file &raquo;</option>
+	<?php foreach ($templateData['backupFiles'] as $fileName): ?>
+	   <option value="<?php print $fileName ?>"<?php if (isset($templateData['verifiedFile']) && $templateData['verifiedFile'] == $fileName): ?> selected="selected" <?php endif; ?> >
+	     <?php print $fileName ?>
+	   </option>
+	<?php endforeach; ?>
+      </select>
+      <input type="hidden" name="verifiedFile" value="<?php if (isset($templateData['verifiedFile'])) print $templateData['verifiedFile'] ?>" />
+      <br/><br/>
+      <div class="warning">
+        <h4>Warning</h4>
+        <p class="description">Restoring the database to a backup that does not match the images in the Gallery data directory could severely damage your Gallery installation.</p>
+        
+	<?php foreach ($templateData['warnings'] as $warning): ?>
+	  <p class="description"><?php print $warning ?><br/></p>
+	<?php endforeach; ?>
+	<?php if (!empty($templateData['versionWarnings'])): ?>
+          <h4>Version Incompatibilities Detected</h4>
+          <p>
+          <?php foreach ($templateData['versionWarnings'] as $warning): ?>
+            <?php print $warning ?><br/>
+          <?php endforeach; ?>
+          </p>
+          <p>If you are restoring the database because of a failed upgrade, you should be alright.
+	  <p>Otherwise, restore the above modules to the indicated versions or risk the possibility
+	  of seriously damaging your installation.</p>
+	<?php endif; ?>
+      </div>
+      <br/><br/>
+      <input type="hidden" value="Begin Import" name="importDatabase" />
+      <div class="go" >
+	  <a href="javascript:document.forms[0].submit()" style="display:none" id="importDatabaseEnabled" class="btn continue"><i></i><span><span></span><i></i>Begin Import</span></a>
+	  <span id="importDatabaseDisabled" class="btn inactive"><i></i><span><span></span><i></i>Begin Import</span></span>
+      </div>
+    </form>

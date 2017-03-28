@@ -1,0 +1,825 @@
+/* ********************************************************************************
+ * Floatrix Theme for Gallery 2, based on Matrix and ideas from Floating Matrix Theme
+ * by Chad Kieffer
+ */
+
+/* ********************************************************************************
+ * Building blocks
+ * h2, h3, p, etc        Standard html tags
+ * div.gbBlock           Sidebar or content section with style for contained lists
+ * ul.gbBreadCrumb       List of links/path elements
+ * table.gbDataTable     Table for data/form elements with styles for shading rows
+ */
+
+#gallery h2, #gallery h3, #gallery h4, #gallery form {
+    margin: 0;
+    padding: 0;
+}
+
+#gallery p {
+    margin: 0.6em 0;
+    padding: 0;
+}
+
+.gbBlock {
+    clear: both;
+    padding: 0.7em 0.7em 0.7em 3.0em;
+    border-width: 0 0 1px 0;
+    border-style: inherit;
+    border-color: inherit;
+    /* IE can't inherit these */
+    border-style: expression(parentElement.currentStyle.borderStyle);
+    border-color: expression(parentElement.currentStyle.borderColor);
+}
+
+.gbBlock ul {
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+}
+
+.gbBlock ul ul {
+    margin: 0 0 0.5em 1.0em;
+}
+
+.gbBlock li {
+    padding: 6px 0 0 0;
+}
+
+#gallery .gbBlock h3 {
+    margin-bottom: 0.5em;
+}
+
+#gallery .gbBlock h4 {
+    margin-top: 0.5em;
+}
+
+#gallery.IE #gsNavBar {
+    display: inline-block;
+}
+
+#gsNavBar div.gbBreadCrumb {
+    margin: 0;
+    padding: 4px 8px;
+}
+
+table.gbDataTable {
+    padding-bottom: 4px;
+}
+
+table.gbDataTable th, table.gbDataTable td {
+    padding: 4px;
+}
+
+
+.giBlockToggle {
+    padding: 0 0.4em 0.1em;
+}
+.giBlockToggle:hover {
+    cursor: pointer;
+}
+
+
+.gbMarkupBar {
+    margin: 4px 0;
+}
+
+#gallery .gbMarkupBar input {
+    margin: 0;
+    padding: 0;
+}
+
+
+/* ********************************************************************************
+ * Sections
+ * body.gallery     Page body in G2 standalone (doesn't apply to embedded)
+ * #gallery         Page container
+ * #gsNavBar        Top bar with breadcrumb and other links
+ * #gsSidebar       Sidebar
+ * #gsContent       Main content
+ */
+
+body.gallery {
+    margin: 0;
+    padding: 0;
+}
+
+#gallery.rtl {
+    direction: rtl;
+}
+
+#gsHeader {
+    padding: 4px 6px;
+}
+
+#gsNavBar {
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+}
+
+#gsNavBar div.gbSystemLinks {
+    padding: 4px 6px;
+}
+
+#gsNavBar div.gbSystemLinks span {
+    padding: 0 4px;
+}
+
+#gsSidebarCol {
+    position: absolute;
+    display: none;
+    width: 195px;
+    height: 350px;
+}
+
+#showSidebarTab {
+    position: absolute;
+    display: block;
+}
+
+#hideSidebarTab {
+    float: right;
+    clear: none;
+}
+#gallery.rtl #hideSidebarTab {
+    float: left;
+}
+
+#gsSidebar {
+    z-index: 100; /* to avoid overlap of images on sidebar in Safari */
+    position: absolute;
+    width: 195px;
+    height: 350px;
+    /* overflow: auto; */ /* moved to sidebar.tpl because of admin sidebar conflict */
+}
+
+#gsSidebar .gbBlock {
+    padding: 8px 8px 8px 22px;
+}
+
+td#gsSidebarCol {
+    position: relative;
+    display: block;
+    width: 195px;
+    margin: 0;
+    padding: 0;
+}
+
+td#gsSidebarCol #gsSideBar {
+    overflow: visible;
+}
+
+/* hack for ie<6 problem with select elements not respecting z-index
+ * http://www.hedgerwow.com/360/bugs/css-select-free.html
+ */
+#gsSidebarCol iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: -1;
+    filter: alpha(opacity: 0);
+    width: 195px;
+    height: 350px;
+}
+
+a#showSidebarTab div {
+    background: url('images/tab_open_sidebar.gif') no-repeat;
+}
+a#hideSidebarTab div {
+    background: url('images/tab_close_sidebar.gif') no-repeat;
+}
+#gallery.rtl a#showSidebarTab div {
+    background: url('images/tab_open_sidebar_rtl.gif') no-repeat;
+}
+#gallery.rtl a#hideSidebarTab div {
+    background: url('images/tab_close_sidebar_rtl.gif') no-repeat;
+}
+
+/* Drop shadows for sidebar, or any other element
+ * yDSF (ydnar Drop-Shadow-Fu)
+ * ydnar@sixapart.com - http://www.sixapart.com
+ */
+
+.dropshadow {
+    display: block;
+    position: relative;
+    margin: 4px -10px -4px 4px;
+    background: url('images/shadow-grid.gif') repeat;
+}
+
+/* ie6 ignores this selector */
+html>body .dropshadow {
+    z-index: 100; /* to avoid overlap of images on sidebar in Safari */
+    margin: 10px -15px -15px 0px;
+    background: url('images/shadow.png') right bottom no-repeat;
+}
+
+/* shadow corners */
+.dropshadow:before, .dropshadow:after {
+    content: " ";
+    display: block;
+    width: 15px;
+    height: 10px;
+    background: inherit;
+}
+
+.dropshadow:before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin: -10px 0 0 auto;
+    background-position: right top;
+}
+
+.dropshadow:after {
+    margin: -10px 0 0 -10px;
+    background-position: left bottom;
+}
+
+.dropshadow .inner {
+    display: block;
+    position: relative;
+    overflow: hidden; /* prevents margin leakage from child elements */
+    left: -4px;
+    top: -4px;
+}
+
+/* ie6 ignores this selector */
+html>body .dropshadow .inner {
+    left: -15px;
+    top: -15px;
+    margin: 0;
+}
+
+
+#gsContent {
+    margin: 0;
+    padding: 0;
+    border-left: 1px solid #ddd;
+}
+
+#gallery.IE #gbTitleBar {
+    display: inline-block;
+}
+
+#gallery.rtl #gbTitleBar h2 {
+    margin-right: 2em;
+}
+
+div.giAlbumCell, div.giItemCell {
+    float: left;
+    clear: none;
+    margin: 0.2em;
+    padding: 1em;
+    text-align: center;
+    overflow: hidden;
+}
+
+div.giAlbumCell table, div.giItemCell table {
+    margin: auto;
+}
+
+#gallery .giAlbumCell select, #gallery .giItemCell select {
+    margin-top: 0.8em;
+}
+
+/* So imageframed thumbs can be centered */
+td.giAlbumCell table, td.giItemCell table {
+    margin: auto;
+}
+
+#gsPages {
+    clear: both;
+}
+#gsPages span {
+    padding: 0 0.3em;
+}
+
+#gallery #gsSidebar ul {
+    font-size: 1em;
+}
+
+/* ********************************************************************************
+ * Building blocks
+ * #gallery              Default font/color settings
+ * .gcBackground1,2..    Palette of backgrounds
+ * .gcBorder1,2..        Palette of borders
+ * a, h2, h3, etc        Standard html tags
+ * .giTitle, .giSubtitle, .giDescription, .giInfo, .giSuccess, .giWarning, .giError
+ *                       Palette of text styles
+ * div.gbBreadCrumb      List of links/path elements
+ * table.gbDataTable     Table for data/form elements with styles for shading rows
+ * div.gbTabBar          UI component for selectable tabs
+ * .autoComplete*        Styles for autoComplete popup lists
+ */
+
+#gallery {
+    font-family: Verdana, Arial, Helvetica, sans-serif;
+    font-size: 62.5%;
+    color: #333;
+    background-color: #fff;
+}
+body.gallery {
+    background-color: #fff;
+}
+
+.gcBackground1 {
+    background-color: #eee;
+}
+
+.gcBackground2 {
+    background-color: #e7e7e7;
+}
+
+.gcBackground3 {
+    background-color: #e7e7e7;
+}
+
+.gcBorder1 {
+    border: 0 solid #ccc;
+}
+
+.gcBorder2 {
+    border: 0 solid #888;
+}
+
+#gallery a {
+    font-weight: bold;
+    text-decoration: none;
+    color: #6b8cb7;
+}
+#gallery a:hover {
+    text-decoration: underline;
+    color: #f4560f;
+}
+#gallery a:active {
+    text-decoration: none;
+    color: #f9c190;
+}
+
+#gallery img {
+    border-width: 0;
+}
+
+#gallery h2, #gallery h3, #gallery h4 {
+    font-family: "Trebuchet MS", Arial, Verdana, Helvetica, sans-serif;
+}
+
+#gallery input:focus, #gallery textarea:focus {
+    background-color: #ffc;
+    color: #000;
+}
+
+#gallery input.inputTypeSubmit, #gallery input.inputTypeButton {  /* No input[type=submit] in IE */
+    color: #333;
+    background-color: #eee;
+    border-width: 2px;
+    border-style: solid;
+    border-color: #e7e7e7 #666 #666 #e7e7e7;
+}
+
+#gallery select {
+    font-size: 1em;
+}
+
+.giTitle, #gallery h2, #gallery h3, #gallery h4 {
+    font-size: 1.3em;
+    font-weight: bold;
+}
+
+#gallery pre, #gallery tt {
+    font-family: Courier New;
+    font-size: 1.2em;
+}
+
+#gbSearch {
+    float: right;
+    margin: 0 8px 0 1em;
+}
+#gallery.rtl #gbSearch {
+    float: left;
+    margin: 0 1em 0 8px;
+}
+
+.giSubtitle {
+    font-size: 0.9em;
+    font-weight: normal;
+    vertical-align: text-bottom;
+}
+
+.giDescription {
+    font-size: 1.1em;
+    line-height: 1.4em;
+    margin-top: 1.2em;
+}
+
+.gbEmptyAlbum {
+    height: 400px;
+}
+
+.giDescription h3.emptyAlbum {
+    line-height: 4.0em;
+    text-align: center;
+}
+
+.giInfo {
+    font-size: 0.9em;
+    color: #888;
+}
+
+.giInfo .summary {
+    display: inline;
+    margin-right: 2.0em;
+}
+
+.giAlbumCell .summary, .giItemCell .summary {
+    display: block;
+    margin-right: 0;
+}
+
+.giSuccess, .giWarning, .giError  {
+    font-weight: bold;
+}
+
+.giSuccess { color: #5c0; }
+.giWarning { color: #c50; }
+.giError { color: #a44; }
+
+.giNew, .giUpdated {
+    border-width: 2px;
+    border-style: ridge;
+    padding: 0 6px;
+    line-height: 1.9em;
+}
+
+#gsNavBar div.gbBreadCrumb {
+    font-size: 1.1em;
+    font-weight: bold;
+}
+
+#gsNavBar div.gbBreadCrumb a, #gsNavBar div.gbBreadCrumb span {
+    padding: 0 0 0 14px;
+    background: url('images/icon_path_separator.gif') no-repeat left;
+}
+
+#gsNavBar div.gbBreadCrumb a.BreadCrumb-1 {   /* no :first-child in IE */
+    padding-left: 0;
+    background-image: none;
+    white-space: nowrap;
+}
+
+#gsThumbMatrix {
+    width: auto;
+    clear: both;
+}
+
+#gsImageViewContainer {
+    margin: 0 auto;
+    padding: 0;
+}
+
+#gsImageViewContainer img {
+    margin: 0;
+}
+
+#gallery.IE div.gbBreadCrumb span {
+    display: inline-block;   /* IE loses padding-left on wrapped inline nowrap element */
+    padding-right: 4px;      /* IE has less space at right of each span */
+}
+
+#gsNavBar div.gbBreadCrumb span.BreadCrumb-1 {   /* no :first-child in IE */
+    padding-left: 0;
+    background-image: none;
+}
+
+#gsNavBar div.gbSystemLinks {
+  float: right;
+}
+
+table.gbDataTable th {
+    text-align: left;
+    background-color: #e7e7e7;
+}
+
+.gbEven {
+    background-color: #fff;
+}
+
+.gbBusy {
+    background-color: #ae9 !important;
+}
+
+.gbOdd {
+    background-color: #eee;
+}
+
+
+div.gbTabBar {
+    font-size: 0.9em;
+    font-weight: bold;
+    margin: 0.8em 0 0 3.0em;
+    padding: 6px;
+    background: url('../floatrix/images/tab_bg.gif') repeat-x bottom;
+    white-space: nowrap;
+}
+
+div.gbTabBar span.o {
+    padding: 6px 0 5px 8px;
+    background: url('../floatrix/images/tab_left.jpg') no-repeat left top;
+}
+#gallery.IE div.gbTabBar span.o {
+    display: inline-block;   /* IE loses padding-left on wrapped inline nowrap element */
+    margin-bottom: 1px;      /* ..and then adds padding differently with inline-block.. */
+}
+/* IE may clip off the right end of a long set of tabs, so allow IE to wrap them */
+#gallery.IE div.gbTabBar { padding-bottom: 0; white-space: normal; }
+#gallery.IE div.gbTabBar span.giSelected { margin-bottom: 0; }
+
+#gallery div.gbTabBar span span {
+    padding: 6px 12px 5px 4px;
+    background: url('../floatrix/images/tab_right.jpg') no-repeat right top;
+}
+
+#gallery div.gbTabBar a {
+    color: #777;
+    text-decoration: none;
+}
+
+#gallery div.gbTabBar a:hover {
+    color: #333;
+}
+
+#gallery div.gbTabBar span.giSelected {
+    padding-bottom: 6px;
+    background-image: url('../floatrix/images/tab_left_on.jpg');
+}
+
+#gallery div.gbTabBar span.giSelected span {
+    color: #333;
+    padding-bottom: 6px;
+    background-image: url('../floatrix/images/tab_right_on.jpg');
+}
+
+.autoCompleteShadow {
+    background-color: #a0a0a0 !important;
+}
+
+.autoCompleteContainer {
+    border-color: #404040 #404040 #080;
+    background-color: #fff;
+}
+
+.autoCompleteContainer li.yui-ac-highlight {
+    background-color: #eee;
+}
+
+#gallery .gbMarkupBar input {
+    font-size: 1.1em;
+}
+
+.giSearchHighlight {
+    font-weight: bold;
+    background-color: #ff6;
+}
+
+/* ********************************************************************************
+ * Sections
+ * #gallery         Page container
+ * #gsNavBar   Top bar with breadcrumb and other links
+ * #gsSidebar       Sidebar
+ * #gsContent       Main content
+ */
+
+#gsNavBar div {
+    margin-top: 0.1em;  /* Align system links with breadcrumb */
+    font-weight: bold;
+}
+
+#gsSidebar div ul {   /* no > in IE */
+    font-size: 1.1em;
+    font-weight: bold;
+}
+#gsSidebar div ul ul { font-size: 1.0em; }
+
+#gsSidebar ul span {
+    color: #999;
+}
+
+div.gbNavigator {
+  clear: both;
+}
+div.gbNavigator .gbPager {
+  float: left;
+  margin: 0 3.0em 0 0;
+}
+div.gbNavigator div.next-and-last {
+  float: right;
+}
+div.gbNavigator div.next-and-last.no-previous {
+  float: none;
+  text-align: right;
+}
+
+div.gbNavigator a.first {
+  padding-left: 27px;
+  background: url('images/nav_first.gif') left no-repeat;
+}
+
+div.gbNavigator a.previous {
+  padding-left: 27px;
+  background: url('images/nav_prev.gif') left no-repeat;
+}
+
+div.gbNavigator a.next {
+  padding-right: 27px;
+  background: url('images/nav_next.gif') right no-repeat;
+}
+
+div.gbNavigator a.last {
+  padding-right: 27px;
+  background: url('images/nav_last.gif') right no-repeat;
+}
+
+div.gbNavigator div.first-and-previous img {
+  vertical-align: middle;
+  padding-right: 0.5em;
+}
+div.gbNavigator div.next-and-last img {
+  vertical-align: middle;
+  padding-left: 0.5em;
+}
+
+#gallery.rtl div.gbNavigator div.next-and-last {
+  float: left;
+}
+#gallery.rtl div.gbNavigator div.next-and-last.no-previous {
+  float: none;
+  text-align: left;
+}
+#gallery.rtl div.gbNavigator div.first-and-previous {
+  text-align: right;
+}
+/* Both IE and Gecko have bugs with omitting padding on rtl inline content */
+#gallery.IE.rtl div.gbNavigator a {
+  display: inline-block;
+}
+#gallery.gecko.rtl div.gbNavigator a {
+  display: -moz-inline-box;
+}
+
+#gallery.rtl div.gbNavigator a.first {
+  padding: 0 27px 0 0;
+  background: url('images/nav_last.gif') right no-repeat;
+}
+#gallery.rtl div.gbNavigator a.previous {
+  padding: 0 27px 0 0;
+  background: url('images/nav_next.gif') right no-repeat;
+}
+#gallery.rtl div.gbNavigator a.next {
+  padding: 0 0 0 27px;
+  background: url('images/nav_prev.gif') left no-repeat;
+}
+#gallery.rtl div.gbNavigator a.last {
+  padding: 0 0 0 27px;
+  background: url('images/nav_first.gif') left no-repeat;
+}
+#gallery.rtl div.gbNavigator div.first-and-previous img {
+  padding: 0 0 0 0.5em;
+}
+#gallery.rtl div.gbNavigator div.next-and-last img {
+  padding: 0 0.5em 0 0;
+}
+
+div.block-search-SearchBlock a.advanced {
+  display: block;
+  padding: 3px;
+}
+
+.block-core-ItemInfo {
+    margin-top: 1.2em;
+}
+
+div.floatrix-userLinks {
+  padding-top: 4px;
+}
+div.floatrix-userLinks .gbAdminLink {
+  margin: 0 5px;
+}
+
+div.block-core-ItemLinks {
+  margin: 3px 0;
+}
+div.block-core-ItemLinks a {
+  padding: 3px;
+}
+div#gsSidebar div.block-core-ItemLinks a {
+  display: block;
+}
+
+div#gsSidebar div.block-core-PeerList a {
+  display: block;
+  padding: 3px;
+}
+
+div#gsSidebar div.block-core-PeerList span {
+  font-weight: bold;
+  display: block;
+  padding: 3px;
+}
+
+div#gsSidebar div.block-core-PeerList span.current {
+  color: #0b6cff;
+}
+
+/* ***************************************************** */
+/*                   Dynamic blocks                      */
+/* ***************************************************** */
+
+div.block-comment-ViewComments {
+  margin: 5px;
+}
+
+div.block-comment-ViewComments div.one-comment {
+  border: 1px solid #e7e7e7;
+  padding: 5px;
+  margin-bottom: 5px;
+}
+
+div.block-comment-ViewComments h3 {
+}
+
+div.block-comment-ViewComments span {
+  padding-right: 5px;
+}
+
+div.block-comment-ViewComments p.info {
+  font-style: italic;
+  text-align: right;
+  font-size: 0.95em;
+}
+
+div.block-core-GuestPreview {
+  float: right;
+  clear: both;
+}
+#gallery.rtl div.block-core-GuestPreview {
+  float: left;
+}
+
+span.block-core-SystemLink {
+}
+
+div.block-exif-ExifInfo {
+  margin: 5px;
+}
+
+span.bsw_ButtonDisabled {
+  color: #999;
+}
+
+span.bsw_ButtonEnabled {
+  color: #000;
+  cursor: pointer;
+}
+
+table.bsw_ParamTable {
+  width: 100%;
+  border: 1px solid #999;
+  border-collapse: collapse;
+}
+
+tr.bsw_ParamHeaderRow {
+  background-color: #EEE;
+}
+
+tr.bsw_ParamHeaderRow td {
+  font-weight: bold;
+  text-align: center;
+  border: 1px solid #999;
+}
+
+td.bsw_BlockCommands {
+  white-space: nowrap;
+  text-align: center;
+}
+
+#gbAlbumBlocks {
+    margin: 0 1.0em 1.0em 2.0em;
+    clear: both;
+}
+
+#gsFooter {
+  padding-top: 4px;
+  float: right;
+  clear: both;
+}
+
+/* ********************************************************************************
+ * Rating module style fix for Floatrix
+ */
+.giRatingUI {
+    margin: 10px auto; /* Required to center default rating module star images */
+}
+#gsThumbMatrix .giRatingAverageContainer {
+    margin: auto;
+}

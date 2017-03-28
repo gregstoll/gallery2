@@ -1,0 +1,491 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryItem.class');
+
+/**
+ * A subclass of GalleryItem for containing groups of GalleryItems.
+ * A GalleryItem that has certain extra properties relating to displaying item groups and is
+ * allowed to contain other GalleryItems.
+ *
+ * @g2 <class-name>GalleryAlbumItem</class-name>
+ * @g2 <parent-class-name>GalleryItem</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>1</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17589 $
+ */
+class GalleryAlbumItem extends GalleryItem {
+
+    /**
+     * The theme to use for this item
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>theme</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>SMALL</member-size>
+     * @g2 </member>
+     */
+    var $theme;
+
+    /**
+     * Specify the name of the field that we're using to order children
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>orderBy</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2 </member>
+     */
+    var $orderBy;
+
+    /**
+     * Specify the order direction that we're applying to the orderBy field
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>orderDirection</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>SMALL</member-size>
+     * @g2 </member>
+     */
+    var $orderDirection;
+
+
+    /**
+     * Create a new instance of this AlbumItem in the persistent store.
+     * Also create the album directory on the filesystem.
+     *
+     * @param int $parentId the id of the parent of this object
+     * @return GalleryStatus a status code
+     */
+    function create($parentId, $albumName) {
+	global $gallery;
+
+	if (empty($albumName) || empty($parentId)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	/* Let our superclass take care of creation in the persistent store */
+	$ret = parent::create($parentId, $albumName, true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$albumName = $this->getPathComponent();
+
+	list ($ret, $parent) = GalleryCoreApi::loadEntitiesById($parentId, 'GalleryItem');
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $parentPath) = $parent->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Copy over derivative preferences from the parent */
+	$ret = GalleryCoreApi::copyDerivativePreferences($parentId, $this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $useDefaults) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'default.newAlbumsUseDefaults');
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($useDefaults != 'true') {
+	    /* Use parent's settings */
+	    $this->setTheme($theme = $parent->getTheme());
+	    $this->setOrderBy($parent->getOrderBy());
+	    $this->setOrderDirection($parent->getOrderDirection());
+	    if (empty($theme)) {
+		list ($ret, $theme) =
+		    GalleryCoreApi::getPluginParameter('module', 'core', 'default.theme');
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	    list ($ret, $themeParams) =
+		GalleryCoreApi::fetchAllPluginParameters('theme', $theme, $parent->getId());
+	    if ($ret) {
+		return $ret;
+	    }
+	    foreach ($themeParams as $key => $value) {
+		$ret = GalleryCoreApi::setPluginParameter('theme', $theme,
+							  $key, $value, $this->getId());
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	} else {
+	    $this->setTheme(null);
+	    $this->setOrderBy(null);
+	    $this->setOrderDirection(null);
+	}
+
+	$ret = $this->_createDir($parentPath . $albumName);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Create a new root level album
+     * @return GalleryStatus a status code
+     */
+    function createRoot() {
+	global $gallery;
+
+	/* See if we already have a root */
+	list ($ret, $rootId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.rootAlbum');
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (!empty($rootId)) {
+	    return GalleryCoreApi::error(ERROR_COLLISION);
+	}
+
+	/* Let our superclass take care of creation in the persistent store */
+	$ret = parent::createRoot();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Root album can contain children */
+	$this->setCanContainChildren(true);
+
+	/* Create default preferences */
+	/* XXX: parameterize this */
+	$ret = GalleryCoreApi::addDerivativePreference(
+	    0, $this->getId(), DERIVATIVE_TYPE_IMAGE_THUMBNAIL, 'thumbnail|150');
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = GalleryCoreApi::addDerivativePreference(
+	    0, $this->getId(), DERIVATIVE_TYPE_IMAGE_RESIZE, 'scale|640');
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Use site default theme and sort order */
+	$this->setTheme('');
+	$this->setOrderBy('');
+	$this->setOrderDirection(ORDER_ASCENDING);
+
+	return null;
+    }
+
+    /**
+     * Internal function to create the album directory
+     * @access private
+     */
+    function _createDir($albumDir) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $perm) = GalleryCoreApi::getPluginParameter(
+	    'module', 'core', 'permissions.directory');
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($platform->file_exists($albumDir)) {
+	    return GalleryCoreApi::error(ERROR_COLLISION, __FILE__, __LINE__,
+					$albumDir . ' already exists');
+	}
+
+	if (!$platform->mkdir($albumDir, $perm)) {
+	    return GalleryCoreApi::error(ERROR_COLLISION, __FILE__, __LINE__,
+					'mkdir failed for ' . $albumDir);
+	}
+
+	return null;
+    }
+
+    /**
+     * Can this item contain other file system items?
+     * Always returns true -- AlbumItems contain other GalleryItems
+     *
+     * @return true if this item can contain other file system items
+     */
+    function isContainer() {
+	return true;
+    }
+
+    /**
+     * @see GalleryItem::save()
+     */
+    function save($postEvent=true) {
+	global $gallery;
+	$session =& $gallery->getSession();
+
+	$isNew = $this->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED);
+
+	$ret = parent::save($postEvent);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/** @todo move the setting of the owner permission to before the save event*/
+	if ($isNew) {
+	    list ($ret, $groupId) =
+		GalleryCoreApi::getPluginParameter('module', 'core', 'id.allUserGroup');
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    list ($ret, $registeredUser) = 
+		GalleryCoreApi::isUserInGroup($this->getOwnerId(), $groupId);
+	    if ($registeredUser) {
+		$ret = GalleryCoreApi::addUserPermission($this->getId(), $this->getOwnerId(),
+		    'core.all', false);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Delete this AlbumItem.
+     * Delete all children and then remove the album directory.
+     *
+     * @return GalleryStatus a status code
+     */
+    function delete() {
+	global $gallery;
+
+	/* Delete myself from the store */
+	$ret = parent::delete();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Delete derivative preferences */
+	$ret = GalleryCoreApi::removeDerivativePreferencesForItem($this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Get my path */
+	list ($ret, $path) = $this->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Remove my directory and everything in it */
+	$platform =& $gallery->getPlatform();
+
+	if ($platform->file_exists($path)) {
+	    if (!$platform->recursiveRmdir($path)) {
+		return GalleryCoreApi::error(ERROR_BAD_PATH);
+	    }
+	}
+
+	$storage =& $gallery->getStorage();
+	$ret = $storage->checkPoint();
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Rename this album
+     *
+     * @param string $newName the path component
+     * @return GalleryStatus a status code
+     */
+    function rename($newName) {
+	global $gallery;
+
+	if ($newName == $this->getPathComponent()) {
+	    return null;
+	}
+
+	/*
+	 * Read lock the parent so that we don't have a race condition below.
+	 */
+	if (GalleryCoreApi::isReadLocked($this->getParentId()) ||
+		GalleryCoreApi::isWriteLocked($this->getParentId())) {
+	    $lockId = null;
+	} else {
+	    list ($ret, $lockId) = GalleryCoreApi::acquireReadLock($this->getParentId());
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	$platform =& $gallery->getPlatform();
+
+	/*
+	 * Get the current path
+	 */
+	list ($ret, $currentPath) = $this->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/*
+	 * Set the new path in the database.  If that succeeds then we should
+	 * be ok in general.  Jump through hoops to make sure that we release
+	 * our locks at the end.
+	 */
+	$error = null;
+	$ret = parent::rename($newName);
+	if ($ret) {
+	    $error = $ret;
+	}
+
+	/* The parent class may have changed/sanitized the pathComponent, so get it again */
+	$newName = $this->getPathComponent();
+
+	if (!isset($error)) {
+	    /* Check to see if the desired path exists. */
+	    $newPath = dirname($currentPath) . '/' . $newName;
+	    if ($platform->file_exists($newPath)) {
+		$error = GalleryCoreApi::error(ERROR_COLLISION);
+	    }
+	}
+
+	if (!isset($error)) {
+	    if (!$platform->rename($currentPath, $newPath)) {
+		$error = GalleryCoreApi::error(ERROR_BAD_PATH);
+	    }
+	}
+
+	/* Release locks */
+	$ret = GalleryCoreApi::releaseLocks($lockId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (isset($error)) {
+	    return $error;
+	}
+
+	return null;
+    }
+
+    /**
+     * Move this item to a new parent
+     *
+     * @param int $newParentId the id of the GalleryItem parent
+     * @return GalleryStatus a status code
+     */
+    function move($newParentId) {
+	/* Get the current parent sequence */
+	list ($ret, $oldParentSequence) = GalleryCoreApi::fetchParentSequence($this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+	$oldChildParentSequence = array_merge($oldParentSequence, array($this->getId()));
+
+	/*
+	 * Perform the move.  Note that *after* the move, my parent id is going to be different so
+	 * the getParentId() calls are going to return $newParentId
+	 */
+	$ret = parent::move($newParentId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Figure out the new one */
+	list ($ret, $newParentSequence) = GalleryCoreApi::fetchParentSequence($this->getParentId());
+	if ($ret) {
+	    return $ret;
+	}
+	$newChildParentSequence = array_merge($newParentSequence,
+					      array($this->getParentId(), $this->getId()));
+
+	/* Convert my children's parent sequences */
+	$ret = GalleryCoreApi::updateParentSequence(
+	    $oldChildParentSequence, $newChildParentSequence);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::itemTypeName
+     */
+    function itemTypeName($localized = true) {
+	global $gallery;
+	if ($localized) {
+	    list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+	    if (! $ret) {
+		return array($core->translate('Album'), $core->translate('album'));
+	    }
+	}
+	return array('Album', 'album');
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryAlbumItem';
+    }
+
+    function getTheme() {
+	return $this->theme;
+    }
+
+    function setTheme($theme) {
+	$this->theme = $theme;
+    }
+
+    function getOrderBy() {
+	return $this->orderBy;
+    }
+
+    function setOrderBy($orderBy) {
+	$this->orderBy = $orderBy;
+    }
+
+    function getOrderDirection() {
+	return $this->orderDirection;
+    }
+
+    function setOrderDirection($orderDirection) {
+	$this->orderDirection = $orderDirection;
+    }
+}
+?>

@@ -1,0 +1,80 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/getid3/classes/Getid3Interface_1_0.class');
+
+/**
+ * Implementation of the Getid3Interface for pulling Getid3 data from a set of target items
+ * @package Getid3
+ * @subpackage Classes
+ * @author Don Willingham <donwillingham@users.sf.net>
+ * @version $Revision: 17580 $
+ */
+class Getid3Extractor extends Getid3Interface_1_0 {
+    /**
+     * @see Getid3Interface_1_0::getMetaData
+     */
+    function getMetaData($itemIds, $properties=array()) {
+	if (!is_array($itemIds)) {
+	    $itemIds = array($itemIds);
+	}
+	if (!is_array($properties)) {
+	    $properties = array($properties);
+	}
+
+	$data = array();
+	foreach ($itemIds as $itemId) {
+	    list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId, 'GalleryItem');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    /* Only look at GalleryDataItems */
+	    if (!GalleryUtilities::isA($item, 'GalleryDataItem')) {
+		continue;
+	    }
+	    list ($ret, $path) = $item->fetchPath();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $data[$itemId] = array();
+
+	    GalleryCoreApi::requireOnce('modules/getid3/classes/Getid3Helper.class');
+	    Getid3Helper::_fetchRawGetid3Data($path, $rawGetid3Data);
+
+	    foreach (Getid3Helper::getGetid3Keys() as $property => $keyData) {
+		if (!empty($properties) && !in_array($property, $properties)) {
+		    continue;
+		}
+		for ($i = 1; $i < count($keyData); $i++) {
+		    $value = Getid3Helper::_getValue($rawGetid3Data, explode('.', $keyData[$i]));
+		    if (isset($value)) {
+			$value = Getid3Helper::postProcessValue($property, $value);
+			$data[$itemId][$property] =
+			    array('title' => $keyData[0], 'value' => $value);
+			break;
+		    }
+		}
+	    }
+	}
+
+	return array(null, $data);
+    }
+}
+?>

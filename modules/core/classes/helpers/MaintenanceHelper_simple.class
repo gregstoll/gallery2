@@ -1,0 +1,164 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A collection of useful maintenance related methods
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class MaintenanceHelper_simple {
+
+    /**
+     * Fetch all the available maintenance tasks
+     * @return array GalleryStatus a status code
+     *               array(taskId => MaintenanceTask, ...)
+     */
+    function fetchTasks() {
+	/* Get all the option plugins */
+	list ($ret, $allTaskIds) =
+	    GalleryCoreApi::getAllFactoryImplementationIds('MaintenanceTask');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$taskInstances = array();
+	foreach (array_keys($allTaskIds) as $taskId) {
+	    list ($ret, $task) = GalleryCoreApi::newFactoryInstanceById('MaintenanceTask', $taskId);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $taskInstances[$taskId] = $task;
+	}
+
+	return array(null, $taskInstances);
+    }
+
+    /**
+     * Return information about the last run of this task.
+     *
+     * @param string $taskId
+     * @return array GalleryStatus a status code
+     *               array(runId => int,
+     *                     timestamp => int,
+     *                     success => bool,
+     *                     details => string)
+     */
+    function fetchLastRun($taskId) {
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryMaintenanceMap',
+	    array('runId', 'timestamp', 'success', 'details'), array('taskId' => $taskId),
+	    array('orderBy' => array('timestamp' => ORDER_DESCENDING),
+		  'limit' => array('count' => 1)));
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$result = $searchResults->nextResult();
+	$info = null;
+	if ($searchResults->resultCount() == 1) {
+	    $info = array('runId' => $result[0],
+			  'timestamp' => (int)$result[1],
+			  'success' => (bool)$result[2],
+			  'details' => unserialize($result[3]));
+	}
+
+	return array(null, $info);
+    }
+
+    /**
+     * Add a new task run to the maintenance map.
+     *
+     * @param string $taskId
+     * @param int $timestamp when the run happened
+     * @param bool $success task success/failure
+     * @param array $details string task details
+     * @return GalleryStatus a status code
+     */
+    function addRun($taskId, $timestamp, $success, $details) {
+	global $gallery;
+
+	$storage =& $gallery->getStorage();
+	list ($ret, $runId) = $storage->getUniqueId();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = GalleryCoreApi::addMapEntry(
+	    'GalleryMaintenanceMap',
+	    array('runId' => $runId,
+		  'taskId' => $taskId,
+		  'timestamp' => $timestamp,
+		  'success' => (int)$success,
+		  'details' => serialize($details)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::setMaintenanceMode
+     */
+    function setMaintenanceMode($mode) {
+	global $gallery;
+
+	$currentMode = $gallery->getConfig('mode.maintenance');
+
+	/* If already in the requested mode, don't have to do anything. */
+	if ($currentMode !== $mode) {
+	    $platform =& $gallery->getPlatform();
+	    $versionFile = $gallery->getConfig('data.gallery.version');
+
+	    list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $versions = $module->getInstalledVersions();
+	    $versionsData = array($versions['core'], $versions['gallery']);
+	    if (!empty($mode)) {
+		$modeText = 'maintenance-mode';
+
+		/* If $mode is a string then treat as a url of the custom maintenance page. */
+		if (is_string($mode)) {
+		    $modeText .= ":$mode";
+		}
+		$versionsData[] = $modeText;
+	    }
+
+	    $gallery->debug('Update versions file with maintenance mode');
+
+	    $data = implode("\n", $versionsData);
+	    if (!$platform->atomicWrite($versionFile, $data)) {
+		$gallery->debug('Error: Can\'t write to versions file');
+		return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+							       'Can\'t write to the versions file');
+	    }
+
+	    $gallery->setConfig('mode.maintenance', $mode);
+	}
+
+	return null;
+    }
+}
+?>

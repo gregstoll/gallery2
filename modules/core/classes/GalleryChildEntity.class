@@ -1,0 +1,171 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryEntity.class');
+
+/**
+ * An entity that can be the child of another entity.
+ * This object performs all of the basic functions required in all Gallery objects.
+ *
+ * @g2 <class-name>GalleryChildEntity</class-name>
+ * @g2 <parent-class-name>GalleryEntity</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>0</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryChildEntity extends GalleryEntity {
+
+    /**
+     * The id of the parent of this GalleryChildEntity
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>parentId</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <indexed/>
+     * @g2   <required/>
+     * @g2 </member>
+     */
+    var $parentId;
+
+
+    /**
+     * Create this item in our persistent store
+     *
+     * @param int $parentId the id of the GalleryItem parent
+     * @return GalleryStatus a status code
+     */
+    function create($parentId) {
+	global $gallery;
+
+	if (empty($parentId)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	$ret = parent::create();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Set the parent id */
+	$this->setParentId($parentId);
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::createLink
+     */
+    function createLink($entity, $parentId) {
+	global $gallery;
+
+	$ret = parent::createLink($entity);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Set the parent id */
+	$this->setParentId($parentId);
+
+	return null;
+    }
+
+    /**
+     * Move this item to a new parent
+     *
+     * @param int $newParentId the id of the GalleryItem parent
+     * @return GalleryStatus a status code
+     */
+    function move($newParentId) {
+	global $gallery;
+
+	if (empty($newParentId)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	/* Set the new parent id */
+	$this->setParentId($newParentId);
+
+	return null;
+    }
+
+    /**
+     * Create a root level item.
+     * This is a special case; every other GalleryChildEntry will have a
+     * parent.  But the root items don't have one.
+     */
+    function createRoot() {
+	$ret = parent::create();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* No parent for root */
+	$this->setParentId(0);
+
+	return null;
+    }
+
+    /**
+     * Get the parent instance
+     *
+     * @return array GalleryStatus a status code
+     *               GalleryItem the parent item
+     */
+    function fetchParent() {
+	global $gallery;
+
+	$parentId = $this->getParentId();
+	if (isset($parentId)) {
+	    list ($ret, $parent) =
+		GalleryCoreApi::loadEntitiesById($this->getParentId(), 'GalleryEntity');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	} else {
+	    $parent = null;
+	}
+
+	return array(null, $parent);
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryChildEntity';
+    }
+
+    function getParentId() {
+	return $this->parentId;
+    }
+
+    function setParentId($parentId) {
+	$this->parentId = $parentId;
+    }
+}
+?>

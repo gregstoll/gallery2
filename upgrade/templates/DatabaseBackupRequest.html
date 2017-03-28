@@ -1,0 +1,84 @@
+    <h1><?php print _("Database Backup") ?></h1>
+
+    <?php if (empty($templateData['errors'])): ?>
+    <p>
+      <?php print _("Before you upgrade, we <b>strongly recommend</b> that you make a backup of your database!  If you fail to make a backup and something goes wrong, there is a strong possibility that we will not be able to help you recover your data!") ?>
+    </p>
+    <?php if (!empty($templateData['canDoBackup'])): ?>
+      <p><?php print _("You have three options:") ?></p>
+    <?php else: ?>
+      <p><?php print _("You have two options:") ?></p>
+    <?php endif; ?>
+    <ol>
+    <?php if (!empty($templateData['canDoBackup'])): ?>
+       <li><?php print _("Do the automated backup (<b>recommended</b>).") ?></li>
+    <?php endif; ?>
+       <li><?php print _("Do a manual backup (see below).") ?>
+    <div class="example">
+    <?php if (!strncmp($templateData['storeConfig']['type'], 'mysql', 5)): ?>
+      <h3> <?php print _("MySQL") ?> </h3>
+      <?php printf('mysqldump -u%s -p -h %s --opt %s > %s.sql',
+		   $templateData['storeConfig']['username'],
+		   $templateData['storeConfig']['hostname'],
+		   $templateData['storeConfig']['database'],
+		   $templateData['storeConfig']['database']) ?>
+
+    <?php elseif (!strncmp($templateData['storeConfig']['type'], 'postgres', 8)): ?>
+      <h3> <?php print _("PostgreSQL") ?> </h3>
+      <?php printf('pg_dump -h %s --format=t %s > %s.sql',
+		   $templateData['storeConfig']['hostname'],
+		   $templateData['storeConfig']['database'],
+		   $templateData['storeConfig']['database']) ?>
+
+    <?php elseif ($templateData['storeConfig']['type'] == 'oci8po'): ?>
+      <h3> <?php print _("Oracle") ?> </h3>
+      <?php printf('exp %s@%s file=%s.dmp full=yes',
+		   $templateData['storeConfig']['username'],
+		   $templateData['storeConfig']['database'],
+		   $templateData['storeConfig']['database']) ?>
+
+    <?php elseif (strstr($templateData['storeConfig']['type'], 'db2')): ?>
+      <h3> <?php print _("IBM DB2") ?> </h3>
+      <?php printf('db2 "backup database %s"',
+		   $templateData['storeConfig']['database']) ?>
+
+    <?php elseif (strstr($templateData['storeConfig']['type'], 'mssql')): ?>
+      <h3> <?php print _("Microsoft SQL Server") ?> </h3>
+      <?php printf('sqlcmd -S %s\SQLEXPRESS -e -Q "backup database %s to disk = \'%s.bkp\'"',
+		   $templateData['storeConfig']['hostname'],
+		   $templateData['storeConfig']['database'],
+		   $templateData['storeConfig']['database']) ?>
+    <?php endif; ?>
+    </div>
+       </li>
+       <li><?php print _("Continue without a backup (<b>discouraged</b>).") ?></li>
+    </ol>
+
+    <p>
+    <?php if (!empty($templateData['canDoBackup'])): ?>
+      <?php print _("If you choose to perform the automated backup, please be patient.  If you cancel or reload the page, you may interfere with the backup process.") ?>
+    <?php endif; ?>
+    </p>
+
+    <div class="go">
+    <?php $nextStep = $stepNumber + 1 ?>
+    <?php if (!empty($templateData['canDoBackup'])): ?>
+       <a href="<?php generateUrl('index.php?step=' . $stepNumber . '&amp;backupDatabase=1') ?>" class="btn continue"><i></i><span><span></span><i></i>
+         <?php print _('Begin Database Backup') ?></span></a>
+	   <a href="<?php generateUrl('index.php?step=' . $nextStep) ?>" class="btn continue"><i></i><span><span></span><i></i>
+	     <?php print _('Skip Database Backup') ?></span></a>
+    <?php else: ?>
+	   <a href="<?php generateUrl('index.php?step=' . $nextStep) ?>" class="btn continue"><i></i><span><span></span><i></i>
+	     <?php printf(_('Continue to Step %d&raquo;'), $nextStep); ?></span></a>
+    <?php endif; ?>
+    <?php else: ?>
+    <h2>
+      <?php print _("Stack Trace:") ?>
+    </h2>
+    <div class="stack_trace">
+      <?php print $templateData['stackTrace']; ?>
+    </div>
+
+    <br />
+    <?php endif; ?>
+     </div>

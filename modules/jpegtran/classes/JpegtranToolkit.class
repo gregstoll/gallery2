@@ -1,0 +1,203 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+
+/**
+ * A Jpegtran version of GalleryToolkit
+ *
+ * This class implements the GalleryToolkit API using Jpegtran.
+ *
+ * @package Jpegtran
+ * @subpackage Classes
+ * @author Matthew Miller <mattdm@mattdm.org>
+ * @author Andy Staudacher <ast@gmx.ch>
+ * @version $Revision: 17580 $
+ */
+class JpegtranToolkit extends GalleryToolkit {
+
+    /**
+     * @see GalleryToolkit::performOperation()
+     */
+    function performOperation($mimeType, $operationName, $sourceFilename,
+			      $destFilename, $parameters, $context=array()) {
+	global $gallery;
+
+	if (!in_array($mimeType, array('image/jpeg', 'image/pjpeg'))) {
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION), null, null);
+	}
+
+	list ($ret, $jpegtran) = GalleryCoreApi::getPluginParameter('module', 'jpegtran', 'path');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$tmpDir = $gallery->getConfig('data.gallery.tmp');
+	$platform =& $gallery->getPlatform();
+	$tmpFilename = $platform->tempnam($tmpDir, 'jpgt_');
+	if (empty($tmpFilename)) {
+	    /* This can happen if the $tmpDir path is bad */
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH), null, null);
+	}
+
+	if (isset($context['width'])) {
+	    $width = $context['width'];
+	    $height = $context['height'];
+	}
+
+	switch($operationName) {
+	case 'rotate':
+	    switch($parameters[0]) {
+	    case -90:
+	    case 270:
+		$rotateAmount = '270';
+		break;
+
+	    case 90:
+		$rotateAmount = '90';
+		break;
+
+	    case -180:
+	    case 180:
+		$rotateAmount = '180';
+		break;
+
+	    default:
+		return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+				"Bad rotation argument: $parameters[0]"), null, null);
+	    }
+	    if (isset($width) && $rotateAmount != '180') {
+		$tmp = $width;
+		$width = $height;
+		$height = $tmp;
+	    }
+
+	    $cmd = array($jpegtran, '-verbose', '-copy', 'all', '-rotate', $rotateAmount);
+	    break;
+
+	case 'crop':
+	    /* Source dimensions are required to convert from percentages to pixels */
+	    if (!isset($width)) {
+		list ($ret, $width, $height) = $this->_getImageDimensions($sourceFilename);
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+	    }
+
+	    /* Source dimensions are required to convert from percentages to pixels  */
+	    $pixelX = round($parameters[0] / 100 * $width);
+	    $pixelY = round($parameters[1] / 100 * $height);
+	    $width = round($parameters[2] / 100 * $width);
+	    $height = round($parameters[3] / 100 * $height);
+
+	    $cmd = array($jpegtran, '-verbose', '-copy', 'all', '-crop',
+			 sprintf('%sx%s+%s+%s', $width, $height, $pixelX, $pixelY));
+	    break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION), null, null);
+	}
+
+	$cmd = array_merge($cmd, array('-outfile', $tmpFilename, $sourceFilename));
+
+	$gallery->guaranteeTimeLimit(90);
+	$oldCwd = $platform->getcwd();
+	$platform->chdir($tmpDir);
+	list ($success, $output) = $platform->exec(array($cmd));
+	if (!$success) {
+	    @$platform->unlink($tmpFilename);
+	    $platform->chdir($oldCwd);
+	    return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE), null, null);
+	}
+	$platform->chdir($oldCwd);
+
+	$success = $platform->rename($tmpFilename, $destFilename);
+	if (!$success) {
+	    @$platform->unlink($tmpFilename);
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					       "Failed renaming $tmpFilename -> $destFilename"),
+			 null, null);
+	}
+	$platform->chmod($destFilename);
+
+	if (isset($width)) {
+	    $context['width'] = $width;
+	    $context['height'] = $height;
+	}
+
+	return array(null, $mimeType, $context);
+    }
+
+    /**
+     * Get the dimensions of a jpeg image.
+     * @param string $filename
+     * @return array GalleryStatus a status code,
+     *               int width,
+     *               int height
+     */
+    function _getImageDimensions($filename) {
+	global $gallery;
+
+	/*
+	 * Run it through PHP first, it's faster and more portable.  If it runs afoul of
+	 * open_basedir it'll return false and we can try Jpegtran.
+	 */
+	$platform =& $gallery->getPlatform();
+	$results = $platform->getimagesize($filename);
+	if (($results != false) &&
+	    (($results[0] > 1) && ($results[1] > 1))) {
+	    return array(null, $results[0], $results[1]);
+	}
+
+	list ($ret, $jpegtran) = GalleryCoreApi::getPluginParameter('module', 'jpegtran', 'path');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$tmpDir = $gallery->getConfig('data.gallery.tmp');
+	$platform =& $gallery->getPlatform();
+	$tmpFilename = $platform->tempnam($tmpDir, 'jpgt_');
+
+	if (empty($tmpFilename)) {
+	    /* This can happen if the $tmpDir path is bad */
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH), null, null);
+	}
+
+	$oldCwd = $platform->getcwd();
+	$platform->chdir($tmpDir);
+
+	$cmd = array($jpegtran, '-verbose', '-outfile', $tmpFilename, $filename);
+	list ($success, $ignored, $output) = $platform->exec(array($cmd));
+	@$platform->unlink($tmpFilename);
+	$platform->chdir($oldCwd);
+	if (!$success) {
+	    return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE), null, null);
+	}
+
+	foreach ($output as $line) {
+	    if (preg_match('/width=([0-9]+), height=([0-9]+)/', $line, $regs)) {
+		return array(null, $regs[1], $regs[2]);
+	    }
+	}
+
+	return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE), null, null);
+    }
+}
+?>

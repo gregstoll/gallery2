@@ -1,0 +1,46 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/cart/classes/CartPluginInterface_1_0.class');
+
+/**
+ * This is an interface for plugins to the Cart module.  Modules that wish to
+ * be able to do fulfillment on items in the cart (like eCommerce, photo printing,
+ * zip download, etc) must provide a class that implements this interface.
+ *
+ * @package Cart
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class CartPluginInterface_1_1 extends CartPluginInterface_1_0 {
+    /**
+     * Return the permission ids required to fulfill the cart action, e.g.
+     * array('someprintmodule.print').
+     *
+     * @return array permission ids
+     * @since 1.1
+     */
+    function getRequiredPermissions() {
+	return array();
+    }
+}
+?>

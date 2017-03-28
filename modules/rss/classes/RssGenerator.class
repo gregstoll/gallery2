@@ -1,0 +1,349 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * @package Rss
+ * @subpackage Classes
+ * @author Jonatan Heyman <http://heyman.info>
+ * @author Pierre-Luc Paour
+ * @author Daniel Grund <http://www.photogrund.nl>
+ * @version $Revision: 17605 $
+ */
+class RssGenerator {
+    /**
+     * An array of all the items (in the RSS sense of the term) in the feed
+     *
+     * @var array $_items
+     * @access private
+     */
+    var $_items = array();
+
+    /**
+     * An array of global properties for the feed
+     *
+     * @var array $_properties
+     * @access private
+     */
+    var $_properties = array();
+
+    /**
+     * Add an item to the RSS feed that will be generated
+     *
+     * @param array $properties item properties array
+     * @param string $key optional key for the item array
+     */
+    function addItem($properties, $key='') {
+	/* add the new item to our items array */
+	if ($key == '') {
+	    $this->_items[] = $properties;
+	} else {
+	    $this->_items[$key] = $properties;
+	}
+    }
+
+    /**
+     * Function to set the items array that will be used when generated the feed
+     * @param array $items
+     */
+    function setItems($items) {
+	$this->_items = $items;
+    }
+
+    /**
+     * Add a channel property to the feed that will be generated
+     *
+     * @param string $name property name
+     * @param string $value property value
+     */
+    function addProperty($name, $value) {
+	$this->_properties[$name] = $value;
+    }
+
+    /**
+     * Set the channel properties of the feed that will be generated
+     *
+     * @param array $properties properties
+     */
+    function setProperties($properties) {
+	$this->_properties = $properties;
+    }
+
+    /**
+     * Change the order of the items in the $_items array
+     * (useful if $key variable is used when items are added)
+     *
+     * @param string $order Can either be ASC or DESC
+     */
+    function sortItems($order) {
+	if ($order == 'ASC') {
+	    ksort($this->_items);
+	} else if ($order == 'DESC') {
+	    krsort($this->_items);
+	}
+    }
+
+    /**
+     * Removes all items except the first $count items
+     *
+     * @param int $count
+     */
+    function sliceItems($count) {
+	$this->_items = array_slice($this->_items, 0, $count);
+    }
+
+    /**
+     * Generate the RSS data string of the items added by addItem()
+     *
+     * @param string $version the rss version number
+     * @return string rss stream
+     */
+    function generate($version) {
+	switch ($version) {
+	case '0.91':
+	    return $this->generate091();
+	    break;
+	case '2.0':
+	    return $this->generate200();
+	    break;
+	}
+    }
+
+    /**
+     * Generate RSS 0.91 data
+     *
+     * @return string rss stream
+     */
+    function generate091() {
+	global $gallery;
+
+	if (!isset($this->_properties['title']) ||
+	    !isset($this->_properties['link']) ||
+	    !isset($this->_properties['description']) ||
+	    !count($this->_items))
+	    return '';
+
+	$platform =& $gallery->getPlatform();
+	$lf = $platform->getLineEnding();
+
+	$data = '<?xml version="1.0"?>' . $lf .
+	    '<!DOCTYPE rss SYSTEM "http://my.netscape.com/publish/formats/rss-0.91.dtd">' . $lf .
+	    '<rss version="0.91"><channel>' . $lf .
+	    '<title>' . $this->cdata(GalleryUtilities::markup($this->_properties['title'])) .
+	    '</title>' . $lf .
+	    '<link>' . $this->_properties['link'] . '</link>' . $lf .
+	    '<description>' .
+	    $this->cdata(GalleryUtilities::markup($this->_properties['description'])) .
+	    '</description>' . $lf .
+	    (isset($this->_properties['language']) ?
+		'<language>' . $this->_properties['language'] .
+		'</language>' : '') . $lf .
+	    (!empty($this->_properties['copyright']) ?
+		'<copyright>' . GalleryUtilities::markup($this->_properties['copyright']) .
+		'</copyright>' : '');
+
+	if (isset($this->_properties['webmaster'])) {
+	    $data .= '<webMaster>' . GalleryUtilities::markup($this->_properties['webmaster']) .
+	    '</webMaster>' . $lf;
+	}
+
+	if (isset($this->_properties['image'])) {
+	    $data .= '<image>' . $lf .
+		' <title>' .
+		$this->cdata(GalleryUtilities::markup($this->_properties['image']['title'])) .
+		'</title>' . $lf .
+		' <link>' . $this->_properties['image']['link'] . '</link>' . $lf .
+		' <url>' . $this->_properties['image']['url'] . '</url>' . $lf .
+		'</image>' . $lf;
+	}
+
+	foreach ($this->_items as $item) {
+	    if (isset($item['title'])) {
+		$data .= '<item>' . $lf .
+		    ' <title>' . $this->cdata(GalleryUtilities::markup($item['title'])) .
+		    '</title>' . $lf .
+		    ' <link>' . $item['link'] . '</link>' . $lf .
+		    ' <description>' .
+		    $this->cdata(GalleryUtilities::markup($item['description'])) .
+		    '</description>' . $lf .
+		    '</item>' . $lf;
+	    }
+	}
+
+	$data .= '</channel>' . $lf . '</rss>';
+
+	return $data;
+    }
+
+    /**
+     * Generate RSS 2.0 data
+     *
+     * @return string rss stream
+     */
+    function generate200() {
+	global $gallery;
+
+	$platform =& $gallery->getPlatform();
+	$lf = $platform->getLineEnding();
+
+	if (isset($this->_properties['useMedia']) && $this->_properties['useMedia'] == 1) {
+	    $data = '<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">';
+	} else {
+	    $data = '<rss version="2.0">';
+	}
+	$data .= $lf . '<channel>' . $lf .
+	    '<title>' . $this->cdata(GalleryUtilities::markup($this->_properties['title'])) .
+	    '</title>' . $lf .
+	    '<link>' . $this->_properties['link'] . '</link>' . $lf .
+	    '<description>' .
+	    $this->cdata(GalleryUtilities::markup($this->_properties['description'])) .
+	    '</description>' . $lf .
+	    (isset($this->_properties['language']) ?
+		'<language>' . $this->_properties['language'] . '</language>' . $lf  : '') .
+	    (!empty($this->_properties['copyright']) ?
+		'<copyright>' . GalleryUtilities::markup($this->_properties['copyright']) .
+		'</copyright>' . $lf  : '') .
+	    (!empty($this->_properties['category']) ?
+		'<category>' . GalleryUtilities::markup($this->_properties['category']) .
+		'</category>' . $lf  : '') .
+	    (isset($this->_properties['generator']) ?
+		'<generator>' . GalleryUtilities::markup($this->_properties['generator']) .
+		'</generator>' . $lf  : '') .
+	    (isset($this->_properties['lastBuildDate']) ?
+		'<lastBuildDate>' . $this->_properties['lastBuildDate'] .
+		'</lastBuildDate>' . $lf  : '') .
+	    (isset($this->_properties['ttl']) ?
+		'<ttl>' . $this->_properties['ttl'] . '</ttl>' . $lf : '') .
+	    (isset($this->_properties['cloud']) ?
+		'<cloud domain="' .
+		GalleryUtilities::markup($this->_properties['cloud']['domain']) .
+		'" port="' . $this->_properties['cloud']['port'] .
+		'" path="' . GalleryUtilities::markup($this->_properties['cloud']['path']) .
+		'" registerProcedure="' . $this->_properties['cloud']['registerProcedure'] .
+		'" protocol="' . $this->_properties['cloud']['protocol'] . '" />' . $lf : '')
+	    . (isset($this->_properties['image']) ?
+		'<image><url>' . $this->_properties['image']['url'] . '</url>' . $lf .
+	       ' <title>' .
+	       $this->cdata(GalleryUtilities::markup($this->_properties['image']['title'])) .
+		'</title>' . $lf .
+		' <link>' . $this->_properties['image']['link'] . '</link></image>' . $lf : '');
+
+	$userMap = array();
+	foreach ($this->_items as $item) {
+	    if (isset($item['title']) && isset($item['link']) && isset($item['description'])) {
+		$data .= '<item>' . $lf .
+		    ' <title>' . $this->cdata(GalleryUtilities::markup($item['title'])) .
+		    '</title>' . $lf .
+		    ' <link>' . $item['link'] . '</link>' . $lf .
+		    ' <guid isPermaLink="false">' . $item['link'] . '</guid>' . $lf .
+		    ' <description>' .
+		    $this->cdata(GalleryUtilities::markup($item['description']))
+		    . '</description>' . $lf;
+
+		if (isset($item['ownerId'])) {
+		    $ownerId = $item['ownerId'];
+		    if (!isset($userMap[$item['ownerId']])) {
+			list ($ret, $userMap[$ownerId]) =
+			    GalleryCoreApi::loadEntitiesById($ownerId, 'GalleryUser');
+			if ($ret) {
+			    /**
+			     * This method has no way of returning errors, so swallow them for now
+			     * @todo convert this to an exception in 2.4
+			     */
+			}
+		    }
+
+		    if (isset($userMap[$ownerId])) {
+			$name = $userMap[$ownerId]->getFullName();
+			if (empty($name)) {
+			    $name = $userMap[$ownerId]->getUsername();
+			}
+			$data .= ' <author>' . GalleryUtilities::markup($name) . '</author>' . $lf;
+		    }
+		}
+
+		if (isset($item['category'])) {
+		    $data .= ' <category>' . GalleryUtilities::markup($item['category']) .
+			     '</category>' . $lf;
+		}
+
+		if (isset($item['comments'])) {
+		    $data .= ' <comments>' . GalleryUtilities::markup($item['comments']) .
+			     '</comments>' . $lf;
+		}
+
+		if (isset($item['enclosure'])) {
+		    $data .= ' <enclosure url="' . $item['enclosure']['url'] . '" length="' .
+			$item['enclosure']['length'] . '" type="' .
+			$item['enclosure']['type'] . '" />' . $lf;
+		}
+
+		if (isset($this->_properties['useMedia']) && $this->_properties['useMedia']) {
+		    if (isset($item['media'])) {
+			$data .= ' <media:content url="' . $item['media']['url']
+			    . '" type="' . $item['media']['type']
+			    . '" height="' . $item['media']['height']
+			    . '" width="' . $item['media']['width'] . '" />' . $lf;
+
+		    }
+
+		    $data .= ' <media:title>'
+			. $this->cdata(GalleryUtilities::markup($item['title']))
+			. '</media:title>' . $lf
+			. ' <media:text type="html">'
+			. $this->cdata(GalleryUtilities::markup($item['description']))
+			. '</media:text>' . $lf;
+
+		    if (isset($item['thumbnail'])) {
+			$data .= ' <media:thumbnail url="' . $item['thumbnail']['url'] . '" width="'
+			    . $item['thumbnail']['width'] . '" height="'
+			    . $item['thumbnail']['height'] . '" />' . $lf;
+		    }
+		}
+
+		if (isset($item['guid'])) {
+		    $data .= ' <guid>' . $item['guid'] . '</guid>' . $lf;
+		}
+
+		if (isset($item['pubDate'])) {
+		    $data .= ' <pubDate>' . $item['pubDate'] . '</pubDate>' . $lf;
+		}
+
+		if (isset($item['source'])) {
+		    $data .= ' <source>' . $item['source'] . '</source>' . $lf;
+		}
+
+		$data .= '</item>' . $lf;
+	    }
+	}
+
+	$data .= '</channel>' . $lf . '</rss>';
+	return $data;
+    }
+
+    /**
+     * Wrap a text element in <![CDATA .. ]]>
+     * @param string $text
+     * @return string wrapped text
+     */
+    function cdata($text) {
+	return '<![CDATA[' . $text . ']]>';
+    }
+}
+?>

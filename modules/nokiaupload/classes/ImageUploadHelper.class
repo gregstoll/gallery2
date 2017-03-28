@@ -1,0 +1,637 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+/**
+ * Static helper methods for use by NokiaUpload views and controllers.
+ * @package NokiaUpload
+ * @subpackage Classes
+ * @author Jerome Rannikko <jeromer@hotpop.com>
+ * @version $Revision: 17589 $
+ * @static
+ */
+
+/**
+ * Error codes and other constants for NokiaUpload module.  These are defined in the Image Upload
+ * Server API document available at forum.nokia.com.
+ */
+define('NOKIAUPLOAD_ERR_NOERR', '0');
+define('NOKIAUPLOAD_ERR_UNKNOWN', '1');
+
+/* Login (section 5.2) */
+define('NOKIAUPLOAD_PROTOCOLVERSION', '1.00');
+define('NOKIAUPLOAD_ERR_AUTH', '2');
+
+/* New Directory (section 5.4) */
+define('NOKIAUPLOAD_ERR_DIRCREATE', '2');
+
+/* Upload (section 5.5) */
+define('NOKIAUPLOAD_ERR_NOSPACE', '2'); /* Not enough space left in server */
+define('NOKIAUPLOAD_ERR_TOOBIG', '3');  /* Too large image */
+
+/* Directory Listing (section 5.6) */
+define('NOKIAUPLOAD_ERR_DIRLIST', '2');
+
+/**
+ * Static helper methods for use by NokiaUpload views and controllers.
+ * @static
+ */
+class ImageUploadHelper {
+
+    /**
+     * Log user in.
+     *
+     * Gets username and password from request and checks that they are valid.  Returns an address
+     * for the remote storage capabilities query, name of the sessionId parameter and its value.  If
+     * remote storage capabilities are available returns them as well to save the client from one
+     * extra call.  Adds user into the mobile users group if s/he isn't yet a member of it.
+     *
+     * @return array ('success', 'rsurl', 'sessionidparam', 'sessionid', 'capabilities')
+     */
+    function doLogin() {
+	global $gallery;
+	$gallery->debug('### LoginHelper ###');
+
+	/* The default status */
+	$status = array();
+	$status['success'] = NOKIAUPLOAD_ERR_UNKNOWN;
+
+	list ($username, $password) =
+	    GalleryUtilities::getRequestVariablesNoPrefix('Username', 'Password');
+
+	list ($ret, $isDisabled) = GalleryCoreApi::isDisabledUsername($username);
+	if ($ret) {
+	    $status['success'] = NOKIAUPLOAD_ERR_AUTH;
+	    return $status;
+	}
+
+	list ($ret, $user) = GalleryCoreApi::fetchUserByUsername($username);
+	if ($ret) {
+	    $gallery->debug("ERROR: Couldn't fetch user by user name.\n" . $ret->getAsText());
+	    $status['success'] = NOKIAUPLOAD_ERR_AUTH;
+	}
+
+	if ($isDisabled || empty($user) || !$user->isCorrectPassword($password)) {
+	    $gallery->debug("ERROR: Couldn't authenticate user $username.");
+	    $status['success'] = NOKIAUPLOAD_ERR_AUTH;
+	}
+
+	if ($status['success'] == NOKIAUPLOAD_ERR_AUTH) {
+	    $event = GalleryCoreApi::newEvent('Gallery::FailedLogin');
+	    $event->setData(array('userName' => $username));
+	    list ($ret, $ignored) = GalleryCoreApi::postEvent($event);
+	    /* ignore errors, we're erroring out anyway */
+	    return $status;
+	} else {
+	    $gallery->debug('Username and password correct.');
+	    $gallery->setActiveUser($user);
+
+	    $event = GalleryCoreApi::newEvent('Gallery::Login');
+	    $event->setEntity($user);
+	    list ($ret, $ignored) = GalleryCoreApi::postEvent($event);
+	    if ($ret) {
+		$gallery->debug('ERROR: Unable to log in completely' . $ret->getAsText());
+		return $status;
+	    }
+	}
+
+	/* Add user to the mobile users' group if s/he isn't yet a member of it */
+	list ($ret, $groupId) =
+	    GalleryCoreApi::getPluginParameter('module', 'nokiaupload', 'id.mobileGroup');
+	if ($ret) {
+	    $gallery->debug("ERROR: Couldn't get Mobile Group id.\n" . $ret->getAsText());
+	    return $status;
+	}
+
+	list ($ret, $isMember) = GalleryCoreApi::isUserInGroup($user->getId(), $groupId);
+	if ($ret) {
+	    $gallery->debug("ERROR: GalleryCoreApi::isUserInGroup failed.\n" . $ret->getAsText());
+	    return $status;
+	}
+
+	if (!$isMember) {
+	    $ret = GalleryCoreApi::addUserToGroup($user->getId(), $groupId);
+	    if ($ret) {
+		$gallery->debug("ERROR: Couldn't add user to mobile group.\n" . $ret->getAsText());
+		return $status;
+	    }
+	    $gallery->debug("User $username added to mobile group.");
+	} else {
+	    $gallery->debug("User $username is already a member of mobile group.");
+	}
+
+	/* Generate URL for Remote Storage Capabilities query */
+	$generator =& $gallery->getUrlGenerator();
+	$rsurl = $generator->generateUrl(array('view' => 'nokiaupload.RemoteStorageCapabilities'),
+					 array('forceFullUrl' => true, 'htmlEntities' => false,
+					       'forceSessionId' => false));
+	$rsurl .= '&';  /* API specification requires URL to end with '&' (or '?'). */
+
+	/* Prepare our results */
+	$status['success'] = NOKIAUPLOAD_ERR_NOERR;
+	$status['rsurl'] = $rsurl;
+
+	/* Send also RS Capabilites if available */
+	$capabilities = ImageUploadHelper::getRSCapabilities();
+	if (!empty($capabilities)) {
+	    $status['capabilities'] = $capabilities;
+	}
+
+	return $status;
+    }
+
+    /**
+     * Remote Storage Capabilities.
+     *
+     * Returns the remote storage capabilities in "print-ready" form.  Currently supported are:
+     * 'Create New Directory', 'Upload' and 'Retrieve Directory Listing'.
+     *
+     * @return array remote storage capabilities
+     */
+    function getRSCapabilities() {
+	global $gallery;
+	$gallery->debug('### RemoteStorageCapabilitiesHelper ###');
+	$gallery->debug('Active userId is ' . $gallery->getActiveUserId());
+
+	/* Generate URLs for all supported API calls.  Specification requires URLs to end in '&' */
+	$urlGen =& $gallery->getUrlGenerator();
+
+	$createDirUrl = $urlGen->generateUrl(
+	    array('controller' => 'nokiaupload.NewDirectory'),
+	    array('forceFullUrl' => true, 'htmlEntities' => false, 'forceSessionId' => false));
+
+	$uploadUrl = $urlGen->generateUrl(
+	    array('controller' => 'nokiaupload.Upload'),
+	    array('forceFullUrl' => true, 'htmlEntities' => false, 'forceSessionId' => false));
+
+	$albumListUrl = $urlGen->generateUrl(
+	    array('controller' => 'nokiaupload.DirectoryListing'),
+	    array('forceFullUrl' => true, 'htmlEntities' => false, 'forceSessionId' => false));
+
+	$create = 'CreateDirURL=' . $createDirUrl . "&\r\n";
+	$upload = 'UploadURL=' . $uploadUrl . "&\r\n";
+	$dirList = 'DirListURL=' . $albumListUrl . "&\r\n";
+
+	return array($create, $upload, $dirList);
+    }
+
+
+    /**
+     * New Directory.
+     *
+     * Creates a subalbum under the album whose id client gives.  If no id is given then uses the
+     * 'id.uploadAlbum' module parameter as the parent id.  Returns the id of the new album.
+     *
+     * @return array ('success', 'id')
+     */
+    function createNewDirectory() {
+	global $gallery;
+	$gallery->debug('### NewDirectoryHelper ###');
+
+	/* Mandatory: DirName.  Optional: DirDesc, Pid. */
+	list ($albumNameOriginal, $description, $parentId) =
+	    GalleryUtilities::getRequestVariablesNoPrefix('DirName', 'DirDesc', 'Pid');
+
+	/* Set the default return value.  This will be changed only if we succeed. */
+	$status['success'] = NOKIAUPLOAD_ERR_DIRCREATE;
+
+	/* If the client didn't give the parent id we need to use our own upload album */
+	if (empty($parentId)) {
+	    $gallery->debug("Parent album id not given by client. Trying our own upload album.");
+	    list ($ret, $parentId) =
+		GalleryCoreApi::getPluginParameter('module', 'nokiaupload', 'id.uploadAlbum');
+	    if ($ret) {
+		$gallery->debug("ERROR: Couldn't get id.uploadAlbum parameter.\n" .
+				$ret->getAsText());
+		return $status;
+	    }
+	}
+
+	if (!is_numeric($parentId)) {
+	    $gallery->debug("Invalid parent album id.");
+	    return $status;
+	}
+
+	$gallery->debug("Using parent id $parentId");
+
+	/* Make sure we have right permissions */
+	list ($ret, $hasPermission) = GalleryCoreApi::hasItemPermission($parentId, 'core.view');
+	if ($ret) {
+	    $gallery->debug('ERROR: Failed to query view permissions.');
+	    return $status;
+	}
+	if (!$hasPermission) {
+	    $gallery->debug("ERROR: User has no view permission for item with $parentId.");
+	    return $status;
+	}
+	$ret = GalleryCoreApi::assertHasItemPermission($parentId, 'core.addAlbumItem');
+	if ($ret) {
+	    $gallery->debug("ERROR: No permission to add subalbum to album with id $parentId.");
+	    return $status;
+	}
+
+	list ($ret, $lockId) = GalleryCoreApi::acquireReadLock($parentId);
+	if ($ret) {
+	    $gallery->debug('ERROR: GalleryCoreApi::acquireReadLock failed.');
+	    return $status;
+	}
+
+	/* Validate album name */
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$albumName = $albumNameOriginal;
+	if (empty($albumName)) {
+	    $gallery->debug('ERROR: Album name missing.');
+	    return $status;
+	}
+        $albumName = $platform->legalizePathComponent($albumName);
+
+	/* Get new album instance */
+	list ($ret, $instance) =
+	    GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryAlbumItem');
+	if ($ret || !isset($instance)) {
+	    $gallery->debug("ERROR: GalleryCoreApi::newFactoryInstance failed.\n"
+			    . $ret->getAsText());
+	    return $status;
+	}
+
+	$ret = $instance->create($parentId, $albumName);
+	if ($ret) {
+	    if ($ret->getErrorCode() & ERROR_COLLISION) {
+		$gallery->debug("ERROR: Album named $albumName already exists.");
+	    }
+	    $gallery->debug("ERROR: Couldn't create album $albumName.\n" . $ret->getAsText());
+	    return $status;
+	}
+
+	$instance->setTitle($albumNameOriginal);
+	if (!empty($description)) {
+	    $instance->setDescription($description);
+	}
+	$ret = $instance->save();
+	if ($ret) {
+	    $gallery->debug("ERROR: Couldn't save album.\n" . $ret->getAsText());
+	    return $status;
+	}
+
+	/*
+	 * We don't allow other (mobile) users to add anything to our personal album.  If we get an
+	 * error here it doesn't really matter so we don't check for errors.
+	 */
+	list ($ret, $groupId) =
+	    GalleryCoreApi::getPluginParameter('module', 'nokiaupload', 'id.mobileGroup');
+	if (!$ret) {
+	    $ret = GalleryCoreApi::removeGroupPermission($instance->getId(), $groupId,
+							 'core.addDataItem', false);
+	    $ret = GalleryCoreApi::removeGroupPermission($instance->getId(), $groupId,
+							 'core.addAlbumItem', false);
+	}
+
+	$ret = GalleryCoreApi::releaseLocks($lockId);
+	if ($ret) {
+	    $gallery->debug('ERROR: GalleryCoreApi::releaseLocks failed, but album was created.');
+	}
+
+	/* Album has been created succesfully */
+	$status['success'] = NOKIAUPLOAD_ERR_NOERR;
+	$status['id'] = $instance->getId();
+
+	$gallery->debug("Created album $albumName (id " . $status['id'] . ").");
+
+	return $status;
+    }
+
+
+    /**
+     * Upload a picture to Gallery from a mobile phone.
+     *
+     * Returns the available space on the server after the upload.  Currently this value is (a
+     * random) 10 000 000 bytes.
+     *
+     * @return array ('success', 'spaceleft')
+     */
+    function doUpload() {
+	global $gallery;
+	$gallery->debug('### UploadHelper ###');
+
+	/* Default status.  Changes only if everything works out. */
+	$status = array('success' => NOKIAUPLOAD_ERR_UNKNOWN);
+
+	/*
+	 * We must specify how many bytes are still available for the current user.  Use a big
+	 * (random) number or define a real limit if you wish.  (I don't know what the phone does
+	 * with this value, probably nothing.)
+	 */
+	$status['spaceleft'] = 10000000;
+
+	/* Mandatory: ImageData */
+	$file = GalleryUtilities::getFile('ImageData', false);
+
+	/* Mandatory: Filename, MimeType, DirId.  Optional: Caption, Desc, Source, Keyword. */
+	/* TODO consider including Source, Keyword in the description */
+	list ($itemName, $mimeType, $albumId, $summary, $description) =
+	    GalleryUtilities::getRequestVariablesNoPrefix('Filename', 'MimeType', 'DirId',
+							  'Caption', 'Desc');
+
+	if (empty($file) || empty($itemName) || empty($mimeType) ||
+		empty($albumId) || !is_numeric($albumId)) {
+	    $gallery->debug('ERROR: Missing required parameter.');
+	    return $status;
+	}
+
+	if ($file['size'] == 0 || $file['tmp_name'] == 'none') {
+	    $gallery->debug('ERROR: File is too big.');
+	    $status['success'] = NOKIAUPLOAD_ERR_TOOBIG;
+	    return $status;
+	}
+
+	list ($ret, $mimeType) = GalleryCoreApi::getMimeType($file['tmp_name'], $mimeType);
+	if ($ret) {
+	    $gallery->debug('ERROR: Failed to query mime type.');
+	    return $status;
+	}
+
+	list ($ret, $hasPermission) = GalleryCoreApi::hasItemPermission($albumId, 'core.view');
+	if ($ret) {
+	    $gallery->debug('ERROR: Failed to query view permissions.');
+	    return $status;
+	}
+	if (!$hasPermission) {
+	    $gallery->debug("ERROR: User has no view permission for item with $albumId.");
+	    return $status;
+	}
+
+	/* Do we have permission to add pictures to this album? */
+	$ret = GalleryCoreApi::assertHasItemPermission($albumId, 'core.addDataItem');
+	if (!$ret) {
+	    /* Get lock to album */
+	    list ($ret, $lockId) = GalleryCoreApi::acquireReadLock($albumId);
+	    if (!$ret) {
+		$title = GalleryUtilities::getFileBase($itemName);
+		list ($ret, $newItem) = GalleryCoreApi::addItemToAlbum($file['tmp_name'],
+								       $itemName,
+								       $title,
+								       $summary,
+								       $description,
+								       $mimeType,
+								       $albumId);
+		if (!$ret) {
+		    $status['success'] = NOKIAUPLOAD_ERR_NOERR;
+
+		    GalleryCoreApi::releaseLocks($lockId);
+		}
+	    }
+	}
+
+	/* If there was an error at some point write that to log */
+	if ($ret) {
+	    $gallery->debug("ERROR: Something went wrong while trying to add new item.\n"
+	    		    . $ret->getAsText());
+	}
+
+	return $status;
+    }
+
+
+    /**
+     * Directory listing.
+     *
+     * Returns all albums where user has core.addDataItem permission.
+     *
+     * @return array ('success', 'albums' => array (array('id', 'parentid', 'name'), ..))
+     */
+    function getDirectoryListing() {
+	global $gallery;
+	$gallery->debug('### DirectoryListingHelper ###');
+	$gallery->debug('Active userId is ' . $gallery->getActiveUserId());
+
+	/* Change the status to no error only if everything succeeds */
+	$status['success'] = NOKIAUPLOAD_ERR_DIRLIST;
+
+	/* Get all album ids where we have addDataItem permission */
+	list ($ret, $albumIds) = GalleryCoreApi::fetchAllItemIds(
+	    'GalleryAlbumItem', array('core.addDataItem', 'core.view'));
+	if ($ret || count($albumIds) < 1) {
+	    $gallery->debug("ERROR: No albums with addDataItem permission.\n"
+	    	    . ($ret ? $ret->getAsText() : ''));
+	    return $status;
+	}
+
+	/* Load albums and get their names */
+	list ($ret, $albums) = GalleryCoreApi::loadEntitiesById($albumIds, 'GalleryAlbumItem');
+	if ($ret) {
+	    $gallery->debug(
+		"ERROR: GalleryCoreApi::loadEntitiesById failed.\n" . $ret->getAsText());
+	    return $status;
+	}
+	foreach ($albums as $album) {
+	    $id = $album->getId();
+	    $parentId = $album->getParentId();
+	    $name = $album->getTitle();
+	    if (empty($name)) {
+		/* If album doesn't have a name set use the file system name */
+		$name = $album->getPathComponent();
+	    }
+	    GalleryUtilities::unsanitizeInputValues($name, false);
+	    $albumData[] = array('id' => $id, 'parentid' => $parentId, 'name' => $name);
+	}
+
+	$status['albums'] = $albumData;
+	$status['success'] = NOKIAUPLOAD_ERR_NOERR;
+
+	return $status;
+    }
+
+    /*
+     * Create new group for mobile phone users.  All users who try to use the Nokia Image Uploader
+     * module will be added to this group in LoginController.
+     * @param string $name name for group
+     * @return GalleryStatus a status code
+     *         int id of the Mobile user group
+     */
+    function createMobileUserGroup($name) {
+	list ($ret, $group) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryGroup');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (!isset($group)) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	}
+
+	$ret = $group->create($name);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$ret = $group->save();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$ret = GalleryCoreApi::setPluginParameter(
+				  'module', 'nokiaupload', 'id.mobileGroup', $group->getId());
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $group->getId());
+    }
+
+    /*
+     * Create new album for uploading images.
+     * @param string $title title for album
+     * @param int $parentId id of parent album
+     * @return GalleryStatus a status code
+     *         int id of the upload album
+     */
+    function createUploadAlbum($title, $parentId) {
+	global $gallery;
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'nokiaupload');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $album) =
+	    GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryAlbumItem');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (!isset($album)) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	}
+
+	/* Lock the parent album */
+	list ($ret, $lockId) = GalleryCoreApi::acquireReadLock($parentId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Choose a name for the album. Hopefully it's unique */
+	$albumName = $module->translate('nokia-image-upload-album');
+	$ret = $album->create($parentId, $albumName);
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return array($ret, null);
+	}
+
+	/* Set the album info and save it */
+	$urlGen =& $gallery->getUrlGenerator();
+	$url = $urlGen->generateUrl(array('controller' => 'nokiaupload.Login'),
+				    array('forceFullUrl' => true, 'forceSessionId' => false,
+					  'useAuthToken' => false));
+
+	$summary = $module->translate(
+	    'To upload to this album you need Image Uploader enabled mobile phone '
+	    . '(e.g. Nokia 3650 and 6600). See album description for more details.');
+	$description = $module->translate(
+	    'You can upload images to this album from your Image Uploader enabled mobile phone '
+	    . '(eg. Nokia 3650 and 6600) using the phone\'s built-in Image Uploader.  '
+	    . 'New albums will be created under this folder.  Web address is ') . "$url\n"
+	    . $module->translate('Username and Password are your Gallery 2 username and password.');
+
+	$album->setTitle($title);
+	$album->setSummary($summary);
+	$album->setDescription($description);
+
+	$ret = $album->save();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return array($ret, null);
+	}
+
+	$ret = GalleryCoreApi::releaseLocks($lockId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$ret = $module->setParameter('id.uploadAlbum', $album->getId());
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $album->getId());
+    }
+
+    /**
+     * Set permissions for the mobile upload album.  Only members of Mobile Users group can add data
+     * and albums to Phone Uploads album.  Admins can do everything and other users can only view
+     * items.  First we remove all possible inherited permissions and then add only the permissions
+     * we want.
+     * @param int $albumId
+     * @param int $groupId id of mobile users group
+     * @return GalleryStatus a status code
+     */
+   function setAlbumPermissions($albumId, $groupId) {
+	/* Few ids that we will need */
+	list ($ret, $everybodyId) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'id.everybodyGroup');
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $adminGroupId) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Reset album permissions */
+	$ret = GalleryCoreApi::removeItemPermissions($albumId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Admin permissions */
+	$ret = GalleryCoreApi::addGroupPermission($albumId, $adminGroupId, 'core.all');
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Mobile user group permissions */
+	$ret = GalleryCoreApi::addGroupPermission($albumId, $groupId, 'core.addDataItem');
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::addGroupPermission($albumId, $groupId, 'core.addAlbumItem');
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Everybody else can only view the items */
+	$ret = GalleryCoreApi::addGroupPermission($albumId, $everybodyId, 'core.viewAll');
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Write the contents of _POST and _GET to debug log.
+     * @param string $message optional message
+     */
+    function logRequest($message='') {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("##### $message ### " . strftime('%Y-%m-%d %T') . ' #####');
+	    $gallery->debug('POST is: ');
+	    $gallery->debug_r($_POST);
+	    $gallery->debug('GET is: ');
+	    $gallery->debug_r($_GET);
+	}
+    }
+}
+?>

@@ -1,0 +1,271 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * RewriteParser class.  Parsers are stored in modules/rewrite/classes/parsers/<parserId> and
+ * require a parser.inc file in that directory.
+ *
+ * @package Rewrite
+ * @subpackage Classes
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class RewriteParser {
+
+    /**
+     * The id of this parser
+     *
+     * @var string parser id
+     * @access private
+     */
+    var $_parserId;
+
+    /**
+     * The name of this URL generator class
+     *
+     * @var string URL generator class name
+     * @access private
+     */
+    var $_urlGeneratorId;
+
+    /**
+     * The type of this parser.  Can be either 'preGallery' or 'inGallery'
+     *
+     * @var string URL generator class name
+     * @access private
+     */
+    var $_type;
+
+    /**
+     * Saves the active rewrite rules.  This needs to be implemented by the specific plugin.  It
+     * needs to save two rewrite params, activeRules and shortUrls.  activeRules is just a
+     * serialized array of the given activeRules and shortUrls is returned by
+     * RewriteHelper::parseActiveRules().  It returns REWRITE_STATUS_OK on success.
+     *
+     * @param array $activeRules (if null, or not set, it defaults to the current rules)
+     * @param GalleryModule $upgradeModule (optional)
+     * @return array GalleryStatus a status code
+     *               int rewrite status code (REWRITE_STATUS_OK on success)
+     *               array string module (on error)
+     *                     int rule id (on error)
+     */
+    function saveActiveRules($activeRules=null, $upgradeModule=null) {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null, null);
+    }
+
+    /**
+     * Saves list of hosts Gallery allows as referrer and if Gallery should allow an empty referrer.
+     * This needs to be implemented by the specific plugin.  It needs to save a serialized array of
+     * the hosts and the value of allowEmptyReferer to the params accessList and allowEmptyReferer.
+     *
+     * @param array $accessList access list of referer hosts
+     * @param boolean $allowEmptyReferer true if Gallery should allow empty referrer
+     * @return array GalleryStatus a status code
+     *               int rewrite status code (REWRITE_STATUS_OK on success)
+     */
+    function saveAccessList($accessList, $allowEmptyReferer) {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+    }
+
+    /**
+     * By default there's nothing to configure, so we return success.
+     *
+     * @return array GalleryStatus a status code
+     *               boolean true if this parser needs configuration
+     */
+    function needsConfiguration() {
+	return array(null, false);
+    }
+
+    /**
+     * This function is called when new rules are saved and by rewrite.AdminRewrite to know if this
+     * rule should be displayed.  If the parser overrides this function it needs to call this (the
+     * parent).  It also verifies that locked rules are saved with the original pattern.  We perform
+     * a sanity check to minimize possible conflicts and bad regular expressions.
+     *
+     * @param array $rule rewrite rule
+     * @param array $activeRule (optional) array ('pattern' => string pattern) set to the custom
+     *        active rule when called from saveActiveRules
+     * @return boolean true if the rule is valid
+     */
+    function isValidRule($rule, $activeRule=null) {
+	if (isset($rule['parser']) && $rule['parser'] != $this->getParserType()) {
+	    return false;
+	}
+
+	/* Only supported by preGallery parsers */
+	if (isset($rule['conditions']) && $this->getParserType() != 'preGallery') {
+	    return false;
+	}
+
+	/* Only supported by preGallery parsers */
+	if (isset($rule['restrict']) && $this->getParserType() != 'preGallery') {
+	    return false;
+	}
+
+	if (isset($activeRule) && (isset($activeRule['pattern']) != isset($rule['pattern']))) {
+	    return false;
+	}
+
+	if (isset($activeRule['pattern']) && isset($rule['pattern']) && isset($rule['locked'])
+		&& $activeRule['pattern'] != $rule['pattern']) {
+	    return false;
+	}
+
+	if (isset($activeRule['pattern'])
+		&& !preg_match('/^[a-zA-Z0-9\/\.\%\-]+$/', $activeRule['pattern'])) {
+	    return false;
+	}
+
+	return true;
+    }
+
+    /**
+     * Returns translated error message, called from AdminRewrite when an unsucsessful save has been
+     * made.  A valid $code is anything that $this->saveActiveRules would return if an error occurs.
+     *
+     * @param int $code rewrite status code
+     * @param RewriteModule $rewriteModule (optional)
+     * @return array GalleryStatus a status code
+     *               string translated error message
+     */
+    function getErrorMessage($code, $rewriteModule=null) {
+	if (!isset($rewriteModule)) {
+	    list ($ret, $rewriteModule) = GalleryCoreApi::loadPlugin('module', 'rewrite');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	switch ($code) {
+	case REWRITE_STATUS_BAD_KEYWORD:
+	    return array(null,
+		$rewriteModule->translate('Bad keyword.'));
+	case REWRITE_STATUS_DUPE_SHORT_URL:
+	    return array(null,
+		$rewriteModule->translate('Duplicate short URL rule.'));
+	case REWRITE_STATUS_INVALID_PATTERN:
+	    return array(null,
+		$rewriteModule->translate('Invalid pattern.'));
+	case REWRITE_STATUS_EMPTY_VALUE:
+	    return array(null,
+		$rewriteModule->translate('Empty configuration value.'));
+	}
+
+	return array(null, null);
+    }
+
+    /**
+     * Displays the test results if the template variable $TestResults.body is set.  It should be a
+     * Gallery base dir relative path.
+     *
+     * @param GalleryTemplate $template
+     * @param array $form the form values
+     * @return GalleryStatus a status code
+     */
+    function loadTestResultsTemplate(&$template, &$form) {
+	return null;
+    }
+
+    /**
+     * Handles the submitted form and should save any settings (ie. forced tests).
+     *
+     * @param array $form the form values
+     * @return array GalleryStatus a status code
+     *               array error codes
+     *               array status codes
+     */
+    function handleTestResultsRequest($form) {
+	return array(null, array(), array());
+    }
+
+    /**
+     * Displays the parser configuration if the template variable $AdminParser.body is set.  It
+     * should be a Gallery base dir relative path.
+     *
+     * @param GalleryTemplate $template
+     * @param array $form the form values
+     * @return GalleryStatus a status code
+     */
+    function loadAdminParserTemplate(&$template, &$form) {
+	return null;
+    }
+
+    /**
+     * Handles the submitted form and should save the settings.
+     *
+     * @param array $form the form values
+     * @return array GalleryStatus a status code
+     *               array error codes
+     *               array status codes
+     */
+    function handleAdminParserRequest($form) {
+	return array(null, array(), array());
+    }
+
+    /**
+     * @see RewriteApi::needsEmbedConfig
+     */
+    function needsEmbedConfig() {
+	return array(null, false);
+    }
+
+    /**
+     * @see RewriteApi::fetchEmbedConfig
+     */
+    function fetchEmbedConfig() {
+	return array(null, array());
+    }
+
+    /**
+     * @see RewriteApi::saveEmbedConfig
+     */
+    function saveEmbedConfig($params) {
+	return array(null, REWRITE_STATUS_OK, null);
+    }
+
+    /* Getters and setters below */
+
+    function _setParserId($parserId) {
+	$this->_parserId = $parserId;
+    }
+
+    function getParserId() {
+	return $this->_parserId;
+    }
+
+    function _setUrlGeneratorId($urlGenerator) {
+	$this->_urlGeneratorId = $urlGenerator;
+    }
+
+    function getUrlGeneratorId() {
+	return $this->_urlGeneratorId;
+    }
+
+    function _setParserType($parserType) {
+	$this->_type = $parserType;
+    }
+
+    function getParserType() {
+	return $this->_type;
+    }
+}
+?>

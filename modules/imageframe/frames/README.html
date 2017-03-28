@@ -1,0 +1,82 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><meta http-equiv="Content-Type" content="text/html; charset=us-ascii" />
+   <title>README: Gallery 2 Image Frames</title>
+      <style type="text/css">
+	<!--
+	html { font-family: "Lucida Grande", Verdana, Arial, sans-serif; font-size: 62.5%; }
+	body { font-size: 1.2em; margin: 10px 28px; }
+	p { line-height: 1.2em; }
+	h2 { font-family: "Gill Sans", Verdana, Arial, sans-serif; font-size: 1.5em;
+	     color: #333; border-bottom: 1px solid #ddd; margin: 0; padding: 0.5em 0 0.15em 0; }
+	ul, ol { margin-top: 0.7em; }
+	ol li { padding: 2px 0; line-height: 1.4em; }
+	hr { clear: both }
+	img { border: none; }
+	.fineprint { font-size: .8em; color: #ccc; }
+	.grid { float: left; margin: 0 28px 6px 0; border-spacing: 3px;
+		text-align: center; font-size: 90% }
+	.grid td { background-color: lightblue; padding: 2px; }
+	.grid td.image { font-size: 150%; width: 150px; height: 120px; }
+	.grid td.W { width: 25px; }
+	.grid td.H { height: 15px; }
+	.grid td.T { width: 100px; }
+	.grid td.L { height: 90px; }
+	//-->
+      </style>
+</head>
+<body>
+    <h2> Gallery 2 Image Frames </h2>
+
+    <table class="grid">
+    <tr><td>TL</td><td class="W">TTL</td><td class="T">TT</td><td class="W">TTR</td><td>TR</td></tr>
+    <tr><td class="H">LLT</td><td rowspan="3" colspan="3" class="image">IMAGE</td>
+        <td class="H">RRT</td></tr>
+    <tr><td class="L">LL</td><td class="L">RR</td></tr>
+    <tr><td class="H">LLB</td><td class="H">RRB</td></tr>
+    <tr><td>BL</td><td class="W">BBL</td><td class="T">BB</td><td class="W">BBR</td><td>BR</td></tr>
+    </table>
+
+    <p>
+      To build your own image frame:
+    </p>
+    <ol>
+      <li> Examine the diagram at left and the <i>frame.inc</i> files for existing image
+           frames to understand how the frames are constructed.  It is not required to use
+           all cells in the diagram.  The TT/BB/LL/RR cells repeat their image to fill
+           available space; all other cells show the image just once. </li>
+      <li> Create a new directory here (under modules/imageframe/frames) for your image frame. </li>
+      <li> Place your images in that directory. </li>
+      <li> Copy an existing <i>frame.inc</i> file into that directory and modify it to
+           work with your images and sizes.  The name of the image frame is also defined
+           in this file. </li>
+      <li> The new image frame should now appear in the list of choices for any theme that
+           uses image frames. </li>
+    </ol>
+
+    <p>
+      Note: you can force a frame to be square: the image/thumb retains it's aspect
+      ratio centered in a square frame ('square' =&gt; true in frame.inc). The holes
+      around non square thumbs left/right or top/bottom are filled with the background image
+      given in 'imageCC'. That image is aligned center and fills all available space.
+      See <i>slidesquare/frame.inc</i> and <i>notebooksquare/frame.inc</i> for examples.
+    </p>
+
+    <p>
+      Note: you can also create a simple image frame using only CSS on the image;
+      see <i>dots/frame.inc</i> for an example.
+    </p>
+
+    <hr />
+
+    <a href="http://validator.w3.org/check?uri=referer">
+      <img style="border:none" src="../../../images/xhtml10.png" height="15" width="80"
+           alt="This page is valid XHTML 1.0"/>
+    </a>
+
+    <p class="fineprint">
+      $Id: README.html 15342 2006-12-01 21:14:46Z andy_st $
+    </p>
+</body>
+</html>

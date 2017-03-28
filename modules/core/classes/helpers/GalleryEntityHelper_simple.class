@@ -1,0 +1,167 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper class for GalleryEntities
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryEntityHelper_simple {
+
+    /**
+     * @see GalleryCoreApi::loadEntitiesById
+     */
+    function loadEntitiesById($ids, $requiredEntityType=null) {
+	global $gallery;
+	$gallery->guaranteeTimeLimit(5);
+
+	if (empty($ids)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	if (is_array($ids)) {
+	    $returnArray = true;
+	} else {
+	    $returnArray = false;
+	    $ids = array($ids);
+	}
+
+	/* Grab what we can from the cache and make up a list of what's missing */
+	$cached = $missing = $onLoad = array();
+	foreach ($ids as $id) {
+	    $cacheKey = "GalleryEntityHelper::loadEntitiesById($id)";
+	    if (GalleryDataCache::containsKey($cacheKey)) {
+		$cached[$id] = GalleryDataCache::get($cacheKey);
+	    } else {
+		$data =& GalleryDataCache::getFromDisk(array('type' => 'entity', 'itemId' => $id));
+		if (isset($data)) {
+		    $cached[$id] =& $data;
+		} else {
+		    $missing[] = $id;
+		}
+		$onLoad[] = $id;
+	    }
+	}
+
+	if (!empty($missing)) {
+	    /* Get our storage object */
+	    $storage =& $gallery->getStorage();
+
+	    /* Load the entities from our persistent store */
+	    list ($ret, $missing) = $storage->loadEntities($missing);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	/* Move the new entities into the cache */
+	foreach ($missing as $entity) {
+	    $id = $entity->getId();
+	    list ($ret, $classFile) = $entity->getClassFile();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    GalleryDataCache::putToDisk(array('type' => 'entity', 'itemId' => $id),
+					$entity, array($classFile));
+	    $cached[$id] = $entity;
+	}
+
+	/* Let each entity do its post-load procedure */
+	foreach ($onLoad as $id) {
+	    $ret = $cached[$id]->onLoad();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    GalleryDataCache::put("GalleryEntityHelper::loadEntitiesById($id)", $cached[$id]);
+	}
+
+	/* Build up the results from the cache */
+	$results = array();
+	foreach ($ids as $id) {
+	    $results[] = $cached[$id];
+	}
+
+	/* Assert the entity-type if requested */
+	if ($requiredEntityType && $requiredEntityType != 'GalleryEntity') {
+	    if (!is_array($requiredEntityType)) {
+		$requiredEntityType = array($requiredEntityType);
+	    }
+
+	    /*
+	     * Assume entityType and class-names correspond 1:1 and use isA rather than
+	     * describeEntity since we'd need to build a class-hierarchy tree from entityInfo which
+	     * we get for free with isA.
+	     */
+	    foreach ($results as $entity) {
+		$match = false;
+		foreach ($requiredEntityType as $requiredType) {
+		    if (GalleryUtilities::isA($entity, $requiredType)) {
+			$match = true;
+			break;
+		    }
+		}
+		if (!$match) {
+		    $errorMessage =
+			sprintf('Entity with id [%d] is a [%s] and does not extend the required '
+				. 'entity type [%s].', $entity->getId(), $entity->getEntityType(),
+				implode(', ', $requiredEntityType));
+		    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT, __FILE__, __LINE__,
+						       $errorMessage),
+				 null);
+		}
+	    }
+	}
+
+	if (!$returnArray) {
+	    $results = $results[0];
+	}
+
+	return array(null, $results);
+    }
+
+    /**
+     * @see GalleryCoreApi::loadEntityByExternalId
+     */
+    function loadEntityByExternalId($externalId, $entityType) {
+	global $gallery;
+
+	list ($ret, $results) = GalleryCoreApi::getMapEntry('ExternalIdMap',
+	    array('entityId'), array('externalId' => $externalId, 'entityType' => $entityType));
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (!($result = $results->nextResult())) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT, __FILE__, __LINE__,
+					      "$externalId $entityType"), null);
+	}
+
+	list ($ret, $entity) =
+	    GalleryEntityHelper_simple::loadEntitiesById($result[0], $entityType);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $entity);
+    }
+}
+?>

@@ -1,0 +1,160 @@
+  <h1><?php print _('Upgrade Plugins') ?></h1>
+
+  <script type="text/javascript">
+    // <![CDATA[
+    function checkAll(newValue) {
+	for (var i = 0; i < document.forms[0].length; i++) {
+	    var element = document.forms[0].elements[i];
+	    if (element.type == 'checkbox' &&
+		element.name.substr(0,6) == 'module' && !element.disabled) {
+		element.checked = newValue;
+	    }
+	}
+    }
+    // ]]>
+  </script>
+
+  <p>
+    <?php print _('The following plugins can be automatically upgraded for you.  If you choose not to upgrade them now, you may experience problems with your Gallery.   You can always upgrade or deactivate them on the Site Administration page, or return to this page later so any decision you make here is not permanent.') ?>
+  </p>
+
+  <?php if (!empty($templateData['deactivatedPlugins'])): ?>
+    <div class="warning">
+      <h2> <?php print _('Deactivated Plugins') ?> </h2>
+      <div>
+	<?php print _('The following plugins were active, but they are missing or incompatible with your current version of Gallery.  They have been deactivated.  Install the latest version of these plugins to reactivate them.') ?>
+      </div>
+      <div>
+	<ul>
+	  <?php
+	  foreach ($templateData['deactivatedPlugins'] as $pluginType => $list) {
+	      $pluginType = ($pluginType == 'module') ? _('Module') : _('Theme');
+	      foreach ($list as $pluginId) {
+		  print "<li> $pluginType: $pluginId </li>";
+	      }
+	  }
+	  ?>
+	</ul>
+      </div>
+    </div>
+  <?php endif; ?>
+
+  <form method="post" action="<?php generateUrl('index.php?step=' . $stepNumber) ?>">
+    <table class="modules">
+      <tr style="background-color: #ccc">
+        <th>
+          &nbsp;
+        </th>
+        <th>
+          <?php print _("Name") ?>
+        </th>
+        <th>
+          <?php print _("Current") ?>
+        </th>
+        <th>
+          <?php print _("New") ?>
+        </th>
+        <th>
+          <?php print _("Description") ?>
+        </th>
+      </tr>
+      <?php $upgradableCount = 0;
+        foreach ($templateData['groupedModules'] as $group => $modules): ?>
+        <tr style="background-color: #fff">
+          <td colspan="4"><h3><?php print $templateData['groupLabel'][$group] ?></h3></td>
+        </tr>
+        <?php $counter = 0; ?>
+        <?php foreach ($modules as $id => $module): ?>
+        <?php $isUpgradeable = isset($templateData['pluginIsUpgradeable']['module'][$id]) ? $templateData['pluginIsUpgradeable']['module'][$id] : $templateData['pluginIsUpgradeable']['theme'][$id]; ?>
+        <?php $isCompatible = isset($templateData['pluginIsCompatible']['module'][$id]) ? $templateData['pluginIsCompatible']['module'][$id] : $templateData['pluginIsCompatible']['theme'][$id]; ?>
+        <tr<?php if ($counter % 2 == 0) print ' style="background-color: #eee; padding: 0px; margin: 0px;"' ?>>
+          <td>
+            <input type="checkbox" id="plugin_<?php print $id ?>"
+              name="<?php print ($templateData['groupType'][$group] . '[' . $id . ']')?>"
+      	<?php if ($isUpgradeable): ?>
+      	  checked="checked"
+      	<?php $upgradableCount++; else: ?>
+      	  disabled="disabled"
+      	<?php endif; ?>
+            />
+          </td>
+          <td>
+            <?php if (!$isUpgradeable): ?> <span class="disabled"> <?php endif; ?>
+            <label for="plugin_<?php print $id ?>">
+      	<?php print $module->getName() ?>
+            </label>
+            <?php if (!$isUpgradeable): ?> </span> <?php endif; ?>
+          </td>
+          <td>
+            <?php if (!$isUpgradeable): ?> <span class="disabled"> <?php endif; ?>
+            <?php print $templateData['currentVersion'][$id]; ?>
+            <?php if (!$isUpgradeable): ?> </span> <?php endif; ?>
+          </td>
+          <td>
+            <?php if (!$isUpgradeable): ?> <span class="disabled"> <?php endif; ?>
+            <?php print $module->getVersion() ?>
+            <?php if (!$isUpgradeable): ?> </span> <?php endif; ?>
+          </td>
+          <td>
+            <?php if (!$isUpgradeable): ?> <span class="disabled"> <?php endif; ?>
+            <?php print $module->getDescription() ?>
+            <?php if (!$isUpgradeable): ?> </span> <?php endif; ?>
+
+	    <?php if (!$isCompatible): ?>
+	    <h2 class="error"><?php print _('Incompatible with this version of Gallery'); ?></h2>
+	    <?php endif; ?>
+          </td>
+        </tr>
+        <?php $counter++; ?>
+        <?php endforeach; ?>
+      <?php endforeach; ?>
+      <?php if ($templateData['anyUpgradeable']): ?>
+      <tr style="background-color: #ccc">
+        <td>
+          <input type="checkbox" onclick="checkAll(this.checked);" checked="checked"/>
+        </td>
+        <td colspan="4">
+          <?php print _("(un)check all") ?>
+          <input type="hidden" name="step" value="<?php print $currentStep->getStepNumber() ?>"/>
+          <input type="hidden" name="upgrade" value="<?php print $upgradableCount ?>"/>
+        </td>
+      </tr>
+      <?php endif; ?>
+    </table>
+  </form>
+
+  <?php if (!empty($templateData['errors'])): ?>
+  <?php foreach ($templateData['errors'] as $error): ?>
+  <h3 class="error">
+    <?php print $error; ?>
+  </h3>
+  <?php endforeach; ?>
+  <?php endif; ?>
+
+  <?php if (!empty($templateData['stackTrace'])): ?>
+  <h2>
+    <?php print _("Stack Trace:") ?>
+  </h2>
+  <div class="stack_trace">
+    <?php print $templateData['stackTrace']; ?>
+  </div>
+  <?php endif; ?>
+
+  <?php if (!empty($templateData['debug'])): ?>
+  <h2>
+    <?php print _("Debug Output:") ?>
+  </h2>
+  <div class="debug">
+    <pre>
+    <?php print $templateData['debug']; ?>
+    </pre>
+  </div>
+  <?php endif; ?>
+
+  <?php if ($templateData['anyUpgradeable']): ?>
+  <div class="go">
+    <?php $nextStep = $stepNumber + 1 ?>
+    <a href="<?php generateUrl('index.php?step=' . $nextStep) ?>" class="btn continue"><i></i><span><span></span><i></i><?php printf(_('Skip Upgrade and Continue to Step %d&raquo;'), $nextStep); ?></span></a>
+    <a href="javascript:document.forms[0].submit();" class="btn continue"><i></i><span><span></span><i></i><?php print _('Upgrade Selected Plugins') ?></span></a>
+  </div>
+  <?php endif; ?>

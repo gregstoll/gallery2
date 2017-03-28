@@ -1,0 +1,251 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper functions for ItemAttributes map
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryItemAttributesHelper_advanced {
+
+    /**
+     * @see GalleryCoreApi::rebalanceChildOrderWeights
+     */
+    function rebalanceChildOrderWeights($parentItemId, $spacing=1000) {
+	global $gallery;
+
+	list ($ret, $parentItem) = GalleryCoreApi::loadEntitiesById($parentItemId, 'GalleryItem');
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $ids) = GalleryCoreApi::fetchChildItemIdsIgnorePermissions($parentItem);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$current = $spacing;
+	foreach ($ids as $id) {
+	    $gallery->guaranteeTimeLimit(5);
+	    $ret = GalleryItemAttributesHelper_advanced::setOrderWeight($id, $current);
+	    if ($ret) {
+		return $ret;
+	    }
+	    $current += $spacing;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchExtremeChildWeight
+     */
+    function fetchExtremeChildWeight($itemId, $direction) {
+	global $gallery;
+
+	$aggregate = ($direction == LOWER_WEIGHT) ? 'MIN' : 'MAX';
+
+	$query = '
+	SELECT
+	  ' . $aggregate . '([GalleryItemAttributesMap::orderWeight])
+	FROM
+	  [GalleryItemAttributesMap], [GalleryChildEntity]
+	WHERE
+	  [GalleryChildEntity::id] = [GalleryItemAttributesMap::itemId]
+	  AND
+	  [GalleryChildEntity::parentId] = ?
+	';
+	list ($ret, $searchResults) = $gallery->search($query, array((int)$itemId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$result = $searchResults->nextResult();
+	$weight = isset($result[0]) ? (int)$result[0] : 0;
+
+	return array(null, $weight);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchNextItemWeight
+     */
+    function fetchNextWeight($itemId, $direction) {
+	global $gallery;
+
+	if ($direction == LOWER_WEIGHT) {
+	    $aggregate = 'MAX';
+	    $comparison = '<';
+	} else {
+	    $aggregate = 'MIN';
+	    $comparison = '>';
+	}
+
+	$query = '
+	SELECT
+	  ' . $aggregate . '([GalleryItemAttributesMap=2::orderWeight])
+	FROM
+	  [GalleryItemAttributesMap=1], [GalleryItemAttributesMap=2],
+	  [GalleryChildEntity=1], [GalleryChildEntity=2]
+	WHERE
+	  [GalleryChildEntity=1::id] = ?
+	  AND
+	  [GalleryChildEntity=1::parentId] = [GalleryChildEntity=2::parentId]
+	  AND
+	  [GalleryChildEntity=1::id] = [GalleryItemAttributesMap=1::itemId]
+	  AND
+	  [GalleryChildEntity=2::id] = [GalleryItemAttributesMap=2::itemId]
+	  AND
+	  [GalleryItemAttributesMap=2::orderWeight] ' .
+		$comparison . ' [GalleryItemAttributesMap=1::orderWeight]
+	';
+	list ($ret, $searchResults) = $gallery->search($query, array((int)$itemId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$result = $searchResults->nextResult();
+	$weight = isset($result[0]) ? (int)$result[0] : null;
+
+	return array(null, $weight);
+    }
+
+    /**
+     * @see GalleryCoreApi::setItemViewCount
+     */
+    function setViewCount($itemId, $count) {
+	$ret = GalleryCoreApi::updateMapEntry(
+	    'GalleryItemAttributesMap',
+	    array('itemId' => $itemId),
+	    array('viewCount' => $count));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::setParentSequence
+     */
+    function setParentSequence($itemId, $parentSequence) {
+	if (empty($parentSequence)) {
+	    $parentSequence = '';
+	} else {
+	    $parentSequence = join('/', $parentSequence) . '/';
+	}
+
+	$ret = GalleryCoreApi::updateMapEntry(
+	    'GalleryItemAttributesMap',
+	    array('itemId' => $itemId),
+	    array('parentSequence' => $parentSequence));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::createItemAttributes
+     */
+    function createItemAttributes($itemId, $parentSequence) {
+	if (empty($parentSequence)) {
+	    $parentSequence = '';
+	} else {
+	    $parentSequence = join('/', $parentSequence) . '/';
+	}
+	$ret = GalleryCoreApi::addMapEntry(
+	    'GalleryItemAttributesMap',
+	    array('itemId' => $itemId,
+		  'viewCount' => 0,
+		  'orderWeight' => 0,
+		  'parentSequence' => $parentSequence));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::removeItemAttributes
+     */
+    function removeItemAttributes($itemId) {
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'GalleryItemAttributesMap', array('itemId' => $itemId));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::setItemOrderWeight
+     */
+    function setOrderWeight($itemId, $orderWeight) {
+	$ret = GalleryCoreApi::updateMapEntry(
+	    'GalleryItemAttributesMap',
+	    array('itemId' => $itemId),
+	    array('orderWeight' => $orderWeight));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::updateParentSequence
+     */
+    function updateParentSequence($oldParentSequence, $newParentSequence) {
+	global $gallery;
+
+	$oldParentSequence = join('/', $oldParentSequence) . '/';
+	$newParentSequence = join('/', $newParentSequence) . '/';
+
+	$storage =& $gallery->getStorage();
+	list ($ret, $substring) = $storage->getFunctionSql('SUBSTRING', array(
+		  '[GalleryItemAttributesMap::parentSequence]', strlen($oldParentSequence) + 1));
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $newSequenceSql) = $storage->getFunctionSql('CONCAT', array('?', $substring));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = GalleryCoreApi::updateMapEntry(
+	    'GalleryItemAttributesMap',
+	    array('parentSequence' =>
+		  new GallerySqlFragment('LIKE ?', $oldParentSequence . '%')),
+	    array('parentSequence' =>
+		  new GallerySqlFragment('=' . $newSequenceSql, $newParentSequence)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+}
+?>

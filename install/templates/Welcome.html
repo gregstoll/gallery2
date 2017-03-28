@@ -1,0 +1,27 @@
+    <h1><?php print _("Welcome") ?></h1>
+    <p>
+      <?php printf(_("Getting Gallery 2 installed on your webserver requires %d steps. This installer will guide you through these steps and provide assistance along the way if additional steps are required to get your Gallery up and running. Once a step has been completed, you can go back and make changes at any time. Please read the %sInstaller Help File%s before proceeding."),
+	$templateData['totalSteps'],
+	'<a href="../README.html" target="_blank">', '</a>') ?>
+    </p>
+    <?php global $translator; if (isset($translator)): ?>
+    <form method="post" action="<?php generateUrl(sprintf('%s?step=%s', INDEX_PHP, $stepNumber)) ?>"><p>
+      <input type="hidden" name="step" value="<?php print $stepNumber ?>"/>
+      <?php print _("Select Language:") ?>
+      <select name="language" onchange="this.form.submit()" style="direction:ltr">
+	<?php
+	  /* Don't use $language here as it conflicts with $_SESSION if register_globals is on */
+	  foreach ($templateData['languages'] as $code => $description) {
+	    print '<option value="' . $code . '"';
+	    if ($code == $_SESSION['language']) print ' selected="selected"';
+	    print '>' . $description . "</option>\n";
+	  }
+	?>
+      </select>
+      <noscript><input type="submit" value="<?php print _("Go") ?>"/></noscript>
+    </p></form>
+    <?php endif; ?>
+
+    <div class="go">
+	  <a href="<?php generateUrl(sprintf('%s?step=%s', INDEX_PHP, $stepNumber + 1)) ?>" class="btn continue"><i></i><span><span></span><i></i><?php print _('Begin Installation&raquo;') ?></span></a>
+    </div>

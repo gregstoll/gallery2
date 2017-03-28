@@ -1,0 +1,119 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Utility functions useful in managing Permalinks.
+ * @package Permalinks
+ * @subpackage Classes
+ * @author Pierre-Luc Paour <gallery@paour.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class PermalinksMapHelper {
+
+    /**
+     * Return the aliases defined for a given item
+     *
+     * @param int $itemId (optional) item id or null for all aliases
+     * @return array GalleryStatus a status code
+     *         array of aliase names
+     */
+    function fetchAliasesForItem($itemId=null) {
+	$match = isset($itemId) ? array('destId' => (int)$itemId) : array();
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('PermalinksMap',
+	    array('aliasName'), $match);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$aliases = array();
+	while ($result = $searchResults->nextResult()) {
+	    $aliases[] = $result[0];
+	}
+	return array(null, $aliases);
+    }
+
+    /**
+     * Return the item id the alias name refers to, if any
+     *
+     * @param string $aliasName
+     * @return array GalleryStatus a status code
+     *               int item id
+     */
+    function fetchItemIdForAlias($aliasName) {
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('PermalinksMap',
+	    array('destId'), array('aliasName' => $aliasName));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($result = $searchResults->nextResult()) {
+	    $destId = (int)$result[0];
+	} else {
+	    $destId = null;
+	}
+	return array(null, $destId);
+    }
+
+    /**
+     * Create an alias
+     *
+     * @param string $aliasName
+     * @param int $itemId
+     * @return GalleryStatus a status code
+     */
+    function createAlias($aliasName, $itemId) {
+	/* first, check for collision */
+	list ($ret, $collisionId) = PermalinksMapHelper::fetchItemIdForAlias($aliasName);
+	if ($ret) {
+	    return $ret;
+	}
+	if (isset($collisionId)) {
+	    /* we expected null, this means we have a collision. Throw it */
+	    return GalleryCoreApi::error(ERROR_COLLISION);
+	}
+
+	/* Add a new alias */
+	$ret = GalleryCoreApi::addMapEntry('PermalinksMap',
+					   array('aliasName' => $aliasName, 'destId' => $itemId));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Delete an alias
+     *
+     * @param int $aliasName
+     * @return GalleryStatus a status code
+     */
+    function deleteAlias($aliasName) {
+	/* Remove this alias from our groups table. */
+	$ret = GalleryCoreApi::removeMapEntry('PermalinksMap', array('aliasName' => $aliasName));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+}
+?>

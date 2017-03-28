@@ -1,0 +1,719 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/notification/classes/NotificationEvent_1_0.class');
+
+/**
+ * This is the container for information about the events defined in the core package
+ * @package Notification
+ * @subpackage Classes
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 18133 $
+ */
+class ActivatePluginNotification extends NotificationEvent_1_0  {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('Plugin Activation Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	return $this->_translateText('notification', array('arg1' => $this->getPluginType(),
+					      'arg2' => $this->getPlugin(),
+					      'text' => $gallery->i18n('The %s %s was activated')));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'Gallery::ActivatePlugin');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isGlobal
+     */
+    function isGlobal() {
+	return true;
+    }
+
+    /**
+     * Get the plugin id of the activated plugin
+     *
+     * @return string The plugin id of the activated plugin
+     */
+    function getPlugin() {
+	$data = $this->_event->getData();
+	return $data['pluginId'];
+    }
+
+    /**
+     * Get the plugin type of the activated plugin
+     *
+     * @return string The plugin type of the activated plugin
+     */
+    function getPluginType() {
+	$data = $this->_event->getData();
+	return $data['pluginType'];
+    }
+}
+
+class DeactivatePluginNotification extends NotificationEvent_1_0 {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('Plugin Deactivation Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'Gallery::DeactivatePlugin');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isGlobal
+     */
+    function isGlobal() {
+	return true;
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	return $this->_translateText('notification', array('arg1' => $this->getPluginType(),
+					    'arg2' => $this->getPlugin(),
+					    'text' => $gallery->i18n('The %s %s was deactivated')));
+    }
+
+    /**
+     * Get the plugin id of the deactivated plugin
+     *
+     * @return string The plugin id of the deactivated plugin
+     */
+    function getPlugin() {
+	$data = $this->_event->getData();
+	return $data['pluginId'];
+    }
+
+    /**
+     * Get the plugin type of the activated plugin
+     *
+     * @return string The plugin type of the activated plugin
+     */
+    function getPluginType() {
+	$data = $this->_event->getData();
+	return $data['pluginType'];
+    }
+}
+
+class ErrorNotification extends NotificationEvent_1_0 {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('Error Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'Gallery::Error');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isGlobal
+     */
+    function isGlobal() {
+	return true;
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	$error = $this->getError();
+	return array(null, $error->getAsText());
+    }
+
+    /**
+     * Return the Gallery Status Object encapsulated in this event.
+     *
+     * @return object GalleryStatus
+     */
+    function getError() {
+	$data = $this->_event->getData();
+	return $data['error'];
+    }
+}
+
+class ItemOrderNotification extends NotificationEvent_1_0 {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('Item Order Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'Gallery::ItemOrder');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	list ($ret, $item) = GalleryCoreApi::loadEntitiesById($this->getItemId(), 'GalleryItem');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$title = GalleryUtilities::markup($item->getTitle(), 'strip');
+	return $this->_translateText('notification', array('arg1' => $title,
+			 'text' => $gallery->i18n('The child items for %s have been reordered.')));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getPermission
+     */
+    function getPermission() {
+	return 'core.view';
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getItemId
+     */
+    function getItemId() {
+	return (int)$this->_event->getData();
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isAppropriateForItem
+     */
+    function isAppropriateForItem($item) {
+	return empty($item) ? false : GalleryUtilities::isA($item, 'GalleryItem');
+    }
+}
+
+class LoginNotification extends NotificationEvent_1_0 {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('User Login Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'Gallery::Login', 'entityType' => 'GalleryUser');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isGlobal
+     */
+    function isGlobal() {
+	return true;
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	$user = $this->getUser();
+	return $this->_translateText('notification', array('arg1' => $user->getUserName(),
+					      'text' => $gallery->i18n('User %s has logged in.')));
+    }
+
+    /**
+     * Return the User entity which just logged on.
+     * @return object GalleryUser
+     */
+    function getUser() {
+	return $this->_event->getEntity();
+    }
+}
+
+class FailedLoginNotification extends NotificationEvent_1_0 {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('User Login Failed Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isGlobal
+     */
+    function isGlobal() {
+	return true;
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'Gallery::FailedLogin');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	return $this->_translateText('notification', array('arg1' => $this->getUserName(),
+						'text' => $gallery->i18n('User %s login failed.')));
+    }
+
+    /**
+     * Get the userName that failed to login
+     *
+     * @return string The userName that failed to login
+     */
+    function getUserName() {
+	$data = $this->_event->getData();
+	return $data['userName'];
+    }
+}
+
+class LogoutNotification extends NotificationEvent_1_0  {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('User Logout Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isGlobal
+     */
+    function isGlobal() {
+	return true;
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'Gallery::Logout', 'entityType' => 'GalleryUser');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	$user = $this->getUser();
+	return $this->_translateText('notification', array('arg1' => $user->getUserName(),
+					      'text' => $gallery->i18n('User %s has logged out.')));
+    }
+
+    /**
+     * Return the User entity which just logged off.
+     * @return object GalleryUser
+     */
+    function getUser() {
+	return $this->_event->getEntity();
+    }
+}
+
+class RemovePermissionNotification extends NotificationEvent_1_0  {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('Permission Removed Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'Gallery::RemovePermission');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getItemId
+     */
+    function getItemId() {
+	$data = $this->_event->getData();
+	$itemIds = array_keys($data['itemIdsAndBits']);
+	return $itemIds[0];
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	$data = $this->_event->getData();
+	/** @todo: Fix the below message for i18n (%d instead of %s, plural form). */
+	return $this->_translateText('notification',
+				     array('arg1' => count($data['itemIdsAndBits']),
+				       'text' => $gallery->i18n('Permission Change on %s items.')));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getPermission
+     */
+    function getPermission() {
+	return 'core.changePermissions';
+    }
+
+}
+
+class UninstallPluginNotification extends NotificationEvent_1_0  {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('Plugin Uninstalled Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'Gallery::UninstallPlugin');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isGlobal
+     */
+    function isGlobal() {
+	return true;
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	return $this->_translateText('notification', array('arg1' => $this->getPluginType(),
+					    'arg2' => $this->getPlugin(),
+					    'text' => $gallery->i18n('The %s %s was uninstalled')));
+    }
+
+    /**
+     * Get the plugin id of the deactivated plugin
+     *
+     * @return string The plugin id of the deactivated plugin
+     */
+    function getPlugin() {
+	$data = $this->_event->getData();
+	return $data['pluginId'];
+    }
+
+    /**
+     * Get the plugin type of the activated plugin
+     *
+     * @return string The plugin type of the activated plugin
+     */
+    function getPluginType() {
+	$data = $this->_event->getData();
+	return $data['pluginType'];
+    }
+}
+
+class AlbumStructureChangeNotification extends NotificationEvent_1_0  {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification',
+				     $gallery->i18n('Album Structure Change Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'Gallery::ViewableTreeChange');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	return $this->_translateText('notification',
+				     $gallery->i18n('Viewable Tree Change Event Occurred'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getPermission
+     */
+    function getPermission() {
+	return 'core.view';
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getItemId
+     */
+    function getItemId() {
+	$data = $this->_event->getData();
+	return $data['itemId'];
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isAppropriateForItem
+     */
+    function isAppropriateForItem($item) {
+	return empty($item) ? false : GalleryUtilities::isA($item, 'GalleryItem');
+    }
+}
+
+class SaveNotification extends NotificationEvent_1_0  {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('Entity Saved Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'GalleryEntity::save', 'entityType' => 'GalleryItem');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	$entity = $this->_event->getEntity();
+
+	return $this->_translateText('notification', array('arg1' => $entity->getTitle(),
+							'text' => $gallery->i18n('%s was saved')));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getItemId
+     */
+    function getItemId() {
+	$entity = $this->_event->getEntity();
+	return $entity->getId();
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getPermission
+     */
+    function getPermission() {
+	return 'core.view';
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isAppropriateForItem
+     */
+    function isAppropriateForItem($item) {
+	return empty($item) ? false : GalleryUtilities::isA($item, 'GalleryItem');
+    }
+
+}
+
+class DeleteNotification extends NotificationEvent_1_0  {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('Entity Deleted Event'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'GalleryEntity::delete', 'entityType' => 'GalleryItem');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	$entity = $this->_event->getEntity();
+
+	return $this->_translateText('notification', array('arg1' =>$entity->getTitle(),
+						       'text' => $gallery->i18n('%s was deleted')));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getItemId
+     */
+    function getItemId() {
+	$entity = $this->_event->getEntity();
+	return $entity->getId();
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getPermission
+     */
+    function getPermission() {
+	return 'core.view';
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isAppropriateForItem
+     */
+    function isAppropriateForItem($item) {
+	return empty($item) ? false : GalleryUtilities::isA($item, 'GalleryItem');
+    }
+}
+
+class ItemAddedNotification extends NotificationEvent_1_0  {
+    /**
+     * @see NotificationEvent_1_0::getDescription.
+     */
+    function getDescription() {
+	global $gallery;
+	return $this->_translateText('notification', $gallery->i18n('Item Added'));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getEventSpecs
+     */
+    function getEventSpecs() {
+	return array('eventName' => 'Gallery::itemAdded');
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getNotificationMessage.
+     */
+    function getNotificationMessage() {
+	global $gallery;
+
+	$items = $this->_event->getData();
+	/* How should we handle what type it is and where to link? */
+	$parentId = $items[0]->getParentId();
+	$itemCount = count($items);
+	if ($itemCount == 1) {
+	    /* One item, call it what it is and link to it directly */
+	    $itemTypeName = $items[0]->itemTypeName();
+	    $itemTypeName = $itemTypeName[1];
+	    $itemId = $items[0]->getId();
+	} else {
+	    /* Many items, link to the parent */
+	    $itemId = $parentId;
+	    $itemTypes = array();
+	    foreach ($items as $item) {
+		$itemTypeName = $item->itemTypeName();
+		$itemTypeName = $itemTypeName[1];
+		$itemTypes[$itemTypeName] = empty($itemTypes[$itemTypeName]) ? 1
+								      : $itemTypes[$itemTypeName]++;
+	    }
+
+	    /* Call it all of the items */
+	    if (count($itemTypes) == 1) {
+		$itemTypeNames = array_keys($itemTypes);
+	    } else {
+		$itemTypeNames = implode(', ', array_keys($itemTypes));
+	    }
+	}
+
+	/* Get the URL to the item the event was triggered on */
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$parentUrl = $urlGenerator->generateUrl(array('view' => 'core.ShowItem',
+						      'itemId' => $itemId),
+						array('forceFullUrl' => true,
+						      'forceSessionId' => false,
+						      'htmlEntities' => false));
+
+	return $this->_translateText('notification', array('arg1' => $itemTypeName,
+			'arg2' => $parentUrl, 'text' =>
+			 $gallery->i18n("A new %s has been added. To view it, click here: \n%s")));
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getPermission
+     */
+    function getPermission() {
+	return 'core.view';
+    }
+
+    /**
+     * @see NotificationEvent_1_0::getItemId
+     */
+    function getItemId() {
+	$data = $this->_event->getData();
+	return count($data) == 1 ?  $data[0]->getId() : $data[0]->getParentId();
+    }
+
+    /**
+     * @see NotificationEvent_1_0::isAppropriateForItem
+     */
+    function isAppropriateForItem($item) {
+	return empty($item) ? false
+		   : GalleryUtilities::isA($item, 'GalleryItem') && $item->getCanContainChildren();
+    }
+}
+?>

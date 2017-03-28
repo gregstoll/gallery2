@@ -1,0 +1,250 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryDerivative.class');
+
+/**
+ * A GalleryDerivative for images.
+ * eg. for thumbnails and resizes.
+ *
+ * @g2 <class-name>GalleryDerivativeImage</class-name>
+ * @g2 <parent-class-name>GalleryDerivative</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>0</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryDerivativeImage extends GalleryDerivative {
+
+    /**
+     * The width of the image.
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>width</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $width;
+
+    /**
+     * The height of the image.
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>height</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $height;
+
+
+    /**
+     * @see GalleryDerivative::canBeViewedInline
+     */
+    function canBeViewedInline() {
+	return true;
+    }
+
+    /**
+     * Create a new GalleryDerivativeImage
+     *
+     * @param int $parentId the id of the parent GalleryItem
+     * @param int $derivativeType the type of derivative image
+     * @return GalleryStatus a status code
+     */
+    function create($parentId, $derivativeType) {
+	global $gallery;
+	$parentId = (int)$parentId;
+
+	if ($derivativeType != DERIVATIVE_TYPE_IMAGE_THUMBNAIL &&
+		$derivativeType != DERIVATIVE_TYPE_IMAGE_RESIZE &&
+		$derivativeType != DERIVATIVE_TYPE_IMAGE_PREFERRED) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER,
+					__FILE__, __LINE__,
+					"Unknown derivative type: $derivativeType");
+	}
+
+	/* We can't have more than one THUMBNAIL or PREFERRED */
+	if ($derivativeType == DERIVATIVE_TYPE_IMAGE_THUMBNAIL ||
+	    $derivativeType == DERIVATIVE_TYPE_IMAGE_PREFERRED) {
+
+	    $query = '
+	    SELECT
+	      COUNT([GalleryChildEntity::id])
+	    FROM
+	      [GalleryChildEntity], [GalleryDerivative]
+	    WHERE
+	      ([GalleryChildEntity::parentId] = ?
+	       AND [GalleryDerivative::derivativeType] = ?)
+	      AND ([GalleryChildEntity::id] = [GalleryDerivative::id])
+	    ';
+
+	    list ($ret, $searchResults) =
+		$gallery->search($query, array($parentId, $derivativeType));
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $result = $searchResults->nextResult();
+	    if ($result[0] > 0) {
+		return GalleryCoreApi::error(ERROR_COLLISION, __FILE__, __LINE__,
+		    sprintf('Too many %s (type: %s, count: %d)',
+			    ($derivativeType == DERIVATIVE_TYPE_IMAGE_PREFERRED ?
+			     'preferreds' : 'thumbnails'),
+			    $derivativeType, $result[0]));
+	    }
+	}
+
+	$ret = parent::create($parentId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Save our derivative type */
+	$this->setDerivativeType($derivativeType);
+	$this->setWidth(0);
+	$this->setHeight(0);
+
+	return null;
+    }
+
+    /**
+     * Rebuild the cache.
+     * Break apart the derivative commands and feed them into the appropriate graphics toolkits
+     * to perform the transformation necessary to create this derivative from its source.
+     *
+     * @return GalleryStatus a status code
+     */
+    function rebuildCache() {
+	global $gallery;
+
+	/* Figure out our target path */
+	list ($ret, $destPath) = $this->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = parent::rebuildCache();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Update our dimensions */
+	$mimeType = $this->getMimeType();
+	list ($ret, $toolkit) = GalleryCoreApi::getToolkitByProperty($mimeType, 'dimensions');
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (isset($toolkit)) {
+	    list ($ret, $dimensions) = $toolkit->getProperty($mimeType, 'dimensions', $destPath);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $this->setWidth($dimensions[0]);
+	    $this->setHeight($dimensions[1]);
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryDerivative::render
+     */
+    function render($format, $item, $params) {
+	global $gallery;
+
+	switch($format) {
+	case 'HTML':
+	    $urlGenerator =& $gallery->getUrlGenerator();
+	    $src = $urlGenerator->generateUrl(
+		array('view' => 'core.DownloadItem', 'itemId' => $this->getId(),
+		      'serialNumber' => $this->getSerialNumber()),
+		array('forceFullUrl' => !empty($params['forceFullUrl'])));
+
+	    list ($width, $height) = array($this->getWidth(), $this->getHeight());
+
+	    /* Shrink our dimensions if necessary */
+	    if (isset($params['maxSize'])) {
+		list ($width, $height) =
+		    GalleryUtilities::shrinkDimensionsToFit($width, $height, $params['maxSize']);
+		unset($params['maxSize']);
+	    }
+
+	    $sizeStr = '';
+	    if ($width > 0 && $height > 0) {
+		$sizeStr = sprintf(' width="%s" height="%s"', $width, $height);
+	    }
+	    if (!isset($params['alt'])) {
+		$params['alt'] =
+		    $item->getTitle() ? GalleryUtilities::markup($item->getTitle(), 'strip')
+				      : $item->getPathComponent();
+	    }
+
+	    $html = sprintf('<img src="%s"%s', $src, $sizeStr);
+	    unset($params['fallback']);
+	    unset($params['forceFullUrl']);
+	    unset($params['forceRawImage']);
+	    foreach ($params as $attr => $value) {
+		if (isset($value)) {
+		    $html .= " $attr=\"$value\"";
+		}
+	    }
+	    return $html . '/>';
+
+	default:
+	    return null;
+	}
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryDerivativeImage';
+    }
+
+    function getWidth() {
+	return $this->width;
+    }
+
+    function setWidth($width) {
+	$this->width = $width;
+    }
+
+    function getHeight() {
+	return $this->height;
+    }
+
+    function setHeight($height) {
+	$this->height = $height;
+    }
+}
+?>

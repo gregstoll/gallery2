@@ -1,0 +1,180 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/comment/module.inc');
+GalleryCoreApi::requireOnce('modules/search/classes/GallerySearchInterface_1_0.class');
+
+/**
+ * This is an implementation of the search module's SearchInterface_1_0
+ * @package Comment
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryCommentSearch extends GallerySearchInterface_1_0 {
+    /**
+     * @see GallerySearchInterface_1_0::getSearchModuleInfo
+     */
+    function getSearchModuleInfo() {
+	global $gallery;
+
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'comment');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$info = array('name' => $module->translate('Comments'),
+		      'description' => $module->translate('Comment Module'),
+		      'options' => array(
+			  'comments' =>
+			  array('description' => $module->translate('Search comments'),
+				'enabled' => 1)));
+	return array(null, $info);
+    }
+
+    /**
+     * @see GallerySearchInterface_1_0::search
+     */
+    function search($options, $criteria, $offset=0, $count=-1) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+
+	/* TODO: Update fetchAccessListIds to also accept an array of permission names */
+	list ($ret, $aclIds) = GalleryCoreApi::fetchAccessListIds('comment.view',
+								  $gallery->getActiveUserId());
+	if ($ret) {
+	    return array($ret, null);
+	}
+	list ($ret, $viewAclIds) = GalleryCoreApi::fetchAccessListIds('core.view',
+								      $gallery->getActiveUserId());
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$aclIds = array_intersect($aclIds, $viewAclIds);
+	if (empty($aclIds)) {
+	    return array(null,
+			 array('start' => 0, 'end' => '0',
+			       'count' => 0, 'results' => array()));
+	}
+
+	$aclMarkers = GalleryUtilities::makeMarkers(count($aclIds));
+	$countQuery = '
+	SELECT
+	  COUNT([GalleryChildEntity::id])
+	FROM
+	  [GalleryChildEntity], [GalleryComment], [GalleryAccessSubscriberMap]
+	WHERE
+	  [GalleryChildEntity::id] = [GalleryComment::id]
+	  AND
+	  [GalleryChildEntity::parentId] = [GalleryAccessSubscriberMap::itemId]
+	  AND
+	  [GalleryAccessSubscriberMap::accessListId] IN (' . $aclMarkers . ')
+	  AND
+	  ([GalleryComment::subject] LIKE ?
+	   OR
+	   [GalleryComment::comment] LIKE ?)
+          AND
+          [GalleryComment::publishStatus] = ?
+	';
+
+	$query = '
+	SELECT
+	  [GalleryChildEntity::id],
+	  [GalleryComment::subject],
+	  [GalleryComment::comment],
+	  [GalleryComment::date],
+	  [GalleryUser::fullName],
+	  [GalleryUser::userName],
+	  [GalleryChildEntity::parentId],
+	  [GalleryComment::author]
+	FROM
+	  [GalleryChildEntity], [GalleryComment], [GalleryAccessSubscriberMap], [GalleryUser]
+	WHERE
+	  [GalleryChildEntity::id] = [GalleryComment::id]
+	  AND
+	  [GalleryUser::id] = [GalleryComment::commenterId]
+	  AND
+	  [GalleryChildEntity::parentId] = [GalleryAccessSubscriberMap::itemId]
+	  AND
+	  [GalleryAccessSubscriberMap::accessListId] IN (' . $aclMarkers . ')
+	  AND
+	  ([GalleryComment::subject] LIKE ?
+	   OR
+	   [GalleryComment::comment] LIKE ?)
+          AND
+          [GalleryComment::publishStatus] = ?
+	ORDER BY
+	  [GalleryComment::date] DESC, [GalleryChildEntity::id] DESC';
+
+	$data = $aclIds;
+	$data[] = '%' . $criteria . '%';
+	$data[] = '%' . $criteria . '%';
+	$data[] = COMMENT_PUBLISH_STATUS_PUBLISHED;
+
+	/* Find the total */
+	list ($ret, $results) = $gallery->search($countQuery, $data);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$result = $results->nextResult();
+	$numRows = (int)$result[0];
+
+	list ($ret, $results) = $gallery->search(
+	    $query, $data, array('limit' => array('offset' => $offset, 'count' => $count)));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'comment');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$text['subject'] = $module->translate('Subject');
+	$text['comment'] = $module->translate('Comment');
+	$text['commenter'] = $module->translate('Commenter');
+	$text['guest'] = $module->translate('guest');
+
+	$searchResults = array();
+	while ($result = $results->nextResult()) {
+	    $fields = array();
+	    $fields[] = array('key' => $text['subject'], 'value' => $result[1]);
+	    $fields[] = array('key' => $text['comment'], 'value' => $result[2]);
+
+	    if(!empty($result[7])){
+	    	$fields[] = array('key' => $text['commenter'],
+	    			  'value' => $result[7] . '(' . $text['guest'] . ')');
+	    } else if (!empty($result[4])) {
+		$fields[] = array('key' => $text['commenter'], 'value' => $result[4]);
+	    } else {
+		$fields[] = array('key' => $text['commenter'], 'value' => $result[5]);
+	    }
+	    $searchResults[] = array('itemId' => (int)$result[6],
+				     'fields' => $fields);
+	}
+
+	$data = array('start' => $numRows == 0 ? 0 : $offset+1,
+		      'end' => $numRows == 0 ? 0 : $offset + sizeof($searchResults),
+		      'count' => $numRows,
+		      'results' => $searchResults);
+	return array(null, $data);
+    }
+}
+?>

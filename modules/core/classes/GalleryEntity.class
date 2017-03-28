@@ -1,0 +1,672 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPersistent.class');
+
+/**
+ * A GalleryEntity is a stateful representation of an entity in the persistent store.  You can
+ * load, modify, save and delete it.  Any modifications made to this entity will live in memory
+ * until you commit the changes to the store (hence, it's stateful).
+ *
+ * @g2 <class-name>GalleryEntity</class-name>
+ * @g2 <parent-class-name>GalleryPersistent</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>2</schema-minor>
+ * @g2 </schema>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryEntity extends GalleryPersistent {
+
+    /**
+     * The id of this item
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>id</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <id/>
+     * @g2   <primary/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $id;
+
+    /**
+     * Date and time this item was created, in seconds since the epoch.
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>creationTimestamp</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <indexed/>
+     * @g2   <required/>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     */
+    var $creationTimestamp;
+
+    /**
+     * Does this entity type support linking?
+     * @var boolean
+     *
+     * @g2 <member>
+     * @g2   <member-name>isLinkable</member-name>
+     * @g2   <member-type>BOOLEAN</member-type>
+     * @g2   <indexed/>
+     * @g2   <required/>
+     * @g2 </member>
+     */
+    var $isLinkable;
+
+    /**
+     * The id of the target entity this entity is linked to
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>linkId</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <indexed/>
+     * @g2 </member>
+     */
+    var $linkId;
+
+    /**
+     * The target entity this entity is linked to
+     * @var GalleryEntity
+     */
+    var $linkedEntity;
+
+    /**
+     * Date and time this item was last modified, in seconds since the epoch.
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>modificationTimestamp</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <indexed/>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $modificationTimestamp;
+
+    /**
+     * The serial number of this object in the persistent store.  This value
+     * will help us to avoid collisions.
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>serialNumber</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <indexed/>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $serialNumber;
+
+    /**
+     * The actual type of this object.  This will allow the storage class to
+     * correctly load this object from the database.
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>entityType</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>SMALL</member-size>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $entityType;
+
+    /**
+     * Handlers to run when this entity is loaded.
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>onLoadHandlers</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2 </member>
+     */
+    var $onLoadHandlers;
+
+
+    /**
+     * Create a new instance of this GalleryEntity in the persistent store
+     *
+     * @return GalleryStatus a status code
+     */
+    function create() {
+	global $gallery;
+
+	/* Create a new instance of this entity in the persistent store */
+	$storage =& $gallery->getStorage();
+	$ret = $storage->newEntity($this);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Set the creation time on this entity */
+	$this->setCreationTimestamp(time());
+
+	/* Set the object type */
+	$this->setEntityType($className = $this->getClassName());
+
+	/*
+	 * Make sure the entity defined its own class name.  This is a little draconian;
+	 * it requires that your entity name is the same as the get_class() version.  We'd
+	 * just use get_class for getClassName() except that it's always lowercase in PHP4.
+	 * If this causes problems we could relax the check to just make sure that
+	 *   $this->getClassName() != 'GalleryEntity'
+	 * but that wouldn't catch the case where one entity extends another one and forgets
+	 * to override getClassName()
+	 * Don't use strcasecmp or strtolower because they are affected by locale.
+	 */
+	if (($thisClass = get_class($this)) != $className && $thisClass
+		!= strtr($className, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')) {
+	    return GalleryCoreApi::error(ERROR_MISSING_VALUE, __FILE__, __LINE__,
+					 sprintf('Entity %s did not override getClassName()',
+						 get_class($this)));
+	}
+
+	/* By default, entities are not linkable; init other fields */
+	$this->setIsLinkable(false);
+	$this->setLinkId(null);
+	$this->setLinkedEntity(null);
+	$this->setOnLoadHandlers(null);
+
+	$ret = $this->resetOriginalValues(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Create a new linked version of this item into a new album
+     *
+     * @param GalleryEntity $entity the entity we're linking to
+     * @return array GalleryStatus a status code
+     *               GalleryItem the linked item
+     */
+    function createLink($entity) {
+	global $gallery;
+
+	if (get_class($this) != get_class($entity)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	/* Follow our usual creation process (same as create() above) */
+	$storage =& $gallery->getStorage();
+	$ret = $storage->newEntity($this);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Set the creation time on this entity */
+	$this->setCreationTimestamp(time());
+
+	/* Set the object type */
+	$this->setEntityType($this->getClassName());
+
+	/* But attach to the linked entity */
+	$this->setIsLinkable(true);
+	$this->setLinkId($entity->getId());
+	$this->setLinkedEntity($entity);
+
+	$ret = $this->resetOriginalValues(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Save the changes to this GalleryEntity.
+     *
+     * @param bool $postEvent post a save event; only disable this during core upgrades
+     * @param int $setAclId (optional) ACL id to assign for new entity (used by subclasses)
+     * @return GalleryStatus a status code
+     */
+    function save($postEvent=true, $setAclId=null) {
+	global $gallery;
+
+	/*
+	 * Newly created objects don't need to be locked 'cause they're not in
+	 * the database yet.  Everything else does.
+	 */
+	if (!GalleryCoreApi::isWriteLocked($this->getId())
+		&& !$this->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED)) {
+	    return GalleryCoreApi::error(ERROR_LOCK_REQUIRED);
+	}
+
+	if (isset($setAclId) && $this->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED)) {
+	    $ret = GalleryCoreApi::addMapEntry('GalleryAccessSubscriberMap',
+		array('itemId' => $this->getId(), 'accessListId' => $setAclId));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	if ($this->isModified()) {
+	    /* Change the modification date */
+	    $phpVm = $gallery->getPhpVm();
+	    $this->setModificationTimestamp($phpVm->time());
+
+	    if ($postEvent) {
+		$event = GalleryCoreApi::newEvent('GalleryEntity::save');
+		$event->setEntity($this);
+		list ($ret) = GalleryCoreApi::postEvent($event);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+
+	    $storage =& $gallery->getStorage();
+	    $changedEntityType = $this->isModified('entityType');
+
+	    $ret = $storage->saveEntity($this);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    /* Update our caches */
+	    if ($changedEntityType) {
+		/*
+		 * We changed the entity type which probably means that the entity class doesn't
+		 * line up with its embedded entityType.  Clear this from our cache so that the
+		 * next load actually gets the clean, correct version.
+		 */
+		GalleryDataCache::remove(
+		    sprintf('GalleryEntityHelper::loadEntitiesById(%s)', $this->getId()));
+		GalleryDataCache::removeFromDisk(
+		    array('type' => 'entity', 'itemId' => $this->getId()));
+	    } else {
+		GalleryDataCache::put(
+		    sprintf('GalleryEntityHelper::loadEntitiesById(%s)', $this->getId()), $this);
+		list ($ret, $classFile) = $this->getClassFile();
+		if ($ret) {
+		    return $ret;
+		}
+		GalleryDataCache::putToDisk(array('type' => 'entity', 'itemId' => $this->getId()),
+					    $this, array($classFile));
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Refresh this item from the persistent store
+     *
+     * @return array GalleryStatus a status code,
+     *               object the refreshed GalleryEntity
+     */
+    function refresh() {
+	global $gallery;
+
+	/* Are we trying to refresh an object that isn't in the database? */
+	if ($this->testPersistentFlag(STORAGE_FLAG_DELETED) ||
+	    $this->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED)) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT),
+			 null);
+	}
+
+	$storage =& $gallery->getStorage();
+
+	list ($ret, $freshEntity) = $storage->refreshEntity($this);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $freshEntity);
+    }
+
+    /**
+     * Delete this GalleryEntity
+     *
+     * @return GalleryStatus a status code
+     */
+    function delete() {
+	global $gallery;
+
+	if (!GalleryCoreApi::isWriteLocked($this->getId())) {
+	    return GalleryCoreApi::error(ERROR_LOCK_REQUIRED);
+	}
+
+	$event = GalleryCoreApi::newEvent('GalleryEntity::delete');
+	$event->setEntity($this);
+	list ($ret) = GalleryCoreApi::postEvent($event);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = GalleryCoreApi::removePluginParametersForItemId($this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'GalleryAccessSubscriberMap', array('itemId' => $this->getId()));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$storage =& $gallery->getStorage();
+	$ret = $storage->deleteEntity($this);
+	if ($ret) {
+	    return $ret;
+	}
+
+	GalleryDataCache::remove(
+	    sprintf('GalleryEntityHelper::loadEntitiesById(%s)', $this->getId()));
+	GalleryDataCache::removeFromDisk(array('type' => 'entity', 'itemId' => $this->getId()));
+
+	return null;
+    }
+
+    /**
+     * This is called after an entity is loaded by the GalleryStorage subsystem.
+     * Perform any actions that are required after loading the entity.
+     *
+     * @return GalleryStatus a status code
+     */
+    function onLoad() {
+	global $gallery;
+
+	$linkId = $this->getLinkId();
+	if (!empty($linkId)) {
+	    list ($ret, $this->linkedEntity) =
+		GalleryCoreApi::loadEntitiesById($linkId, $this->entityType);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    list ($ret, $data) = GalleryCoreApi::describeEntity($this->entityType);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $target = $this->entityType;
+	    while ($target) {
+		foreach ($data[$target]['linked'] as $memberName) {
+		    $setFunc = "set$memberName";
+		    $getFunc = "get$memberName";
+		    $this->$setFunc($this->linkedEntity->$getFunc());
+		}
+		$target = $data[$target]['parent'];
+	    }
+	} else {
+	    $this->setLinkedEntity(null);
+	}
+
+	/*
+	 * Run any onLoad handlers for this entity
+	 * Modules that wish to implement an onLoad handler for an entity must provide
+	 * a class that implements the GalleryOnLoadHandler interface.
+	 */
+	$onLoadHandlers = $this->getOnLoadHandlers();
+	if (!empty($onLoadHandlers)) {
+	    /* Determine whether we're in an upgrade process */
+	    $session =& $gallery->getSession();
+	    $isDuringInstallOrUpgrade = $session->get('isInstall') || $session->get('isUpgrade');
+
+	    foreach (explode('|', $onLoadHandlers) as $handlerId) {
+		if (empty($handlerId)) {
+		    continue;
+		}
+		list ($ret, $handler) =
+		    GalleryCoreApi::newFactoryInstanceById('GalleryOnLoadHandler', $handlerId);
+		if ($ret) {
+		    return $ret;
+		}
+		if (isset($handler)) {
+		    /* GalleryOnLoadHandlerInterface_1_0::onLoad(&$entity, $duringUpgrade)
+		     *
+		     * A GalleryOnLoadHandler has to implement this method
+		     * It is called for each entity when it is loaded from the disk cache or the
+		     * persistent store (the database), but not when the entity is already in the
+		     * memory cache.
+		     *
+		     * During the core module install or upgrade, there's no active gallery session
+		     * and $duringUpgrade is set to false. If $duringUpgrade is set to false, be
+		     * aware that everything that is related to the current active user will
+		     * error-out. The recommended usage is to do nothing and just return a success
+		     * status in onLoad if $duringUpgrade is set to false. If this would affect
+		     * data integrity and / or you are sure that your onLoad method does not
+		     * require an activeSession, you can ignore $duringUpgrade.
+		     *
+		     * @param GalleryEntity reference to an entity
+		     * @param boolean whether the onLoad handler is being called during an upgrade
+		     * @return GalleryStatus a status code
+		     */
+		    $ret = $handler->onLoad($this, $isDuringInstallOrUpgrade);
+		    if ($ret) {
+			return $ret;
+		    }
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Check for an onLoad handler.
+     *
+     * @param string $handlerId
+     * @return boolean
+     */
+    function hasOnLoadHandler($handlerId) {
+	return (strpos($this->getOnLoadHandlers(), "|$handlerId|") !== false);
+    }
+
+    /**
+     * Add onLoad handler.
+     *
+     * @param string $handlerId
+     */
+    function addOnLoadHandler($handlerId) {
+	$onLoadHandlers = $this->getOnLoadHandlers();
+	if (empty($onLoadHandlers)) {
+	    $onLoadHandlers = '|';
+	}
+	$this->setOnLoadHandlers($onLoadHandlers . $handlerId . '|');
+    }
+
+    /**
+     * Remove onLoad handler.
+     *
+     * @param string $handlerId
+     */
+    function removeOnLoadHandler($handlerId) {
+	$onLoadHandlers = preg_replace('{\|' . preg_quote($handlerId) . '\|}', '|',
+				       $this->getOnLoadHandlers());
+	if (empty($onLoadHandlers) || $onLoadHandlers == '|') {
+	    $onLoadHandlers = null;
+	}
+
+	$this->setOnLoadHandlers($onLoadHandlers);
+    }
+
+    /**
+     * This is called after an entity is saved by the GalleryStorage subsystem.
+     * Perform any actions that are required after saving the entity.
+     *
+     * @return GalleryStatus a status code
+     */
+    function onSave() {
+	return null;
+    }
+
+    /**
+     * Return the name of this type of item.
+     * Subclasses must override this to provide their own type names.
+     *
+     * @param boolean $localized if the name is to be translated using the current language
+     * @return array string to be used by itself ("Photo")
+     *               string to be used in context ("photo")
+     */
+    function itemTypeName($localized=true) {
+	assert(false);
+    }
+
+    /**
+     * Return true if this entity is linked to another
+     * @return boolean
+     */
+    function isLinked() {
+	$linkedEntity = $this->getLinkedEntity();
+	return isset($linkedEntity);
+    }
+
+    /**
+     * Detach this entity from the entity it is linked to by the simple expedient
+     * of overwriting over all non-null members with the equivalent from the link target.
+     *
+     * @return GalleryStatus a status code
+     */
+    function detachLink() {
+	if (!$this->isLinked()) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__, 'Not a link!');
+	}
+
+	/*
+	 * Copy over the linked data.  It should already be here since we do this in onLoad() but
+	 * this will guarantee it in case the values were changed before the detach happens.
+	 */
+	list ($ret, $data) = GalleryCoreApi::describeEntity($this->entityType);
+	if ($ret) {
+	    return $ret;
+	}
+
+	foreach ($data[$this->entityType]['linked'] as $memberName) {
+	    $setFunc = "set$memberName";
+	    $getFunc = "get$memberName";
+	    $this->$setFunc($this->linkedEntity->$getFunc());
+	}
+
+	/* Get rid of the link */
+	$this->setLinkedEntity(null);
+	$this->setLinkId(null);
+
+	return null;
+    }
+
+    /**
+     * Return the case sensitive name of this entity class.  This is exactly what get_class()
+     * would return in PHP5.  PHP4 is case-insensitive though so we must rely on it being set
+     * in each entity.  The framework uses this as an index into entity related tables.
+     * @return string
+     */
+    function getClassName() {
+	return 'GalleryEntity';
+    }
+
+    function getId() {
+	return $this->id;
+    }
+
+    function setId($id) {
+	$this->id = $id;
+    }
+
+    function getCreationTimestamp() {
+	return $this->creationTimestamp;
+    }
+
+    function setCreationTimestamp($creationTimestamp) {
+	$this->creationTimestamp = $creationTimestamp;
+    }
+
+    function getIsLinkable() {
+	return $this->isLinkable;
+    }
+
+    function setIsLinkable($isLinkable) {
+	$this->isLinkable = $isLinkable;
+    }
+
+    function getLinkId() {
+	return $this->linkId;
+    }
+
+    function setLinkId($linkId) {
+	$this->linkId = $linkId;
+    }
+
+    function getLinkedEntity() {
+	return $this->linkedEntity;
+    }
+
+    function setLinkedEntity($linkedEntity) {
+	$this->linkedEntity = $linkedEntity;
+    }
+
+    function getModificationTimestamp() {
+	return $this->modificationTimestamp;
+    }
+
+    function setModificationTimestamp($modificationTimestamp) {
+	$this->modificationTimestamp = $modificationTimestamp;
+    }
+
+    function getSerialNumber() {
+	return $this->serialNumber;
+    }
+
+    function setSerialNumber($serialNumber) {
+	$this->serialNumber = $serialNumber;
+    }
+
+    function getEntityType() {
+	return $this->entityType;
+    }
+
+    function setEntityType($entityType) {
+	$this->entityType = $entityType;
+    }
+
+    function getOnLoadHandlers() {
+	return $this->onLoadHandlers;
+    }
+
+    function setOnLoadHandlers($onLoadHandlers) {
+	$this->onLoadHandlers = $onLoadHandlers;
+    }
+
+    /**
+     * @todo Consider removing this method when refactoring the renderer code.
+     */
+    function getRenderer() {
+	/* See bug 1662652 */
+	return null;
+    }
+}
+?>

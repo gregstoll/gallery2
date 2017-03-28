@@ -1,0 +1,234 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteUrlGenerator.class');
+
+/**
+ * PHP path info URL generator.
+ * @package Rewrite
+ * @subpackage Parsers
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class PathInfoUrlGenerator extends RewriteUrlGenerator {
+
+    /**
+     * Base parameter string for all generated URLs, e.g. 'module=gallery'.  Index of array =
+     * $forceDirect (true/false) only relevant for embedded Gallery.
+     * @var array 0 => string query string, 1 => string forceDirect query string
+     * @access private
+     */
+    var $_baseParamString;
+
+    /**
+     * URL base filename of Gallery.  Doesn't include URL parameters (unlike
+     * GalleryUrlGenerator::_file).  Index of array = $forceDirect (true/false) only relevant for
+     * embedded Gallery.
+     * @var array (0 => string file, 1 => string forceDirect file)
+     * @access private
+     */
+    var $_piFile;
+
+    /**
+     * @see GalleryUrlGenerator::init
+     */
+    function init($baseUri=null, $g2Uri=null, $embedSessionString=null) {
+	$ret = parent::init($baseUri, $g2Uri, $embedSessionString);
+	if ($ret) {
+	    return $ret;
+	}
+
+	foreach (array(0, 1) as $fD) {
+	    $this->_piFile[$fD] = $this->_file[$fD];
+	    $this->_baseParamString[$fD] = '';
+
+	    /* Use the value from baseUri for both if not in embedded */
+	    if ($fD && !GalleryUtilities::isEmbedded() && empty($this->_piFile[$fD])) {
+		$this->_piFile[$fD] = $this->_file[0];
+	    }
+
+	    /* Default to index.php, mostly only relevant for embedded Gallery */
+	    if ($fD && substr($this->_piFile[$fD], 0, 1) == '?') {
+		$this->_pifile[$fD] = 'index.php' . $this->_piFile[$fD];
+	    }
+
+	    /* Split the query params off (we add them later again, at generateUrl time) */
+	    if (strpos($this->_piFile[$fD], '?') !== false) {
+		list ($this->_piFile[$fD], $this->_baseParamString[$fD]) =
+		    explode('?', $this->_piFile[$fD]);
+		$this->_baseParamString[$fD] = '?' . $this->_baseParamString[$fD];
+	    }
+	}
+
+	list($ret, $parser) = GalleryCoreApi::getPluginParameter(
+	    'module', 'rewrite', 'pathinfo.parser');
+	if ($ret) {
+	    return $ret;
+	}
+	$parser = unserialize($parser);
+
+	/* Parse the PATH_INFO string */
+	if (($pathInfo = GalleryUtilities::getServerVar('PATH_INFO'))
+		!= GalleryUtilities::getServerVar('SCRIPT_NAME') && !empty($pathInfo)) {
+	    /* Remove the path of the existing base file if necessary */
+	    $base = substr(
+		$this->getCurrentUrlDir() . $this->_piFile[0], strlen($this->makeUrl('/')) - 1);
+	    $len = strlen($base);
+	    if (strncmp($pathInfo, $base, $len) == 0) {
+		$pathInfo = substr($pathInfo, $len);
+	    }
+
+	    /* Do the parsing (add params to request variables) */
+	    $pathInfo = str_replace('+', ' ', $pathInfo);
+	    if (!empty($parser['static'][$pathInfo])) {
+		foreach ($parser['static'][$pathInfo]['queryString'] as $key => $value) {
+		    GalleryUtilities::putRequestVariable($key, $value);
+		}
+	    } else {
+		foreach ($parser['dynamic'] as $dynamic) {
+		    if (!preg_match($dynamic['pattern'], $pathInfo, $matches)) {
+			continue;
+		    }
+
+		    foreach ($dynamic['keywords'] as $reference => $name) {
+			if (empty($name)) {
+			    continue;
+			}
+
+			GalleryUtilities::putRequestVariable($name, $matches[$reference]);
+		    }
+
+		    foreach ($dynamic['queryString'] as $key => $value) {
+			GalleryUtilities::putRequestVariable($key, $value);
+		    }
+
+		    break;
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryUrlGenerator::initNavigation
+     */
+    function initNavigation() {
+	$ret = $this->_onLoad();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = parent::initNavigation();
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryUrlGenerator::generateUrl
+     */
+    function generateUrl($params=array(), $options=array()) {
+	if ($this->_error) {
+	    return parent::generateUrl($params, $options);
+	}
+
+	/*
+	 * Since the baseFile (e.g. main.php) is in the REQUEST_URI, e.g.
+	 *     http://example.com/gallery2/main.php/albumA/itemB.jpg.htm
+	 * GalleryUrlGenerator::makeRelativeUrl would generate relative URLs when it actually should
+	 * generate server-relative URLs.  Thus enforce server-relative URLs.
+	 */
+	$options['forceServerRelativeUrl'] = true;
+	return parent::generateUrl($params, $options);
+    }
+
+    /**
+     * @see RewriteUrlGenerator::_getBaseUrl
+     */
+    function _getBaseUrl($forceDirect=false) {
+	if (!isset($this->_baseUrl[$forceDirect])) {
+	    $url = $this->getCurrentUrlDir($forceDirect) . $this->_piFile[$forceDirect];
+	    $url .= (substr($url, -1) != '/') ? '/' : '';
+	    $this->_baseUrl[$forceDirect] = $url;
+	}
+
+	return $this->_baseUrl[$forceDirect];
+    }
+
+    /**
+     * @see RewriteUrlGenerator::_getBaseParamString
+     */
+    function _getBaseParamString($forceDirect=false) {
+	return $this->_baseParamString[$forceDirect];
+    }
+
+    /**
+     * Return the base directory of all generated URLs, e.g. if the URL is:
+     *   http://example.com/gallery2/main.php/Travels/Somewhere/IMG001.jpg.htm
+     * Then we return:
+     *   http://example.com/gallery2/
+     *
+     * Note that the URL parts can all be overridden.
+     *
+     * @param boolean $forceDirect (optional) ensure Gallery base URL is returned
+     *        (different when embedded)
+     * @return string the base URL directory
+     */
+    function getCurrentUrlDir($forceDirect=false) {
+	if (!isset($this->_currentUrlBaseDir[$forceDirect])) {
+
+	    if (!empty($this->_path[$forceDirect])) {
+		/* An override for the path was defined (most likely an embedded Gallery request) */
+		$url = $this->makeUrl($this->_path[$forceDirect], $forceDirect);
+	    } else {
+		/*
+		 * Non-embedded request (else path must be set)
+		 * Auto-detect the path in the current URL
+		 */
+		$url = $this->getCurrentUrl($forceDirect);
+
+		/*
+		 * Remove the base file and any query string or path info after it:
+		 *    http://example.com/gallery2/main.php/core.ShowView/foo=bar/...
+		 * Extract everything up to but not including main.php:
+		 *    http://example.com/gallery2/
+		 */
+		if (empty($this->_file[0])) {
+		    $url = substr($url, 0, strrpos($url, '/') + 1);
+		} else if (($i = strpos($url, $this->_file[0])) !== false) {
+		    /* $this->_file might include query params, e.g. 'index.php?mod=gallery' */
+		    $url = substr($url, 0, $i);
+		} else if (($i = strpos($url, $this->_piFile[0])) !== false) {
+		    /* $this->_piFile doesn't include query params, but a traling slash */
+		    $url = substr($url, 0, $i - 1);
+		}
+	    }
+	    $url .= substr($url, -1) != '/' ? '/' : '';
+
+	    $this->_currentUrlBaseDir[$forceDirect] = $url;
+	}
+
+	return $this->_currentUrlBaseDir[$forceDirect];
+    }
+}
+?>

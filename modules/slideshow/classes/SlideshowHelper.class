@@ -1,0 +1,242 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/** MediaRSS paging items per page */
+define('SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE', 25);
+
+GalleryCoreApi::requireOnce('modules/slideshow/classes/SlideshowInterface_1_0.class');
+
+/**
+ * Helper utilities for building slideshow data.
+ * @package Slideshow
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17603 $
+ */
+class SlideshowHelper {
+
+    /**
+     * Return item, image and thumbnail data specific to a given GalleryItem.  If the item is a
+     * GalleryAlbumItem, then return slideshow data for the children of the album.  Otherwise,
+     * return slideshow data for the parent album of the given item, and set the start of the
+     * slideshow to be the location of the item provided.
+     *
+     * @param GalleryItem the item to show
+     * @param int $startId (optional) the id that the slideshow should start with
+     * @param int $offset (optional) number of items to skip
+     * @return array GalleryStatus a status code
+     *               array an array of data for each item requested where
+     *                     containing item, image and thumbnail entities
+     *               int the index into the data array where the slideshow should start.
+     *               int the offset value for the previous page, null for no previous page
+     *               int the offset value for the next page, null for no next page
+     */
+    function buildAlbumSlideshow($item, $startId=null, $offset=0) {
+	list ($ret, $canView) = GalleryCoreApi::hasItemPermission($item->getId(), 'core.view');
+	if ($ret) {
+	    return array($ret, null, null, null, null);
+	}
+	if (!$canView) {
+	    /* Avoid information disclosure, act as if the item didn't exist. */
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null, null, null, null);
+	}
+
+	if (!$item->getCanContainChildren()) {
+	    /* Photo: do slideshow of parent album, start at this photo */
+	    $startId = $item->getId();
+	    list ($ret, $item) =
+		GalleryCoreApi::loadEntitiesById($item->getParentId(), 'GalleryItem');
+	    if ($ret) {
+		return array($ret, null, null, null, null);
+	    }
+	    list ($ret, $canView) = GalleryCoreApi::hasItemPermission($item->getId(), 'core.view');
+	    if ($ret) {
+		return array($ret, null, null, null, null);
+	    }
+	    if (!$canView) {
+		/* Avoid information disclosure, act as if the item didn't exist. */
+		return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null, null, null, null);
+	    }
+	}
+
+	/** @todo Make sure startId is in the first page we serve */
+	list ($ret, $childIds) = GalleryCoreApi::fetchChildItemIds($item, $offset,
+	    SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE);
+	if ($ret) {
+	    return array($ret, null, null, null, null);
+	}
+
+	$itemId = $item->getId();
+	$prevOffset = $nextOffset = null;
+	list ($ret, $prevOffset, $nextOffset) = SlideshowHelper::paginateItemSlideshow($itemId,
+	    $offset);
+	if ($ret) {
+	    return array($ret, null, null, null, null);
+        }
+
+	list ($ret, $items, $start) = SlideshowHelper::buildItemsSlideshow($childIds, $startId);
+	return array($ret, $items, $start, $prevOffset, $nextOffset);
+    }
+
+    /**
+     * Return item, image and thumbnail data for a series of GalleryItem ids.  The resulting data
+     * will only contain images that the user is permitted to see.
+     *
+     * @param array $childIds ids of GalleryItem instances
+     * @param int $startId (optional) the id that the slideshow should start with
+     * @return array GalleryStatus a status code
+     *               array an array of data for each item requested where
+     *                     containing item, image and thumbnail entities
+     *               int the index into the data array where the slideshow should start.
+     */
+    function buildItemsSlideshow($childIds, $startId=null) {
+	global $gallery;
+
+	if (empty($childIds)) {
+	    return array(null, null, null);
+	}
+
+	$items = array();
+	list ($ret, $childItems) = GalleryCoreApi::loadEntitiesById($childIds, 'GalleryItem');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	list ($ret, $preferredFullImages) = GalleryCoreApi::fetchPreferredsByItemIds($childIds);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	list ($ret, $resizedImages) = GalleryCoreApi::fetchResizesByItemIds($childIds);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	list ($ret, $thumbnails) = GalleryCoreApi::fetchThumbnailsByItemIds($childIds);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	list ($ret, $permissions) = GalleryCoreApi::fetchPermissionsForItems($childIds);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	if (!isset($startId)) {
+	    $start = 0;
+	}
+
+	foreach ($childItems as $child) {
+	    if (count($items) % 100 == 0) {
+		$gallery->guaranteeTimeLimit(30);
+	    }
+
+	    $childId = $child->getId();
+	    if (!isset($permissions[$childId]['core.view'])) {
+		return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT, null, null,
+						   'Unknown id ' . $child->getId()),
+			     null, null);
+	    }
+
+	    if (empty($thumbnails[$childId])) {
+		/**
+		 * Don't show items without thumbnails for now.  It's a rare case and it'll screw
+		 * up the PicLens UI.  It'd work for LyteBox, though since that doesn't show
+		 * thumbnails.  But we don't know which consumer we're generating this data for.
+		 *
+		 * @todo Figure out a way to put in a placeholder, or allow the consumer to
+		 *       specify what data it wants back so LyteBox could tell us that it doesn't
+		 *       care about thumbnails.
+		 */
+		continue;
+	    }
+
+	    if (!isset($start) && $childId == $startId) {
+		$start = count($items);
+	    }
+
+	    /**
+	     * @todo add support for other types of items when we're confident that
+	     * piclens/lytebox support them.
+	     */
+	    if (GalleryUtilities::isA($child, 'GalleryPhotoItem')) {
+		$image = null;
+		if (isset($permissions[$childId]['core.viewSource'])) {
+		    /* Full size; check for preferred copy */
+		    if (isset($preferredFullImages[$childId])) {
+			$image = $preferredFullImages[$childId];
+		    } else if ($child->canBeViewedInline()) {
+			$image = $child;
+		    }
+		} else if (isset($permissions[$childId]['core.viewResizes']) &&
+			   isset($resizedImages[$childId])) {
+		    $maxSize = 0;
+		    foreach ($resizedImages[$childId] as $resize) {
+			/* Pick the largest resize */
+			$tmp = $resize->getWidth() * $resize->getHeight();
+			if ($tmp > $maxSize) {
+			    $image = $resize;
+			    $maxSize = $tmp;
+			}
+		    }
+		}
+
+		if (!$image) {
+		    $image = $thumbnails[$childId];
+		}
+
+		if ($image) {
+		    $items[] = array(
+			'item' => (array)$child,
+			'image' => (array)$image,
+			'thumbnail' => (array)$thumbnails[$childId]);
+		}
+	    }
+	}
+
+	return array(null, $items, isset($start) ? $start : 0);
+    }
+
+    /**
+     * Return offsets for the prevous and next page of slideshow items
+     *
+     * @param int $itemId the id of the item to be paginated 
+     * @param int $offset (optional) the current offset. Default 0.
+     * @return array GalleryStatus a status code
+     *               int the offset value for the previous page, null for no previous page
+     *               int the offset value for the next page, null for no next page
+     */
+    function paginateItemSlideshow($itemId, $offset=0) {
+	list ($ret, $itemCount) = GalleryCoreApi::fetchChildCounts(array($itemId));
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$itemCount = $itemCount[$itemId];
+
+	$prevOffset = $offset - SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE;
+	if ($prevOffset < 0 ) {
+	    $prevOffset = null;
+	}
+	$nextOffset = $offset + SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE;
+	if ($nextOffset >= $itemCount) {
+	    $nextOffset = null;
+	}
+
+	return array(null, $prevOffset, $nextOffset);
+    }
+}
+?>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!DOCTYPE change
+  SYSTEM "../../../../../lib/tools/dtd/DatabaseChangeDefinition2.0.dtd">
+<change>
+  <table-name>AccessMap</table-name>
+  <schema-from>
+    <schema-major>1</schema-major>
+    <schema-minor>0</schema-minor>
+  </schema-from>
+  <schema-to>
+    <schema-major>1</schema-major>
+    <schema-minor>1</schema-minor>
+  </schema-to>
+  <remove>
+    <key>
+      <column-name>accessListId</column-name>
+      <column-name>userId</column-name>
+      <column-name>groupId</column-name>
+    </key>
+  </remove>
+  <add>
+    <column>
+      <column-name>userOrGroupId</column-name>
+      <column-type>INTEGER</column-type>
+      <not-null/>
+      <default>0</default>
+    </column>
+  </add>
+</change>

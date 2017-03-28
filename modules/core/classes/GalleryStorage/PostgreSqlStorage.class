@@ -1,0 +1,258 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryStorage.class');
+
+/**
+ * PostgreSQL extension of the GalleryStorage class.
+ * This object implements the hooks for saving and restoring objects in a PostgreSQL database.
+ *
+ * @package GalleryCore
+ * @subpackage Storage
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class PostgreSqlStorage extends GalleryStorage {
+
+    function PostgreSqlStorage($config) {
+	$this->GalleryStorage($config);
+	$this->_isTransactional = true;
+    }
+
+    /**
+     * Return the type of this database
+     * @return string
+     */
+    function getType() {
+	return 'postgres';
+    }
+
+    /**
+     * @see GalleryStorage::cleanStore
+     */
+    function cleanStore() {
+	$ret = parent::cleanStore();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/*
+	 * Use a temporary database connection such that possible errors when dropping the bit_or
+	 * function don't affect the main transaction.
+	 */
+	list ($ret, $tmpDb) = $this->_getConnection(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Ignore errors when trying to drop the bit_or function */
+	$this->_traceStart();
+	$recordSet = $tmpDb->Execute('DROP AGGREGATE BIT_OR(bit)');
+	$tmpDb->Close();
+	$this->_traceStop();
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::configureStore
+     */
+    function configureStore($moduleId, $upgradeInfo=array()) {
+	if ($moduleId == 'core' && empty($upgradeInfo)) {
+	    $query = '
+	    CREATE AGGREGATE BIT_OR
+	    (
+	      basetype = bit,
+	      sfunc = bitor,
+	      stype = bit
+	    )';
+
+	    /* Create a temporary database connection and install our custom aggregate function */
+	    list ($ret, $tmpDb) = $this->_getConnection(true);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $this->_traceStart();
+	    $recordSet = $tmpDb->Execute($query);
+	    $tmpDb->Close();
+	    $this->_traceStop();
+
+	    /*
+	     * Ignore errors here, since we'll get them every time we try to
+	     * install the aggregate, which will happen every time we upgrade core
+	     * or install in a database with another Gallery already present.
+	     *
+	     * XXX: At some point figure out a way to detect if the aggregate is
+	     * already there before trying to install it again.
+	     */
+	}
+
+	$ret = parent::configureStore($moduleId, $upgradeInfo);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::_setConnectionSettings
+     */
+    function _setConnectionSettings(&$db) {
+	if (!empty($this->_schema)) {
+	    $this->_traceStart();
+	    $db->Execute('set search_path to ' . $this->_schema);
+	    $this->_traceStop();
+	}
+    }
+
+    /**
+     * @see GalleryStorage::convertIntToBits
+     */
+    function convertIntToBits($intVal) {
+	return sprintf("%032b", $intVal);
+    }
+
+    /**
+     * @see GalleryStorage::convertBitsToInt
+     */
+    function convertBitsToInt($bitsVal) {
+	return bindec($bitsVal);
+    }
+
+    /**
+     * @see GalleryStorage::getFunctionsSql
+     */
+    function getFunctionSql($functionName, $args) {
+	switch($functionName) {
+	case 'CONCAT':
+	    $sql = implode(' || ', $args);
+	    break;
+
+	case 'BITAND':
+	    /* Cast any input values as the 'bit' type */
+	    $args = str_replace('?', '?', $args);
+	    $sql = $args[0] . ' & ' . $args[1];
+	    break;
+
+	case 'BIT_OR':
+	    $sql = 'BIT_OR(' . $args[0] . ')';
+	    break;
+
+	case 'UNIX_TIMESTAMP':
+	    $sql = 'date_part(\'epoch\', ' . $args[0] . ')';
+	    break;
+
+	case 'AS':
+	    $sql = 'AS';
+	    break;
+
+	case 'SUBSTRING':
+	    $sql = sprintf('SUBSTRING(%s)', implode(', ', $args));
+	    break;
+
+	case 'RAND':
+	    $sql = sprintf('RANDOM(%s)', empty($args) ? '' : $args[0]);
+	    break;
+
+	case 'RANDOM_INTEGER':
+	    $sql = 'FLOOR(RANDOM() * 2147483647)';
+	    break;
+
+	case 'LIMIT':
+	    $sql = $args[1] . ' LIMIT ' . $args[0];
+	    break;
+
+	case 'CASE':
+	    $sql = array();
+	    while (count($args) > 1) {
+		$sql[] = 'WHEN ' . array_shift($args) . ' THEN ' . array_shift($args);
+	    }
+	    $sql = 'CASE ' . implode(' ', $sql) . ' ELSE ' . $args[0] . ' END';
+	    break;
+
+	case 'LIKE':
+	    $sql = $args[0] . ' LIKE ' . $args[1];
+	    break;
+
+	case 'MULTI_INSERT':
+	    /*
+	     * 0 - table name
+	     * 1 - array of column names
+	     * 2 - number of rows
+	     */
+	    $markers = GalleryUtilities::makeMarkers(sizeof($args[1]));
+	    $rowList = rtrim(str_repeat('SELECT ' . $markers . ' UNION ALL ', $args[2]),
+			     'UNION ALL ');
+	    $sql = 'INSERT INTO ' . $args[0] . ' (';
+	    $sql .= join(', ', $args[1]);
+	    $sql .= ') ' . $rowList;
+	    break;
+
+	case 'AVG':
+	    $sql = sprintf('AVG(%s)', $args[0]);
+	    break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED, __FILE__, __LINE__,
+					      $functionName . ' ' . implode(' ', $args)), null);
+	}
+
+	return array(null, $sql);
+    }
+
+    /**
+     * Get database version.
+     * @return string version
+     */
+    function getVersion() {
+	if (function_exists('pg_version')) {
+	    return implode(' ', pg_version());
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::_getOptimizeStatements
+     */
+    function _getOptimizeStatements() {
+	return array('VACUUM ANALYZE VERBOSE %s');
+    }
+
+    /**
+     * @see GalleryStorage::encodeBlob
+     *
+     * Note: pg_escape_bytea is only available in PHP 4.2.0+ and is even a little
+     * slower than addcslashes.
+     */
+    function encodeBlob($blob) {
+	/* See: http://www.postgresql.org/docs/8.1/interactive/datatype-binary.html */
+	return addcslashes($blob, "\000..\037\047\134\177..\377");
+    }
+
+    /**
+     * @see GalleryStorage::decodeBlob
+     */
+    function decodeBlob($blob) {
+	return stripcslashes($blob);
+    }
+}
+?>

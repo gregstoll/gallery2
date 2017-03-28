@@ -1,0 +1,197 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryStorage.class');
+
+/**
+ * Oracle extension of the GalleryStorage class.
+ * This object implements the hooks for saving and restoring objects in an Oracle database.
+ *
+ * @package GalleryCore
+ * @subpackage Storage
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 18160 $
+ */
+class OracleStorage extends GalleryStorage {
+
+    function OracleStorage($config) {
+	$this->GalleryStorage($config);
+	$this->_isTransactional = true;
+	$this->_isEmptyAllowedForNotNullColumn = false;
+    }
+
+    /**
+     * Return the type of this database
+     * @return string
+     */
+    function getType() {
+	return 'oracle';
+    }
+
+    /**
+     * @see GalleryStorage::_setConnectionSettings
+     */
+    function _setConnectionSettings(&$db) {
+	/* May cause "ORA-12705: Cannot access NLS data files or invalid environment specified" */
+	/* @putenv("NLS_LANG=UTF8"); */
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::getFunctionsSql
+     */
+    function getFunctionSql($functionName, $args) {
+	switch($functionName) {
+	case 'CONCAT':
+	    $sql = implode(' || ', $args);
+	    break;
+
+	case 'BITAND':
+	    $sql = 'BITAND(' . $args[0] . ',' . $args[1] . ')';
+	    break;
+
+	case 'BIT_OR':
+	    /*
+	     * By default don't use BIT_OR aggregate, but OR together values in PHP.
+	     * Performing BIT_OR in the database may boost performance a bit; to do
+	     * this, see OracleCreateBitOr.sql in this directory and run the statements
+	     * with sqlplus.  Then uncomment the line below:
+	     */
+	    /* return array(null, 'BIT_OR(' . $args[0] . ')'); */
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION), null);
+	    break;
+
+	case 'AS':
+	    $sql = '';
+	    break;
+
+	case 'SUBSTRING':
+	    $sql = sprintf('SUBSTR(%s)', implode(', ', $args));
+	    break;
+
+	case 'RAND':
+	    if (!empty($args)) {
+		return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED, __FILE__, __LINE__,
+						  $functionName . ' ' . implode(' ', $args)), null);
+	    }
+	    $sql = 'DBMS_RANDOM.RANDOM';
+	    break;
+
+	case 'RANDOM_INTEGER':
+	    $sql = 'ROUND(DBMS_RANDOM.VALUE(0, 2147483647))';
+	    break;
+
+	case 'LIMIT':
+	    $sql = 'SELECT * FROM (' . $args[1] . ') WHERE ROWNUM <= ' . $args[0];
+	    break;
+
+	case 'CASE':
+	    $sql = array();
+	    while (count($args) > 1) {
+		$sql[] = 'WHEN ' . array_shift($args) . ' THEN ' . array_shift($args);
+	    }
+	    $sql = 'CASE ' . implode(' ', $sql) . ' ELSE ' . $args[0] . ' END';
+	    break;
+
+	case 'LIKE':
+	    $sql = $args[0] . ' LIKE ' . $args[1];
+	    break;
+
+	case 'MULTI_INSERT':
+	    /*
+	     * 0 - table name
+	     * 1 - array of column names
+	     * 2 - number of rows
+	     */
+	    $markers = GalleryUtilities::makeMarkers(sizeof($args[1]));
+	    $rowList = array_fill(0, $args[2], 'SELECT ' . $markers . ' FROM DUAL');
+	    $sql = 'INSERT INTO ' . $args[0] . ' (';
+	    $sql .= implode(', ', $args[1]);
+	    $sql .= ') ' . implode(' UNION ALL ', $rowList);
+	    break;
+
+	case 'AVG':
+	    $sql = sprintf('AVG(%s)', $args[0]);
+	    break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED, __FILE__, __LINE__,
+					      $functionName . ' ' . implode(' ', $args)), null);
+	}
+
+	return array(null, $sql);
+    }
+
+    /**
+     * Get database version.
+     * @return string version
+     */
+    function getVersion() {
+	if (function_exists('oci_server_version')) {
+	    if (!isset($this->_db)) {
+		list ($ret, $this->_db) = $this->_getConnection();
+		if ($ret) {
+		    /* Try to fallback */
+		    return ociserverversion();
+		}
+	    }
+	    return oci_server_version($this->_db->_connectionID);
+	}
+	return ociserverversion();
+    }
+
+    /**
+     * @see GalleryStorage::_getOptimizeStatements
+     */
+    function _getOptimizeStatements() {
+	/* Is this the right command to use? */
+	return array('ANALYZE TABLE %s COMPUTE STATISTICS');
+    }
+
+    /**
+     * @see GalleryStorage::_normalizeValue
+     */
+    function _normalizeValue($value, $memberData, $fromDb=false) {
+	if ($fromDb && is_null($value) && ($memberData['type'] == STORAGE_TYPE_STRING
+					|| $memberData['type'] == STORAGE_TYPE_TEXT)) {
+	    return '';
+	} else {
+	    return parent::_normalizeValue($value, $memberData, $fromDb);
+	}
+    }
+
+    /**
+     * Derived from PostgreSqlStorage::encodeBlob and adjusted for Oracle (based on experiments).
+     * @see GalleryStorage::decodeBlob
+     */
+    function encodeBlob($blob) {
+	/* See: http://www.postgresql.org/docs/8.1/interactive/datatype-binary.html */
+	return addcslashes($blob, "\000..\037\134\177..\377");
+    }
+
+    /**
+     * @see GalleryStorage::decodeBlob
+     */
+    function decodeBlob($blob) {
+	return stripcslashes($blob);
+    }
+}
+?>

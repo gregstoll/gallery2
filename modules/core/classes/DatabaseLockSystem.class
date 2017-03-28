@@ -1,0 +1,139 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryLockSystem.class');
+
+/**
+ * Database backed locking.  This is less efficient than filesystem based locking,
+ * but is more reliable and portable.
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class DatabaseLockSystem extends GalleryLockSystem {
+
+    /**
+     * @see GalleryLockSystem::_acquireLock
+     */
+    function _acquireLock($ids, $timeout, $lockType) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+
+	if ($lockType == LOCK_WRITE) {
+	    list ($ret, $lock) = $storage->acquireWriteLock($ids, $timeout);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	} else {
+	    list ($ret, $lock) = $storage->acquireReadLock($ids, $timeout);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	$this->_locks[$lock['lockId']] = $lock;
+	return array(null, $lock['lockId']);
+    }
+
+    /**
+     * @see GalleryLockSystem::_releaseLocksNow
+     */
+    function _releaseLocksNow($locks) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+
+	$ret = $storage->releaseLocks(array_keys($locks));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryLockSystem:_removeObjectsFromLock
+     */
+    function _removeObjectsFromLock(&$lock, $ids) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+
+	$ret = $storage->removeIdsFromLock($lock, $ids);
+	if ($ret) {
+	    return $ret;
+	}
+	foreach ($ids as $id) {
+	    unset($lock['ids'][$id]);
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryLockSystem:_moveObjectsBetweenLocks
+     */
+    function _moveObjectsBetweenLocks($relock, $newLockId) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+
+	$ret = $storage->moveIdsBetweenLocks(
+		$relock, $newLockId, $this->_locks[$newLockId]['type']);
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = parent::_moveObjectsBetweenLocks($relock, $newLockId);
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryLockSystem::_newLockId
+     */
+    function _newLockId() {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+
+	list ($ret, $lockId) = $storage->newLockId();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	return array(null, $lockId);
+    }
+
+    /**
+     * @see GalleryLockSystem::refreshLocks
+     */
+    function refreshLocks($freshUntil) {
+	global $gallery;
+
+	if (!empty($this->_locks)) {
+	    $storage =& $gallery->getStorage();
+	    $ret = $storage->refreshLocks(array_keys($this->_locks), $freshUntil);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+}
+?>

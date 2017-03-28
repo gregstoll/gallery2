@@ -1,0 +1,259 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A toolkit for manipulating files.
+ * This class defines the API for file manipulation toolkits.  It's designed such that we can
+ * create many different toolkits, each providing its own unique functions for manipulating files.
+ * Some of these toolkits may be centered around a particular technology (eg, NetPBPM, ImageMagick,
+ * Jhead, etc) while others may be focussed on a specific type of file (eg JPEG).
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Ernesto Baschny <ernst@baschny.de>
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 20954 $
+ * @abstract
+ */
+class GalleryToolkit {
+
+    /**
+     * Get a certain property of a file
+     *
+     * @param string $mimeType
+     * @param string $propertyName
+     * @param string $sourceFilename
+     * @return array GalleryStatus a status code,
+     *	       mixed the value of the property
+     */
+    function getProperty($mimeType, $propertyName, $sourceFilename) {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+    }
+
+    /**
+     * Perform a certain operation
+     *
+     * Perform the wanted operation on sourceFilename and write the results in
+     * destFilename.
+     * Note: Rules for 'width' and 'height' keys in $context..
+     *   If w/h are present in context and toolkit performs an operation that
+     *   changes the w/h then it must update the context with the new values.
+     *   (This is optional if the context previously had no w/h values)
+     *
+     * @param string $mimeType
+     * @param string $operationName
+     * @param string $sourceFilename the source file name
+     * @param string $destFilename the destination file name (it will be overwritten if it exists)
+     * @param array $parameters
+     * @param array $context (optional) context data
+     * @return array GalleryStatus a status code
+     *               string the output mime type
+     *               array context data
+     */
+    function performOperation($mimeType, $operationName, $sourceFilename,
+			      $destFilename, $parameters, $context=array()) {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null, null);
+    }
+
+    /**
+     * Apply the transform operation to the set of target operations.  The transform operation
+     * will typically have happened upstream from the target operations, so we have to adjust
+     * the target operations to take it into account.  For example, if the target operations
+     * include a crop operation and upstream we rotate|90 it, then you'd want to rotate the
+     * crop's parameters accordingly.
+     *
+     * @param string $transformOperation the upstream transform
+     * @param string $targetOperations the current set of operations
+     * @param boolean $reverse true if we should apply the transform in reverse
+     * @return array boolean success or failure
+     *               string the new set of operations
+     */
+    function applyTransform($transformOperation, $targetOperations, $reverse=false) {
+	$transformedOperations = $targetOperations;
+
+	/* Right now, only the rotate operation will cause issues */
+	if (!strncmp($transformOperation, 'rotate', 6)) {
+	    /* And it will only cause issues to the crop operation */
+	    if (strstr($targetOperations, 'crop|') !== false) {
+		$rotationAmount = substr($transformOperation, 7);
+		if ($reverse) {
+		    switch ($rotationAmount) {
+		    case '90':
+			$rotationAmount = '270';
+			break;
+
+		    case '-90':
+		    case '270':
+			$rotationAmount = '90';
+			break;
+		    }
+		}
+
+		$newOperations = array();
+		foreach (explode(';', $targetOperations) as $operation) {
+		    if (!strncmp($operation, 'crop', 4)) {
+			list ($x, $y, $width, $height) = explode(',', substr($operation, 5));
+
+			switch ($rotationAmount) {
+			case '90':
+			    $newX = GalleryUtilities::roundToString(
+				100.0 - GalleryUtilities::castToFloat($y)
+				      - GalleryUtilities::castToFloat($height), 3);
+			    $newY = $x;
+			    $newWidth = $height;
+			    $newHeight = $width;
+			    break;
+
+			case '-90':
+			case '270':
+			    $newX = $y;
+			    $newY = GalleryUtilities::roundToString(
+				100.0 - GalleryUtilities::castToFloat($x)
+				      - GalleryUtilities::castToFloat($width), 3);
+			    $newWidth = $height;
+			    $newHeight = $width;
+			    break;
+
+			case '180':
+			    $newX = GalleryUtilities::roundToString(
+				100.0 - GalleryUtilities::castToFloat($x)
+				      - GalleryUtilities::castToFloat($width), 3);
+			    $newY = GalleryUtilities::roundToString(
+				100.0 - GalleryUtilities::castToFloat($y)
+				      - GalleryUtilities::castToFloat($height), 3);
+			    $newWidth = $width;
+			    $newHeight = $height;
+			    break;
+
+			default:
+			    /* What do we do now?  Do nothing. */
+			    $newX = $x;
+			    $newY = $y;
+			    $newWidth = $width;
+			    $newHeight = $height;
+			}
+
+			$newOperations[] = sprintf('crop|%s,%s,%s,%s',
+						   $newX, $newY, $newWidth, $newHeight);
+		    } else {
+			$newOperations[] = $operation;
+		    }
+		}
+		$transformedOperations = join(';', $newOperations);
+	    }
+	}
+
+	return array(true, $transformedOperations);
+    }
+
+
+    /**
+     * Merge two operations together in an intelligent way.  The end result of
+     * the merge should be a new operation and arguments that would result if
+     * you applied the operations in sequence.  For example, if the operations
+     * are 'rotate|90' and 'rotate|180', then the result would be 'rotate|270'
+     * (or 'rotate|-90').  The toolkit should only merge the operations if it
+     * can do so cleanly.
+     *
+     * @param string $operation1 the first operation
+     * @param array $args1 the first operation's arguments
+     * @param string $operation2 the second operation
+     * @param array $args2 the second operation's arguments
+     * @return array (true if the operation was success,
+     *                $mergedOperation,
+     *                $mergedArgs)
+     */
+    function mergeOperations($operation1, $args1, $operation2, $args2) {
+	/* We can only merge like operations */
+	if ($operation1 != $operation2) {
+	    /* But not all like operations have the same name */
+	    $likeOperations = array('resize', 'scale', 'thumbnail');
+	    if (!(in_array($operation1, $likeOperations)
+		    && in_array($operation2, $likeOperations))) {
+		return array(false, null, null);
+	    }
+	}
+
+	switch ($operation1) {
+	case 'crop':
+	case 'resize':
+	case 'scale':
+	case 'thumbnail':
+	    /* For like operations, the second operation takes precedence */
+	    return array(true, $operation2, $args2);
+	    break;
+
+	case 'rotate':
+	    /* Rotation is additive */
+	    $rotation = (360 + $args1[0] + $args2[0]) % 360;
+
+	    /* 0 rotation means the operation goes away */
+	    if ($rotation == 0) {
+		return array(true, null, null);
+	    }
+
+	    if (abs($rotation) > 180) {
+		$rotation = $rotation - 360;
+	    }
+	    return array(true, $operation2, array($rotation));
+
+	default:
+	    return array(false, null, null);
+	}
+    }
+
+    /**
+     * Estimate the dimensions of a GalleryDerivativeImage from its operations and its source.
+     *
+     * @param GalleryDerivativeImage $derivative
+     * @param GalleryEntity $source (probably a GalleryPhotoItem or GalleryMovieItem)
+     * @static
+     */
+    function estimateDimensions(&$derivative, $source) {
+	if (method_exists($source, 'getwidth') && method_exists($source, 'getheight')) {
+	    $width = $source->getWidth();
+	    $height = $source->getHeight();
+	    if ($width && $height) {
+		$operations = $derivative->getDerivativeOperations();
+		if (preg_match('/^(?:thumbnail|scale)\|(\d+)$/', $operations, $matches)) {
+		    $target = $matches[1];
+		    if (!empty($target)) {
+			if (GalleryUtilities::isA($source, 'GalleryDerivativeImage')) {
+			    /*
+			     * If the source is also a derivative then assume the real source
+			     * is larger and allow upscaling in this estimate.  It's possible
+			     * the real source is actually smaller than our $target size, but
+			     * it will be corrected once the derivative is actually built.
+			     */
+			    list ($newWidth, $newHeight) =
+				GalleryUtilities::scaleDimensionsToFit($width, $height, $target);
+			} else {
+			    list ($newWidth, $newHeight) =
+				GalleryUtilities::shrinkDimensionsToFit($width, $height, $target);
+			}
+			$derivative->setWidth($newWidth);
+			$derivative->setHeight($newHeight);
+		    }
+		}
+	    }
+	}
+    }
+}
+?>

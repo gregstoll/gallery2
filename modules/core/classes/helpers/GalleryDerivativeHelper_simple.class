@@ -1,0 +1,186 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Utility functions useful in managing GalleryDerivatives
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryDerivativeHelper_simple {
+
+    /**
+     * @see GalleryCoreApi::rebuildDerivativeCacheIfNotCurrent
+     */
+    function rebuildCacheIfNotCurrent($derivativeId, $fixBroken=false) {
+	global $gallery;
+
+	list ($ret, $derivative) =
+			GalleryCoreApi::loadEntitiesById($derivativeId, 'GalleryDerivative');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	list ($ret, $current) = $derivative->isCacheCurrent();
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$isBroken = $derivative->getIsBroken();
+	if (!$current || ($fixBroken && !empty($isBroken))) {
+	    list ($ret, $derivative) =
+		GalleryCoreApi::rebuildDerivativeCache($derivativeId);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	}
+
+	return array(null, $derivative,
+		     (!$current || ($fixBroken && !empty($isBroken))));
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchThumbnailsByItemIds
+     */
+    function fetchThumbnailsByItemIds($ids) {
+	if (!is_array($ids)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	if (empty($ids)) {
+	    return array(null, array());
+	}
+
+	list ($ret, $results) = GalleryDerivativeHelper_simple::_loadDerivatives(
+	    $ids, null, DERIVATIVE_TYPE_IMAGE_THUMBNAIL);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Only one thumb per item, so simplify the results */
+	foreach ($results as $id => $value) {
+	    $results[$id] = $value[0];
+	}
+
+	return array(null, $results);
+    }
+
+    /**
+     * Load the derivative images for the ids/types specified
+     *
+     * @param array $itemIds GalleryItem ids
+     * @param array $sourceIds GalleryDataItem or GalleryDerivative source ids
+     * @param array $types derivative types (eg. 'DERIVATIVE_TYPE_IMAGE_THUMBNAIL')
+     * @return array GalleryStatus a status code
+     *               array(GalleryItem id => GalleryDerivativeImage, ...)
+     * @access private
+     */
+    function _loadDerivatives($itemIds, $sourceIds, $types=array()) {
+	global $gallery;
+
+	if (empty($itemIds) && empty($sourceIds) ||
+	    empty($itemIds) && !is_array($sourceIds) ||
+	    empty($sourceIds) && !is_array($itemIds)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER),
+			 null);
+	}
+
+	if (!is_array($types)) {
+	    $types = array($types);
+	}
+
+	if (!empty($itemIds)) {
+	    $idMarkers = GalleryUtilities::makeMarkers(sizeof($itemIds));
+	    $data = $itemIds;
+	    $query = '
+	    SELECT
+	      [GalleryDerivative::id], [GalleryChildEntity::parentId]
+	    FROM
+	      [GalleryDerivative], [GalleryChildEntity]
+	    WHERE
+	      [GalleryDerivative::id] = [GalleryChildEntity::id]
+	      AND
+	      [GalleryChildEntity::parentId] IN (' . $idMarkers . ')
+	    ';
+	} else {
+	    $idMarkers = GalleryUtilities::makeMarkers(sizeof($sourceIds));
+	    $data = $sourceIds;
+	    $query = '
+	    SELECT
+	      [GalleryDerivative::id], [GalleryDerivative::derivativeSourceId]
+	    FROM
+	      [GalleryDerivative]
+	    WHERE
+	      [GalleryDerivative::derivativeSourceId] IN (' . $idMarkers . ')
+	    ';
+	}
+	foreach ($data as $idx => $id) {
+	    $data[$idx] = (int)$id;
+	}
+
+	if (!empty($types)) {
+	    $typeMarkers = GalleryUtilities::makeMarkers(sizeof($types));
+	    $query .= '
+	      AND
+	      [GalleryDerivative::derivativeType] IN (' . $typeMarkers . ')
+	    ';
+	    $data = array_merge($data, $types);
+	}
+
+	list ($ret, $searchResults) = $gallery->search($query, $data);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$derivativeTable = array();
+	if ($searchResults->resultCount() > 0) {
+	    $derivativeIds = array();
+	    while ($result = $searchResults->nextResult()) {
+		$derivativeIds[] = $result[0];
+	    }
+
+	    /*
+	     * Sorting this in the database triggers a filesort in MySQL which
+	     * is slow.  We expect this to be a fairly small set of derivatives
+	     * so we'll do it in memory in PHP instead and lighten the load on the DB.
+	     *
+	     * TODO: Consider caching this result since it's the kind of thing
+	     * that will be called often on data that won't change frequently.
+	     */
+	    sort($derivativeIds, SORT_NUMERIC);
+
+	    /* Load all the derivative images */
+	    list ($ret, $derivativeEntities) =
+			GalleryCoreApi::loadEntitiesById($derivativeIds, 'GalleryDerivative');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    /* Create a table of child id -> image data */
+	    foreach ($derivativeEntities as $derivative) {
+		$derivativeTable[$derivative->getParentId()][] = $derivative;
+	    }
+	}
+
+	return array(null, $derivativeTable);
+    }
+}
+?>

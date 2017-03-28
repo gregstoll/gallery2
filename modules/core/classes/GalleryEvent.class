@@ -1,0 +1,106 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is a container for information about a specific event
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryEvent {
+
+    /**
+     * Event name
+     * @var string
+     * @access private
+     */
+    var $_eventName;
+
+    /**
+     * Target entity
+     * @var GalleryEntity
+     * @access private
+     */
+    var $_entity;
+
+    /**
+     * Event specific data
+     * @var mixed
+     * @access private
+     */
+    var $_data;
+
+
+    function GalleryEvent() {
+	$this->setEventName(null);
+	$this->setEntity($null=null);
+	$this->setData(null);
+    }
+
+    /**
+     * Set this event's name
+     * @param string $eventName
+     */
+    function setEventName($eventName) {
+	$this->_eventName = $eventName;
+    }
+
+    /**
+     * Return the event name
+     * @return string the event name
+     */
+    function getEventName() {
+	return $this->_eventName;
+    }
+
+    /**
+     * Set this event's entity
+     * @param GalleryEntity $entity
+     */
+    function setEntity(&$entity) {
+	$this->_entity =& $entity;
+    }
+
+    /**
+     * Return the event's entity
+     * @return GalleryEntity
+     */
+    function &getEntity() {
+	return $this->_entity;
+    }
+
+    /**
+     * Set this event's data
+     * @param mixed $data
+     */
+    function setData($data) {
+	$this->_data = $data;
+    }
+
+    /**
+     * Return the event's data
+     * @return mixed
+     */
+    function getData() {
+	return $this->_data;
+    }
+}
+?>

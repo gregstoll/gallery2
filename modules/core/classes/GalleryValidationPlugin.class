@@ -1,0 +1,65 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is an interface for security/validation plugins that will be used in multiple places
+ * across the codebase.  Most notably, UserLogin and the register module.
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Jay Rossiter <cryptographite@users.sf.net>
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class GalleryValidationPlugin {
+
+    /**
+     * Perform validation for this request.
+     *
+     * @param array $form the form values
+     * @param array $options (optional) validation options
+     *        'level' => HIGH or MEDIUM or LOW (defaults to HIGH)
+     *        'key' => (string) unique identifier for this validation request (for MEDIUM)
+     *        'pass' => (boolean) false to increment failure count (for MEDIUM/LOW)
+     * @return array GalleryStatus a status code
+     *               array of error keys
+     *               boolean true/false should we continue processing this request?
+     */
+    function performValidation(&$form, $options=array()) {
+	return array(null, array(), true);
+    }
+
+    /**
+     * Prepare template for validation.
+     *
+     * @param array $form the form values
+     * @param array $options (optional) validation options
+     *        'level' => HIGH or MEDIUM or LOW (defaults to HIGH)
+     *        'key' => (string) unique identifier for this validation request (for MEDIUM)
+     * @return array GalleryStatus a status code
+     *               string the path to a template file to include or null
+     *               string localization domain for the template file or null
+     */
+    function loadTemplate(&$form, $options=array()) {
+	return array(null, null, null);
+    }
+}
+?>

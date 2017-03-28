@@ -1,0 +1,40 @@
+<div>
+  <table cellspacing="0">
+    <tr>
+      <td class="heading" colspan="2">
+        <?php print _('Upgrade Steps') ?>
+      </td>
+    </tr>
+    <?php for ($i = 0; $i < count($steps); $i++): ?>
+    <tr>
+      <td class="navnum">
+        <?php if ($i <= $currentStep->getStepNumber()
+                  && ($steps[$i]->isComplete() || $steps[$i]->isOptional())): ?>
+          <span class="success">&radic;</span>
+        <?php elseif ($steps[$i]->isInError()): ?>
+          <span class="error">&#10007;</span>
+        <?php else: ?>
+          <?php print $i ?>
+        <?php endif; ?>
+      </td>
+      <td class="navtext">
+        <?php $linkable = ($i == 0 ||
+              ($i <= $currentStep->getStepNumber() + 1 &&
+               ($steps[$i-1]->isComplete() || $steps[$i-1]->isOptional())));
+        ?>
+        <?php if ($linkable): ?>
+          <a href="<?php generateUrl('index.php?step=' . $i) ?>"
+	    	<?php if ($i == $currentStep->getStepNumber()): ?>
+	    	class="current"
+	      	<?php endif; ?>
+	      >
+        <?php endif; ?>
+        <?php print $steps[$i]->stepName(); ?>
+        <?php if ($linkable): ?>
+          </a>
+        <?php endif; ?>
+      </td>
+    </tr>
+    <?php endfor; ?>
+  </table>
+</div>

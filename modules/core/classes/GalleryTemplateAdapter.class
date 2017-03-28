@@ -1,0 +1,1275 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This class is a glue layer between the templating system and our various
+ * callbacks that generate URLs, localized text, dates, themed widgets, etc.
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 20954 $
+ */
+class GalleryTemplateAdapter {
+
+    /**
+     * The number of times our block callbacks have been executed
+     * @var array
+     * @access private
+     */
+    var $_callCount;
+
+    /**
+     * The active theme
+     * @var GalleryTheme
+     * @access private
+     */
+    var $_theme;
+
+    /**
+     * Aggregation of text that we want to output at the bottom of the page,
+     * useful for when we need to put javascript at the bottom.
+     * @var string
+     * @access private
+     */
+    var $_trailer;
+
+    /**
+     * Registered callbacks that will get executed during the trailer.
+     * @var array
+     * @access private
+     */
+    var $_trailerCallbacks = array();
+
+    /**
+     * Current state of the progress bar.
+     * @var array
+     * @access private
+     */
+    var $_progressBarStats;
+
+
+    function GalleryTemplateAdapter() {
+	$this->_callCount = array();
+	$this->_theme = null;
+	$this->_trailer = null;
+	$this->_progressBarStats = null;
+    }
+
+    /**
+     * Set the theme
+     * @param GalleryTheme $theme
+     */
+    function setTheme($theme) {
+	$this->_theme = $theme;
+    }
+
+    /*************************************************************
+     * Special purpose template callback methods.
+     *************************************************************/
+
+    /**
+     * Return a valid Gallery URL, standalone or embedded.
+     * @see GalleryUrlGenerator::generateUrl
+     *
+     * @param array $params data in key/value pairs
+     * @param Smarty $smarty the smarty instance
+     * @return string a URL
+     */
+    function url($params, &$smarty) {
+	global $gallery;
+
+	/* Allow the user to pass in bulk params */
+	$urlParams = isset($params['params']) ? $params['params'] : array();
+	unset($params['params']);
+
+	/* Search for args and add them to the params */
+	for ($i = 1; ($arg = "arg$i") && isset($params[$arg]); $i++) {
+	    list ($key, $value) = explode('=', $params[$arg], 2);
+	    $urlParams[$key] = $value;
+	    unset($params[$arg]);
+	}
+
+	/* Add special 'href' key to the params */
+	if (isset($params['href'])) {
+	    $urlParams['href'] = $params['href'];
+	    unset($params['href']);
+	}
+
+	/* Allow the user to pass in bulk options */
+	if (isset($params['options'])) {
+	    $params = array_merge($params['options'], $params);
+	    unset($params['options']);
+	}
+
+	$urlGenerator =& $gallery->getUrlGenerator();
+	return $urlGenerator->generateUrl($urlParams, $params);
+    }
+
+    /**
+     * Return any hidden form variables that we want to embed in this form based on the
+     * current session and request context.  We use this to pass the special "return" variable
+     * forward, for example.
+     *
+     * @param array $params data in key/value pairs
+     * @param Smarty $smarty the smarty instance
+     * @return a series of XHTML 1.0 compliant <input> elements
+     */
+    function hiddenFormVars($params, &$smarty) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$session =& $gallery->getSession();
+	$vars = array();
+
+	/* The 'return' url */
+	if (GalleryUtilities::hasRequestVariable('return')) {
+	    $vars['return'] = GalleryUtilities::getRequestVariables('return');
+	}
+
+	/* Remember the current url for getting back to where we came from */
+	if (empty($vars['return'])) {
+	    $vars['return'] = $urlGenerator->getNavigationReturnUrl();
+	}
+
+	/* Remember the original URL where this form was first shown */
+	$vars['formUrl'] = GalleryUtilities::getRequestVariables('formUrl');
+	if (empty($vars['formUrl'])) {
+	    /* First time we load this form */
+	    $vars['formUrl'] = $urlGenerator->getNavigationReturnUrl();
+	}
+
+	/* Add the auth token to all controller requests */
+	$vars['authToken'] = $session->getAuthToken();
+
+	$out = '';
+	foreach ($vars as $key => $value) {
+	    $out .= sprintf('<input type="hidden" name="%s" value="%s"/>' . "\n",
+			   GalleryUtilities::prefixFormVariable($key),
+			   $value);
+	}
+	return $out;
+    }
+
+    /**
+     * Return a valid Gallery date.
+     * @todo This needs to be refactored.
+     *
+     * @param array $params data in key/value pairs
+     * @param Smarty $smarty the smarty instance
+     * @return string date
+     */
+    function date($params, &$smarty) {
+	global $gallery;
+	static $defaultFormat;
+	$platform =& $gallery->getPlatform();
+
+	if (empty($params['format'])) {
+	    if (!isset($defaultFormat)) {
+		$defaultFormat = array('date' => '%x', 'time' => '%X', 'datetime' => '%c');
+		list ($ret, $core) = GalleryCoreApi::fetchAllPluginParameters('module', 'core');
+		if (!$ret) {
+		    $defaultFormat = array('date' => $core['format.date'],
+					   'time' => $core['format.time'],
+					   'datetime' => $core['format.datetime']);
+		}
+	    }
+
+	    $params['format'] =
+		(!empty($params['style']) && isset($defaultFormat[$params['style']]))
+		? $defaultFormat[$params['style']] : $defaultFormat['date'];
+	}
+
+	return $platform->strftime($params['format'],
+	    !empty($params['timestamp']) ? $params['timestamp'] : null);
+    }
+
+    /**
+     * @see GalleryTranslator::translateDomain
+     */
+    function text($params, &$smarty) {
+	global $gallery;
+
+	if (isset($params['l10Domain'])) {
+	    $domain = $params['l10Domain'];
+	} else if (isset($smarty->_tpl_vars['viewL10domain'])) {
+	    $domain = $smarty->_tpl_vars['viewL10domain'];
+	} else {
+	    $domain = $smarty->_tpl_vars['l10Domain'];
+	}
+	$translator =& $gallery->getTranslator();
+	if (!empty($params['postSprintfArg1'])) {
+	    /*
+	     * Attempt to translate post-sprintf string to allow specific translations
+	     * for particular %s values.  Currently only supports a single arg.
+	     * Fallback to normal translation of given $params.
+	     */
+	    $string = sprintf($params['text'], $params['postSprintfArg1']);
+	    list ($ret, $text) = $translator->translateDomain($domain, $string);
+	    if ($ret || $text == $string) {
+		list ($ret, $text) = $translator->translateDomain($domain, $params);
+	    }
+	} else {
+	    list ($ret, $text) = $translator->translateDomain($domain, $params);
+	}
+	if ($ret) {
+	    return '[Translation error: ' . print_r($params, true) . ']';
+	}
+
+	if (!empty($params['forJavascript'])) {
+	    if (!function_exists('smarty_modifier_escape')) {
+		GalleryCoreApi::requireOnce('lib/smarty/plugins/modifier.escape.php');
+	    }
+	    $text = smarty_modifier_escape($text, 'javascript', 'UTF-8');
+	}
+
+	return $text;
+    }
+
+    /**
+     * Return a checkbox asking whether to chenge the value in descendents.
+     * Useful when we are trying to change a value recursively.
+     *
+     * @param array $params key => value attributes
+     * @param Smarty $smarty the smarty instance
+     * @return HTML content
+     */
+    function changeInDescendents($params, &$smarty) {
+	global $gallery;
+
+	if (isset($params['l10Domain'])) {
+	    $domain = $params['l10Domain'];
+	} else {
+	    $domain = $smarty->_tpl_vars['l10Domain'];
+	}
+	$translator =& $gallery->getTranslator();
+	list ($ret, $text) = $translator->translateDomain($domain, $params);
+	if ($ret) {
+	    return '[Translation error: ' . print_r($params, true) . ']';
+	}
+
+	return '<input type="checkbox" id="' . $params['module'] . '_ChangeInDescendents" name="'
+	     . GalleryUtilities::prefixFormVariable(
+		     'form[changeInDescendents][' . $params['module'] . ']') . '"/> <label for="'
+	     . $params['module'] . '_ChangeInDescendents"> ' . $text . '</label>';
+    }
+
+    /**
+     * Return a transformed element name.
+     *
+     * @param array $params key => value attributes
+     * @return HTML content
+     */
+    function formVar($params) {
+	return GalleryUtilities::prefixFormVariable($params['var']);
+    }
+
+    /**
+     * Delegate to the appropriate item class to render an image.
+     * @todo Figure out a more graceful way to deal with errors here.
+     *
+     * @param array $params containing item, image, maxSize, fallback, and any img attributes
+     * @param Smarty $smarty the smarty instance
+     * @return string HTML content
+     */
+    function image($params, &$smarty) {
+	list ($ret, $html) = $this->_image($params, $smarty);
+	if ($ret) {
+	    return '[Render error]';
+	}
+
+	return $html;
+    }
+
+    /**
+     * Implementation of image() that can return an error.
+     * @see GalleryTemplateAdapter::image
+     * @access private
+     */
+    function _image($params, &$smarty) {
+	/*
+	 * Cases:
+	 * - Item can render itself
+	 * - Entity can render itself (with info from the item)
+	 * - Renderer can render the entity (with info from the item)
+	 */
+	if ($params['item']['id'] == $params['image']['id']) {
+	    /* XXX: Can't be more specific than entity-type = GalleryEntity here */
+	    list ($ret, $item) =
+		GalleryCoreApi::loadEntitiesById($params['item']['id'], 'GalleryEntity');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $entity = null;
+	} else {
+	    list ($ret, $results) = GalleryCoreApi::loadEntitiesById(
+		array($params['item']['id'], $params['image']['id']), 'GalleryEntity');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    list ($item, $entity) = $results;
+	}
+
+	unset($params['item']);
+	unset($params['image']);
+	if (isset($params['fallback'])) {
+	    $fallback = $params['fallback'];
+	} else {
+	    $fallback = $params['fallback'] = null;
+	}
+
+	$rendererClass = $item->getRenderer();
+	if ($rendererClass) {
+	    list ($ret, $renderer) =
+		GalleryCoreApi::newFactoryInstanceById('GalleryRenderer', $rendererClass);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	} else {
+	    $renderer = null;
+	}
+
+	/* TODO: Normalize these 3 different APIs */
+	$html = null;
+	if (isset($renderer)) {
+	    $html = $renderer->render('HTML', $entity ? $entity : $item, $item, $params);
+	}
+
+	if ($html === null) {
+	    if ($entity) {
+		$html = $entity->render('HTML', $item, $params);
+	    } else {
+		$html = $item->render('HTML', $params);
+	    }
+	}
+
+	if (empty($html)) {
+	    $html = $fallback;
+	}
+
+	return array(null, $html);
+    }
+
+    /**
+     * Render head content
+     *
+     * @param array $params
+     * @param Smarty $smarty the smarty instance
+     * @return string HTML content
+     */
+    function head($params, &$smarty) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$templateVars =& $smarty->get_template_vars();
+	$head = $templateVars['head'];
+	$output = array('');
+
+	/* Title */
+	if (isset($head['title'])) {
+	    $output[] = '<title>' . $head['title'] . "</title>";
+	}
+
+	/* <link> elements (rss, css) */
+	foreach (array_keys($head['link']) as $linkHtml) {
+	    $output[] = $linkHtml;
+	}
+
+	/* Javascript */
+	if (!empty($head['javascript'])) {
+	    $theme = $templateVars['theme'];
+	    if (empty($theme['pageType']) || $theme['pageType'] != 'error') {
+		$this->_combineJavascriptFiles(array_keys($head['javascript']), $output);
+	    } else {
+		foreach (array_keys($head['javascript']) as $file) {
+		    $output[] = sprintf('<script type="text/javascript" src="%s"></script>',
+			$urlGenerator->generateUrl(array('href' => $file)));
+		}
+	    }
+	}
+
+	/* Tpl to include. */
+	foreach ($head['tpl'] as $path => $l10Domain) {
+	    /* Guard template vars so that the include doesn't pollute our namespace */
+	    $save = $smarty->_tpl_vars;
+	    $smarty->_smarty_include(
+		array('smarty_include_tpl_file' => "gallery:$path",
+		      'smarty_include_vars' => array('l10Domain' => $l10Domain)));
+	    $smarty->_tpl_vars = $save;
+	}
+
+	/* This should help out users whose browsers are confused about the character set */
+	$output[] = '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>';
+
+	/* Meta */
+	foreach ($head['meta'] as $meta) {
+	    $key = empty($meta['isHttpEquiv']) ? 'name' : 'http-equiv';
+	    $output[] = sprintf('<meta %s="%s" content="%s"/>',
+				$key, $meta['name'], $meta['content']);
+	}
+
+	return implode("\n", $output);
+    }
+
+    /**
+     * Combine as many static Javascript files as possible into a single request to
+     * core.CombinedJavascript to minimize the number of connections required by the browser to
+     * retrieve them, which improves performance on slower connections.
+     * @param array $files relative paths to javascript files
+     * @param array $output output buffer to add lines.
+     */
+    function _combineJavascriptFiles($files, &$output) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	$filteredFiles = array();
+	$key = '';
+	$codeBase = GalleryCoreApi::getCodeBasePath();
+	$pattern = '<script type="text/javascript" src="%s"></script>';
+
+	/* Special case utilities.js is superset of yahoo-dom-event.js */
+	/** @todo move this check into GalleryTemplate::javascript */
+	$yde = array_search('lib/yui/yahoo-dom-event.js', $files);
+	if ($yde !== false) {
+	    $util = array_search('lib/yui/utilities.js', $files);
+	    if ($util !== false) {
+		if ($yde < $util) {
+		    $files[$yde] = $files[$util];
+		    unset($files[$util]);
+		} else {
+		    unset($files[$yde]);
+		}
+	    }
+	}
+	foreach ($files as $file) {
+	    /*
+	     * Don't do caching if it's a dynamic request, for which we use the quick and dirty
+	     * approach of checking for a ? in the path.  This will fail if you register a short
+	     * url for a JS immediate view, which seems pretty unlikely.
+	     */
+	    $path = $codeBase . $file;
+	    if (strpos($file, '?') === false && $platform->file_exists($path)) {
+		/* 7 == size, 9 == mtime, see http://php.net/stat */
+		$stats = $platform->stat($path);
+		$key .= "$file $stats[7] $stats[9],";
+		$filteredFiles[] = $file;
+	    } else {
+		if ($filteredFiles) {
+		    /* Create a combined javascript file for what we have now */
+		    $output[] = sprintf($pattern,
+			$this->_buildCombinedJavascriptFileAndGenerateUrl($filteredFiles, $key));
+		    $filteredFiles = array();
+		    $key = '';
+		}
+		$output[] = sprintf(
+		    $pattern, $urlGenerator->generateUrl(array('href' => $file)));
+	    }
+	}
+
+	if ($filteredFiles) {
+	    $output[] = sprintf($pattern, $this->_buildCombinedJavascriptFileAndGenerateUrl(
+		$filteredFiles, $key));
+	}
+    }
+
+    /**
+     * Combine the specified files into a single file and store it in the disk cache with the key.
+     * @param array files to be combined
+     * @param array string to be used to generate the key
+     * @return string a url to retrieve the combined script file or null
+     */
+    function _buildCombinedJavascriptFileAndGenerateUrl($filteredFiles, $key) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$phpVm = $gallery->getPhpVm();
+
+	$codeBase = GalleryCoreApi::getCodeBasePath();
+
+	$key = $phpVm->md5($key);
+	$cacheFile = GalleryDataCache::getCachePath(
+	    array('type' => 'module',
+		  'itemId' => 'CombinedJavascript_' . $key,
+		  'id' => '_all'));
+	if (!$platform->file_exists($cacheFile)) {
+	    $contents = '';
+	    foreach ($filteredFiles as $file) {
+		$contents .= $platform->file_get_contents($codeBase . $file);
+	    }
+	    GalleryDataCache::putToDisk(
+		array('type' => 'module',
+		      'itemId' => 'CombinedJavascript_' . $key,
+		      'id' => '_all'),
+		$contents);
+	    if ($phpVm->function_exists('gzencode')) {
+		GalleryDataCache::putToDisk(
+		    array('type' => 'module',
+			  'itemId' => 'CombinedJavascript_gzip_' . $key,
+			  'id' => '_all'),
+		    $phpVm->gzencode($contents, 9, FORCE_GZIP));
+	    }
+	}
+	return $urlGenerator->generateUrl(
+	    array('view' => 'core.CombinedJavascript', 'key' => $key),
+	    array('forceDirect' => true, 'forceFullUrl' => true));
+    }
+
+    /**
+     * Include our AutoCompletion template.
+     *
+     * @param array $params params
+     * @param string $content content
+     * @param Smarty $smarty the smarty instance
+     */
+    function autoComplete($params, $content, &$smarty) {
+	global $gallery;
+	$session =& $gallery->getSession();
+
+	if (!isset($content)) {
+	    return;
+	}
+
+	if (!isset($this->_callCount['autoComplete'])) {
+	    $this->_callCount['autoComplete'] = 0;
+	}
+
+	$url = trim($content);
+	/* Add the auth token to the URL */
+	if (strstr($url, 'authToken') === false) {
+	    $url = GalleryUrlGenerator::appendParamsToUrl($url,
+	    	array('authToken' => $session->getAuthToken()));
+	    $url = str_replace('&amp;', '&', $url);
+	}
+
+	/* Guard template vars so that the include doesn't pollute our namespace */
+	$save = $smarty->_tpl_vars;
+	$smarty->_smarty_include(
+	    array('smarty_include_tpl_file' => 'gallery:modules/core/templates/AutoComplete.tpl',
+		  'smarty_include_vars' =>
+			array('element' => $params['element'],
+			      'url' => $url,
+			      'callCount' => ++$this->_callCount['autoComplete'])));
+	$smarty->_tpl_vars = $save;
+    }
+
+    /**
+     * Include form inputs for dimensions.
+     *
+     * @param array $params params
+     * @param Smarty $smarty the smarty instance
+     */
+    function dimensions($params, &$smarty) {
+	if (!isset($this->_callCount['dimensions'])) {
+	    $this->_callCount['dimensions'] = 0;
+	}
+
+	/* Guard template vars so that the include doesn't pollute our namespace */
+	$save = $smarty->_tpl_vars;
+	$smarty->_smarty_include(
+	    array('smarty_include_tpl_file' => 'gallery:modules/core/templates/Dimensions.tpl',
+		  'smarty_include_vars' => array(
+		      'formVar' => $params['formVar'],
+		      'formVarId' => strtr($params['formVar'], '[]', '__'),
+		      'width' => isset($params['width']) ? $params['width'] : null,
+		      'height' => isset($params['height']) ? $params['height'] : null,
+		      'callCount' => ++$this->_callCount['dimensions'])));
+	$smarty->_tpl_vars = $save;
+    }
+
+    /**
+     * Add hidden form elements to select a default submit button
+     * that is used if enter is pressed in a text input.
+     * Include this before any submit buttons are added to the form.
+     *
+     * @param array $params params
+     * @param Smarty $smarty the smarty instance
+     */
+    function defaultButton($params, &$smarty) {
+	if (!isset($this->_callCount['defaultButton'])) {
+	    $this->_callCount['defaultButton'] = 0;
+	}
+
+	/* Guard template vars so that the include doesn't pollute our namespace */
+	$save = $smarty->_tpl_vars;
+	$smarty->_smarty_include(
+	    array('smarty_include_tpl_file' => 'gallery:modules/core/templates/DefaultButton.tpl',
+		  'smarty_include_vars' => array(
+		      'name' => $params['name'],
+		      'callCount' => ++$this->_callCount['defaultButton'])));
+	$smarty->_tpl_vars = $save;
+    }
+
+    /**
+     * This takes an array and looks for view, subview, and controller to make
+     * a linkid (being used as a css classname)
+     *
+     * @param array $params the items to make a css class out of
+     * @return string the id of the css class
+     */
+    function linkId($params) {
+	$linkId = 'gbLink';
+	if (!empty($params['urlParams']['controller'])) {
+	    $linkId .= '-' . $params['urlParams']['controller'];
+	}
+	if (!empty($params['view'])) {
+	    $linkId .= '-' . $params['view'];
+	} elseif (!empty($params['urlParams']['view'])) {
+	    $linkId .= '-' . $params['urlParams']['view'];
+	}
+	if (!empty($params['urlParams']['subView'])) {
+	    $linkId .= '-' . ($subView = $params['urlParams']['subView']);
+	    if (preg_match('{^core\.Item(?:Edit|Move|Delete|CreateLink)(?:Single)?$}', $subView) &&
+		    !empty($params['urlParams']['itemId'])) {
+		/* Append item type for a few subViews, with fallback class without type */
+		list ($ret, $item) = GalleryCoreApi::loadEntitiesById(
+		    $params['urlParams']['itemId'], 'GalleryEntity');
+		if (!$ret) {
+		    $type = $item->itemTypeName(false);
+		    $fallbackLinkId = $linkId;
+		    $linkId .= '-' . $type[1];
+		}
+	    }
+	}
+	return 'gbAdminLink ' . GalleryTemplateAdapter::_safeCssName($linkId) .
+	    (isset($fallbackLinkId) ?
+	     ' ' . GalleryTemplateAdapter::_safeCssName($fallbackLinkId) : '');
+    }
+
+    /**
+     * Render a single item link as an <option> or <a>.
+     * @param array $params 'link' => getItemLinks data for one link
+     *                      'type' => (optional) 'link' or 'option' (default=link)
+     *                      'lowercase' => (optional) true to convert link text to lowercase
+     *                      Other keys are used as attributes.
+     * @return string
+     */
+    function itemLink($params) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+	if (empty($params['link'])) {
+	    return '[missing link]';
+	}
+	$link = $params['link'];
+	$type = isset($params['type']) ? $params['type'] : 'link';
+	$lowercase = !empty($params['lowercase']);
+	$text = isset($params['text']) ? $params['text'] : $link['text'];
+	unset($params['link']);
+	unset($params['type']);
+	unset($params['lowercase']);
+	unset($params['text']);
+
+	if ($type == 'option') {
+	    $tag = '<option value="' . (isset($link['script']) ? $link['script']
+		: ('window.location=\''
+		   . $urlGenerator->generateUrl($link['params'], $link['options']) . '\'')) . '"';
+	    $endTag = '</option>';
+	} else {
+	    if (!array_key_exists('class', $params)) {
+		/* Use default classes */
+		$params['class'] = $this->linkId(array('urlParams' => $link['params']));
+	    }
+	    $tag = '<a href="' . $urlGenerator->generateUrl($link['params'], $link['options']) . '"'
+		. (isset($link['script']) ? ' onclick="' . $link['script'] . ';return false"' : '')
+		. (isset($link['attrs']) ? ' ' . $link['attrs'] : '');
+	    $endTag = '</a>';
+	}
+	foreach ($params as $key => $value) {
+	    if (isset($value)) {
+		$tag .= " $key=\"$value\"";
+	    }
+	}
+	return $tag . '>' . ($lowercase ? strtolower($text) : $text) . $endTag;
+    }
+
+    /**
+     * This removes unsafe characters from a string so they can be used as a class
+     * name or id in html and be addressed via css
+     *
+     * Purpose:  Removes characters from a string so that it can be used for an
+     * html class name or id and be addressed via css
+     *
+     * @param string $string the input string
+     * @return string
+     * @access private
+     */
+    function _safeCssName($string) {
+	$string = preg_replace('/[^-A-Za-z0-9_]+/', '_', $string);
+	$string = preg_replace('/__+/', '_', $string);
+	return preg_replace('/[-_][-_]+/', '-', $string);
+    }
+
+    /**
+     * Return attributes for container of all Gallery content.
+     */
+    function mainDivAttributes($params, &$smarty) {
+	global $gallery;
+
+	$classes = array();
+	$userAgent =
+	    GalleryUtilities::strToLower(GalleryUtilities::getServerVar('HTTP_USER_AGENT'));
+	if (strpos($userAgent, 'safari') !== false) {
+	    $classes[] = 'safari';
+	} else if (strpos($userAgent, 'opera') !== false) {
+	    $classes[] = 'opera';
+	} else if (strpos($userAgent, 'msie') !== false) {
+	    $classes[] = 'IE';
+	} else if (strpos($userAgent, 'gecko/') !== false) {
+	    $classes[] = 'gecko';
+	}
+
+	$translator =& $gallery->getTranslator();
+	if ($translator->isRightToLeft()) {
+	    $classes[] = 'rtl';
+	}
+
+	$classes = empty($classes) ? '' : ' class="' . implode(' ', $classes) . '"';
+	return 'id="gallery"' . $classes;
+    }
+
+    /**
+     * Return active language code in format used with HTML lang attribute.
+     */
+    function language($params, &$smarty) {
+	global $gallery;
+	list ($ret, $languageCode) = $gallery->getActiveLanguageCode();
+	if ($ret || empty($languageCode)) {
+	    return '';
+	}
+	return strtr($languageCode, '_', '-');
+    }
+
+    /**
+     * Render logo button image.
+     * @param array $params ('type' => logo type)
+     * @param Smarty $smarty the smarty instance
+     * @return HTML content
+     */
+    function logoButton($params, &$smarty) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+	list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core', true);
+	if ($ret) {
+	    return;
+	}
+
+	list ($ret, $isAdmin) =
+	    GalleryCoreApi::isUserInSiteAdminGroup($smarty->_tpl_vars['theme']['actingUserId']);
+	if ($ret) {
+	    return;
+	}
+	$linkTarget = empty($params['target']) ? '' : (' target="' . $params['target'] . '"');
+	$isAdminOrShowAll = $isAdmin || (isset($params['showToAll']) && $params['showToAll']);
+	$useLink = !isset($params['link']) || $params['link'];
+
+	switch($params['type']) {
+	case 'gallery2':
+	    $installedVersions = $core->getInstalledVersions();
+	    if (!$isAdmin) {
+		/* Don't show exact patch release to non-admins */
+		$installedVersions['gallery'] =
+		    preg_replace('/^(\d+\.\d+).*$/', '$1', $installedVersions['gallery']);
+	    }
+	    $version = $core->translate(
+		array('text' => "Powered by Gallery v%s", 'arg1' => $installedVersions['gallery']));
+	    return sprintf(
+		'%s<img src="%s" alt="%s" title="%s" style="%s" width="80" height="15"/>%s',
+		$useLink ? ('<a href="http://gallery.sourceforge.net"' . $linkTarget . '>')
+		: '',
+		$urlGenerator->generateUrl(array('href' => 'images/gallery.gif')),
+		$version, $version, 'border-style: none',
+		$useLink ? '</a>' : '');
+
+	case 'validation':
+	    if (!$isAdminOrShowAll) {
+		return;
+	    }
+	    if ($useLink && $gallery->getConfig('allowSessionAccess')) {
+		/* Calculate a URI that we can use for the validation link */
+		$validationUri = $urlGenerator->getCurrentUrl();
+		$session =& $gallery->getSession();
+		if ($session->isUsingCookies()) {
+		    $validationUri = $urlGenerator->appendParamsToUrl(
+			$validationUri, array($session->getKey() => $session->getId()));
+		}
+		$validationUri = sprintf(
+		    'http://validator.w3.org/check?uri=%s&amp;ss=1',
+		    urlencode(str_replace('&amp;', '&', $validationUri)));
+	    } else if ($useLink) {
+		$validationUri = sprintf(
+		    'javascript:alert(\'%s\');',
+		    $core->translate(
+			'Validation disabled until you set allowSessionAccess in config.php'));
+	    }
+	    return sprintf(
+		    '%s<img src="%s" alt="%s" title="%s" style="%s" width="80" height="15"/>%s',
+		    $useLink ? ('<a href="' . $validationUri . '"' . $linkTarget . '>') : '',
+		    $urlGenerator->generateUrl(array('href' => 'images/xhtml10.png')),
+		    $core->translate('This page is valid XHTML 1.0'),
+		    $core->translate('This page is valid XHTML 1.0'),
+		    'border-style: none',
+		    $useLink ? '</a>' : '');
+
+	case 'donate':
+	    if (!$isAdminOrShowAll) {
+		return;
+	    }
+	    $installedVersions = $core->getInstalledVersions();
+	    return sprintf(
+		    '%s<img src="%s" alt="%s" title="%s" style="%s" width="80" height="15"/>%s',
+		    $useLink ? ('<a href="http://gallery.sourceforge.net/donate.php?donate_tag=' .
+			$installedVersions['gallery'] . '"' . $linkTarget . '>') : '',
+		    $urlGenerator->generateUrl(array('href' => 'modules/core/data/donate.png')),
+		    $core->translate('Donate to the Gallery project'),
+		    $core->translate('Donate to the Gallery project'),
+		    'border-style: none',
+		    $useLink ? '</a>' : '');
+
+	case 'gallery2-version':
+	    if (!$isAdminOrShowAll) {
+		return;
+	    }
+	    return sprintf(
+		    '<img src="%s" alt="%s" title="%s" style="%s" width="80" height="15"/>',
+		    $urlGenerator->generateUrl(
+			array('href' => 'modules/core/data/g23-skidoo.png')),
+		    $core->translate('G2.3: Skidoo'),
+		    $core->translate('G2.3: Skidoo'),
+		    'border-style: none');
+	}
+    }
+
+    /**
+     * Show debug output.
+     */
+    function debug($params, &$smarty) {
+	global $gallery;
+	$debug = $gallery->getDebug();
+	$profiling = $gallery->isProfiling('sql');
+
+	$buf = '';
+	if ($debug == 'buffered' || $profiling) {
+	    /* don't worry about localizing this -- it's only debug output */
+	    $buf .= '<div id="gpDebug"> <h3> Debug Output </h3>';
+	    if ($debug == 'buffered') {
+		$buf .= $gallery->getDebugBuffer();
+	    }
+
+	    if ($profiling) {
+		$storage =& $gallery->getStorage();
+		$buf .= '<span>' . $storage->getProfilingHtml() . '</span>';
+	    }
+	    $buf .= '</div>';
+	}
+	if ($debug == 'buffered') {
+	    /* Smarty debug console */
+	    if (!function_exists('smarty_function_debug')) {
+		GalleryCoreApi::requireOnce('lib/smarty/plugins/function.debug.php');
+	    }
+	    $buf .= smarty_function_debug($params, $smarty);
+	}
+	return $buf;
+    }
+
+    /**
+     * Perform a theme related function.  Possible parameters are
+     *   include => file to include inside the theme's templates/ dir
+     *   url  => url to a file inside the themes dir
+     *
+     * @param array $params ('include' => ..., 'url' => ...)
+     * @param Smarty $smarty the smarty instance
+     */
+    function theme($params, &$smarty) {
+	global $gallery;
+
+	if (isset($params['include'])) {
+	    /* Guard template vars so that the include doesn't pollute our namespace */
+	    $save = $smarty->_tpl_vars;
+	    $smarty->_smarty_include(array(
+		'smarty_include_tpl_file' =>
+		    'gallery:themes/' . $this->_theme->getId(). '/templates/' . $params['include'],
+		'smarty_include_vars' => $params));
+	    $smarty->_tpl_vars = $save;
+	} else if (isset($params['url'])) {
+	    /*
+	     * Use this combo of dirname and '..' in g2Dir to avoid creating paths in the unit
+	     * test that won't be Windows compatible.
+	     */
+	    $g2Dir = dirname(dirname(__FILE__)) . '/../../';
+	    $base = 'themes/' . $this->_theme->getId() . '/';
+	    if (($dirname = dirname($params['url'])) == '.') {
+		$localVersion = 'local/' . $params['url'];
+	    } else {
+		$localVersion = $dirname . '/local/' . basename($params['url']);
+	    }
+	    $platform =& $gallery->getPlatform();
+	    $urlGenerator =& $gallery->getUrlGenerator();
+	    if ($platform->file_exists($g2Dir . $base . $localVersion) &&
+		    $platform->is_readable($g2Dir . $base . $localVersion)) {
+		$target = $localVersion;
+	    } else {
+		$target = $params['url'];
+	    }
+	    return $urlGenerator->generateUrl(array('href' => $base . $target));
+	}
+    }
+
+    /**
+     * Include a module's block into the current smarty page.  The only
+     * required param is 'type' which should be of the form <module>.<blockname>
+     * eg: "core.LoginBlock".  Any other parameters get passed on to the block itself.
+     *
+     * @param array $params ('type' => <block descriptor>, ...)
+     * @param Smarty $smarty the smarty instance
+     */
+    function block($params, &$smarty) {
+	global $gallery;
+	list ($module, $file) = explode('.', $params['type']);
+	$class = empty($params['class']) ? '' : ' ' . $params['class'];
+
+	list ($ret, $pluginStatus) = GalleryCoreApi::fetchPluginStatus('module');
+	if ($ret) {
+	    /* What can we do here? */
+	    return '[error fetching blocks]';
+	}
+
+	if (empty($pluginStatus[$module]['active'])) {
+	    return;
+	}
+
+	if (isset($params['params'])) {
+	    $params = $params['params'];
+	}
+
+	/* Verify that the requested block actually exists */
+	$tplPath = "gallery:modules/$module/templates/blocks/$file.tpl";
+	$compileCheck = GalleryTemplate::shouldDoCompileCheck();
+	if (!$compileCheck) {
+            $platform =& $gallery->getPlatform();
+            $smartyCompilePath = $smarty->_get_compile_path($tplPath);
+            $tplCompiled = $platform->file_exists($smartyCompilePath);
+        }
+        if (($compileCheck || empty($tplCompiled)) && !$smarty->template_exists($tplPath)) {
+	    /* Fall back to "missing template" block */
+	    $module = 'core';
+	    $file = 'Missing';
+	}
+
+	$params['class'] = "block-$module-$file$class";
+	$params['l10Domain'] = "modules_$module";
+
+	/* Guard template vars so that the include doesn't pollute our namespace */
+	$save = $smarty->_tpl_vars;
+	$smarty->_smarty_include(
+	    array('smarty_include_tpl_file' => "gallery:modules/$module/templates/blocks/$file.tpl",
+		  'smarty_include_vars' => $params));
+	$smarty->_tpl_vars = $save;
+    }
+
+    /**
+     * Include a module's container into the current smarty page.  The only
+     * required param is 'type' which should be of the form <module>.<blockname>
+     * eg: "core.LoginBlock".  Any other parameters get passed on to the block itself.
+     *
+     * This is like block() except it wraps actual content.
+     *
+     * @param array $params ('type' => <block descriptor>, ...)
+     * @param string $content
+     * @param Smarty $smarty the smarty instance
+     */
+    function container($params, $content, &$smarty) {
+	if (!isset($content)) {
+	    return;
+	}
+
+	list ($ret, $pluginStatus) = GalleryCoreApi::fetchPluginStatus('module');
+	if ($ret) {
+	    /* What can we do here? */
+	    return '[container error]';
+	}
+
+	list ($module, $file) = explode('.', $params['type']);
+	if (empty($pluginStatus[$module]['active'])) {
+	    return $content;
+	}
+
+	/* Guard template vars so that the include doesn't pollute our namespace */
+	$save = $smarty->_tpl_vars;
+	$smarty->_smarty_include(
+	    array('smarty_include_tpl_file' =>
+		  "gallery:modules/$module/templates/containers/$file.tpl",
+		  'smarty_include_vars' => array_merge(array('content' => $content),
+						       $params)));
+	$smarty->_tpl_vars = $save;
+    }
+
+    /**
+     * Call back to a module to get it to preload some data for the template. The only required
+     * param is 'type' which should be of the form <module>.<blockname> eg: "core.LoginBlock".
+     * Any other parameters get passed on to the block itself.
+     *
+     * @param array $params ('type' => <block descriptor>, ...)
+     * @param Smarty $smarty the smarty instance
+     */
+    function callback($params, &$smarty) {
+	global $gallery;
+	static $moduleStatus;
+	if (empty($status)) {
+	    list ($ret, $status) = GalleryCoreApi::fetchPluginStatus('module');
+	    if ($ret) {
+		/* What can we do with this error? */
+		$gallery->debug("Error performing $params[type] callback");
+		$gallery->debug($ret->getAsHtml());
+	    }
+	}
+
+	list ($module, $file) = explode('.', $params['type']);
+
+	if (!empty($status[$module]['active'])) {
+	    GalleryCoreApi::requireOnce("modules/$module/Callbacks.inc");
+
+	    $userId = $smarty->_tpl_vars['theme']['actingUserId'];
+	    $className = "${module}Callbacks";
+	    $class = new $className;
+	    $ret = $class->callback($params, $smarty, $file, $userId);
+	    if ($ret) {
+		/* What can we do with this error? */
+		$gallery->debug("Error performing $params[type] callback");
+		$gallery->debug($ret->getAsHtml());
+	    }
+	}
+    }
+
+    /**
+     * Add the content to our trailer block
+     *
+     * @param array $params
+     * @param string $content
+     * @param Smarty $smarty the smarty instance
+     */
+    function addToTrailer($params, $content, &$smarty) {
+	if (!isset($content)) {
+	    return;
+	}
+	$this->_trailer .= $content;
+    }
+
+    /**
+     * Register a callback function to be executed when we run the trailer.
+     *
+     * @param callback $callback suitable to be used as an input for call_user_func()
+     * @param array $args for callback
+     */
+    function registerTrailerCallback($callback, $args) {
+	$this->_trailerCallbacks[] = array('function' => $callback, 'args' => $args);
+    }
+
+    /**
+     * Render trailer output
+     */
+    function trailer($params, &$smarty) {
+	print $this->_trailer;
+
+	foreach ($this->_trailerCallbacks as $callback) {
+	    $ret = call_user_func_array($callback['function'], $callback['args']);
+	    if (is_array($ret)) {
+		$ret = $ret[0];
+	    }
+	    if ($ret) {
+		/* If progress bar is in use, report error via its interface */
+		global $gallery;
+		if ($gallery->getCurrentView() == 'core.ProgressBar') {
+		    $this->errorProgressBar($ret);
+		} else {
+		    $summary = $ret->getErrorMessage();
+		    if (empty($summary)) {
+			$summary = implode(', ', $ret->getErrorCodeConstants($ret->getErrorCode()));
+		    }
+		    GalleryCoreApi::addEventLogEntry('Gallery Error', $summary, $ret->getAsText());
+		}
+	    }
+	}
+    }
+
+    /**
+     * Use GalleryUtilities::shrinkDimensionsToFit to scale template vars to new target size.
+     *
+     * @param array $params args; should contain widthVar, heightVar, maxSize keys
+     * @param Smarty $smarty the smarty instance
+     */
+    function shrinkDimensions($params, &$smarty) {
+	if (!isset($params['widthVar']) || !isset($params['heightVar']) ||
+		!isset($params['maxSize'])) {
+	    return;
+	}
+	$widthVar = $params['widthVar'];
+	$heightVar = $params['heightVar'];
+	if (!isset($smarty->_tpl_vars[$widthVar]) || !isset($smarty->_tpl_vars[$heightVar])) {
+	    return;
+	}
+	list ($smarty->_tpl_vars[$widthVar], $smarty->_tpl_vars[$heightVar]) =
+	    GalleryUtilities::shrinkDimensionsToFit(
+		$smarty->_tpl_vars[$widthVar], $smarty->_tpl_vars[$heightVar], $params['maxSize']);
+    }
+
+    /**
+     * Update progress bar
+     * @param string $title top heading
+     * @param string $description subheading
+     * @param float $percentComplete from 0 to 1
+     */
+    function updateProgressBar($title, $description, $percentComplete) {
+	static $coreModule;
+	if (!isset($coreModule)) {
+	    list ($ret, $coreModule) = GalleryCoreApi::loadPlugin('module', 'core');
+	    if ($ret) {
+		/*
+		 * Unlikely this will ever be used.. but do update it if exact form of
+		 * translate() calls (with text+arg1+arg2) in this function ever change.
+		 */
+		eval('class GalleryTemplateAdapterFallbackCoreModule {
+		    function translate($x) {
+			return sprintf($x[\'text\'], $x[\'arg1\'], $x[\'arg2\']);
+		    }
+		}');
+		$coreModule = new GalleryTemplateAdapterFallbackCoreModule();
+	    }
+	}
+
+	if (empty($this->_progressBarStats)) {
+	    $this->_progressBarStats['startTime'] = time();
+	}
+
+	/*
+	 * Calculate the time remaining
+	 *
+	 * TODO: Use a weighted measurement to provide a balanced estimate.  Consider the case
+	 * where the first 50% goes really quickly and the second 50% goes really slowly; the
+	 * estimate will be wildly inaccurate at the transition.
+	 */
+	if ($percentComplete > 0 &&
+		$percentComplete < 1 && time() > $this->_progressBarStats['startTime']) {
+	    $elapsed = (int)(time() - $this->_progressBarStats['startTime']);
+	    $timeRemaining = ($elapsed / $percentComplete) - $elapsed;
+	    $timeRemaining = $coreModule->translate(
+		array('text' => 'Estimated time remaining: %d:%02d',
+		      'arg1' => (int)($timeRemaining / 60),
+		      'arg2' => $timeRemaining % 60));
+	} else {
+	    $timeRemaining = '';
+	}
+
+	/* it is possible to not have this function compiled into php */
+	$memoryUsed = (function_exists('memory_get_usage')) ? memory_get_usage() : 0;
+
+	/* A disabled memory_limit is -1, 0 crashes php */
+	$memoryTotal = (0 < ini_get('memory_limit')) ? ini_get('memory_limit') : 0;
+
+	/*
+	 * Ensure that percentComplete is in a dotted-decimal format.  Since the immediateView
+	 * is dealing in percentages, anything beyond two decimal places is unnecessary.
+	 */
+	$percentComplete = GalleryUtilities::roundToString($percentComplete, 2);
+
+	/* Need to escape for javascript (backslash, ..) */
+	if (!function_exists('smarty_modifier_escape')) {
+	    GalleryCoreApi::requireOnce('lib/smarty/plugins/modifier.escape.php');
+	}
+	$title = smarty_modifier_escape($title, 'javascript');
+	$description = smarty_modifier_escape($description, 'javascript', 'UTF-8');
+
+	$memoryInfo = $coreModule->translate(
+	    array('text' => 'Memory used: %s, total: %s',
+		  'arg1' => $memoryUsed,
+		  'arg2' => $memoryTotal));
+	/* Newline needed or Opera 9.02 won't show updates */
+	printf('<script type="text/javascript">'
+		. 'updateProgressBar("%s", "%s", "%s", "%s", "%s");</script>%s',
+	       $title, $description, $percentComplete, $timeRemaining, $memoryInfo, "\n");
+	flush();
+    }
+
+    /**
+     * Reset progress bar timing stats.
+     */
+    function resetProgressBarStats() {
+	$this->_progressBarStats = array();
+    }
+
+    /**
+     * Display error progress bar.
+     * @param GalleryStatus $status
+     */
+    function errorProgressBar($status) {
+	global $gallery;
+	list ($ret, $isAdmin) = GalleryCoreApi::isUserInSiteAdminGroup();
+	if ($ret) {
+	    $isAdmin = false;
+	}
+
+	/* Log the error */
+	$summary = $status->getErrorMessage();
+	if (empty($summary)) {
+	    $summary = implode(', ', $status->getErrorCodeConstants($status->getErrorCode()));
+	}
+	GalleryCoreApi::addEventLogEntry('Gallery Error', $summary, $status->getAsText());
+
+	/* Display an error message */
+	if ($gallery->getDebug() || $isAdmin) {
+	    $status = $status->getAsHtml($isAdmin);
+	} else {
+	    $status = 'Error ('
+		    . implode(', ', $status->getErrorCodeConstants($status->getErrorCode())) . ')';
+	}
+	if (!function_exists('smarty_modifier_escape')) {
+	    GalleryCoreApi::requireOnce('lib/smarty/plugins/modifier.escape.php');
+	}
+	$status = smarty_modifier_escape($status, 'javascript', 'UTF-8');
+	printf('<script type="text/javascript">errorProgressBar("%s");</script>', $status);
+    }
+
+    /**
+     * Complete progress bar.
+     * @param string $continueUrl URL shown to continue the process
+     * @param bool $doRedirect Whether to redirect automatically. Defaults to false, requiring
+     *                         user-interaction to follow the continue link.
+     */
+    function completeProgressBar($continueUrl, $doRedirect=false) {
+	global $gallery;
+	$continueUrl = str_replace('&amp;', '&', $continueUrl);
+	/* Display the continue link after a short delay to avoid bug 2031942 */
+	printf('<script type="text/javascript">'
+	     . 'setTimeout(function(){completeProgressBar("%s")}, 2000);</script>',
+	       $continueUrl);
+	if (($debug = $gallery->getDebug()) && $debug != 'logged') {
+	    /* Don't automatically redirect when in debug mode */
+	    print '<hr/>';
+	    print '<pre>';
+	    print $gallery->getDebugBuffer();
+	    print '</pre>';
+	} else if ($doRedirect) {
+	    /*
+	     * Redirect after a short delay giving the server time to store the session before
+	     * the next page is requested.
+	     */
+	    printf('<script type="text/javascript">'
+		 . 'setTimeout(\'document.location.href = "%s";\', 2000);</script>', $continueUrl);
+	}
+    }
+}
+?>

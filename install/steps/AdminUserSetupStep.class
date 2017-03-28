@@ -1,0 +1,122 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Setup admin user
+ * @package Install
+ */
+class AdminUserSetupStep extends InstallStep {
+    var $_hasBeenLoadedBefore;
+
+    function stepName() {
+	return _('Admin User Setup');
+    }
+
+    function loadTemplateData(&$templateData) {
+	global $galleryStub;
+
+	if (!isset($this->_hasBeenLoadedBefore)) {
+	    $this->_hasBeenLoadedBefore = 1;
+	    $this->_password = $galleryStub->getConfig('setup.password');
+	    $this->_adminName = _('admin');
+	    $this->_email = '';
+	    $this->_fullName = _('Gallery Administrator');
+	}
+
+	$templateData['passwordA'] = $templateData['passwordB'] =
+	    strlen($this->_password) ? '******' : '';
+	$templateData['adminName'] = $this->_adminName;
+	$templateData['email'] = $this->_email;
+	$templateData['fullName'] = $this->_fullName;
+
+	$templateData['freshInstall'] = $galleryStub->getConfig('freshInstall');
+
+	if (isset($_POST['action']) && $_POST['action'] == 'create') {
+	    $passwordOk = false;
+	    $isStars = preg_match('/^\*+$/', trim($_POST['passwordA']));
+	    if (empty($_POST['passwordA']) || ($isStars && empty($this->_password))) {
+		$templateData['error']['passwordA_missing'] = 1;
+		$templateData['passwordA'] = $templateData['passwordB'] = '';
+	    } else if (empty($_POST['passwordB'])) {
+		$templateData['error']['passwordB_missing'] = 1;
+		$templateData['passwordA'] = $templateData['passwordB'] = '';
+	    } else if ($_POST['passwordA'] != $_POST['passwordB']) {
+		$templateData['error']['password_mismatch'] = 1;
+		$templateData['passwordA'] = $templateData['passwordB'] = '';
+	    } else {
+		if (!$isStars) {
+		    $this->_password = $this->sanitize($_POST['passwordA']);
+		}
+		$templateData['passwordA'] = $templateData['passwordB'] = '******';
+		$passwordOk = true;
+	    }
+
+	    if ($templateData['freshInstall']) {
+		/* It's a fresh install, show the admin data fields and check their value */
+		$this->_adminName = $templateData['adminName'] =
+		    $this->sanitize($_POST['adminName']);
+		$this->_email = $templateData['email'] = $this->sanitize($_POST['email']);
+		$this->_fullName = $templateData['fullName'] = $this->sanitize($_POST['fullName']);
+
+		$adminNameOk = false;
+		if (empty($this->_adminName) || strlen($this->_adminName) < 1
+			|| strlen($this->_adminName) > 32) {
+		    $templateData['error']['invalid_adminName'] = 1;
+		} else {
+		    $adminNameOk = true;
+		}
+		$emailOk = false;
+		if (!empty($this->_email)
+			&& !GalleryUtilities::isValidEmailString($this->_email)) {
+		    $templateData['error']['invalid_email'] = 1;
+		} else {
+		    $emailOk = true;
+		}
+		if ($passwordOk && $adminNameOk && $emailOk) {
+		    $this->setComplete(true);
+		}
+	    } else if ($passwordOk) {
+		/*
+		 * If we're reusing db tables, we don't create a new admin user and just
+		 * change the setup password
+		 */
+		$this->setComplete(true);
+	    }
+	}
+
+	if ($this->isComplete()) {
+	    $galleryStub->setConfig('setup.password', $this->_password);
+	    if ($templateData['freshInstall']) {
+		/* Store admin name and data for later use in InstallCoreModule */
+		$galleryStub->setConfig('setup.admin.userName', $this->_adminName);
+		$galleryStub->setConfig('setup.admin.email', $this->_email);
+		$galleryStub->setConfig('setup.admin.fullName', $this->_fullName);
+	    }
+	    $templateData['bodyFile'] = 'AdminUserSetupSuccess.html';
+	} else {
+	    $templateData['bodyFile'] = 'AdminUserSetupRequest.html';
+	}
+    }
+
+    function isRedoable() {
+	return true;
+    }
+}
+?>

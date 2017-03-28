@@ -1,0 +1,396 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryChildEntity.class');
+
+/**
+ * A GalleryChildEntity that also has data stored in the filesystem.
+ * This class understands how to manage data on the filesystem in parallel to
+ * the data in the persistent store.
+ *
+ * Treat this class as abstract class, it is not registered in the factory.
+ *
+ * @g2 <class-name>GalleryFileSystemEntity</class-name>
+ * @g2 <parent-class-name>GalleryChildEntity</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>0</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class GalleryFileSystemEntity extends GalleryChildEntity {
+
+    /**
+     * The path component of this item (eg. "image1").  This value, when combined with the paths
+     * of all the parent objects (say, "rootAlbum", "album01") will form the complete path to the
+     * item ("rootAlbum/album01/image1").
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>pathComponent</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <indexed/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $pathComponent;
+
+
+    /**
+     * Create a new instance of this FileSystemEntity in the persistent store.
+     * Let the parent do its work, then add any initialization specific to this class.
+     *
+     * @param int $parentId the id of the parent GalleryChildEntity
+     * @param string $pathComponent the path component of this entity
+     * @param boolean $isDirectory (optional) Used for legal path component characters.
+     *        Defaults to false.
+     * @return GalleryStatus a status code
+     */
+    function create($parentId, $pathComponent, $isDirectory=false) {
+	if (empty($pathComponent)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	/*
+	 * The parent must be read locked at this point to make sure that it's not going to be
+	 * moved around while we're adding stuff to it.  Realistically, the entire parent tree must
+	 * be locked but it's not really practical to check the whole tree so just check the parent.
+	 */
+	if (!GalleryCoreApi::isReadLocked($parentId)) {
+	    return GalleryCoreApi::error(ERROR_LOCK_REQUIRED);
+	}
+
+	list ($ret, $pathComponent) =
+	    GalleryCoreApi::getLegalPathComponent($pathComponent, $parentId, null, $isDirectory);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = parent::create($parentId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Set our path component */
+	$this->setPathComponent($pathComponent);
+
+	return null;
+    }
+
+    /**
+     * Create a new root level instance of this FileSystemEntity in the persistent store.
+     * Let the parent do its work, then add any initialization specific to this class.
+     *
+     * @return GalleryStatus a status code
+     */
+    function createRoot() {
+	$ret = parent::createRoot();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* The root has no path component */
+	$this->setPathComponent(NULL);
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::createLink
+     */
+    function createLink($entity, $parentId) {
+	$ret = parent::createLink($entity, $parentId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $pathComponent) =
+	    GalleryCoreApi::getLegalPathComponent($entity->getPathComponent(), $parentId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Set our path component */
+	$this->setPathComponent($pathComponent);
+
+	return null;
+    }
+
+    /**
+     * Rename this item
+     *
+     * @param string $newPathComponent the path component
+     * @return GalleryStatus a status code
+     */
+    function rename($newPathComponent) {
+	if (!$this->getParentId() || empty($newPathComponent)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	/* No need to do anything if renaming to same name */
+	if ($newPathComponent == $this->getPathComponent()) {
+	    return null;
+	}
+
+	$parentId = $this->getParentId();
+	list ($ret, $newPathComponent) =
+	    GalleryCoreApi::getLegalPathComponent($newPathComponent, $parentId, $this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	$this->setPathComponent($newPathComponent);
+
+	return null;
+    }
+
+    /**
+     * Move item to a new parent
+     *
+     * @param int $newParentId the id of the new parent GalleryItem
+     * @return GalleryStatus a status code
+     * @todo Make sure that 'order' stuff is maintained, so that the moved
+     *       items become the last in order in the new album if that album is marked as unordered
+     */
+    function move($newParentId) {
+	global $gallery;
+
+	/* No need to do anything if moving to same parent */
+	if ($newParentId == $this->getParentId()) {
+	    return null;
+	}
+
+	/* Make sure the old parent and the new parent are read locked */
+	if (!(GalleryCoreApi::isReadLocked($newParentId)
+		&& GalleryCoreApi::isReadLocked($this->getParentId()))) {
+	    return GalleryCoreApi::error(ERROR_LOCK_REQUIRED, __FILE__, __LINE__,
+					sprintf("One parent id (%d or %d) is not read locked",
+						$newParentId,
+						$this->getParentId()));
+	}
+
+	/* Get the new parent */
+	list ($ret, $newParent) =
+		GalleryCoreApi::loadEntitiesById($newParentId, 'GalleryFileSystemEntity');
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (!$newParent->getCanContainChildren()) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	list ($ret, $newPathComponent) = GalleryCoreApi::getLegalPathComponent(
+					 $this->getPathComponent(), $newParentId, $this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $currentPath) = $this->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $newParentPath) = $newParent->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* No collision -- proceed! */
+	$ret = parent::move($newParentId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (!$this->isLinked()) {
+	    $newPath = $newParentPath . $newPathComponent;
+	    $platform =& $gallery->getPlatform();
+	    if (!$platform->rename($currentPath, $newPath)) {
+		return GalleryCoreApi::error(ERROR_BAD_PATH, __FILE__, __LINE__,
+					    "rename $currentPath to $newPath");
+	    }
+	}
+
+	/* Our path component may have changed when it got "legalized" */
+	$this->setPathComponent($newPathComponent);
+
+	return null;
+    }
+
+    /**
+     * Delete this GalleryFileSystemEntity
+     * @return GalleryStatus a status code
+     */
+    function delete() {
+	/*
+	 * The parent must be read or write locked at this point to make sure
+	 * that it's not going to be moved around while we're deleting stuff
+	 * from its children.  Realistically, the entire parent tree must be at
+	 * least read locked but it's not really practical to check the entire
+	 * tree so just check the parent.
+	 */
+	$parentId = $this->getParentId();
+	if (!empty($parentId)) {
+	    if (!GalleryCoreApi::isReadLocked($parentId) &&
+		    !GalleryCoreApi::isWriteLocked($parentId)) {
+		return GalleryCoreApi::error(ERROR_LOCK_REQUIRED);
+	    }
+	}
+
+	return parent::delete();
+    }
+
+    /**
+     * Return a path for any objects contained within this one (ie, children)
+     *
+     * Subclasses should specify their container-ness by overloading isContainer()
+     *
+     * @return array GalleryStatus a status code,
+     *               string a path where children can store their data files
+     */
+    function fetchContainerPath() {
+	if ($this->isContainer()) {
+	    list ($ret, $path) = $this->fetchPath();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    return array(null, $path);
+	} else {
+	    list ($ret, $parent) = $this->fetchParent();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    if (isset($parent)) {
+		list ($ret, $path) = $parent->fetchContainerPath();
+		if ($ret) {
+		    return array($ret, null);
+		}
+
+		return array(null, $path);
+	    } else {
+		return array(GalleryCoreApi::error(ERROR_BAD_PATH), null);
+	    }
+	}
+    }
+
+    /**
+     * Can this item contain other file system items?
+     * @return boolean
+     */
+    function isContainer() {
+	return false;
+    }
+
+    /**
+     * Return the logical path to this item.  Note that this path is only valid as
+     * long as the entire tree is at least read locked.
+     *
+     * @return array GalleryStatus a status code,
+     *         array path component names
+     */
+    function fetchLogicalPath() {
+	$parentId = $this->getParentId();
+	if (!empty($parentId)) {
+	    list ($ret, $parent) = $this->fetchParent();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    list ($ret, $parentPath) = $parent->fetchLogicalPath();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	} else {
+	    $parentPath = '';
+	}
+
+	$path = $parentPath . $this->getPathComponent();
+	if ($this->isContainer()) {
+	    $path .= '/';
+	}
+
+	return array(null, $path);
+    }
+
+    /**
+     * Return the full path of this item.  Note that this path is only valid as
+     * long as the entire tree is at least read locked.
+     *
+     * @return array a GalleryStatus status, string a path
+     */
+    function fetchPath() {
+	global $gallery;
+	$absolutePath = $gallery->getConfig('data.gallery.albums');
+
+	if ($this->isLinked()) {
+	    $linkedEntity = $this->getLinkedEntity();
+	    list ($ret, $logicalPath) = $linkedEntity->fetchLogicalPath();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	} else {
+	    list ($ret, $logicalPath) = $this->fetchLogicalPath();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	/*
+	 * The album path ends with a slash, and the logical path starts with one (because the
+	 * root path component is empty) so we'll have two slashes, unless we remove one of them.
+	 */
+	$logicalPath = substr($logicalPath, 1);
+
+	/*
+	 * Logical path is slash (/) delimited.  Convert that to the platform's actual
+	 * directory separator.
+	 */
+	$platform =& $gallery->getPlatform();
+	if ($platform->getDirectorySeparator() != '/') {
+	    $logicalPath = str_replace('/', $platform->getDirectorySeparator(), $logicalPath);
+	}
+
+	return array(null, $absolutePath . $logicalPath);
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryFileSystemEntity';
+    }
+
+    function getPathComponent() {
+	return $this->pathComponent;
+    }
+
+    function setPathComponent($pathComponent) {
+	$this->pathComponent = $pathComponent;
+    }
+}
+?>

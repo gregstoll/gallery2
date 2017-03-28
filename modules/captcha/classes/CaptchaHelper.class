@@ -1,0 +1,73 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * @package Captcha
+ * @subpackage Classes
+ * @author Stefan Ioachim <stefanioachim@gmail.com>
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class CaptchaHelper {
+    /**
+     * Verify the existence of the GD functions that we require to draw a captcha.
+     * @return array ('fail' => array(func, func, ...), 'success' => array(func, func, ...))
+     */
+    function testRequiredGdFunctions() {
+	global $gallery;
+	$phpVm = $gallery->getPhpVm();
+
+	$gdFunctions = array();
+	$gdFunctions[] = 'ImageCreateFromJPEG';
+	$gdFunctions[] = 'ImageColorAllocate';
+	$gdFunctions[] = 'ImageString';
+	$gdFunctions[] = 'ImageJPEG';
+	$gdFunctions[] = 'ImageDestroy';
+	$gdFunctions[] = 'imagesx';
+
+	$gdReport = array('success' => array(), 'fail' => array());
+	foreach ($gdFunctions as $gdFunction) {
+	    if ($phpVm->function_exists($gdFunction)) {
+		$gdReport['success'][] = $gdFunction;
+	    } else {
+		$gdReport['fail'][] = $gdFunction;
+	    }
+	}
+
+	return $gdReport;
+    }
+
+    /**
+     * Generate a new captcha code and put it into the session.
+     */
+    function generateCaptchaSessionKey() {
+	global $gallery;
+
+	/* These letters are relatively unambiguous when made hard to read */
+	$goodChars = 'ABEHJKMNPSUWXZ';
+	$code = '' ;
+	for ($i = 0; $i < 6; $i++) {
+	    $code .= substr($goodChars, rand(0, strlen($goodChars) - 1), 1);
+	}
+	$session =& $gallery->getSession();
+	$session->put('captcha.key', $code);
+    }
+}
+?>

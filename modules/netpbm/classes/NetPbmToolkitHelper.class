@@ -1,0 +1,327 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A helper class for the GalleryNetPbmToolkit class
+ * @package NetPbm
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17771 $
+ * @static
+ */
+class NetPbmToolkitHelper {
+
+    /**
+     * Figure out what operations and properties are supported by the
+     * NetPbmToolkit and return them.
+     *
+     * @param boolean $saveParameters (optional) true to save module parameters
+     * @return GalleryStatus a status code
+     *         array('operations' => ..., 'properties' => ...)
+     */
+    function getOperationsAndProperties($saveParameters=false) {
+	global $gallery;
+
+	list ($ret, $netPbmPath) =
+	    GalleryCoreApi::getPluginParameter('module', 'netpbm', 'path');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (empty($netPbmPath)) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_VALUE), null);
+	}
+
+	list ($ret, $tests, $mimeTypes) = NetPbmToolkitHelper::testBinaries($netPbmPath);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($saveParameters) {
+	    $ret = NetPbmToolkitHelper::saveParameters($tests);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	/* -------------------- Operations -------------------- */
+
+	/* Convert TIFF and PPM to JPEG */
+	$convertFrom[] = 'image/x-portable-pixmap';
+	if (in_array('image/tiff', $mimeTypes)) {
+	    $convertFrom[] = 'image/tiff';
+	}
+
+	$operations['convert-to-image/jpeg']['params'] = array();
+	$operations['convert-to-image/jpeg']['description'] = $gallery->i18n('Convert to a JPEG');
+	$operations['convert-to-image/jpeg']['mimeTypes'] = $convertFrom;
+	$operations['convert-to-image/jpeg']['outputMimeType'] = 'image/jpeg';
+
+	/* Scale */
+	$operations['scale']['params'][] = array('type' => 'int', 'description' =>
+		$gallery->i18n(array('text' => 'target width (# pixels or #% of full size)',
+				     'cFormat' => false)));
+	$operations['scale']['params'][] = array('type' => 'int', 'description' =>
+		$gallery->i18n('(optional) target height, defaults to same as width'));
+	$operations['scale']['description'] =
+	    $gallery->i18n('Scale the image to the target size, maintain aspect ratio');
+	$operations['scale']['mimeTypes'] = $mimeTypes;
+
+	/* Thumbnail is an alias for scale */
+	$operations['thumbnail'] = $operations['scale'];
+
+	/* Resize */
+	$operations['resize']['params'][] = array('type' => 'int', 'description' =>
+		$gallery->i18n(array('text' => 'target width (# pixels or #% of full size)',
+				     'cFormat' => false)));
+	$operations['resize']['params'][] = array('type' => 'int', 'description' =>
+		$gallery->i18n(array('text' => 'target height (# pixels or #% of full size)',
+				     'cFormat' => false)));
+	$operations['resize']['description'] =
+	    $gallery->i18n('Resize the image to the target dimensions');
+	$operations['resize']['mimeTypes'] = $mimeTypes;
+
+	/* Rotate */
+	$operations['rotate']['params'][] =
+	    array('type' => 'int', 'description' => $gallery->i18n('rotation degrees'));
+	$operations['rotate']['description'] = $gallery->i18n('Rotate the image');
+	$operations['rotate']['mimeTypes'] = $mimeTypes;
+
+	/* Crop */
+	$operations['crop']['params'][] =
+	    array('type' => 'float', 'description' => $gallery->i18n('left edge %'));
+	$operations['crop']['params'][] =
+	    array('type' => 'float', 'description' => $gallery->i18n('top edge %'));
+	$operations['crop']['params'][] =
+	    array('type' => 'float', 'description' => $gallery->i18n('width %'));
+	$operations['crop']['params'][] =
+	    array('type' => 'float', 'description' => $gallery->i18n('height %'));
+	$operations['crop']['description'] = $gallery->i18n('Crop the image');
+	$operations['crop']['mimeTypes'] = $mimeTypes;
+
+	/* Watermark */
+	$operations['composite']['params'][] =
+	    array('type' => 'string', 'description' => $gallery->i18n('overlay path'));
+	$operations['composite']['params'][] =
+	    array('type' => 'string', 'description' => $gallery->i18n('overlay mime type'));
+	$operations['composite']['params'][] =
+	    array('type' => 'int', 'description' => $gallery->i18n('overlay width'));
+	$operations['composite']['params'][] =
+	    array('type' => 'int', 'description' => $gallery->i18n('overlay height'));
+	$operations['composite']['params'][] =
+	    array('type' => 'string', 'description' => $gallery->i18n('alignment type'));
+	$operations['composite']['params'][] =
+	    array('type' => 'int', 'description' => $gallery->i18n('alignment x %'));
+	$operations['composite']['params'][] =
+	    array('type' => 'int', 'description' => $gallery->i18n('alignment y %'));
+	$operations['composite']['description'] =
+	    $gallery->i18n('Overlay source image with a second one');
+	$operations['composite']['mimeTypes'] = $mimeTypes;
+
+	/* Compress */
+	$qualityMimeTypes = array_intersect(array('image/jpeg', 'image/pjpeg'), $mimeTypes);
+	if (!empty($qualityMimeTypes)) {
+	    $operations['compress'] = array(
+		'params' => array(
+		    array('type' => 'int', 'description' => $gallery->i18n('target size in kb'))),
+		'description' => $gallery->i18n('Reduce image quality to reach target file size'),
+		'mimeTypes' => $qualityMimeTypes);
+	}
+
+	/*
+	 * -------------------- Properties --------------------
+	 */
+
+	/* Dimensions */
+	$properties['dimensions']['type'] = 'int,int';
+	$properties['dimensions']['description'] =
+	    $gallery->i18n('Get the width and height of the image');
+	$properties['dimensions']['mimeTypes'] = array_merge($mimeTypes,
+		array('image/x-portable-pixmap',
+		      'application/x-shockwave-flash')); /* Supported by php getimagesize */
+
+	return array(null, array('operations' => $operations, 'properties' => $properties));
+    }
+
+    /**
+     * Test if the given path has a working jhead binary.
+     *
+     * This is done by calling jhead with the -V flag
+     *
+     * @param string $jheadPath path to the jhead binary
+     * @return array GalleryStatus general status of tests
+     *	       array ('name' => string: the name of the binary,
+     *		      'success' => boolean: test successful?
+     *		      'message' => string: the error message
+     *		     )
+     *         array hash map of mime types
+     */
+    function testJhead($jheadPath) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	/*
+	 * If the path is restricted by open_basedir, then verify that it's legal.
+	 * Else just hope that it's valid and use it.
+	 */
+	if (!$platform->isRestrictedByOpenBaseDir($jheadPath) && !@$platform->is_dir($jheadPath)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH), null, null);
+	}
+	$tests = array();
+	$fullPath = $jheadPath . 'jhead';
+	if (GalleryUtilities::isA($platform, 'WinNtPlatform')) {
+	    $fullPath .= '.exe';
+	}
+
+	if (!$platform->isRestrictedByOpenBaseDir($fullPath) &&
+		!$platform->file_exists($fullPath)) {
+	    $success = false;
+	    $results = array('File does not exist');
+	} else {
+	    list ($success, $results) = $platform->exec(array(array($fullPath, '-V')));
+	}
+	$tests[] = array('name' => 'jhead',
+			 'success' => $success,
+			 'message' => $results);
+
+	return array(null, $tests, array());
+    }
+
+    /**
+     * Test if the given path has a working set of NetPbm binaries.
+     *
+     * This is done by calling all the binaries with the --version flag and
+     * making sure they run properly.
+     *
+     * @param string $netPbmPath path to the NetPbm we are testing
+     * @return array GalleryStatus general status of tests
+     *	       array ('name' => string: the name of the binary,
+     *		      'success' => boolean: test successful?
+     *		      'message' => string: the error message
+     *		     )
+     *         array of string mime types
+     */
+    function testBinaries($netPbmPath) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$isRestrictedPath = $platform->isRestrictedByOpenBaseDir($netPbmPath);
+	/*
+	 * If the path is not restricted by open_basedir, then verify that it's legal.
+	 * Else just hope that it's valid and use it.
+	 */
+	if ($isRestrictedPath || !@$platform->is_dir($netPbmPath)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH, null, null, '"' . $netPbmPath 
+		   . '" is not a directory or is not specified in open_basedir.'), null, null);
+	}
+
+	
+	$binaryData = array(
+	    '' => array('pnmscale', 'pnmcut|pamcut', 'pnmfile|pamfile', 'pnmcomp|pamcomp',
+			'exist' => 'pnmflip|pamflip'), /* No --version for this */
+	    'image/jpeg|image/pjpeg' => array('jpegtopnm', 'pnmtojpeg|ppmtojpeg'),
+	    'image/gif' => array('giftopnm', 'ppmtogif', 'exist' => 'ppmquant|pnmquant'),
+	    'image/png' => array('pngtopnm', 'pnmtopng'),
+	    'image/tiff' => array('tifftopnm', 'pnmtotiff|pamtotiff'),
+	    'image/bmp' => array('bmptopnm|bmptoppm', 'ppmtobmp', 'exist' => 'ppmquant|pnmquant'),
+	);
+
+	$tests = $mimeTypes = array();
+	foreach ($binaryData as $mimeList => $binaryList) {
+	    $failCount = 0;
+	    foreach ($binaryList as $i => $binaries) {
+		$test = array();
+		$checkExistenceOnly = is_string($i);
+		foreach (explode('|', $binaries) as $binary) {
+		    $fullPath = $netPbmPath . $binary;
+		    if (GalleryUtilities::isA($platform, 'WinNtPlatform')) {
+			if (!$isRestrictedPath && !$platform->file_exists($fullPath)) {
+			    $fullPath .= '.exe';
+			}
+		    }
+		    if (!$isRestrictedPath && !$platform->file_exists($fullPath)) {
+			continue;
+		    }
+		    list ($success, $results) = $checkExistenceOnly ? array(true, array()) :
+			$platform->exec(array(array($fullPath, '--version')));
+		    if ($success) {
+			$tests[] = array('name' => $binary,
+					 'success' => true, 'message' => $results);
+			continue 2;
+		    } else if (empty($test)) {
+			$test = array('name' => $binary, 'success' => false, 'message' => $results);
+		    }
+		}
+		if (!empty($test)) {
+		    $tests[] = $test;
+		} else {
+		    if (!isset($module)) {
+			/* Only used for translation, so ignore version mismatch during upgrade */
+			list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'netpbm', true);
+			if ($ret) {
+			    return array($ret, null, null);
+			}
+		    }
+		    $tests[] = array(
+			'name' => str_replace('|', $module->translate(' or '), $binaries),
+			'success' => false,
+			'message' => array($module->translate('File does not exist')));
+		}
+		$failCount++;
+	    }
+	    if ($failCount && empty($mimeList)) {
+		/* These binaries are required; bail out */
+		break;
+	    } else if (!$failCount && !empty($mimeList)) {
+		$mimeTypes = array_merge($mimeTypes, explode('|', $mimeList));
+	    }
+	}
+
+	return array(null, $tests, $mimeTypes);
+    }
+
+    /**
+     * Save module parameters based on test results.
+     *
+     * @param array $tests testBinaries test results
+     * @return GalleryStatus a status code
+     */
+    function saveParameters($tests) {
+	$paramList = array('pnmtojpeg' => 'p.mtojpeg', 'bmptopnm' => 'bmptop.m',
+			   'pnmcomp' => 'p.mcomp');
+	foreach ($tests as $test) {
+	    if (!$test['success']) {
+		continue;
+	    }
+	    foreach ($paramList as $key => $match) {
+		if (preg_match("|$match|", $test['name'])) {
+		    $binary[$key] = $test['name'];
+		}
+	    }
+	}
+	foreach (array_keys($paramList) as $key) {
+	    $ret = GalleryCoreApi::setPluginParameter('module', 'netpbm', $key,
+						      isset($binary[$key]) ? $binary[$key] : $key);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	return null;
+    }
+}
+?>

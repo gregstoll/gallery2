@@ -1,0 +1,172 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * PHP path info helper.
+ * @package Rewrite
+ * @subpackage Parsers
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class PathInfoHelper {
+
+    /**
+     * @see RewriteParser::saveActiveRules
+     */
+    function saveActiveRules($parser, $activeRules=null, $upgradeModule=null) {
+	/* By default we use the rules we've already got */
+	if (is_null($activeRules)) {
+	    list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module', 'rewrite', 'activeRules');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    $activeRules = unserialize($activeRules);
+	}
+
+	$regexRules = array();
+	$shortUrls = array();
+	if (!empty($activeRules)) {
+	    list ($ret, $code, $regexRules, $shortUrls, $errorId) = RewriteHelper::parseActiveRules(
+		$activeRules, $parser, $upgradeModule);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    if ($code != REWRITE_STATUS_OK) {
+		return array(null, $code, $errorId);
+	    }
+	}
+
+	$ret = PathInfoHelper::saveParser($regexRules);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	/* Finally, save the new rules */
+	$ret = GalleryCoreApi::setPluginParameter(
+	    'module', 'rewrite', 'shortUrls', serialize($shortUrls));
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$ret = GalleryCoreApi::setPluginParameter(
+	    'module', 'rewrite', 'activeRules', serialize($activeRules));
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	return array(null, REWRITE_STATUS_OK, null);
+    }
+
+    /**
+     * Save the rules in a way the parser can grab quickly and compare against the request.
+     * @param array $regexRules regular expression rules used by the parser
+     * @return GalleryStatus a status code
+     */
+    function saveParser($regexRules) {
+	$static = $dynamic = array();
+	foreach ($regexRules as $rule) {
+	    if (empty($rule['pattern'])) {
+		$static['/'] = array('queryString' => $rule['queryString']);
+
+	    /*
+	     * Backreference 0 contains the text that matched the full pattern, backreference 1
+	     * contains the text that matched the first parenthesized subpattern, and so on.
+	     */
+	    } else if (count($rule['keywords']) < 2) {
+		$static['/' . $rule['pattern']] = array('queryString' => $rule['queryString']);
+	    } else {
+		$dynamic[] = array('pattern' => '@^/' . $rule['pattern'] . '$@',
+				   'keywords' => $rule['keywords'],
+				   'queryString' => $rule['queryString']);
+	    }
+	}
+
+	$ret = GalleryCoreApi::setPluginParameter(
+	    'module', 'rewrite', 'pathinfo.parser', serialize(array('static' => $static,
+								    'dynamic' => $dynamic)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Returns one of the following codes:
+     *   REWRITE_STATUS_OK                              everything is fine
+     *   REWRITE_STATUS_NO_PATH_INFO                    no path info support
+     *
+     * @return array GalleryStatus a status code
+     *               int rewrite status code (REWRITE_STATUS_OK on success)
+     *               int true rewrite status code (REWRITE_STATUS_OK on success)
+     */
+    function checkPathInfo() {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	list ($ret, $forced) = GalleryCoreApi::getPluginParameter('module', 'rewrite',
+	    'pathinfo.forced');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$fetch = $urlGenerator->generateUrl(
+	    array('href' => 'modules/rewrite/data/path_info/index.php/test/path/info'),
+	    array('forceFullUrl' => true));
+	list ($success, $body) = GalleryCoreAPI::fetchWebPage($fetch);
+
+	if ($success && !strncmp('PASS_PATH_INFO', $body, 14)) {
+	    return array(null, REWRITE_STATUS_OK, REWRITE_STATUS_OK);
+	}
+
+	return array(null,
+		     ($forced) ? REWRITE_STATUS_OK : REWRITE_STATUS_NO_PATH_INFO,
+		     REWRITE_STATUS_NO_PATH_INFO);
+    }
+
+    /**
+     * @see RewriteParser::loadTestResultsTemplate
+     */
+    function loadTestResultsTemplate(&$template, &$form) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	list ($ret, $TestResults['pathInfo'], $TestResults['truePathInfo']) =
+	    PathInfoHelper::checkPathInfo();
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($TestResults['pathInfo'] != REWRITE_STATUS_OK) {
+	    $TestResults['hrefTest'] = $urlGenerator->generateUrl(array(
+		'href' => 'modules/rewrite/data/path_info/index.php/test/path/info'));
+	    $TestResults['action'] = 1;
+	    $TestResults['refresh'] = 1;
+	}
+
+	$TestResults['template'] = 'modules/rewrite/templates/PathInfoTestResults.tpl';
+	$template->setVariable('TestResults', $TestResults);
+
+	return null;
+    }
+}
+
+?>

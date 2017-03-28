@@ -1,0 +1,151 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/AdminMaintenance.inc');
+
+/**
+ * This is a MaintenanceTask that will attempt to retrieve and set the
+ * origination timestamp for all items (usually from EXIF data).
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class SetOriginationTimestampTask extends MaintenanceTask {
+    /**
+     * @see MaintenanceTask::getInfo
+     */
+    function getInfo() {
+	global $gallery;
+
+	return array('l10Domain' => 'modules_core',
+		     'title' => $gallery->i18n('Refresh capture dates'),
+		     'description' => $gallery->i18n(
+			 'Update capture date stored in Gallery for all items with an available ' .
+			 'date in the original data file (usually from EXIF data).'),
+		     'confirmRun' => true);
+    }
+
+    /**
+     * @see MaintenanceTask::run
+     */
+    function run() {
+	global $gallery;
+	$templateAdapter =& $gallery->getTemplateAdapter();
+
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$message = $module->translate('Processing...');
+
+	$templateAdapter->updateProgressBar(
+	    $module->translate('Refresh Capture Dates'), $message, '');
+
+	list ($ret, $results) =
+	    $gallery->search('SELECT [GalleryDataItem::id] FROM [GalleryDataItem] ' .
+			     'ORDER BY [GalleryDataItem::id]');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$i = $updated = 0;
+	$toolkitMap = array();
+	$total = $results->resultCount();
+	while ($result = $results->nextResult()) {
+	    $gallery->guaranteeTimeLimit(90);
+	    /* Grab 5 items at a time */
+	    $ids = array($result[0]);
+	    for ($j = 0; $j < 4 && ($result = $results->nextResult()); $j++) {
+		$ids[] = $result[0];
+	    }
+	    list ($ret, $items) = GalleryCoreApi::loadEntitiesById($ids, 'GalleryDataItem');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    foreach ($items as $item) {
+		$mimeType = $item->getMimeType();
+		if (!isset($toolkitMap[$mimeType])) {
+		    list ($ret, $toolkitMap[$mimeType]) =
+			GalleryCoreApi::getToolkitsByProperty($mimeType, 'originationTimestamp');
+		    if ($ret) {
+			return array($ret, null, null);
+		    }
+		}
+		$toolkits = $toolkitMap[$mimeType];
+		if (!empty($toolkits)) {
+		    list ($ret, $path) = $item->fetchPath();
+		    if ($ret) {
+			return array($ret, null, null);
+		    }
+		    foreach ($toolkits as $toolkit) {
+			if (!isset($toolkit)) {
+			    continue;
+			}
+			list ($ret, $originationTimestamp) =
+			    $toolkit->getProperty($mimeType, 'originationTimestamp', $path);
+			if ($ret) {
+			    return array($ret, null, null);
+			}
+			if (is_array($originationTimestamp) && !empty($originationTimestamp[0])) {
+			    $item->setOriginationTimestamp($originationTimestamp[0]);
+			    if ($item->isModified()) {
+				list ($ret, $lockId) =
+				    GalleryCoreApi::acquireWriteLock($item->getId());
+				if ($ret) {
+				    return array($ret, null, null);
+				}
+				$ret = $item->save();
+				if ($ret) {
+				    GalleryCoreApi::releaseLocks($lockId);
+				    return array($ret, null, null);
+				}
+				$ret = GalleryCoreApi::releaseLocks($lockId);
+				if ($ret) {
+				    return array($ret, null, null);
+				}
+				$updated++;
+			    }
+			    break;
+			}
+		    }
+		}
+		$i++;
+	    }
+
+	    $message = $module->translate(
+		array('text' => 'Processing item %d of %d', 'arg1' => $i, 'arg2' => $total));
+	    $templateAdapter->updateProgressBar($message, '', $i / $total);
+	}
+
+	return array(null, true,
+		     array($module->translate(array('text' => 'Updated %d of %d items',
+						    'arg1' => $updated, 'arg2' => $total))));
+    }
+
+    /**
+     * @see MaintenanceTask::requiresProgressBar
+     */
+    function requiresProgressBar() {
+	return true;
+    }
+}
+?>

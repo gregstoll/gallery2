@@ -1,0 +1,212 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is an implementation of the cart module's CartPluginInterface_1_1
+ * @package ZipCart
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class ZipCartPlugin /* implements CartPluginInterface_1_0 and CartPluginInterface_1_1 */ {
+    /**
+     * @see CartPluginInterface_1_0::getSupportedItemTypes
+     */
+    function getSupportedItemTypes() {
+	return array('GalleryDataItem');
+    }
+
+    /**
+     * @see CartPluginInterface_1_1::getRequiredPermissions
+     */
+    function getRequiredPermissions() {
+	return array();
+    }
+
+    /**
+     * @see CartPluginInterface_1_0::getActionDisplayName
+     */
+    function getActionDisplayName() {
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'zipcart');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$action = $module->translate('Download in Zip');
+
+	return array(null, $action);
+    }
+
+    /**
+     * @see CartPluginInterface_1_0::fulfillCart
+     */
+    function fulfillCart($cartItemIds) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$slash = $platform->getDirectorySeparator();
+	$zipBase = $platform->tempnam($gallery->getConfig('data.gallery.tmp'), 'zip_');
+	$zipDir = $zipBase . '.dir';
+	$zipFile = $zipBase . '.zip';
+	list ($success) = GalleryUtilities::guaranteeDirExists($zipDir);
+	if (!$success) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE), null);
+	}
+	list ($ret, $zip) = GalleryCoreApi::getPluginParameter('module', 'zipcart', 'path');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$itemIds = array_keys($cartItemIds);
+	list ($ret, $items) = GalleryCoreApi::loadEntitiesById($itemIds, 'GalleryDataItem');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	list ($ret, $preferreds) = GalleryCoreApi::fetchPreferredsByItemIds($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	list ($ret, $resizes) = GalleryCoreApi::fetchResizesByItemIds($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	list ($ret, $thumbnails) = GalleryCoreApi::fetchThumbnailsByItemIds($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	list ($ret, $permissions) = GalleryCoreApi::fetchPermissionsForItems($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$tmpDirs = array();
+	$tmpFiles = array();
+	$cmd = array($zip, $zipFile);
+	$albumDir = $gallery->getConfig('data.gallery.albums');
+	$i = 0;
+	foreach ($items as $item) {
+	    if ($i++ % 50) {
+		$gallery->guaranteeTimeLimit(30);
+	    }
+	    list ($ret, $path) = $item->fetchPath();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $relativePath = (strpos($path, $albumDir) === 0) ?
+				substr($path, strlen($albumDir)) : basename($path);
+
+	    $itemId = $item->getId();
+	    $itemMimeType = $item->getMimeType();
+
+	    if (isset($permissions[$itemId]['core.viewSource'])) {
+		if (isset($preferreds[$itemId])) {
+		    $item = $preferreds[$itemId];
+		}
+	    } else if (isset($permissions[$itemId]['core.viewResizes'])
+		    && !empty($resizes[$itemId])) {
+		$maxSize = null;
+		foreach ($resizes[$itemId] as $resize) {
+		    $size = $resize->getDerivativeSize();
+		    if (!isset($maxSize) || $size > $maxSize) {
+			$item = $resize;
+			$maxSize = $size;
+		    }
+		}
+	    } else if (isset($thumbnails[$itemId])) {
+		$item = $thumbnails[$itemId];
+	    } else {
+		$item = null;
+	    }
+
+	    if (!isset($item)) {
+		/* Nothing to download for this item! */
+		continue;
+	    }
+
+	    if (GalleryUtilities::isA($item, 'GalleryDerivative')) {
+		list ($ret, $item) =
+		    GalleryCoreApi::rebuildDerivativeCacheIfNotCurrent($item->getId());
+		if ($ret) {
+		    return array($ret, null);
+		}
+		/* Bug 1462984: Make sure we use the right extension */
+		$derivativeMimeType = $item->getMimeType();
+		if ($derivativeMimeType != $itemMimeType) {
+		    list ($ret, $mimeExtensions) =
+			GalleryCoreApi::convertMimeToExtensions($derivativeMimeType);
+		    if ($ret) {
+			return array($ret, null);
+		    }
+		    if (!empty($mimeExtensions)) {
+			$base = GalleryUtilities::getFileBase($relativePath);
+			$relativePath = $base . '.' . $mimeExtensions[0];
+		    }
+		}
+	    }
+
+	    list ($ret, $path) = $item->fetchPath();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    /* Copy file into temp dir with right subdir/filename */
+	    $target = $zipDir . $slash . $relativePath;
+	    list ($success, $created) = GalleryUtilities::guaranteeDirExists(dirname($target));
+	    if (!$success) {
+		return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE),
+			     null);
+	    }
+	    $tmpDirs = array_merge($tmpDirs, $created);
+	    if (!$platform->copy($path, $target)) {
+		return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE),
+			     null);
+	    }
+	    $tmpFiles[] = $target;
+	    $cmd[] = $relativePath;
+	}
+
+	$cwd = $platform->getcwd();
+	if (!$platform->chdir($zipDir)) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE), null);
+	}
+	$gallery->guaranteeTimeLimit(60);
+	list ($success) = $platform->exec(array($cmd));
+	if (!empty($cwd)) {
+	    @$platform->chdir($cwd);
+	}
+
+	foreach ($tmpFiles as $path) {
+	    @$platform->unlink($path);
+	}
+	foreach (array_reverse($tmpDirs) as $path) {
+	    @$platform->rmdir($path);
+	}
+	@$platform->rmdir($zipDir);
+
+	if (!$success) {
+	    @$platform->unlink($zipBase);
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE), null);
+	}
+	$platform->chmod($zipFile);
+
+	return array(null,
+		     array('view' => 'zipcart.Download', 'file' => basename($zipBase)));
+    }
+}
+?>

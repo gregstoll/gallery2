@@ -1,0 +1,210 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is a helper class that provides an interface to the GalleryToolkit api.  Modules that
+ * implement a GalleryToolkit interface can register their various operations and properties
+ * using this class, and then classes that want to use a toolkit operation or property can locate
+ * the appropriate toolkit by operation/property and mime type.
+ *
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryToolkitHelper_simple {
+
+    /**
+     * @see GalleryCoreApi::getToolkitByOperation
+     */
+    function getToolkitByOperation($mimeType, $operationName) {
+	global $gallery;
+
+	$cacheKey = "GalleryToolkitHelper::getToolkitByOperation($mimeType, $operationName)";
+	if (empty($mimeType) || empty($operationName)) {
+	    $toolkit = $outputMimeType = null;
+	} else if (!GalleryDataCache::containsKey($cacheKey)) {
+	    $query = '
+	    SELECT
+	      [GalleryToolkitOperationMimeTypeMap::toolkitId],
+	      [GalleryToolkitOperationMap::outputMimeType]
+	    FROM
+	      [GalleryToolkitOperationMap],
+	      [GalleryToolkitOperationMimeTypeMap]
+	    WHERE
+	      [GalleryToolkitOperationMap::name] =
+		[GalleryToolkitOperationMimeTypeMap::operationName]
+	      AND
+	      [GalleryToolkitOperationMimeTypeMap::mimeType] = ?
+	      AND
+	      [GalleryToolkitOperationMap::name] = ?
+	    ORDER BY
+	      [GalleryToolkitOperationMimeTypeMap::priority] ASC
+	    ';
+
+	    list ($ret, $searchResults) =
+		$gallery->search($query, array((string)$mimeType, (string)$operationName));
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+	    $toolkit = null;
+	    $outputMimeType = null;
+	    while ($result = $searchResults->nextResult()) {
+		$toolkitId = $result[0];
+		$outputMimeType = empty($result[1]) ? $mimeType : $result[1];
+
+		list ($ret, $toolkit) =
+		    GalleryCoreApi::newFactoryInstanceById('GalleryToolkit', $toolkitId);
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+
+		if (isset($toolkit)) {
+		    break;
+		}
+	    }
+	    GalleryDataCache::put($cacheKey, array($toolkit, $outputMimeType));
+	} else {
+	    list ($toolkit, $outputMimeType) = GalleryDataCache::get($cacheKey);
+	}
+
+	return array(null, $toolkit, $outputMimeType);
+    }
+
+    /**
+     * @see GalleryCoreApi::getToolkitByProperty
+     */
+    function getToolkitByProperty($mimeType, $propertyName) {
+	$cacheKey = "GalleryToolkitHelper::getToolkitByProperty($mimeType, $propertyName)";
+	if (!GalleryDataCache::containsKey($cacheKey)) {
+	    list ($ret, $toolkits) =
+		GalleryToolkitHelper_simple::getToolkitsByProperty($mimeType, $propertyName);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $toolkit = $toolkits[0];
+	} else {
+	    $toolkit = GalleryDataCache::get($cacheKey);
+	}
+	return array(null, $toolkit);
+    }
+
+    /**
+     * @see GalleryCoreApi::getToolkitsByProperty
+     */
+    function getToolkitsByProperty($mimeType, $propertyName) {
+	global $gallery;
+
+	$cacheKey = "GalleryToolkitHelper::getToolkitsByProperty($mimeType, $propertyName)";
+	if (empty($mimeType) || empty($propertyName)) {
+	    $toolkits = null;
+	} else if (!GalleryDataCache::containsKey($cacheKey)) {
+	    $query = '
+	    SELECT
+	      [GalleryToolkitPropertyMimeTypeMap::toolkitId]
+	    FROM
+	      [GalleryToolkitPropertyMap],
+	      [GalleryToolkitPropertyMimeTypeMap]
+	    WHERE
+	      [GalleryToolkitPropertyMap::name] = [GalleryToolkitPropertyMimeTypeMap::propertyName]
+	      AND
+	      [GalleryToolkitPropertyMimeTypeMap::mimeType] = ?
+	      AND
+	      [GalleryToolkitPropertyMap::name] = ?
+	    ';
+
+	    list ($ret, $searchResults) =
+		$gallery->search($query, array((string)$mimeType, (string)$propertyName));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $toolkits = null;
+	    while ($result = $searchResults->nextResult()) {
+		list ($ret, $toolkit) =
+		    GalleryCoreApi::newFactoryInstanceById('GalleryToolkit', $result[0]);
+		if ($ret) {
+		    return array($ret, null);
+		}
+		$toolkits[] = $toolkit;
+	    }
+	    GalleryDataCache::put($cacheKey, $toolkits);
+	} else {
+	    $toolkits = GalleryDataCache::get($cacheKey);
+	}
+
+	return array(null, $toolkits);
+    }
+
+    /**
+     * @see GalleryCoreApi::getMaximumManagedToolkitPriority
+     */
+    function getMaximumManagedPriority() {
+	global $gallery;
+
+	$query =
+	    'SELECT
+		MAX([GalleryToolkitOperationMimeTypeMap::priority])
+	     FROM
+		[GalleryToolkitOperationMimeTypeMap]
+	     WHERE
+		[GalleryToolkitOperationMimeTypeMap::priority] >= 20
+		AND
+		[GalleryToolkitOperationMimeTypeMap::priority] <= 40';
+
+	list ($ret, $results) = $gallery->search($query);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($result = $results->nextResult()) {
+	    $priority = (int)$result[0];
+	}
+	if (empty($priority)) {
+	    $priority = 20;
+	}
+
+	return array(null, $priority);
+    }
+
+    /**
+     * @see GalleryCoreApi::getToolkitPriorityById
+     */
+    function getToolkitPriorityById($toolkitId) {
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry(
+	    'GalleryToolkitOperationMimeTypeMap',
+	    array('priority'), array('toolkitId' => (string)$toolkitId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($result = $searchResults->nextResult()) {
+	    $priority = (int)$result[0];
+	}
+	if (empty($priority)) {
+	    $priority = null;
+	}
+
+	return array(null, $priority);
+    }
+}
+?>

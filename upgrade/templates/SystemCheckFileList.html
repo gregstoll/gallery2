@@ -1,0 +1,18 @@
+  <span id="SystemCheck_<?php print $blockId; ?>_toggle"
+        onclick="BlockToggle('SystemCheck_<?php print $blockId; ?>', 'SystemCheck_<?php print $blockId; ?>_toggle_indicator')">
+    <span id="SystemCheck_<?php print $blockId; ?>_toggle_indicator" class="showHideToggle">+</span>
+    <b>
+      <?php print $heading; ?>
+    </b>
+  </span>
+  <?php if (!empty($notice)): ?>
+  <br/>
+  <?php print $notice; ?>
+  <?php endif; ?>
+  <textarea wrap="off" readonly="readonly" rows="<?php print count($files)?>"
+            class="manifestBlock" id="SystemCheck_<?php print $blockId; ?>"
+            style="display: none">
+    <?php foreach ($files as $fileName): ?>
+    <?php print "$fileName\n" ?>
+    <?php endforeach; ?>
+  </textarea>

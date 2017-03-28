@@ -1,0 +1,137 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryRenderer.class');
+
+/**
+ * A renderer for MP3 Audio.
+ * @package MP3Audio
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class MP3AudioRenderer extends GalleryRenderer {
+    /**
+     * @see GalleryRenderer::canBeViewedInline
+     */
+    function canBeViewedInline($item) {
+	return GalleryUtilities::isA($item, 'GalleryDataItem')
+	    && $item->getMimeType() == 'audio/mpeg';
+    }
+
+    /**
+     * @see GalleryRenderer::render
+     */
+    function render($format, $entity, $item, $params) {
+	global $gallery;
+	$fallback = trim(preg_replace("/[\r\n]/", '', $params['fallback']));
+
+	if ($format != 'HTML' || $entity->getMimeType() != 'audio/mpeg') {
+	    return null;
+	}
+
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$src = $urlGenerator->generateUrl(
+		array('view' => 'core.DownloadItem', 'itemId' => $entity->getId(),
+		      'serialNumber' => $entity->getSerialNumber()),
+		array('forceFullUrl' => true, 'forceSessionId' => true, 'htmlEntities' => false));
+	$flashVars = 'mp3Url=' . urlencode($src);
+	/*
+	 * Including SWFObject<http://blog.deconcept.com/swfobject/> to defeat the
+	 * "Click to activate..." in IE
+	 */
+	$SWFObjectUrl = $urlGenerator->generateUrl(
+	    array('href' => 'modules/mp3audio/lib/swfobject.js'),
+	    array('forceFullUrl' => true));
+	$expressInstallUrl = $urlGenerator->generateUrl(
+	    array('href' => 'modules/mp3audio/lib/expressinstall.swf'),
+	    array('forceFullUrl' => true));
+	$playerUrl = $urlGenerator->generateUrl(
+	    array('href' => 'modules/mp3audio/lib/G2mp3.swf'),
+	    array('forceFullUrl' => true));
+
+	GalleryCoreApi::requireOnce('lib/smarty_plugins/modifier.markup.php');
+	$title = smarty_modifier_markup($item->getTitle(), 'strip');
+	$flashVars .= '&title=' . urlencode($title);
+
+	/* Uncomment the next line to allow download button. Default: false */
+	//$flashVars .= '&allowDownload=true';
+
+	/*
+	 * Uncomment the next line to allow the share button (also the swfUrl below).
+	 * Default: false
+	 */
+	//$flashVars .= '&share=true';
+
+	/* To allow for sharing we must also pass the playerUrl */
+	//$flashVars .= '&swfUrl=' . urlencode($playerUrl);
+
+	$itemId = $item->getId();
+	list ($ret, $thumbnail) = GalleryCoreApi::fetchThumbnailsByItemIds(array($itemId));
+	if (!$ret && !empty($thumbnail)) {
+	    $thumbUrl = $urlGenerator->generateUrl(
+		array('view' => 'core.DownloadItem', 'itemId' => $thumbnail[$itemId]->getId(),
+		      'serialNumber' => $thumbnail[$itemId]->getSerialNumber()),
+		array('forceFullUrl' => true, 'forceSessionId' => true, 'htmlEntities' => false));
+	    $flashVars .= '&thumbUrl=' . urlencode($thumbUrl);
+	}
+
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'mp3audio');
+	if ($ret) {
+	    return null;
+	}
+	foreach (array('langArtist' => $module->translate('Artist'),
+		       'langAlbum' => $module->translate('Album'),
+		       'langSong' => $module->translate('Song'),
+		       'langTrack' => $module->translate('Track'),
+		       'langGenre' => $module->translate('Genre'),
+		       'langYear' => $module->translate('Year'),
+		       'langDownload' => $module->translate('Download'),
+		       'langInfo' => $module->translate('Info'),
+		       'langPlay' => $module->translate('Play'),
+		       'langPause' => $module->translate('Pause'),
+		       'langForward' => $module->translate('Forward'),
+		       'langRewind' => $module->translate('Rewind'),
+		       'langMute' => $module->translate('Mute'),
+		       'langUnmute' => $module->translate('Unmute'),
+		       'langShare' => $module->translate('Share'),
+		) as $key => $value) {
+	    $flashVars .= '&' . $key . '=' . urlencode($value);
+	}
+	$jsWarning = $module->translate('JavaScript required to view this content.');
+
+	return sprintf(
+	    '<script type="text/javascript" src="%s"></script>
+	    <div id="soContent">%s</div>
+	    <script type="text/javascript">
+	    // <![CDATA[
+	    var so = new SWFObject("%s", "%s", "496", "250", "9.0.28.0", "ffffff");
+	    so.addParam("flashVars","%s");
+	    so.useExpressInstall("%s");
+	    so.addParam("allowScriptAccess","always");
+	    so.addParam("wmode","transparent");
+	    so.write("soContent");
+	    // ]]>
+	    </script>',
+	    $SWFObjectUrl, $jsWarning, $playerUrl, !empty($params['id']) ? $params['id'] : 'audio',
+	    $flashVars, $expressInstallUrl);
+    }
+}
+?>

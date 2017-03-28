@@ -1,0 +1,209 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper functions for users/groups
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryUserGroupHelper_medium {
+
+    /**
+     * @see GalleryCoreApi::addUserToGroup
+     */
+    function addUserToGroup($userId, $groupId) {
+	global $gallery;
+	if (empty($userId) || empty($groupId)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	$userId = (int) $userId;
+	$groupId = (int) $groupId;
+
+	/* Is the user already in the group? */
+	list ($ret, $inGroup) = GalleryCoreApi::isUserInGroup($userId, $groupId);
+	if ($ret) {
+	    return $ret;
+	}
+	if ($inGroup) {
+	    return null;
+	}
+
+	/* Add a new entry in our groups table to represent this relationship. */
+	$ret = GalleryCoreApi::addMapEntry(
+	    'GalleryUserGroupMap', array('userId' => $userId, 'groupId' => $groupId));
+	if ($ret) {
+	    return $ret;
+	}
+	GalleryDataCache::remove("GalleryUserGroupHelper::isUserInGroup($userId,$groupId)");
+
+	$event = GalleryCoreApi::newEvent('Gallery::ViewableTreeChange');
+	$event->setData(array('userId' => $userId, 'itemId' => null));
+	list ($ret) = GalleryCoreApi::postEvent($event);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::removeUserFromGroup
+     */
+    function removeUserFromGroup($userId, $groupId) {
+	global $gallery;
+	if (empty($userId) || empty($groupId)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	$userId = (int) $userId;
+	$groupId = (int) $groupId;
+
+	/* Remove this relationship from our groups table. */
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'GalleryUserGroupMap', array('userId' => $userId, 'groupId' => $groupId));
+	if ($ret) {
+	    return $ret;
+	}
+	GalleryDataCache::remove("GalleryUserGroupHelper::isUserInGroup($userId,$groupId)");
+
+	$event = GalleryCoreApi::newEvent('Gallery::ViewableTreeChange');
+	$event->setData(array('userId' => $userId, 'itemId' => null));
+	list ($ret) = GalleryCoreApi::postEvent($event);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::removeUserFromAllGroups
+     */
+    function removeUserFromAllGroups($userId) {
+	global $gallery;
+	if (empty($userId)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	$userId = (int) $userId;
+
+	/* Remove this relationship from our groups table. */
+	$ret = GalleryCoreApi::removeMapEntry('GalleryUserGroupMap', array('userId' => $userId));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$event = GalleryCoreApi::newEvent('Gallery::ViewableTreeChange');
+	$event->setData(array('userId' => $userId, 'itemId' => null));
+	list ($ret) = GalleryCoreApi::postEvent($event);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::removeAllUsersFromGroup
+     */
+    function removeAllUsersFromGroup($groupId) {
+	global $gallery;
+	if (empty($groupId)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	$groupId = (int) $groupId;
+
+	/* Remove this relationship from our groups table. */
+	$ret = GalleryCoreApi::removeMapEntry('GalleryUserGroupMap', array('groupId' => $groupId));
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $group) = GalleryCoreApi::loadEntitiesById($groupId, 'GalleryGroup');
+	if ($ret) {
+	    return $ret;
+	}
+	if ($group->getGroupType() != GROUP_ALL_USERS
+		&& $group->getGroupType() != GROUP_EVERYBODY) {
+	    list ($ret, $userData) = GalleryCoreApi::fetchUsersForGroup($groupId);
+	    if ($ret) {
+		return $ret;
+	    }
+	    $event = GalleryCoreApi::newEvent('Gallery::ViewableTreeChange');
+	    $event->setData(array('userId' => array_keys($userData), 'itemId' => null));
+	    list ($ret) = GalleryCoreApi::postEvent($event);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchUsersForGroup
+     */
+    function fetchUsersForGroup($groupId, $count=null, $offset=null, $substring=null) {
+	global $gallery;
+
+	$data = array();
+	$query = '
+	SELECT
+	  [GalleryUserGroupMap::userId],
+	  [GalleryUser::userName]
+	FROM
+	  [GalleryUserGroupMap], [GalleryUser]
+	WHERE
+	  [GalleryUserGroupMap::groupId] = ?
+	  AND
+	  [GalleryUserGroupMap::userId] = [GalleryUser::id]
+	';
+	$data[] = (int) $groupId;
+	if (!empty($substring)) {
+	    $query .= '
+	      AND
+	      [GalleryUser::userName] LIKE ?
+	    ';
+	    $data[] = "%$substring%";
+	}
+	$query .= '
+	ORDER BY
+	  [GalleryUser::userName]
+	';
+
+	list ($ret, $searchResults) = $gallery->search(
+	    $query, $data, array('limit' => array('count' => $count, 'offset' => $offset)));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$data = array();
+	while ($result = $searchResults->nextResult()) {
+	    $data[$result[0]] = $result[1];
+	}
+	return array(null, $data);
+    }
+}
+?>

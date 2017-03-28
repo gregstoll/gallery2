@@ -1,0 +1,998 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+/**
+ * A helper class for the EXIF module.
+ * @package Exif
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @author Georg Rehfeld <rehfeld@georg-rehfeld.de>
+ * @version $Revision: 17580 $
+ */
+
+/**
+ * Summary EXIF setting
+ */
+define('EXIF_SUMMARY', 1);
+
+/**
+ * Detailed EXIF setting
+ */
+define('EXIF_DETAILED', 2);
+
+/**
+ * Import EXIF description into item summary
+ */
+define('EXIF_ITEM_SUMMARY', 1);
+
+/**
+ * Import EXIF description into item description
+ */
+define('EXIF_ITEM_DESCRIPTION', 2);
+
+/**
+ * Import IPTC keywords into item keywords
+ */
+define('IPTC_ITEM_KEYWORDS', 4);
+
+/**
+ * Import IPTC Name into item title
+ */
+define('IPTC_ITEM_TITLE', 32);
+
+/**
+ * Rotate pictures based on exifData
+ */
+define('EXIF_ITEM_ROTATE', 8);
+
+/**
+ * Preserve original on rotating
+ */
+define('EXIF_ITEM_ROTATE_PRESERVE', 16);
+
+/**
+ * A helper class for the EXIF module.
+ *
+ * This class follows the Adapter pattern: 2 foreign packages with totally different APIs are made
+ * compatible with the G2 API. Methods starting with '_' (underscore), though not neccessarily
+ * declared private, must only be used internally in this class or subclasses.
+ * @static
+ */
+class ExifHelper {
+
+    /**
+     * Reset the given view mode back to its default settings
+     *
+     * @param int $viewMode
+     * @return GalleryStatus a status code
+     */
+    function setDefaultProperties($viewMode) {
+	switch ($viewMode) {
+	case EXIF_SUMMARY:
+	    /* This is an initial install; make sure that we have some reasonable defaults */
+	    $properties[] = 'Make';
+	    $properties[] = 'Model';
+	    $properties[] = 'ApertureValue';
+	    $properties[] = 'ColorSpace';
+	    $properties[] = 'ExposureBiasValue';
+	    $properties[] = 'ExposureProgram';
+	    $properties[] = 'Flash';
+	    $properties[] = 'FocalLength';
+	    $properties[] = 'ISO';
+	    $properties[] = 'MeteringMode';
+	    $properties[] = 'ShutterSpeedValue';
+	    $properties[] = 'DateTime';
+	    $properties[] = 'IPTC/Caption';
+	    $properties[] = 'IPTC/CopyrightNotice';
+	    break;
+
+	case EXIF_DETAILED:
+	    $properties[] = 'Make';
+	    $properties[] = 'Model';
+	    $properties[] = 'ApertureValue';
+	    $properties[] = 'ColorSpace';
+	    $properties[] = 'ExposureBiasValue';
+	    $properties[] = 'ExposureProgram';
+	    $properties[] = 'Flash';
+	    $properties[] = 'FocalLength';
+	    $properties[] = 'ISO';
+	    $properties[] = 'MeteringMode';
+	    $properties[] = 'ShutterSpeedValue';
+	    $properties[] = 'DateTime';
+	    $properties[] = 'IPTC/Caption';
+	    $properties[] = 'IPTC/CopyrightNotice';
+	    $properties[] = 'IPTC/Keywords';
+	    $properties[] = 'ImageType';
+	    $properties[] = 'Orientation';
+	    $properties[] = 'PhotoshopSettings';
+	    $properties[] = 'ResolutionUnit';
+	    $properties[] = 'xResolution';
+	    $properties[] = 'yResolution';
+	    $properties[] = 'Compression';
+	    $properties[] = 'BrightnessValue';
+	    $properties[] = 'Contrast';
+	    $properties[] = 'ExposureMode';
+	    $properties[] = 'FlashEnergy';
+	    $properties[] = 'Saturation';
+	    $properties[] = 'SceneType';
+	    $properties[] = 'Sharpness';
+	    $properties[] = 'SubjectDistance';
+	    break;
+
+	default:
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	$ret = ExifHelper::setProperties($viewMode, $properties);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Add default IPTC properties for the given view mode to the end of current properties.
+     * This is used on upgrade of the module from before IPTC times.
+     *
+     * @param int $viewMode
+     * @return GalleryStatus a status code
+     */
+    function addDefaultIptcProperties($viewMode) {
+	list ($ret, $properties) = ExifHelper::getProperties($viewMode);
+	if ($ret) {
+	    return $ret;
+	}
+
+	switch ($viewMode) {
+	case EXIF_SUMMARY:
+	    $properties[] = 'IPTC/Caption';
+	    $properties[] = 'IPTC/CopyrightNotice';
+	    break;
+
+	case EXIF_DETAILED:
+	    $properties[] = 'IPTC/Caption';
+	    $properties[] = 'IPTC/CopyrightNotice';
+	    $properties[] = 'IPTC/Keywords';
+	    break;
+
+	default:
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	$ret = ExifHelper::setProperties($viewMode, $properties);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Retrieve the raw EXIF data as returned by lib/Exifer.
+     *
+     * @param string $path the path to the file
+     * @param array $rawExifData reference to an array where to store the results
+     *        as returned by read_exif_data_raw() from exifer
+     */
+    function _fetchRawExifData($path, &$rawExifData) {
+	global $gallery;
+	GalleryCoreApi::requireOnce('modules/exif/lib/exifer/exif.inc');
+
+	$platform =& $gallery->getPlatform();
+	if (!$platform->file_exists($path)) {
+	    $rawExifData = null;
+	    return;
+	}
+	$rawExifData = read_exif_data_raw($path, false);
+	if ($gallery->getDebug()) {
+	    $buf = print_r($rawExifData, true);
+	    $gallery->debug(str_replace("\0", '', $buf));
+	}
+    }
+
+    /**
+     * Return the raw IPTC data as a lib/JPEG object. This method call has the penalty to have
+     * to read in the lib/JPEG library (currently ~100KB) but nearly no penalties for the image:
+     * it isn't read here, that happens lazily when actually accessing IPTC values.
+     *
+     * @param string $path the path to a jpeg file
+     * @return array   GalleryStatus a status code
+     *                 object  the JPEG object containing the IPTC data
+     * @see getIptcValue
+     * @todo (xlerb) reduce size of lib/JPEG: 1. remove whitespace/comments; 2. refactor according
+     *      to lazy reading. Before refactoring, add timing tests.
+     */
+    function getIptcObject($path) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	if (!$platform->file_exists($path)) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					      "Missing $path"),
+			 null);
+	}
+	GalleryCoreApi::requireOnce('modules/exif/lib/JPEG/JPEG.inc');
+	$result = new JPEG($path);
+	if ($gallery->getDebug()) {
+	    /* Capture old-school print_r() to support older PHP */
+	    ob_start();
+	    print_r($result->getRawInfo());
+	    $buf = ob_get_contents();
+	    ob_end_clean();
+	    $gallery->debug(str_replace("\0", '', $buf));
+	}
+	return array(null, $result);
+    }
+
+    /**
+     * Return the wanted EXIF/IPTC data for one given file according to the given view mode.
+     * This method doesn't return all available EXIF/IPTC data; instead it returns only the data
+     * existing and configured to be viewed in the given mode.
+     *
+     * @param string $path the path to the file
+     * @param int $viewMode
+     * @return array GalleryStatus a status code
+     *               array title/value pairs
+     */
+    function getExifData($path, $viewMode) {
+	$rawExifData = array();
+	ExifHelper::_fetchRawExifData($path, $rawExifData);
+	list ($ret, $iptcObj) = ExifHelper::getIptcObject($path);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$exifKeys = ExifHelper::getExifKeys();
+
+	$results = array();
+	list ($ret, $properties) = ExifHelper::getProperties($viewMode);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	foreach ($properties as $property) {
+	    $title = $exifKeys[$property][0];
+	    for ($i = 1; $i < sizeof($exifKeys[$property]); $i++) {
+		$keyPath = explode('.', $exifKeys[$property][$i]);
+		$value = ExifHelper::getExifValue($rawExifData, $keyPath);
+		if (!isset($value)) {
+		    $value = ExifHelper::getIptcValue($iptcObj, $keyPath);
+		}
+		if (isset($value)) {
+		    $value = ExifHelper::postProcessValue($property, $value);
+		}
+		if (isset($value)) {
+		    $results[] = array('title' => $title, 'value' => $value);
+		    break;
+		}
+	    }
+	}
+
+	return array(null, $results);
+    }
+
+    /**
+     * Sometimes the values that are returned aren't quite as we'd like to
+     * present them, so do a little post processing on the text
+     *
+     * @param string $property the property name (eg. "ApertureValue")
+     * @param string $value the value (eg. "f 2.8")
+     * @return string the result (eg. "f/2.8")
+     */
+    function postProcessValue($property, $value) {
+	global $gallery;
+
+	GalleryUtilities::sanitizeInputValues($value, false);
+
+	switch ($property) {
+	case 'ApertureValue':
+	    /* Convert "f 2.8" to "f/2.8" */
+	    $results = sscanf($value, 'f %s');
+	    if (count($results) == 1) {
+		$value = 'f/' . $results[0];
+	    }
+	    break;
+
+	case 'DateTime':
+	    $value = ExifHelper::_parseDate($value);
+	    if (isset($value)) {
+		/* Convert to localized string */
+		list ($ret, $format) =
+		    GalleryCoreApi::getPluginParameter('module', 'core', 'format.datetime');
+		if ($ret || empty($format)) {
+		    $format = '$x $X';
+		}
+		$platform =& $gallery->getPlatform();
+		$value = $platform->strftime($format, $value);
+	    }
+	    break;
+
+	case 'ExposureBiasValue':
+	case 'FocalLength':
+	case 'FocalPlaneXResolution':
+	case 'FocalPlaneYResolution':
+	    /*
+	     * Round to two decimal places, sprintf must be feeded with non-localized floating
+	     * numbers (dot as decimal separator). sprintf('%.2f', '21.3725') returns a localized
+	     * decimal separator, but it does not accept '21,3725' as argument. Weird, but it's
+	     * like that.
+	     */
+	    $value = preg_replace('/(\d*)[\.,](\d{3,})/e', 'sprintf(\'%.2f\', $1.$2)', $value);
+	    break;
+	}
+
+	return $value;
+    }
+
+    /**
+     * Return the timestamp when the picture was taken, as recorded in exif
+     *
+     * @param string $path the path to the file
+     * @return int an unix timestamp
+     * @todo (xlerb) check for IPTC.DateCreated and IPTC.TimeCreated additionally? Problem: only
+     *      date set by Adobe in IPTC, set time to 0 = midnight or 12 = noon? Also, which priority
+     *      has it: it was explicitely set by the editor, thus first priority? Or to be considered
+     *      just before IFD0.DateTime == last modification time?
+     */
+    function getOriginationTimestamp($path) {
+	$rawExifData = array();
+	ExifHelper::_fetchRawExifData($path, $rawExifData);
+	/*
+	 * The method name indicates, that we want the earliest date available for the img.
+	 * As of specs and practice with raw camera images and Adobe manipulated ones it seems,
+	 * that SubIFD.DateTimeOriginal and SubIFD.DateTimeDigitized indicate creation time:
+	 * both are set to shot time by cameras, scanners set only SubIFD.DateTimeDigitized.
+	 * Adobe sets IFD0.DateTime to the last modification date/time. So we prefer creation date.
+	 */
+	foreach (array('SubIFD.DateTimeOriginal', 'SubIFD.DateTimeDigitized', 'IFD0.DateTime')
+		 as $tag) {
+	    $value = ExifHelper::getExifValue($rawExifData, explode('.', $tag));
+	    if (isset($value)) {
+		$value = ExifHelper::_parseDate($value);
+		if (isset($value)) {
+		    return $value;
+		}
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * Parse date string into unix timestamp.
+     * @access private
+     */
+    function _parseDate($value) {
+	/* Ignore "blank" value */
+	if ($value == '0000:00:00 00:00:00') {
+	    return null;
+	}
+	/* Standard EXIF format */
+	if (preg_match('#(\d+):(\d+):(\d+)\s+(\d+):(\d+):(\d+)#', $value, $m)) {
+	    $time = mktime((int)$m[4], (int)$m[5], (int)$m[6], (int)$m[2], (int)$m[3], (int)$m[1]);
+	}
+	/* This ISO 8601 pattern seems to be used by newer Adobe products */
+	else if (preg_match('#(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)(([-+])(\d+)(:(\d+))?)?#',
+		    $value, $m)) {
+	    $time = mktime((int)$m[4], (int)$m[5], (int)$m[6], (int)$m[2], (int)$m[3], (int)$m[1]);
+	}
+	if (empty($time)) {
+	    return null;
+	}
+	if (isset($m[8])) {
+	    $offset = ((int)$m[9] * 60 + (isset($m[11]) ? (int)$m[11] : 0)) * 60;
+	    if ($m[8] == '+') {
+		$time += $offset;
+	    } else {
+		$time -= $offset;
+	    }
+	}
+	return $time;
+    }
+
+    /**
+     * Retrieve a single EXIF value by path from a nested associative array.
+     * The data source is an array like this:
+     *
+     * foo => (
+     *   bar => (a => 1, b => 2, c => 3),
+     *   baz => (d => 4, e => 5, f => 6))
+     *
+     * and the key path is an array like this:
+     *
+     * (foo, baz, d)
+     *
+     * the resulting value would be "4"
+     *
+     * @param array $source the data source
+     * @param array $keyPath the key path
+     * @return array GalleryStatus a status code
+     *               string value
+     */
+    function getExifValue(&$source, $keyPath) {
+	$key = array_shift($keyPath);
+	if (!isset($source[$key])) {
+	    return null;
+	}
+
+	if (empty($keyPath)) {
+	    return str_replace("\0", '', $source[$key]);
+	}
+
+	return ExifHelper::getExifValue($source[$key], $keyPath);
+    }
+
+    /**
+     * Retrieve a single IPTC value out of the given JPEG object by key path.
+     * If the key path starts with 'IPTC', the second part is assumed to contain the physical
+     * IPTC name, more parts are silently ignored. When the path does not start with 'IPTC', this
+     * method returns null.
+     *
+     * @param object $object A JPEG object containing the IPTC values
+     * @param array $keyPath
+     * @param string $sourceEncoding encoding of the IPTC value, e.g. 'ISO-8859-1', defaults from
+     *               current locale
+     * @return string  An IPTC value or null, if there is no such value or on error
+     * @todo (xlerb) have IPTC input charset default in EXIF/IPTC admin interface.
+     * @todo (xlerb) have IPTC input charset overrides for albums (maybe images too?) for cases,
+     *      where users from different countries can upload images with IPTC data. It is such a
+     *      pain, that the charset used isn't recorded in IPTC headers.
+     */
+    function getIptcValue(&$object, $keyPath, $sourceEncoding=null) {
+	if ($keyPath[0] != 'IPTC') {
+	    return null;
+	}
+	$result = $object->getIPTCField($keyPath[1]);
+	if ($result == false) {
+	    return null;
+	}
+	if (is_array($result)) {
+	    $result = implode('; ', $result);
+	}
+	$result = GalleryCoreApi::convertToUtf8($result, $sourceEncoding);
+	return $result;
+    }
+
+    /**
+     * Return the target properties for the given view mode
+     *
+     * @param int $viewMode the view mode (EXIF_SUMMARY, etc)
+     * @return array GalleryStatus a status code
+     *               array logical exif property names
+     */
+    function getProperties($viewMode) {
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('ExifPropertiesMap',
+	    array('property', 'sequence'), array('viewMode' => $viewMode),
+	    array('orderBy' => array('sequence' => ORDER_ASCENDING)));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$data = array();
+	while ($result = $searchResults->nextResult()) {
+	    $data[] = $result[0];
+	}
+
+	return array(null, $data);
+    }
+
+    /**
+     * Set the target properties for the given view mode
+     *
+     * @param int $viewMode the view mode (EXIF_SUMMARY, etc)
+     * @param array $properties logical property key/value pairs
+     * @return GalleryStatus a status code
+     */
+    function setProperties($viewMode, $properties) {
+
+	/* Remove all old map entries */
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'ExifPropertiesMap', array('viewMode' => $viewMode));
+	if ($ret) {
+	    return $ret;
+	}
+
+	for ($i = 0; $i < sizeof($properties); $i++) {
+	    $ret = GalleryCoreApi::addMapEntry(
+		'ExifPropertiesMap',
+		array('property' => $properties[$i],
+		      'viewMode' => $viewMode,
+		      'sequence' => $i));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Return the EXIF/IPTC keys that we know about (from lib/Exifer and lib/JPEG).
+     *
+     * The resulting array is of the form:
+     *
+     *   'G2 exif/iptc property 0' => (
+     *       'internationalized title 0',
+     *       'physical exif property' [, 'another physical exif property', ...])
+     *   'G2 exif/iptc property 1' => (
+     *       'internationalized title 1',
+     *       'physical exif property' [, 'another physical exif property', ...])
+     *   ...
+     *
+     *   The G2 exif/iptc properties are unique and have some correlation to the physical
+     *   properties, but have been changed for our convenience, especially allowing to access
+     *   several physical exif/iptc properties for one and the same logical G2 exif/iptc property.
+     *   The first existing physical property in the given order will be used and returned.
+     *
+     * @return array exif keys
+     */
+    function getExifKeys() {
+	global $gallery;
+	static $data;
+
+	if (!empty($data)) {
+	    return $data;
+	}
+
+	/* Must haves */
+	$data['ApertureValue'] =
+	    array($gallery->i18n('Aperture Value'), 'SubIFD.ApertureValue', 'SubIFD.FNumber');
+	$data['ShutterSpeedValue'] =
+	    array($gallery->i18n('Shutter Speed Value'),
+		  'SubIFD.ShutterSpeedValue', 'SubIFD.ExposureTime');
+	$data['ISO'] =
+	    array($gallery->i18n('ISO'),
+		  'SubIFD.MakerNote.Settings 1.ISO', 'SubIFD.MakerNote.ISOSelection',
+		  'SubIFD.MakerNote.ISOSetting', 'SubIFD.ISOSpeedRatings');
+	$data['FocalLength'] =
+	    array($gallery->i18n('Focal Length'), 'SubIFD.FocalLength');
+	$data['Flash'] =
+	    array($gallery->i18n('Flash'), 'SubIFD.Flash', 'SubIFD.MakerNote.Settings 1.Flash');
+	/* Not sure */
+	$data['ACDComment'] =
+	    array($gallery->i18n('ACD Comment'), 'IFD0.ACDComment');
+	$data['AEWarning'] =
+	    array($gallery->i18n('AE Warning'), 'SubIFD.MakerNote.AEWarning');
+	$data['AFFocusPosition'] =
+	    array($gallery->i18n('AF Focus Position'), 'SubIFD.MakerNote.AFFocusPosition');
+	$data['AFPointSelected'] =
+	    array($gallery->i18n('AF Point Selected'),
+		  'SubIFD.MakerNote.Settings 1.AFPointSelected');
+	$data['AFPointUsed'] =
+	    array($gallery->i18n('AF Point Used'), 'SubIFD.MakerNote.Settings 4.AFPointUsed');
+	$data['Adapter'] =
+	    array($gallery->i18n('Adapter'), 'SubIFD.MakerNote.Adapter');
+	$data['Artist'] =
+	    array($gallery->i18n('Artist'), 'IFD0.Artist');
+	$data['BatteryLevel'] =
+	    array($gallery->i18n('Battery Level'), 'IFD1.BatteryLevel');
+	$data['BitsPerSample'] =
+	    array($gallery->i18n('Bits Per Sample'), 'IFD1.BitsPerSample');
+	$data['BlurWarning'] =
+	    array($gallery->i18n('Blur Warning'), 'SubIFD.MakerNote.BlurWarning');
+	$data['BrightnessValue'] =
+	    array($gallery->i18n('Brightness Value'), 'SubIFD.BrightnessValue');
+	$data['CCDSensitivity'] =
+	    array($gallery->i18n('CCD Sensitivity'), 'SubIFD.MakerNote.CCDSensitivity');
+	$data['CameraID'] =
+	    array($gallery->i18n('Camera ID'), 'SubIFD.MakerNote.CameraID');
+	$data['CameraSerialNumber'] =
+	    array($gallery->i18n('Camera Serial Number'), 'SubIFD.MakerNote.CameraSerialNumber');
+	$data['Color'] =
+	    array($gallery->i18n('Color'), 'SubIFD.MakerNote.Color');
+	$data['ColorMode'] =
+	    array($gallery->i18n('Color Mode'), 'SubIFD.MakerNote.ColorMode');
+	$data['ColorSpace'] =
+	    array($gallery->i18n('Color Space'), 'SubIFD.ColorSpace');
+	$data['ComponentsConfiguration'] =
+	    array($gallery->i18n('Components Configuration'), 'SubIFD.ComponentsConfiguration');
+	$data['CompressedBitsPerPixel'] =
+	    array($gallery->i18n('Compressed Bits Per Pixel'), 'SubIFD.CompressedBitsPerPixel');
+	$data['Compression'] =
+	    array($gallery->i18n('Compression'), 'IFD1.Compression');
+	$data['ContinuousTakingBracket'] =
+	    array($gallery->i18n('Continuous Taking Bracket'),
+		  'SubIFD.MakerNote.ContinuousTakingBracket');
+	$data['Contrast'] =
+	    array($gallery->i18n('Contrast'), 'SubIFD.Contrast',
+		  'SubIFD.MakerNote.Settings 1.Contrast');
+	$data['Converter'] =
+	    array($gallery->i18n('Converter'), 'SubIFD.MakerNote.Converter');
+	$data['Copyright'] =
+	    array($gallery->i18n('Copyright'), 'IFD0.Copyright');
+	$data['CustomFunctions'] =
+	    array($gallery->i18n('Custom Functions'), 'SubIFD.MakerNote.CustomFunctions');
+	$data['CustomerRender'] =
+	    array($gallery->i18n('Customer Render'), 'SubIFD.CustomerRender');
+	/* See comment inside getOriginationTimestamp() for changed order of physical props. */
+	$data['DateTime'] =
+	    array($gallery->i18n('Date/Time'), 'SubIFD.DateTimeOriginal',
+		  'SubIFD.DateTimeDigitized', 'IFD0.DateTime');
+	$data['DigitalZoom'] =
+	    array($gallery->i18n('Digital Zoom'),
+		  'SubIFD.MakerNote.DigitalZoom', 'SubIFD.MakerNote.DigiZoom');
+	$data['DigitalZoomRatio'] =
+	    array($gallery->i18n('Digital Zoom Ratio'), 'SubIFD.DigitalZoomRatio');
+	$data['DriveMode'] =
+	    array($gallery->i18n('DriveMode'), 'SubIFD.MakerNote.Settings 1.DriveMode');
+	$data['EasyShooting'] =
+	    array($gallery->i18n('Easy Shooting'), 'SubIFD.MakerNote.Settings 1.EasyShooting');
+	$data['ExposureBiasValue'] =
+	    array($gallery->i18n('Exposure Bias Value'), 'SubIFD.ExposureBiasValue');
+	$data['ExposureIndex'] =
+	    array($gallery->i18n('Exposure Index'), 'IFD1.ExposureIndex', 'SubIFD.ExposureIndex');
+	$data['ExposureMode'] =
+	    array($gallery->i18n('Exposure Mode'),
+		  'SubIFD.ExposureMode', 'SubIFD.MakerNote.Settings 1.ExposureMode');
+	$data['ExposureProgram'] =
+	    array($gallery->i18n('Exposure Program'), 'SubIFD.ExposureProgram');
+	$data['FileSource'] =
+	    array($gallery->i18n('File Source'), 'SubIFD.FileSource');
+	$data['FirmwareVersion'] =
+	    array($gallery->i18n('Firmware Version'), 'SubIFD.MakerNote.FirmwareVersion');
+	$data['FlashBias'] =
+	    array($gallery->i18n('Flash Bias'), 'SubIFD.MakerNote.Settings 4.FlashBias');
+	$data['FlashDetails'] =
+	    array($gallery->i18n('Flash Details'), 'SubIFD.MakerNote.Settings 1.FlashDetails');
+	$data['FlashEnergy'] =
+	    array($gallery->i18n('Flash Energy'), 'IFD1.FlashEnergy', 'SubIFD.FlashEnergy');
+	$data['FlashMode'] =
+	    array($gallery->i18n('Flash Mode'), 'SubIFD.MakerNote.FlashMode');
+	$data['FlashPixVersion'] =
+	    array($gallery->i18n('Flash Pix Version'), 'SubIFD.FlashPixVersion');
+	$data['FlashSetting'] =
+	    array($gallery->i18n('Flash Setting'), 'SubIFD.MakerNote.FlashSetting');
+	$data['FlashStrength'] =
+	    array($gallery->i18n('Flash Strength'), 'SubIFD.MakerNote.FlashStrength');
+	$data['FocalPlaneResolutionUnit'] =
+	    array($gallery->i18n('Focal Plane Resolution Unit'),
+		  'SubIFD.FocalPlaneResolutionUnit');
+	$data['FocalPlaneXResolution'] =
+	    array($gallery->i18n('Focal Plane X Resolution'), 'SubIFD.FocalPlaneXResolution');
+	$data['FocalPlaneYResolution'] =
+	    array($gallery->i18n('Focal Plane Y Resolution'), 'SubIFD.FocalPlaneYResolution');
+	$data['FocalUnits'] =
+	    array($gallery->i18n('Focal Units'), 'SubIFD.MakerNote.Settings 1.FocalUnits');
+	$data['Focus'] =
+	    array($gallery->i18n('Focus'), 'SubIFD.MakerNote.Focus');
+	$data['FocusMode'] =
+	    array($gallery->i18n('Focus Mode'),
+		  'SubIFD.MakerNote.FocusMode', 'SubIFD.MakerNote.Settings 1.FocusMode');
+	$data['FocusWarning'] =
+	    array($gallery->i18n('Focus Warning'), 'SubIFD.MakerNote.FocusWarning');
+	$data['GainControl'] =
+	    array($gallery->i18n('Gain Control'), 'SubIFD.GainControl');
+	$data['ImageAdjustment'] =
+	    array($gallery->i18n('Image Adjustment'), 'SubIFD.MakerNote.ImageAdjustment');
+	$data['ImageDescription'] =
+	    array($gallery->i18n('Image Description'), 'IFD0.ImageDescription');
+	$data['ImageHistory'] =
+	    array($gallery->i18n('Image History'), 'SubIFD.ImageHistory');
+	$data['ImageLength'] =
+	    array($gallery->i18n('Image Length'), 'IFD1.ImageLength');
+	$data['ImageNumber'] =
+	    array($gallery->i18n('Image Number'),
+		  'IFD1.ImageNumber', 'SubIFD.MakerNote.ImageNumber');
+	$data['ImageSharpening'] =
+	    array($gallery->i18n('Image Sharpening'), 'SubIFD.MakerNote.ImageSharpening');
+	$data['ImageSize'] =
+	    array($gallery->i18n('Image Size'), 'SubIFD.MakerNote.Settings 1.ImageSize');
+	$data['ImageType'] =
+	    array($gallery->i18n('Image Type'), 'IFD0.ImageType', 'SubIFD.MakerNote.ImageType');
+	$data['ImageWidth'] =
+	    array($gallery->i18n('Image Width'), 'IFD1.ImageWidth');
+	$data['InterColorProfile'] =
+	    array($gallery->i18n('Inter Color Profile'), 'IFD1.InterColorProfile');
+	$data['Interlace'] =
+	    array($gallery->i18n('Interlace'), 'IFD1.Interlace');
+	$data['InteroperabilityIFD.InteroperabilityIndex'] =
+	    array($gallery->i18n('Interoperability Index'),
+		  'InteroperabilityIFD.InteroperabilityIndex');
+	$data['InteroperabilityIFD.InteroperabilityVersion'] =
+	    array($gallery->i18n('Interoperability Version'),
+		  'InteroperabilityIFD.InteroperabilityVersion');
+	$data['InteroperabilityIFD.RelatedImageFileFormat'] =
+	    array($gallery->i18n('Related Image File Format'),
+		  'InteroperabilityIFD.RelatedImageFileFormat');
+	$data['InteroperabilityIFD.RelatedImageLength'] =
+	    array($gallery->i18n('Related Image Length'),
+		  'InteroperabilityIFD.RelatedImageLength');
+	$data['InteroperabilityIFD.RelatedImageWidth'] =
+	    array($gallery->i18n('Related Image Width'),
+		  'InteroperabilityIFD.RelatedImageWidth');
+	$data['JPEGTables'] =
+	    array($gallery->i18n('JPEG Tables'), 'IFD1.JPEGTables');
+	$data['JpegIFByteCount'] =
+	    array($gallery->i18n('Jpeg IF Byte Count'), 'IFD1.JpegIFByteCount');
+	$data['JpegIFOffset'] =
+	    array($gallery->i18n('Jpeg IF Offset'), 'IFD1.JpegIFOffset');
+	$data['JpegQual'] =
+	    array($gallery->i18n('Jpeg Quality'), 'SubIFD.MakerNote.JpegQual');
+	$data['LightSource'] =
+	    array($gallery->i18n('Light Source'), 'SubIFD.LightSource');
+	$data['LongFocalLength'] =
+	    array($gallery->i18n('Long Focal Length'),
+		  'SubIFD.MakerNote.Settings 1.LongFocalLength');
+	$data['Macro'] =
+	    array($gallery->i18n('Macro'),
+		  'SubIFD.MakerNote.Macro', 'SubIFD.MakerNote.Settings 1.Macro');
+	$data['Make'] =
+	    array($gallery->i18n('Make'), 'IFD0.Make');
+	$data['ManualFocusDistance'] =
+	    array($gallery->i18n('Manual Focus Distance'), 'SubIFD.MakerNote.ManualFocusDistance');
+	$data['MaxApertureValue'] =
+	    array($gallery->i18n('Max Aperture Value'), 'SubIFD.MaxApertureValue');
+	$data['MeteringMode'] =
+	    array($gallery->i18n('Metering Mode'),
+		  'SubIFD.MeteringMode', 'SubIFD.MakerNote.Settings 1.MeteringMode');
+	$data['Model'] =
+	    array($gallery->i18n('Model'), 'IFD0.Model');
+	$data['Noise'] =
+	    array($gallery->i18n('Noise'), 'IFD1.Noise');
+	$data['NoiseReduction'] =
+	    array($gallery->i18n('Noise Reduction'), 'SubIFD.MakerNote.NoiseReduction');
+	$data['Orientation'] =
+	    array($gallery->i18n('Orientation'), 'IFD0.Orientation');
+	$data['OwnerName'] =
+	    array($gallery->i18n('Owner Name'), 'SubIFD.MakerNote.OwnerName');
+	$data['PhotometricInterpret'] =
+	    array($gallery->i18n('Photometric Interpretation'),
+		  'IFD0.PhotometricInterpret', 'IFD1.PhotometricInterpretation');
+	$data['PhotoshopSettings'] =
+	    array($gallery->i18n('Photoshop Settings'), 'IFD0.PhotoshopSettings');
+	$data['PictInfo'] =
+	    array($gallery->i18n('Picture Info'), 'SubIFD.MakerNote.PictInfo');
+	$data['PictureMode'] =
+	    array($gallery->i18n('Picture Mode'), 'SubIFD.MakerNote.PictureMode');
+	$data['PlanarConfiguration'] =
+	    array($gallery->i18n('Planar Configuration'),
+		  'IFD1.PlanarConfiguration', 'IFD0.PlanarConfig');
+	$data['Predictor'] =
+	    array($gallery->i18n('Predictor'), 'IFD1.Predictor');
+	$data['PrimaryChromaticities'] =
+	    array($gallery->i18n('Primary Chromaticities'), 'IFD0.PrimaryChromaticities');
+	$data['Quality'] =
+	    array($gallery->i18n('Quality'),
+		  'SubIFD.MakerNote.Quality', 'SubIFD.MakerNote.Settings 1.Quality');
+	$data['ReferenceBlackWhite'] =
+	    array($gallery->i18n('Reference Black/White'), 'IFD0.ReferenceBlackWhite');
+	$data['RelatedSoundFile'] =
+	    array($gallery->i18n('Related Sound File'), 'SubIFD.RelatedSoundFile');
+	$data['ResolutionUnit'] =
+	    array($gallery->i18n('Resolution Unit'), 'IFD0.ResolutionUnit');
+	$data['RowsPerStrip'] =
+	    array($gallery->i18n('Rows Per Strip'), 'IFD1.RowsPerStrip');
+	$data['SamplesPerPixel'] =
+	    array($gallery->i18n('Samples Per Pixel'),
+		  'IFD1.SamplesPerPixel', 'IFD0.SamplePerPixel');
+	$data['Saturation'] =
+	    array($gallery->i18n('Saturation'),
+		  'SubIFD.Saturation', 'SubIFD.MakerNote.Saturation',
+		  'SubIFD.MakerNote.Settings 1.Saturation');
+	$data['SceneCaptureMode'] =
+	    array($gallery->i18n('Scene Capture Mode'), 'SubIFD.SceneCaptureMode');
+	$data['SceneType'] =
+	    array($gallery->i18n('Scene Type'), 'SubIFD.SceneType');
+	$data['SecurityClassification'] =
+	    array($gallery->i18n('Security Classification'), 'IFD1.SecurityClassification');
+	$data['SelfTimer'] =
+	    array($gallery->i18n('Self Timer'), 'SubIFD.MakerNote.Settings 1.SelfTimer');
+	$data['SelfTimerMode'] =
+	    array($gallery->i18n('Self Timer Mode'), 'IFD1.SelfTimerMode');
+	$data['SensingMethod'] =
+	    array($gallery->i18n('Sensing Method'), 'SubIFD.SensingMethod');
+	$data['SequenceNumber'] =
+	    array($gallery->i18n('Sequence Number'), 'SubIFD.MakerNote.Settings 4.SequenceNumber');
+	$data['Sharpness'] =
+	    array($gallery->i18n('Sharpness'),
+		  'SubIFD.Sharpness', 'SubIFD.MakerNote.Sharpness',
+		  'SubIFD.MakerNote.Settings 1.Sharpness');
+	$data['ShortFocalLength'] =
+	    array($gallery->i18n('Short Focal Length'),
+		  'SubIFD.MakerNote.Settings 1.ShortFocalLength');
+	$data['SlowSync'] =
+	    array($gallery->i18n('Slow Sync'), 'SubIFD.MakerNote.SlowSync');
+	$data['Software'] =
+	    array($gallery->i18n('Software'), 'IFD0.Software');
+	$data['SoftwareRelease'] =
+	    array($gallery->i18n('Software Release'), 'SubIFD.MakerNote.SoftwareRelease');
+	$data['SpatialFrequencyResponse'] =
+	    array($gallery->i18n('Spatial Frequency Response'),
+		  'IFD1.SpatialFrequencyResponse', 'SubIFD.SpacialFreqResponse');
+	$data['SpecialMode'] =
+	    array($gallery->i18n('Special Mode'), 'SubIFD.MakerNote.SpecialMode');
+	$data['SpectralSensitivity'] =
+	    array($gallery->i18n('Spectral Sensitivity'), 'SubIFD.SpectralSensitivity');
+	$data['StripByteCounts'] =
+	    array($gallery->i18n('Strip Byte Counts'), 'IFD1.StripByteCounts');
+	$data['StripOffsets'] =
+	    array($gallery->i18n('Strip Offsets'), 'IFD1.StripOffsets');
+	$data['SubIFDs'] =
+	    array($gallery->i18n('SubIFDs'), 'IFD1.SubIFDs');
+	$data['SubfileType'] =
+	    array($gallery->i18n('Subfile Type'), 'IFD1.SubfileType');
+	$data['SubjectDistance'] =
+	    array($gallery->i18n('Subject Distance'),
+		  'SubIFD.SubjectDistance', 'SubIFD.MakerNote.Settings 4.SubjectDistance');
+	$data['SubjectLocation'] =
+	    array($gallery->i18n('Subject Location'),
+		  'IFD1.SubjectLocation', 'SubIFD.SubjectLocation');
+	$data['SubsecTime'] =
+	    array($gallery->i18n('Subsec Time'), 'SubIFD.SubsecTime');
+	$data['SubsecTimeDigitized'] =
+	    array($gallery->i18n('Subsec Time (Digitized)'), 'SubIFD.SubsecTimeDigitized');
+	$data['SubsecTimeOriginal'] =
+	    array($gallery->i18n('Subsec Time (Original)'), 'SubIFD.SubsecTimeOriginal');
+	$data['TIFF/EPStandardID'] =
+	    array($gallery->i18n('TIFF/EP Standard ID'), 'IFD1.TIFF/EPStandardID');
+
+	$data['TileByteCounts'] =
+	    array($gallery->i18n('Tile Byte Counts'), 'IFD1.TileByteCounts');
+	$data['TileLength'] =
+	    array($gallery->i18n('Tile Length'), 'IFD1.TileLength');
+	$data['TileOffsets'] =
+	    array($gallery->i18n('Tile Offsets'), 'IFD1.TileOffsets');
+	$data['TileWidth'] =
+	    array($gallery->i18n('Tile Width'), 'IFD1.TileWidth');
+	$data['TimeZoneOffset'] =
+	    array($gallery->i18n('Time Zone Offset'), 'IFD1.TimeZoneOffset');
+	$data['Tone'] =
+	    array($gallery->i18n('Tone'), 'SubIFD.MakerNote.Tone');
+	$data['TransferFunction'] =
+	    array($gallery->i18n('Transfer Function'), 'IFD1.TransferFunction');
+	$data['UserComment'] =
+	    array($gallery->i18n('User Comment'), 'SubIFD.UserComment', 'IFD0.UserCommentOld');
+	$data['Version'] =
+	    array($gallery->i18n('Version'), 'SubIFD.MakerNote.Version');
+	$data['WhiteBalance'] =
+	    array($gallery->i18n('White Balance'),
+		  'SubIFD.WhiteBalance', 'SubIFD.MakerNote.WhiteBalance',
+		  'SubIFD.MakerNote.Settings 4.WhiteBalance');
+	$data['WhitePoint'] =
+	    array($gallery->i18n('White Point'), 'IFD0.WhitePoint');
+	$data['YCbCrCoefficients'] =
+	    array($gallery->i18n('Y/Cb/Cr Coefficients'), 'IFD0.YCbCrCoefficients');
+	$data['YCbCrPositioning'] =
+	    array($gallery->i18n('Y/Cb/Cr Positioning'), 'IFD0.YCbCrPositioning');
+	$data['YCbCrSubSampling'] =
+	    array($gallery->i18n('Y/Cb/Cr Sub-Sampling'), 'IFD1.YCbCrSubSampling');
+	$data['xResolution'] =
+	    array($gallery->i18n('X Resolution'), 'IFD0.xResolution');
+	$data['yResolution'] =
+	    array($gallery->i18n('Y Resolution'), 'IFD0.yResolution');
+
+	$data['ExifImageHeight'] =
+	    array($gallery->i18n('Exif Image Height'), 'SubIFD.ExifImageHeight');
+	$data['ExifImageWidth'] =
+	    array($gallery->i18n('Exif Image Width'), 'SubIFD.ExifImageWidth');
+
+	/* EXIF GPS fields, see exifer/makers/gps.inc */
+	$data['GPS/Version'] =
+	    array($gallery->i18n('GPS: Version'), 'GPS.Version');
+	$data['GPS/LatitudeReference'] =
+	    array($gallery->i18n('GPS: Latitude Reference'), 'GPS.Latitude Reference');
+	$data['GPS/Latitude'] =
+	    array($gallery->i18n('GPS: Latitude'), 'GPS.Latitude');
+	$data['GPS/LongitudeReference'] =
+	    array($gallery->i18n('GPS: Longitude Reference'), 'GPS.Longitude Reference');
+	$data['GPS/Longitude'] =
+	    array($gallery->i18n('GPS: Longitude'), 'GPS.Longitude');
+	$data['GPS/AltitudeReference'] =
+	    array($gallery->i18n('GPS: Altitude Reference'), 'GPS.Altitude Reference');
+	$data['GPS/Altitude'] =
+	    array($gallery->i18n('GPS: Altitude'), 'GPS.Altitude');
+	$data['GPS/Time'] =
+	    array($gallery->i18n('GPS: Time'), 'GPS.Time');
+	$data['GPS/Satellite'] =
+	    array($gallery->i18n('GPS: Satellite'), 'GPS.Satellite');
+	$data['GPS/ReceiveStatus'] =
+	    array($gallery->i18n('GPS: Receive Status'), 'GPS.ReceiveStatus');
+	$data['GPS/MeasurementMode'] =
+	    array($gallery->i18n('GPS: Measurement Mode'), 'GPS.MeasurementMode');
+	$data['GPS/MeasurementPrecision'] =
+	    array($gallery->i18n('GPS: Measurement Precision'), 'GPS.MeasurementPrecision');
+	$data['GPS/SpeedUnit'] =
+	    array($gallery->i18n('GPS: Speed Unit'), 'GPS.SpeedUnit');
+	$data['GPS/ReceiverSpeed'] =
+	    array($gallery->i18n('GPS: Receiver Speed'), 'GPS.ReceiverSpeed');
+	$data['GPS/MovementDirectionRef'] =
+	    array($gallery->i18n('GPS: Movement Direction Reference'), 'GPS.MovementDirectionRef');
+	$data['GPS/MovementDirection'] =
+	    array($gallery->i18n('GPS: Movement Direction'), 'GPS.MovementDirection');
+	$data['GPS/ImageDirectionRef'] =
+	    array($gallery->i18n('GPS: Image Direction Reference'), 'GPS.ImageDirectionRef');
+	$data['GPS/ImageDirection'] =
+	    array($gallery->i18n('GPS: Movement Image Direction'), 'GPS.ImageDirection');
+	$data['GPS/GeodeticSurveyData'] =
+	    array($gallery->i18n('GPS: Geodetic Survey Data'), 'GPS.GeodeticSurveyData');
+	$data['GPS/DestLatitudeRef'] =
+	    array($gallery->i18n('GPS: Destination Latitude Reference'), 'GPS.DestLatitudeRef');
+	$data['GPS/DestinationLatitude'] =
+	    array($gallery->i18n('GPS: Destination Latitude'), 'GPS.DestinationLatitude');
+	$data['GPS/DestLongitudeRef'] =
+	    array($gallery->i18n('GPS: Destination Longitude Reference'), 'GPS.DestLongitudeRef');
+	$data['GPS/DestinationLongitude'] =
+	    array($gallery->i18n('GPS: Destination Longitude'), 'GPS.DestinationLongitude');
+	$data['GPS/DestBearingRef'] =
+	    array($gallery->i18n('GPS: Destination Bearing Reference'), 'GPS.DestBearingRef');
+	$data['GPS/DestinationBearing'] =
+	    array($gallery->i18n('GPS: Destination Bearing'), 'GPS.DestinationBearing');
+	$data['GPS/DestDistanceRef'] =
+	    array($gallery->i18n('GPS: Destination Distance Reference'), 'GPS.DestDistanceRef');
+	$data['GPS/DestinationDistance'] =
+	    array($gallery->i18n('GPS: Destination Distance'), 'GPS.DestinationDistance');
+	$data['GPS/ProcessingMethod'] =
+	    array($gallery->i18n('GPS: Processing Method'), 'GPS.ProcessingMethod');
+	$data['GPS/AreaInformation'] =
+	    array($gallery->i18n('GPS: Area Information'), 'GPS.AreaInformation');
+	$data['GPS/Datestamp'] =
+	    array($gallery->i18n('GPS: Datestamp'), 'GPS.Datestamp');
+	$data['GPS/DifferentialCorrection'] =
+	    array($gallery->i18n('GPS: Differential Correction'), 'GPS.DifferentialCorrection');
+
+	/* IPTC fields, see http://www.iptc.org/IIM/, if you have time to waste. */
+	$data['IPTC/SupplementalCategories'] =
+	    array($gallery->i18n('IPTC: Supplemental Categories'), 'IPTC.SupplementalCategories');
+	$data['IPTC/Keywords'] =
+	    array($gallery->i18n('IPTC: Keywords'), 'IPTC.Keywords');
+	$data['IPTC/Caption'] =
+	    array($gallery->i18n('IPTC: Caption'), 'IPTC.Caption');
+	$data['IPTC/CaptionWriter'] =
+	    array($gallery->i18n('IPTC: Caption Writer'), 'IPTC.CaptionWriter');
+	$data['IPTC/Headline'] =
+	    array($gallery->i18n('IPTC: Headline'), 'IPTC.Headline');
+	$data['IPTC/SpecialInstructions'] =
+	    array($gallery->i18n('IPTC: Special Instructions'), 'IPTC.SpecialInstructions');
+	$data['IPTC/Category'] =
+	    array($gallery->i18n('IPTC: Category'), 'IPTC.Category');
+	$data['IPTC/Byline'] =
+	    array($gallery->i18n('IPTC: Byline'), 'IPTC.Byline');
+	$data['IPTC/BylineTitle'] =
+	    array($gallery->i18n('IPTC: Byline Title'), 'IPTC.BylineTitle');
+	$data['IPTC/Credit'] =
+	    array($gallery->i18n('IPTC: Credit'), 'IPTC.Credit');
+	$data['IPTC/Source'] =
+	    array($gallery->i18n('IPTC: Source'), 'IPTC.Source');
+	$data['IPTC/CopyrightNotice'] =
+	    array($gallery->i18n('IPTC: Copyright Notice'), 'IPTC.CopyrightNotice');
+	$data['IPTC/ObjectName'] =
+	    array($gallery->i18n('IPTC: Object Name'), 'IPTC.ObjectName');
+	$data['IPTC/City'] =
+	    array($gallery->i18n('IPTC: City'), 'IPTC.City');
+	$data['IPTC/ProvinceState'] =
+	    array($gallery->i18n('IPTC: Province State'), 'IPTC.ProvinceState');
+	$data['IPTC/CountryName'] =
+	    array($gallery->i18n('IPTC: Country Name'), 'IPTC.CountryName');
+	$data['IPTC/OriginalTransmissionReference'] =
+	    array($gallery->i18n('IPTC: Original Transmission Reference'),
+		'IPTC.OriginalTransmissionReference');
+	$data['IPTC/DateCreated'] =
+	    array($gallery->i18n('IPTC: Date Created'), 'IPTC.DateCreated');
+	$data['IPTC/CopyrightFlag'] =
+	    array($gallery->i18n('IPTC: Copyright Flag'), 'IPTC.CopyrightFlag');
+	$data['IPTC/TimeCreated'] =
+	    array($gallery->i18n('IPTC: Time Created'), 'IPTC.TimeCreated');
+	$data['IPTC/ContentLocationName'] =
+	    array($gallery->i18n('IPTC: Content Location Name'), 'IPTC.ContentLocationName');
+	$data['IPTC/Sublocation'] =
+	    array($gallery->i18n('IPTC: Sub Location'), 'IPTC.Sublocation');
+
+	return $data;
+    }
+}
+?>

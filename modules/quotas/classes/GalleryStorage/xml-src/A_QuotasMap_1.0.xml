@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!DOCTYPE change
+  SYSTEM "../../../../../lib/tools/dtd/DatabaseChangeDefinition2.0.dtd">
+<change>
+  <table-name>QuotasMap</table-name>
+  <schema-from>
+    <schema-major>1</schema-major>
+    <schema-minor>0</schema-minor>
+  </schema-from>
+  <schema-to>
+    <schema-major>1</schema-major>
+    <schema-minor>1</schema-minor>
+  </schema-to>
+  <remove>
+    <index>
+      <column-name>userOrGroupId</column-name>
+    </index>
+  </remove>
+  <alter>
+    <column>
+      <column-name>userOrGroupId</column-name>
+      <column-type>INTEGER</column-type>
+      <column-size>MEDIUM</column-size>
+      <not-null empty="disallowed"/>
+    </column>
+  </alter>
+  <add>
+    <key primary="true">
+      <column-name>userOrGroupId</column-name>
+    </key>
+  </add>
+</change>

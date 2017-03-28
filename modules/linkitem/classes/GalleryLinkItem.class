@@ -1,0 +1,191 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryItem.class');
+
+/**
+ * An extension of GalleryItem to link to another album or an external url.
+ *
+ * @g2 <class-name>GalleryLinkItem</class-name>
+ * @g2 <parent-class-name>GalleryItem</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>1</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package LinkItem
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryLinkItem extends GalleryItem {
+
+    /**
+     * The id of the linked album or text of external link.
+     *
+     * @g2 <member>
+     * @g2   <member-name>link</member-name>
+     * @g2   <member-type>TEXT</member-type>
+     * @g2   <member-size>SMALL</member-size>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $link
+     * @access public
+     */
+    var $link;
+
+    /**
+     * Create a new instance of this GalleryEntity in the persistent store.
+     * Let the parent do its work, then add any initialization specific to this class.
+     *
+     * @param int $parentId the id of the parent object
+     * @param mixed $link the link target: either string url or int id of a GalleryAlbumItem
+     * @return GalleryStatus a status code
+     */
+    function create($parentId, $link) {
+	if (!isset($parentId) || empty($link)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+	if (is_numeric($link)) {
+	    /* Link to an album */
+	    list ($ret, $linkedAlbum) = GalleryCoreApi::loadEntitiesById($link, 'GalleryAlbumItem');
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	$ret = parent::create($parentId, 'linkitem' . rand(1000, 9999));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$this->setLink($link);
+	if (isset($linkedAlbum)) {
+	    $this->setTitle($linkedAlbum->getTitle());
+	    $this->setSummary($linkedAlbum->getSummary());
+	    $this->setDescription($linkedAlbum->getDescription());
+	    $this->setKeywords($linkedAlbum->getKeywords());
+	} else {
+	    $this->setTitle(basename($link));
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryFileSystemEntity::move
+     */
+    function move($newParentId) {
+	/*
+	 * We don't really have anything in the filesystem to move.
+	 * Pretend to be a linked entity during the move to avoid platform rename.
+	 */
+	$this->setLinkedEntity('fake');
+
+	$ret = parent::move($newParentId);
+	$this->setLinkedEntity(null);
+
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::itemTypeName
+     */
+    function itemTypeName($localized = true) {
+	if ($localized) {
+	    list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'linkitem');
+	    if (!$ret) {
+		return array($module->translate('Link'), $module->translate('link'));
+	    }
+	}
+	return array('Link', 'link');
+    }
+
+    /**
+     * @see GalleryEntity::onLoad
+     */
+    function onLoad() {
+	$ret = parent::onLoad();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Redirect if trying to show this item */
+	list ($view, $itemId) = GalleryUtilities::getRequestVariables('view', 'itemId');
+	if ($view == 'core.ShowItem' && $itemId == $this->getId()) {
+	    global $gallery;
+	    $link = $this->getLink();
+	    if (is_numeric($link)) {
+		$session =& $gallery->getSession();
+		$ret = $session->start();
+		if ($ret) {
+		    return $ret;
+		}
+		$session->doNotUseTempId();
+		$urlGenerator =& $gallery->getUrlGenerator();
+		$link = $urlGenerator->generateUrl(array('view' => 'core.ShowItem',
+							 'itemId' => $link),
+						   array('forceFullUrl' => true));
+	    }
+
+	    $phpVm = $gallery->getPhpVm();
+	    $phpVm->header('Location: ' . str_replace('&amp;', '&', $link));
+	    $phpVm->exit_();
+	}
+
+	return null;
+    }
+
+    /* Add functions to make this entity thumbnail-able */
+    function fetchPath() {
+	return array(null, $this->getLink());
+    }
+    function getMimeType() {
+	return 'gallery/linkitem';
+    }
+    function getWidth() {
+	return 0;
+    }
+    function getHeight() {
+	return 0;
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryLinkItem';
+    }
+
+    function getLink() {
+	return $this->link;
+    }
+
+    function setLink($link) {
+	$this->link = $link;
+    }
+}
+?>

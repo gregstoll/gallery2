@@ -1,0 +1,140 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/notification/classes/NotificationHandler_1_0.class');
+
+/**
+ * This NotificationMethod sends notification by email
+ * @package Notification
+ * @subpackage Classes
+ * @author Zimzat <zimzat@zimzat.com>
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17648 $
+ */
+class NotificationMethodEmail extends NotificationHandler_1_0 {
+    /**
+     * @see NotificationHandler_1_0::getDescription
+     */
+    function getDescription() {
+	global $gallery;
+
+	return $this->_translateText('notification', $gallery->i18n('Send an email'));
+    }
+
+    /**
+     * @see NotificationHandler_1_0::handleNotification
+     */
+    function handleNotification($subscribers, $notification) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	$event = $notification->getEvent();
+
+	list ($ret, $users) = GalleryCoreApi::loadEntitiesById($subscribers, 'GalleryUser');
+	if ($ret) {
+	    return $ret;
+	}
+
+	$emails = array();
+	foreach ($users as $user) {
+	    if (!GalleryUtilities::isValidEmailString($user->getEmail())) {
+		continue;
+	    }
+	    list ($ret, $language) = GalleryCoreApi::fetchLanguageCodeForUser($user->getId());
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $emails[$language][] = $user->getEmail();
+	}
+
+	if (empty($emails)) {
+	    return null;
+	}
+
+	$translator =& $gallery->getTranslator();
+
+	list ($ret, $defaultLanguageCode) = $gallery->getActiveLanguageCode();
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'notification');
+	if ($ret) {
+	    return $ret;
+	}
+
+	foreach ($emails as $languageCode => $recipients) {
+	    list ($ret, $currentLanguageCode) = $translator->init($languageCode);
+	    if ($ret) {
+		list ($ret2) = $translator->init($defaultLanguageCode);
+		if ($ret2) {
+		    return $ret2;
+		}
+		return $ret;
+	    }
+
+	    $to = implode(',', $recipients);
+
+	    list ($ret, $notificationName) = $notification->getDescription();
+	    if ($ret) {
+		return $ret;
+	    }
+	    $subject = $notificationName;
+
+	    list ($ret, $body) = $notification->getNotificationMessage();
+	    if ($ret) {
+		list ($ret2) = $translator->init($defaultLanguageCode);
+		if ($ret2) {
+		    return $ret2;
+		}
+		return $ret;
+	    }
+
+	    $body = wordwrap($body, 70);
+
+	    $redirect['view'] = 'core.UserAdmin';
+	    $redirect['subView'] = 'notification.NotificationUserAdmin';
+
+	    $unsubscribeUrl = $urlGenerator->generateUrl($redirect, array('forceFullUrl' => true));
+	    $ret = GalleryCoreApi::sendTemplatedEmail(
+			'modules/notification/templates/NotificationEmail.tpl',
+			array('body' => $body,
+			      'l10Domain' => 'modules_notification',
+			      'unsubscribeUrl' => $unsubscribeUrl),
+			null, $to, $subject);
+	    if ($ret) {
+		list ($ret2) = $translator->init($defaultLanguageCode);
+		if ($ret2) {
+		    return $ret2;
+		}
+		return $ret;
+	    }
+	}
+
+	list ($ret, $currentLanguageCode) = $translator->init($defaultLanguageCode);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+}
+?>

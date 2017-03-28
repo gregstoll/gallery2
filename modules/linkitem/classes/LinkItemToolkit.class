@@ -1,0 +1,124 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+
+/**
+ * A GalleryToolkit to provide a thumbnail image for an external URL
+ * @package LinkItem
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class LinkItemToolkit extends GalleryToolkit {
+    /**
+     * @see GalleryToolkit::performOperation
+     */
+    function performOperation($mimeType, $operationName, $sourceFilename,
+			      $destFilename, $parameters, $context=array()) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	if ($operationName != 'convert-to-image/jpeg' || $mimeType != 'gallery/linkitem') {
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION, __FILE__, __LINE__,
+					       "$operationName $mimeType"), null, null);
+	}
+	list ($ret, $urlSnapshot) =
+	    GalleryCoreApi::getPluginParameter('module', 'linkitem', 'urlSnapshot');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	if (!$urlSnapshot) {
+	    if (!$platform->copy(dirname(dirname(__FILE__)) . '/images/link.jpg',
+				 $destFilename)) {
+		return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE), null, null);
+	    }
+	    $context['width'] = 270;
+	    $context['height'] = 224;
+	    return array(null, 'image/jpeg', $context);
+	}
+
+	/* Source URL is passed in as "source filename" */
+	$url = $sourceFilename;
+
+	/* Fetch snapshot image from webdesignbook.net
+	list ($success, $response, $headers) = GalleryCoreApi::fetchWebFile(
+		'http://webdesignbook.net/snapper.php?url=' . urlencode($url) . '&w=1024&h=768',
+		$destFilename);
+	if (!$success) {
+	    return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE), null, null);
+	}
+	*/
+	list ($ret, $snapshotExec) =
+	    GalleryCoreApi::getPluginParameter('module', 'linkitem', 'snapshotExec');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	if (empty($snapshotExec)) {
+	    return array(GalleryCoreApi::error(ERROR_CONFIGURATION_REQUIRED), null, null);
+	}
+	$tmpBase = $platform->tempnam($gallery->getConfig('data.gallery.tmp'), 'lnk_');
+	$tmpFile = $tmpBase . '.jpg';
+	$map = array('%WIDTH%' => 1024, '%HEIGHT%' => 768,
+		     '%URL%' => $url, '%OUTFILE%' => $tmpFile);
+	$exec = explode(' ', LinkItemToolkit::getSnapshotParams());
+	foreach ($exec as $i => $param) {
+	    if (isset($map[$param])) {
+		$exec[$i] = $map[$param];
+	    }
+	}
+	array_unshift($exec, $snapshotExec);
+	list ($success, $output, $error) = $platform->exec(array($exec));
+	@$platform->unlink($tmpBase);
+	if (!$success) {
+	    return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE), null, null);
+	}
+	$success = $platform->copy($tmpFile, $destFilename);
+	@$platform->unlink($tmpFile);
+	if (!$success) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE), null, null);
+	}
+
+	$context['width'] = $map['%WIDTH%'];
+	$context['height'] = $map['%HEIGHT%'];
+	return array(null, 'image/jpeg', $context);
+    }
+
+    /**
+     * Get command line parameters for snapshotExec.
+     * Default params for khtml2png are hardcoded; can be overridden by params.txt file.
+     * @return string command line parameters with %URL% %WIDTH% %HEIGHT% %OUTFILE% tokens
+     * @static
+     */
+    function getSnapshotParams() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$paramFile = dirname(dirname(__FILE__)) . $platform->getDirectorySeparator() . 'params.txt';
+	if ($platform->file_exists($paramFile)) {
+	    $lines = $platform->file($paramFile);
+	    if (!empty($lines)) {
+		return rtrim(array_shift($lines));
+	    }
+	}
+	return '--width %WIDTH% --height %HEIGHT% %URL% %OUTFILE%';
+    }
+}
+?>

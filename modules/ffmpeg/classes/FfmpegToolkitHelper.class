@@ -1,0 +1,360 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A helper class for FfmpegToolkit
+ * @package Ffmpeg
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 18154 $
+ * @static
+ */
+class FfmpegToolkitHelper {
+
+    /**
+     * Figure out what operations and properties are supported by the
+     * FfmpegToolkit and return them.
+     *
+     * @return GalleryStatus a status code
+     *         array('operations' => ..., 'properties' => ...)
+     */
+    function getOperationsAndProperties() {
+	global $gallery;
+
+	list ($ret, $ffmpegPath) = GalleryCoreApi::getPluginParameter('module', 'ffmpeg', 'path');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (empty($ffmpegPath)) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_VALUE), null);
+	}
+
+	list ($ret, $tests, $mimeTypes, $supportsOffset,
+	      $mimeTypesEncoder, $encoderAudioCodecs, $version) =
+		FfmpegToolkitHelper::testBinary($ffmpegPath);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* -------------------- Operations -------------------- */
+
+	/* extract */
+	$operations['convert-to-image/jpeg']['params'] = array();
+	$operations['convert-to-image/jpeg']['description'] = $gallery->i18n('Convert to a JPEG');
+	$operations['convert-to-image/jpeg']['mimeTypes'] = $mimeTypes;
+	$operations['convert-to-image/jpeg']['outputMimeType'] = 'image/jpeg';
+
+	if ($supportsOffset) {
+	    $operations['select-offset'] = array(
+		'params' => array(array('type' => 'float',
+					'description' => $gallery->i18n('offset in seconds'))),
+		'description' => $gallery->i18n('Select time offset in movie file'),
+		'mimeTypes' => $mimeTypes,
+		'outputMimeType' => null);
+	}
+
+	/* Convert to Flash Video */
+	if (in_array('video/x-flv', $mimeTypesEncoder)) {
+	    $operations['convert-to-video/x-flv']['params'] = array();
+	    $operations['convert-to-video/x-flv']['description'] =
+		    $gallery->i18n('Convert to Flash Video');
+	    $operations['convert-to-video/x-flv']['mimeTypes'] = $mimeTypes;
+	    $operations['convert-to-video/x-flv']['outputMimeType'] = 'video/x-flv';
+
+	    /* set-video-dimensions */
+	    $operations['set-video-dimensions']['params'] = array(
+		array('type' => 'int', 'description' => $gallery->i18n('video width in pixels')),
+		array('type' => 'int', 'description' => $gallery->i18n('video height in pixels')));
+	    $operations['set-video-dimensions']['description'] =
+		    $gallery->i18n('Set video dimensions');
+	    $operations['set-video-dimensions']['mimeTypes'] = $mimeTypes;
+	    $operations['set-video-dimensions']['outputMimeType'] = null;
+
+	    /* set-video-framerate */
+	    $operations['set-video-framerate']['params'] = array(
+		array('type' => 'float', 'description' => $gallery->i18n(
+		      'frames per second')));
+	    $operations['set-video-framerate']['description'] = $gallery->i18n(
+		'Set video frames per second property');
+	    $operations['set-video-framerate']['mimeTypes'] = $mimeTypes;
+	    $operations['set-video-framerate']['outputMimeType'] = null;
+
+	    $operations['set-video-sameq']['params'] = array();
+	    $operations['set-video-sameq']['description'] =
+		    $gallery->i18n('Set same video quality');
+	    $operations['set-video-sameq']['mimeTypes'] = $mimeTypes;
+	    $operations['set-video-sameq']['outputMimeType'] = null;
+
+	    /* If mp3 audio supported */
+	    if (in_array('mp3', $encoderAudioCodecs)) {
+		/* set-audio-channels */
+		$operations['set-audio-channels']['params'] = array(
+		    array('type' => 'int', 'description' => $gallery->i18n(
+			  'number of channels')));
+		$operations['set-audio-channels']['description'] = $gallery->i18n(
+		    'Set audio channels property');
+		$operations['set-audio-channels']['mimeTypes'] = $mimeTypes;
+		$operations['set-audio-channels']['outputMimeType'] = null;
+
+		/* set-audio-samplerate */
+		$operations['set-audio-samplerate']['params'] = array(
+		    array('type' => 'int', 'description' => $gallery->i18n(
+			  'audio sample rate (Hz / cycles per second)')));
+		$operations['set-audio-samplerate']['description'] = $gallery->i18n(
+		    'Set audio rate property');
+		$operations['set-audio-samplerate']['mimeTypes'] = $mimeTypes;
+		$operations['set-audio-samplerate']['outputMimeType'] = null;
+	    }
+	}
+
+	/* -------------------- Properties -------------------- */
+
+	/* Dimensions */
+	$properties['dimensions']['type'] = 'int,int';
+	$properties['dimensions']['description'] =
+	    $gallery->i18n('Get the width and height of the movie');
+	$properties['dimensions']['mimeTypes'] = $mimeTypes;
+
+	$properties['dimensions-and-duration']['type'] = 'int,int,float';
+	$properties['dimensions-and-duration']['description'] =
+	    $gallery->i18n('Get the width, height and duration of the movie');
+	$properties['dimensions-and-duration']['mimeTypes'] = $mimeTypes;
+
+	$properties['video-framerate']['type'] = 'float';
+	$properties['video-framerate']['description'] =
+	    $gallery->i18n('Get video frames per seconds of the movie');
+	$properties['video-framerate']['mimeTypes'] = $mimeTypes;
+
+	$properties['audio-samplerate']['type'] = 'int';
+	$properties['audio-samplerate']['description'] =
+	    $gallery->i18n('Get audio samples per seconds of the movie');
+	$properties['audio-samplerate']['mimeTypes'] = $mimeTypes;
+
+	$properties['audio-channels']['type'] = 'int';
+	$properties['audio-channels']['description'] =
+	    $gallery->i18n('Get number of audio channels in movie');
+	$properties['audio-channels']['mimeTypes'] = $mimeTypes;
+
+	return array(null, array('operations' => $operations, 'properties' => $properties));
+    }
+
+    /**
+     * Test if the given path has a working Ffmpeg binary.
+     *
+     * This is done by calling the binary with the -formats flag and
+     * making sure it runs properly.
+     *
+     * @param string $ffmpegPath path to the Ffmpeg we are testing
+     * @return array GalleryStatus general status of tests
+     *         array of array ('name' => string: the name of the binary,
+     *                         'success' => boolean: test successful?
+     *                         'results' => string: the ffmpeg output)
+     *         array hash map of mime types
+     *         boolean true if ffmpeg supports -ss time_offset
+     *         array of strings listing mime types that can be encoded
+     *         array of strings listing available audio codecs for encoding
+     *         string containing the ffmpeg version
+     */
+    function testBinary($ffmpegPath) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	/*
+	 * If the path is not restricted by open_basedir, then verify that it's legal.
+	 * Else just hope that it's valid and use it.
+	 */
+	if (!$platform->isRestrictedByOpenBaseDir($ffmpegPath)) {
+	    if (!$platform->file_exists($ffmpegPath) || !$platform->is_file($ffmpegPath)) {
+		return array(GalleryCoreApi::error(ERROR_BAD_PATH),
+			     null, null, null, null, null, null);
+	    }
+	} else {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH, null, null, '"' . $ffmpegPath
+			 . '" is not specified in open_basedir.'), null,
+			 null, null, null, null, null);
+	}
+
+	/* We only care about video for now */
+	/** @todo: Add '3g2' => '3g2', '3gp' => '3gp' when recognized as videos */
+	$relevantTypes = array('mpeg' => 'mpeg', 'asf' => 'asf', 'avi' => 'avi',
+			       'mov' => 'mov', 'wmv1' => 'wmv', 'flv' => 'flv', 'mp4' => 'mp4');
+	/* We only care about encoding flash video for now */
+	$relevantEncode = array('flv' => 'flv');
+	/**
+	 * @todo: Add 'adpcm_swf' => 'adpcm_swf' to relevantAudioCodecs if/when videos play
+	 *        correctly
+	 */
+	$relevantAudioCodecs = array('mp3' => 'mp3', 'libmp3lame' => 'mp3');
+	list ($ignored, $results) = $platform->exec(array(array($ffmpegPath, '-formats')));
+	$version = array();
+	list ($ignored, $ignored, $version) =
+		$platform->exec(array(array($ffmpegPath, '-version')));
+
+	$mimeTypes = array();
+	$mimeTypesEncoder = array();
+	$encoderAudioCodecs = array();
+
+	$success = false;
+	$i = 0;
+	while ($i < sizeof($results)) {
+	    $resultLine = $results[$i++];
+	    /*
+	     * ffmpeg 0.4.6 says:
+	     * File formats:
+	     *   Decoding: mpeg mpegts pgm pgmyuv ppm .Y.U.V pgmpipe pgmyuvpipe
+	     * ppmpipe mp3 ac3 m4v mpegvideo mjpeg s16le s16be u16le u16be s8 u8 mulaw alaw
+	     * rawvideo rm asf avi wav swf au mov jpeg dv ffm video_grab_device
+	     * audio_device rtsp redir sdp rtp
+	     * [multiple lines]
+	     * Codecs:
+	     * ....
+	     *
+	     * ffmpeg 0.4.7 says:
+	     * Input audio/video file formats: mpeg mpegts image ...
+	     * [all on one line]
+	     *
+	     * ffmpeg 0.4.8 says:
+	     * File formats:
+	     *   E 3gp
+	     *  D  4xm
+	     *  D  RoQ
+	     *  DE ac3
+	     *  DE ala
+	     *  DE asf
+	     *  E asf
+	     * ...
+	     * Image formats:
+	     *  D  pnm
+	     *   E pbm
+	     *   E pgm
+	     * ...
+	     * Codecs:
+	     *  D V    4xm
+	     *  D V D  8bps
+	     *   EA    ac3
+	     *  DEA    adpcm_4xm
+	     */
+	    if (preg_match('|Input audio/video file formats: (.*)$|', $resultLine, $regs)) {
+		/* We have found 0.4.7 format, read single line */
+		/** @todo: Support mimeTypesEncoder and encoderAudioCodecs */
+		foreach (explode(' ', $regs[1]) as $type) {
+		    if (isset($relevantTypes[$type])) {
+			list ($ret, $mime) =
+			    GalleryCoreApi::convertExtensionToMime($relevantTypes[$type]);
+			if ($ret) {
+			    return array($ret, null, null, null, null, null, null);
+			}
+			$mimeTypes[$mime] = 1;
+		    }
+		}
+		$success = true;
+	    } else if (preg_match('/  Decod(?:ing|ers): (.*)$/', $resultLine, $regs)) {
+		/* We have found 0.4.6 format, read until Codec: line */
+		/** @todo: Support mimeTypesEncoder and encoderAudioCodecs */
+		do {
+		    foreach (explode(' ', $regs[1]) as $type) {
+			if (isset($relevantTypes[$type])) {
+			    list ($ret, $mime) = GalleryCoreApi::convertExtensionToMime(
+				$relevantTypes[$type]);
+			    if ($ret) {
+				return array($ret, null, null, null, null, null, null);
+			    }
+			    $mimeTypes[$mime] = 1;
+			}
+		    }
+		    $resultLine = $results[$i++];
+		} while ($i < sizeof($results) && !preg_match('|Codecs:|', $resultLine));
+		$success = true;
+	    } else if (preg_match('/(File formats|Codecs):/', $resultLine, $regs)) {
+		$resultLine = $results[$i++];
+		if (preg_match('/^  \w+: /', $resultLine)) {
+		    /* We have found 0.4.6 format */
+		    continue;
+		}
+		if (!strcmp('File formats', $regs[1])) {
+		    /* Parse File formats */
+		    do {
+			list ($capabilities, $types) =
+			    preg_split('/\s+/', $resultLine, -1, PREG_SPLIT_NO_EMPTY);
+			foreach (explode(',', $types) as $type) {
+			    if (isset($relevantTypes[$type])) {
+				list ($ret, $mime) = GalleryCoreApi::convertExtensionToMime(
+				    $relevantTypes[$type]);
+				if ($ret) {
+				    return array($ret, null, null, null, null, null, null);
+				}
+				if (preg_match('|D|', $capabilities)) {
+				    $mimeTypes[$mime] = 1;
+				}
+				if (isset($relevantEncode[$type])
+					&& preg_match('|E|', $capabilities)) {
+				    $mimeTypesEncoder[$mime] = 1;
+				}
+			    }
+			}
+
+			$resultLine = $results[$i++];
+		    } while (!empty($resultLine));
+		    $success = true;
+		} else {
+		    /* Parse codecs */
+		    do {
+			$type = substr($resultLine, 8);
+			$decode = ('D' == substr($resultLine, 1, 1));
+			$encode = ('E' == substr($resultLine, 2, 1));
+			$audio  = ('A' == substr($resultLine, 3, 1));
+			$video  = ('V' == substr($resultLine, 3, 1));
+			if (isset($relevantAudioCodecs[$type]) && $encode && $audio) {
+			    $encoderAudioCodecs[$relevantAudioCodecs[$type]] = 1;
+			}
+			/* Check relevant types too since wmv uses an asf container */
+			if (isset($relevantTypes[$type]) && $decode && $video) {
+			    list ($ret, $mime) = GalleryCoreApi::convertExtensionToMime(
+				$relevantTypes[$type]);
+			    if ($ret) {
+				return array($ret, null, null, null, null, null, null);
+			    }
+			    $mimeTypes[$mime] = 1;
+			}
+			$resultLine = $results[$i++];
+		    } while (!empty($resultLine));
+		}
+	    }
+	}
+	$tests[] = array('name' => 'ffmpeg',
+			 'success' => $success,
+			 'results' => $results);
+
+	/* Test if this ffmpeg supports -ss flag.. */
+	$supportsOffset = false;
+	list ($ok, $flags) = $platform->exec(array(array($ffmpegPath, '-h')));
+	foreach ($flags as $line) {
+	    if (!strncmp($line, '-ss ', 4)) {
+		$supportsOffset = true;
+		break;
+	    }
+	}
+
+	return array(null, $tests, array_keys($mimeTypes), $supportsOffset,
+		     array_keys($mimeTypesEncoder), array_keys($encoderAudioCodecs), $version);
+    }
+}
+?>

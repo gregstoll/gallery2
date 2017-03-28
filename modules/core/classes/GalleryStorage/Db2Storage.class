@@ -1,0 +1,324 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryStorage.class');
+
+/**
+ * IBM DB2 UDB (for Linux/UNIX/Windows) extension of the GalleryStorage class.
+ * This object implements the hooks for saving and restoring objects in an
+ * IBM DB2 Universal Database database.
+ *
+ * @package GalleryCore
+ * @subpackage Storage
+ * @version $Revision: 17580 $
+ */
+class Db2Storage extends GalleryStorage {
+
+    function Db2Storage($config) {
+	$this->GalleryStorage($config);
+	$this->_isTransactional = true;
+    }
+
+    /**
+     * Return the type of this database
+     * @return string
+     */
+    function getType() {
+	return 'db2';
+    }
+
+    /**
+     * @see GalleryStorage::cleanStore
+     */
+    function cleanStore() {
+	$ret = parent::cleanStore();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Create a temporary database connection and install our custom aggregate function */
+	list ($ret, $tmpDb) = $this->_getConnection(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$statements = array();
+	$statements[] = 'DROP FUNCTION G2_BIT_AND(CHAR(32), CHAR(32))';
+	$statements[] = 'DROP FUNCTION BIT_AND(SMALLINT, SMALLINT)';
+	$statements[] = 'DROP FUNCTION G2_LIKE(VARCHAR(8000), VARCHAR(8000))';
+	$statements[] = 'DROP FUNCTION G2_BIT_OR(INTEGER, VARCHAR(32))';
+	/*
+	 * Unregister the Jar file; use ODBC delimiters, see
+	 * http://gallery.menalto.com/node/37648?from=850#comment-172690
+	 */
+	$statements[] = "{CALL SQLJ.REMOVE_JAR('g2_db2_jar')}";
+	foreach ($statements as $sql) {
+	    $this->_traceStart();
+	    $recordSet = $tmpDb->Execute($sql);
+	    $this->_traceStop();
+	    if (empty($recordSet)) {
+		return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	    }
+	}
+	$tmpDb->Close();
+
+	return null;
+    }
+
+    /**
+     * @see GalleryStorage::configureStore
+     */
+    function configureStore($moduleId, $upgradeInfo=array()) {
+	if ($moduleId == 'core') {
+	    global $gallery;
+
+	    /*
+	     *  Create our user-defined DB2 functions
+	     *   1) Create a temporary database connection
+	     *   2) Register the Jar file
+	     *   3) Create/Catalog the UDFs
+	     *   4) Disconnect from the database
+	     */
+	    $platform =& $gallery->getPlatform();
+	    $slash = $platform->getDirectorySeparator();
+
+	    /* 1) Create a temporary database connection */
+	    list ($ret, $tmpDb) = $this->_getConnection(true);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    /*
+	     * 2) Register the Jar file (use ODBC delimiters, see
+	     *    http://gallery.menalto.com/node/37648?from=850#comment-172690)
+	     */
+	    $sql = "{CALL SQLJ.INSTALL_JAR('file:" . dirname(__FILE__) . $slash .
+		    "g2_db2.jar',  'g2_db2_jar')}";
+	    $this->_traceStart();
+	    $recordSet = $tmpDb->Execute($sql);
+	    $this->_traceStop();
+	    if (empty($recordSet)) {
+		/*
+		 * XXX: At some point figure out a way to detect if the UDFs are
+		 * already there before trying to install them again.
+		 */
+		if ($gallery->getDebug()) {
+		    $gallery->debug('Failed to install g2_db2.jar .. continuing ' .
+				    'under the assumption that this is an upgrade');
+		}
+	    } else {
+		/* 3) Create/Catalog the UDFs */
+		$ret = $this->_executeSqlFile(dirname(__FILE__) . $slash . 'Db2CreateUdfs.sql');
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+
+	    /* 4) Disconnect from the database */
+	    $tmpDb->Close();
+
+	}
+
+	$ret = parent::configureStore($moduleId, $upgradeInfo);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+     }
+
+    /**
+     * @see GalleryStorage::convertIntToBits
+     */
+    function convertIntToBits($intVal) {
+	return sprintf("%032b", $intVal);
+    }
+
+    /**
+     * @see GalleryStorage::convertBitsToInt
+     */
+    function convertBitsToInt($bitsVal) {
+	return bindec($bitsVal);
+    }
+
+    /**
+     * @see GalleryStorage::removeAllMapEntries
+     */
+    function removeAllMapEntries($mapName, $useNonTransactionalConnection=false) {
+	$extras =& $this->_getExtras();
+	/* DB2 does not support TRUNCATE */
+	return $extras->removeAllMapEntries($mapName, $useNonTransactionalConnection, false);
+    }
+
+    /**
+     * @see GalleryStorage::getFunctionsSql
+     */
+    function getFunctionSql($functionName, $args) {
+	switch($functionName) {
+	case 'CONCAT':
+	    /*
+	     * CHAR($value) creates a string of length 11 for large and a string of length 4 for
+	     * smaller integer values. Thus we need to trim the string to the actual length of the
+	     * string representation of the integer
+	     */
+	    foreach ($args as $key => $value) {
+		$args[$key] = 'RTRIM(CHAR(' . $value . '))';
+	    }
+	    $sql = implode(' || ', $args);
+	    break;
+
+	case 'BITAND':
+	    $sql = 'G2_BIT_AND (CAST(' . $args[0] . ' AS CHAR(32)), ' .
+		'CAST(' . $args[1] . ' AS CHAR(32)))';
+	    break;
+
+	case 'BIT_OR':
+	    /*
+	     * Emulation of a user-defined aggregate function by using a UDF that always operates
+	     * on 2 operands (last result from scratchpad and current row) and outputs the result,
+	     * plus it stores the result in the DB2 scratchpad. We use the built-in aggregate
+	     * function MAX() to select the last "intermediate" result of the BIT_OR
+	     */
+
+	    /*
+	     * arg 0 is the column over which we do the BIT_OR, arg 1 is the GROUP BY column
+	     * (or a constant number if no GROUP BY clause is used)
+	     */
+	    $sql = 'MAX(G2_BIT_OR (' . $args[1] . ', ' . $args[0] . '))';
+	    break;
+
+	case 'UNIX_TIMESTAMP':
+	    $sql = 'date_part(\'epoch\', ' . $args[0] . ')';
+	    break;
+
+	case 'AS':
+	    $sql = 'AS';
+	    break;
+
+	case 'SUBSTRING':
+	    $sql = sprintf('SUBSTR(%s)', implode(', ', $args));
+	    break;
+
+	case 'RAND':
+	    /* Add random parameter to seed DB2 random number generator */
+	    $sql = sprintf('RAND(%s)', empty($args) ? mt_rand(0, 2147483647) : $args[0]);
+	    break;
+
+	case 'RANDOM_INTEGER':
+	    /* Add random parameter to seed DB2 random number generator */
+	    $sql = sprintf('FLOOR(RAND(%s) * 2147483647)', mt_rand(0, 2147483647));
+	    break;
+
+	case 'LIMIT':
+	    $sql = $args[1] . ' FETCH FIRST ' . $args[0] . ' ROWS ONLY';
+	    break;
+
+	case 'CASE':
+	    $sql = array();
+	    while (count($args) > 1) {
+		$sql[] = 'WHEN ' . array_shift($args) . ' THEN ' . array_shift($args);
+	    }
+	    $sql = 'CASE ' . implode(' ', $sql) . ' ELSE ' . $args[0] . ' END';
+	    break;
+
+	case 'LIKE':
+	    /* DB2's LIKE predicate support is very restrictive.  No non-strings, no SQL UDFs. */
+	    $sql = 'G2_LIKE(' . $args[0] . ', ' . $args[1] . ') = 1';
+	    break;
+
+	case 'MULTI_INSERT':
+	    /*
+	     * 0 - table name
+	     * 1 - array of column names
+	     * 2 - number of rows
+	     */
+	    $markers = GalleryUtilities::makeMarkers(sizeof($args[1]));
+	    $rowList = rtrim(str_repeat('(' . $markers . '), ', $args[2]), ', ');
+	    $sql = 'INSERT INTO ' . $args[0] . ' (';
+	    $sql .= join(', ', $args[1]);
+	    $sql .= ') VALUES ' . $rowList;
+	    break;
+
+	case 'AVG':
+	    /*
+	     * DB2's AVG's return value is of the same type as the input value. To get the same
+	     * behavior that we expect from MySQL and PostgreSQL, cast the input to double
+	     */
+	    $sql = sprintf('AVG(double(%s))', $args[0]);
+	    break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED, __FILE__, __LINE__,
+					      $functionName . ' ' . implode(' ', $args)), null);
+	}
+
+	return array(null, $sql);
+    }
+
+    /**
+     * Get database version.
+     * @return string version
+     */
+    function getVersion() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	list ($success, $results) = $platform->exec(array(array('db2level')));
+	if ($success && is_array($results)) {
+	    return implode("\n", $results);
+	} else {
+	    return '';
+	}
+    }
+
+    /**
+     * @see GalleryStorage::_getOptimizeStatements
+     */
+    function _getOptimizeStatements() {
+	return array('CALL ADMIN_CMD (\'REORG TABLE ' . $this->_username . '.%s\')',
+		     'CALL ADMIN_CMD (\'RUNSTATS ON TABLE ' . $this->_username .
+		     '.%s WITH DISTRIBUTION ON ALL COLUMNS AND INDEXES ALL\')');
+
+    }
+
+    /**
+     * Truncate UTF-8 strings to given byte length rather than character length since DB2 interprets
+     * string lengths in bytes.
+     * @see GalleryStorage::_truncateString
+     */
+    function _truncateString($value, $size, $lengthInBytes=false) {
+	return parent::_truncateString($value, $size, true);
+    }
+
+    /**
+     * @see GalleryStorage::encodeBlob
+     */
+    function encodeBlob($blob) {
+	return addcslashes($blob, "\000\134\377");
+    }
+
+    /**
+     * @see GalleryStorage::decodeBlob
+     */
+    function decodeBlob($blob) {
+	return stripcslashes($blob);
+    }
+}
+?>

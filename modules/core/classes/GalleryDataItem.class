@@ -1,0 +1,418 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryItem.class');
+
+/**
+ * A subclass of GalleryItem for items containing actual data.
+ * DataItems are ones that have an actual data source, such as PhotoItem or MovieItem.
+ *
+ * @g2 <class-name>GalleryDataItem</class-name>
+ * @g2 <parent-class-name>GalleryItem</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>0</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryDataItem extends GalleryItem {
+
+    /**
+     * The mime type of the data file
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>mimeType</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <linked/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $mimeType;
+
+    /**
+     * The byte size of the data file
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>size</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <linked/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $size;
+
+
+    /**
+     * Data items that can be viewed inline (photos, movies, etc) should return true.
+     * Items that can't be viewed inline (word documents, text, etc) should return false.
+     *
+     * Classes that return true for this query must implement getWidth() and getHeight()
+     *
+     * @return boolean true if this data item can be viewed inline
+     */
+    function canBeViewedInline() {
+	return $this->_canBeViewedInline();
+    }
+
+    /**
+     * Helper function to check renderer and list of mime types for canBeViewedInline.
+     *
+     * @param array $mimeList (optional) list of mime types that render() will support
+     * @return boolean true if this data item can be viewed inline
+     * @access protected
+     */
+    function _canBeViewedInline($mimeList=null) {
+	$renderer = $this->getRenderer();
+	if (!empty($renderer)) {
+	    list ($ret, $renderer) =
+		GalleryCoreApi::newFactoryInstanceById('GalleryRenderer', $renderer);
+	    if (!$ret && isset($renderer)) {
+		return $renderer->canBeViewedInline($this);
+	    }
+	}
+	if (isset($mimeList) && in_array($this->getMimeType(), $mimeList)) {
+	    return true;
+	}
+	return false;
+    }
+
+    /**
+     * Create a new instance of this type in the persistent store.
+     *
+     * @param int $parentId the id of the parent GalleryItem
+     * @param string $inputFileName the path to a data file to be contained
+     * @param string $mimeType the mime type of the new item
+     * @param string $targetName (optional) the desired name of the new item
+     * @param boolean $symlink (optional) a boolean true if we should symlink instead
+     *        of copy (default is false).
+     * @return GalleryStatus a status code
+     */
+    function create($parentId, $inputFileName, $mimeType, $targetName=null, $symlink=false) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	/* Validate the input file */
+	if (empty($inputFileName)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	if (!$platform->is_uploaded_file($inputFileName)
+		&& !$platform->file_exists($inputFileName)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PATH);
+	}
+
+	/*
+	 * The parent must be read locked at this point to make sure that it's
+	 * not going to be moved around while we're adding stuff to it.
+	 */
+	if (!GalleryCoreApi::isReadLocked($parentId)) {
+	    return GalleryCoreApi::error(ERROR_LOCK_REQUIRED);
+	}
+
+	/* Set the mime type before we call the parent so that it can use this info if necessary */
+	$this->setMimeType($mimeType);
+
+	$baseName = !empty($targetName) ? $targetName : basename($inputFileName);
+	$ret = parent::create($parentId, $baseName);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Figure out the new location for this file */
+	list ($ret, $parent) = GalleryCoreApi::loadEntitiesById($parentId, 'GalleryItem');
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $parentPath) = $parent->fetchContainerPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/*
+	 * Grab the new name from the path component, since GalleryFileSystemEntity
+	 * may adapt the newName to avoid conflicts
+	 */
+	$newFileName = $parentPath . $this->getPathComponent();
+
+	/*
+	 * XXX: Race condition here!  It's possible for two threads to be
+	 * adding a file with the same name to the container at the same time.
+	 * We have to write lock the container to be sure that this doesn't happen.
+	 */
+	if ($symlink) {
+	    if (!$platform->isSymlinkSupported()) {
+		return GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION);
+	    }
+	    if (!$platform->symlink($inputFileName, $newFileName)) {
+		return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+	    }
+	} else {
+	    /* Copy the file to its new location */
+	    if (!$platform->copy($inputFileName, $newFileName)) {
+		return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+	    }
+	}
+
+	/* Set my file size */
+	$this->setSize($platform->filesize($newFileName));
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::detachLink
+     */
+    function detachLink() {
+	global $gallery;
+
+	/* Stash the linked entity because the super class is going to get rid of it */
+	$linkedEntity = $this->getLinkedEntity();
+
+	$ret = parent::detachLink();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$platform =& $gallery->getPlatform();
+	list ($ret, $sourcePath) = $linkedEntity->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $parent) = $this->fetchParent();
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $newPathBase) = $parent->fetchContainerPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* This path should already be legal, unless we screwed up elsewhere */
+	$newPath = $newPathBase . $this->getPathComponent();
+
+	if (!$platform->copy($sourcePath, $newPath)) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+	}
+
+	return null;
+    }
+
+    /**
+     * Delete this GalleryEntity
+     * @return GalleryStatus a status code
+     */
+    function delete() {
+	global $gallery;
+
+	/* Delete myself */
+	$ret = parent::delete();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Delete our source file, if we're not a link */
+	if (!$this->isLinked()) {
+	    list ($ret, $path) = $this->fetchPath();
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $platform =& $gallery->getPlatform();
+	    if ($platform->file_exists($path) && !$platform->unlink($path)) {
+		return GalleryCoreApi::error(ERROR_BAD_PATH, __FILE__, __LINE__,
+					    "Could not delete $path");
+	    }
+	}
+
+	/* Delete the fast-download cache if it exists */
+	GalleryCoreApi::deleteFastDownloadFileById($this->getId());
+
+	return null;
+    }
+
+    /**
+     * Scan this item's data for changes.
+     * @return GalleryStatus a status code
+     */
+    function rescan() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $path) = $this->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$this->setSize($platform->filesize($path));
+	GalleryCoreApi::deleteFastDownloadFileById($this->getId());
+
+	return null;
+    }
+
+    /**
+     * Rename this DataItem
+     *
+     * @param string $newName the path component
+     * @return GalleryStatus a status code
+     */
+    function rename($newName) {
+	global $gallery;
+
+	if ($newName == $this->getPathComponent()) {
+	    return null;
+	}
+
+	/* Read lock the parent so that we don't have a race condition below */
+	list ($ret, $lockId) = GalleryCoreApi::acquireReadLock($this->getParentId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	$platform =& $gallery->getPlatform();
+
+
+	/* Get the current path before we let the superclass do the rename */
+	list ($ret, $currentPath) = $this->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/*
+	 * Set the new path in the database.  If that succeeds then we should be ok in general.
+	 * Jump through hoops to make sure that we release our locks at the end.
+	 */
+	$error = null;
+	$ret = parent::rename($newName);
+
+	if ($ret) {
+	    $error = $ret;
+	}
+
+	/* Only rename the filesystem entity if we're not a link */
+	if (!$this->isLinked()) {
+
+	    /*
+	     * Grab the new name from the path component, since GalleryFileSystemEntity
+	     * may adapt the newName to avoid conflicts
+	     */
+	    $newName = $this->getPathComponent();
+
+	    if (!isset($error)) {
+		$newPath = dirname($currentPath) . '/' . $newName;
+
+		/* Check to see if the desired path exists */
+		if ($platform->file_exists($newPath)) {
+		    $error = GalleryCoreApi::error(ERROR_COLLISION);
+		}
+	    }
+
+	    if (!isset($error)) {
+		if (!$platform->rename($currentPath, $newPath)) {
+		    $error = GalleryCoreApi::error(ERROR_BAD_PATH);
+		}
+	    }
+	}
+
+	/* Release locks */
+	$ret = GalleryCoreApi::releaseLocks($lockId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (isset($error)) {
+	    return $error;
+	}
+
+	return null;
+    }
+
+    /**
+     * Get the full path to the data file.
+     *
+     * @return array GalleryStatus a status code,
+     *               string a path where children can store their data files
+     */
+    function fetchPath() {
+	global $gallery;
+
+	/*
+	 * Source files in the item's directory.  But the parent may be an item that doesn't have
+	 * its own directory, so we need to get the path of the nearest parent who is a container
+	 * (eg an AlbumItem), because a container has a directory for the items it contains.
+	 */
+	if ($this->isLinked()) {
+	    $target = $this->getLinkedEntity();
+	} else {
+	    $target = $this;
+	}
+
+	list ($ret, $containerPath) = $target->fetchContainerPath();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $containerPath . $target->getPathComponent());
+    }
+
+    /**
+     * @see GalleryRenderer::render
+     *
+     * @todo Change this API to match that of GalleryRenderer::render()
+     *       on the next major GalleryModule API bump.
+     */
+    function render($format, $params) {
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryDataItem';
+    }
+
+    function getMimeType() {
+	return $this->mimeType;
+    }
+
+    function setMimeType($mimeType) {
+	$this->mimeType = $mimeType;
+    }
+
+    function getSize() {
+	return $this->size;
+    }
+
+    function setSize($size) {
+	$this->size = $size;
+    }
+}
+?>

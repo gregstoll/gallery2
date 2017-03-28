@@ -1,0 +1,126 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Base class for upgrade step
+ * @package Upgrade
+ * @abstract
+ */
+class UpgradeStep {
+    var $_stepNumber;
+    var $_isComplete;
+    var $_isInError;
+    var $_isLastStep;
+
+    function isComplete() {
+	return $this->_isComplete;
+    }
+
+    function isRedoable() {
+	return false;
+    }
+
+    function setComplete($complete) {
+	$this->_isComplete = $complete;
+    }
+
+    function canBeVisited() {
+	return true;
+    }
+
+    function setInError($inError) {
+	$this->_isInError = $inError;
+    }
+
+    function isInError() {
+	return $this->_isInError;
+    }
+
+    function stepName() {
+	return _('Unknown');
+    }
+
+    function setStepNumber($stepNumber) {
+	$this->_stepNumber = $stepNumber;
+    }
+
+    function getStepNumber() {
+	return $this->_stepNumber;
+    }
+
+    function processRequest() {
+	return true; /* true means continue rendering the page */
+    }
+
+    function loadTemplateData(&$templateData) {
+	return null;
+    }
+
+    function getActions() {
+	return array();
+    }
+
+    function setIsLastStep($lastStep) {
+	$this->_isLastStep = $lastStep;
+    }
+
+    function isLastStep() {
+	return $this->_isLastStep;
+    }
+
+    function loadGalleryConfig($config) {
+    }
+
+    function sanitize($string) {
+	if (get_magic_quotes_gpc()) {
+	    $string = stripslashes($string);
+	}
+	return $string;
+    }
+
+    function isRelevant() {
+	return true;
+    }
+
+    function isOptional() {
+	return false;
+    }
+
+    function resetL10Domain() {
+	/* Reset to installer domain in case we called some code that may have done translation */
+	if (function_exists('textdomain')) {
+	    textdomain('gallery2_upgrade');
+	}
+    }
+
+    function _startDebugLog($header) {
+	global $gallery;
+	$gallery->setDebug('logged');
+	if (!isset($_SESSION['debugLogFile'])) {
+	    $dataBase = $gallery->getConfig('data.gallery.base');
+	    $tag = substr(md5(microtime() . rand(1, 32767)), 0, 10);
+	    $_SESSION['debugLogFile'] = $dataBase . '/upgrade_' . $tag . '.log';
+	}
+	$gallery->setDebugLogFile($_SESSION['debugLogFile']);
+	$gallery->debug("\n\n--------------------------------------------------------\n\t$header\n"
+		. "--------------------------------------------------------\n\n");
+    }
+}
+?>

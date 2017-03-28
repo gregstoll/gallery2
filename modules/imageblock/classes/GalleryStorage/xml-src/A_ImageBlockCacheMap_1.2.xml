@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!DOCTYPE change
+  SYSTEM "../../../../../lib/tools/dtd/DatabaseChangeDefinition2.0.dtd">
+<change>
+  <table-name>ImageBlockCacheMap</table-name>
+  <schema-from>
+    <schema-major>1</schema-major>
+    <schema-minor>2</schema-minor>
+  </schema-from>
+  <schema-to>
+    <schema-major>1</schema-major>
+    <schema-minor>3</schema-minor>
+  </schema-to>
+  <remove>
+    <index>
+      <column-name>random</column-name>
+      <column-name>itemId</column-name>
+    </index>
+    <index>
+      <column-name>userId</column-name>
+      <column-name>itemType</column-name>
+    </index>
+  </remove>
+  <add>
+    <index>
+      <column-name>userId</column-name>
+      <column-name>itemType</column-name>
+      <column-name>random</column-name>
+    </index>
+  </add>
+</change>

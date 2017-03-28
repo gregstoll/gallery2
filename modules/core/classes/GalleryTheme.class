@@ -1,0 +1,2024 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPlugin.class');
+
+/**
+ * This interface provides functionality so user-interfaces have a customizable theme.  A theme
+ * should implement this class.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 20954 $
+ * @abstract
+ */
+class GalleryTheme extends GalleryPlugin {
+
+    /**
+     * The version of the GalleryTheme API required by this theme.
+     * @var array
+     * @access private
+     */
+    var $_requiredThemeApi;
+
+    /**
+     * Which of the standard theme settings this theme supports.
+     * @var array
+     * @access private
+     */
+    var $_standardSettings = array();
+
+    /**
+     * Is the page we're rendering cacheable?
+     * @var boolean
+     * @access private
+     */
+    var $_cacheablePage = false;
+
+
+    /**
+     * Constructor to prevent PHP Notices in upgrader and AdminThemes.inc when old themes with a
+     * theme.inc are still in the themes folder.  The old themes call $this->GalleryTheme() in their
+     * constructor.
+     */
+    function GalleryTheme() {
+    }
+
+    /**
+     * Return the major and minor version of the GalleryTheme API.
+     * This follows the same rules as the core API
+     * @see GalleryCoreApi::getApiVersion
+     *
+     * @todo On the next major API bump:
+     * - Remove backwards compatible CSS from lib/javascript/AutoComplete.js
+     *
+     * @return array major number, minor number
+     */
+    function getApiVersion() {
+	return array(2, 6);
+    }
+
+    /**
+     * Return whether the theme uses simple or advanced settings.  To support simple settings the
+     * theme needs to implement getSettings and validateSettings To support advanced settings the
+     * theme must implement loadSettingsTemplate and handleSettingsRequest.
+     *
+     * @return boolean true for advanced settings, false for simple
+     */
+    function isAdvancedSettings() {
+	return false;  /* Default to simple */
+    }
+
+    /**
+     * Return the possible settings that a theme can specify on a global or per item basis.  Used
+     * for theme with simple settings (@see isAdvancedSettings)
+     *
+     * Each setting contains:
+     *   key:         a unique identifier
+     *   name:        a localized, displayable text string
+     *   type:        single-select, multiple-select, text-field
+     *   choices:     [only valid for single-select, multiple-select type]
+     *                array of:
+     *                   keys:   unique identifier within this set of choices
+     *                   values: localized displayable text string
+     *   value:       the current value for this setting
+     *
+     * @param int $itemId (optional)
+     * @return array GalleryStatus a status code
+     *               settings array
+     *               params array (useful for a theme overriding this function)
+     */
+    function getSettings($itemId=null) {
+	list ($ret, $params) = $this->fetchParameters($itemId);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	/*
+	 * For simplicity in upgrading, we don't require themes to delete their old settings.  So
+	 * any item may be carting around extra settings that are no longer valid.  We could fix
+	 * this in the future, but for now, just leave those out of the settings list
+	 */
+	$standard = $this->getStandardSettings();
+	$params = array_merge($standard, $params);
+
+	$settings = array();
+	if (isset($params['rows']) && isset($standard['rows'])) {
+	    $settings[] = array('key' => 'rows',
+				'name' => $core->translate('Rows per album page'),
+				'type' => 'text-field',
+				'typeParams' => array('size' => 2),
+				'value' => $params['rows']);
+	}
+
+	if (isset($params['columns']) && isset($standard['columns'])) {
+	    $settings[] = array('key' => 'columns',
+				'name' => $core->translate('Columns per album page'),
+				'type' => 'text-field',
+				'typeParams' => array('size' => 2),
+				'value' => $params['columns']);
+	}
+
+	if (isset($params['perPage']) && isset($standard['perPage'])) {
+	    $settings[] = array('key' => 'perPage',
+				'name' => $core->translate('Number of items to show per page'),
+				'type' => 'text-field',
+				'typeParams' => array('size' => 2),
+				'value' => $params['perPage']);
+	}
+
+	if (isset($params['rowHeight']) && isset($standard['rowHeight'])) {
+	    $settings[] = array('key' => 'rowHeight',
+				'name' => $core->translate('Row height (pixels)'),
+				'type' => 'text-field',
+				'typeParams' => array('size' => 3),
+				'value' => $params['rowHeight']);
+	}
+
+	if (isset($params['columnWidth']) && isset($standard['columnWidth'])) {
+	    $settings[] = array('key' => 'columnWidth',
+				'name' => $core->translate('Column width (pixels)'),
+				'type' => 'text-field',
+				'typeParams' => array('size' => 3),
+				'value' => $params['columnWidth']);
+	}
+
+	if (isset($params['showImageOwner']) && isset($standard['showImageOwner'])) {
+	    $settings[] = array('key' => 'showImageOwner',
+				'name' => $core->translate('Show image owners'),
+				'type' => 'checkbox',
+				'value' => $params['showImageOwner']);
+	}
+
+	if (isset($params['showAlbumOwner']) && isset($standard['showAlbumOwner'])) {
+	    $settings[] = array('key' => 'showAlbumOwner',
+				'name' => $core->translate('Show album owners'),
+				'type' => 'checkbox',
+				'value' => $params['showAlbumOwner']);
+	}
+
+	if (isset($params['showMicroThumbs']) && isset($standard['showMicroThumbs'])) {
+	    $settings[] = array('key' => 'showMicroThumbs',
+				'name' => $core->translate('Show micro navigation thumbnails'),
+				'type' => 'checkbox',
+				'value' => $params['showMicroThumbs']);
+	}
+
+	if (isset($params['sidebarBlocks']) && isset($standard['sidebarBlocks'])) {
+	    $settings[] = array('key' => 'sidebarBlocks',
+				'name' => $core->translate('Blocks to show in the sidebar'),
+				'type' => 'block-list',
+				'typeParams' => array('packType' => 'block-list'),
+				'value' => $params['sidebarBlocks']);
+	}
+
+	if (isset($params['albumBlocks']) && isset($standard['albumBlocks'])) {
+	    $settings[] = array('key' => 'albumBlocks',
+				'name' => $core->translate('Blocks to show on album pages'),
+				'type' => 'block-list',
+				'typeParams' => array('packType' => 'block-list'),
+				'value' => $params['albumBlocks']);
+	}
+
+	if (isset($params['photoBlocks']) && isset($standard['photoBlocks'])) {
+	    $settings[] = array('key' => 'photoBlocks',
+				'name' => $core->translate('Blocks to show on photo pages'),
+				'type' => 'block-list',
+				'typeParams' => array('packType' => 'block-list'),
+				'value' => $params['photoBlocks']);
+	}
+
+	if (isset($params['dynamicLinks']) && isset($standard['dynamicLinks'])) {
+	    $settings[] = array('key' => 'dynamicLinks',
+				'name' => $core->translate('Thumbnail links in dynamic albums'),
+				'type' => 'single-select',
+				'choices' => array(
+				    'browse' => $core->translate('Browse dynamic album'),
+				    'jump' => $core->translate('Jump to original album'),
+				    'jumplink' => $core->translate(
+					'Separate link to original album')),
+				'value' => $params['dynamicLinks']);
+	}
+
+	/* ImageFrame settings, if available */
+	list ($ret, $imageframe) = GalleryCoreApi::newFactoryInstance('ImageFrameInterface_1_1');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	if (isset($imageframe) &&
+	    (isset($params['albumFrame']) ||
+	     isset($params['itemFrame']) ||
+	     isset($params['photoFrame']))) {
+	    list ($ret, $list) = $imageframe->getImageFrameList();
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    list ($ret, $sampleUrl) = $imageframe->getSampleUrl($itemId);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    $sample = ' (<a href="' . $sampleUrl . '">'
+		    . $core->translate('View Samples') . '</a>)';
+
+	    if (isset($params['albumFrame']) && isset($standard['albumFrame'])) {
+		$settings[] = array('key' => 'albumFrame',
+				    'name' => $core->translate('Album Frame') . $sample,
+				    'type' => 'single-select',
+				    'choices' => $list,
+				    'value' => $params['albumFrame']);
+	    }
+
+	    if (isset($params['itemFrame']) && isset($standard['itemFrame'])) {
+		$settings[] = array('key' => 'itemFrame',
+				    'name' => $core->translate('Item Frame') . $sample,
+				    'type' => 'single-select',
+				    'choices' => $list,
+				    'value' => $params['itemFrame']);
+	    }
+
+	    if (isset($params['photoFrame']) && isset($standard['photoFrame'])) {
+		$settings[] = array('key' => 'photoFrame',
+				    'name' => $core->translate('Photo Frame') . $sample,
+				    'type' => 'single-select',
+				    'choices' => $list,
+				    'value' => $params['photoFrame']);
+	    }
+	}
+
+	/* ColorPack setting, if available */
+	list ($ret, $colorpack) = GalleryCoreApi::newFactoryInstance('ColorPackInterface_1_0');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	if (isset($colorpack) && isset($params['colorpack'])) {
+	    list ($ret, $list) = $colorpack->getColorPacks();
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    $settings[] = array('key' => 'colorpack',
+				'name' => $core->translate('Color Pack'),
+				'type' => 'single-select',
+				'choices' => $list,
+				'value' => $params['colorpack']);
+	}
+
+	return array(null, $settings, $params);
+    }
+
+    /**
+     * Check the values of the settings for legality.  If there are errors, return an array of
+     * localized error messages to display for each invalid setting.  Used for theme with simple
+     * settings (@see isAdvancedSettings)
+     *
+     * @param array $settings array('key' => array(value, ...), ...)
+     * @return array errors in the form of array('key' => 'translated text', ...)
+     */
+    function validateSettings($settings) {
+	global $gallery;
+	$error = array();
+	$standard = $this->getStandardSettings();
+
+	list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    $core = $this;
+	}
+
+	if (isset($standard['rows'])
+		&& (empty($settings['rows']) || !is_numeric($settings['rows']))) {
+	    $error['rows'] = $core->translate('You must enter a number greater than 0');
+	}
+	if (isset($standard['columns'])
+		&& (empty($settings['columns']) || !is_numeric($settings['columns']))) {
+	    $error['columns'] = $core->translate('You must enter a number greater than 0');
+	}
+	if (isset($standard['perPage'])
+		&& (empty($settings['perPage']) || !is_numeric($settings['perPage']))) {
+	    $error['perPage'] = $core->translate('You must enter a number greater than 0');
+	}
+
+	if (!empty($settings['rowHeight']) && !is_numeric($settings['rowHeight'])) {
+	    $error['rowHeight'] = $core->translate('You must enter a number greater than 0');
+	}
+	if (!empty($settings['columnWidth']) && !is_numeric($settings['columnWidth'])) {
+	    $error['columnWidth'] = $core->translate('You must enter a number greater than 0');
+	}
+
+	foreach (array('sidebarBlocks', 'albumBlocks', 'photoBlocks') as $blockKey) {
+	    if (isset($standard[$blockKey])) {
+		if (!empty($settings[$blockKey])) {
+		    list ($success, $newValue) =
+			$this->packSetting('block-list', $settings[$blockKey]);
+		    if (!$success) {
+			if ($gallery->getDebug()) {
+			    $gallery->debug('Unable to parse block-list: ' . $settings[$blockKey]);
+			}
+			$error[$blockKey] = $core->translate(
+			  'Error reading block settings. Clear your browser cache and try again.');
+		    }
+		}
+	    }
+	}
+	return $error;
+    }
+
+    /**
+     * Convert a setting from a string format into a PHP native format.  The string format is
+     * something that could be passed to the browser, like:
+     *       [I like [eggs bacon]]
+     * The packed format might be:
+     *       array("I like", array("eggs", "bacon"))
+     *
+     * The specific packing depends on the packType variable.
+     *
+     * @param string $packType
+     * @param string $value the input value
+     * @return mixed the packed form
+     */
+    function packSetting($packType, $value) {
+	$success = true;
+
+	switch ($packType) {
+	case 'block-list':
+	    /*
+	     * Expecting format (without line breaks):
+	     * [["module.BlockName",{"param1":"value1",...}],
+	     *  ["module.BlockName",{"param1":"value1",...}],
+	     *  ["module.BlockName2"]]
+	     *
+	     * Output is a serialized array of the format:
+	     * array(
+	     *    array('module.BlockName', array('param1' => 'value1')),
+	     *    array('module.BlockName', array('param1' => 'value1')),
+	     *    array('module.BlockName2', array()))
+	     *
+	     * The value can be empty.  There can be any number of blocks.  Blocks can be repeated.
+	     * There can be any number of parameters
+	     */
+	    $results = array();
+	    if (empty($value) || $value == '[]') {
+		/* success */
+	    } else {
+		GalleryCoreApi::requireOnce('lib/JSON/JSON.php');
+		$json = new Services_JSON(SERVICES_JSON_LOOSE_TYPE);
+
+		/* The sanitizer will escape quotes, so unescape them */
+		$value = str_replace('&quot;', '"', $value);
+
+		$results = $json->decode($value);
+
+		if (empty($results) || !isset($results[0])) {
+		    $success = false;
+		    $results = array();
+		} else {
+		    for ($i = 0; $i < count($results); $i++) {
+			if (count($results[$i]) == 1) {
+			    array_push($results[$i], array());
+			}
+		    }
+		}
+	    }
+
+	    $value = serialize($results);
+	}
+
+	return array($success, $value);
+    }
+
+    /**
+     * Unpack a packed setting.
+     * @see GalleryTheme::packSetting
+     *
+     * @param string $packType
+     * @param mixed $value the packed value
+     * @return string the unpacked value
+     */
+    function unpackSetting($packType, $value) {
+	$success = true;
+
+	switch ($packType) {
+	case 'block-list':
+	    /*
+	     * Convert to this format:
+	     * [["module.BlockName", {"param1":"value1",...}]
+	     *  ["module.BlockName", {"param1":"value1",...}]]
+	     *
+	     * Input is:
+	     * array('module.BlockName', array('param1' => 'value1'),
+	     *       'module.BlockName', array('param1' => 'value1'))
+	     */
+	    $result = '';
+	    $input = @unserialize($value);
+	    if (!is_array($input)) {
+		$success = false;
+	    } else if (empty($input)) {
+		$success = true;
+		$value = '[]';
+	    } else {
+		GalleryCoreApi::requireOnce('lib/JSON/JSON.php');
+		$json = new Services_JSON();
+		for ($i = 0; $i < count($input); $i++) {
+		    if (empty($input[$i]) || !is_array($input[$i])) {
+			return array(false, '');
+		    }
+		    if (count($input[$i]) == 1) {
+			array_push($input[$i], array());
+		    }
+		}
+		$value = $json->encode($input);
+		/*
+		 * JSON can't distinguish between regular arrays and assoc arrays if the array is
+		 * empty, so fix it up here.  This isn't essential, but it keeps our interchange
+		 * format cleaner (and we enforce this behaviour in our tests).
+		 */
+		$value = str_replace('[]', '{}', $value);
+		$success = true;
+	    }
+	}
+	return array($success, $value);
+    }
+
+    /**
+     * Load the template with data to define the theme settings.  Used for theme with advanced
+     * settings.
+     *
+     * @see isAdvancedSettings
+     *
+     * @param GalleryTemplate $template
+     * @param array $form array the form values
+     * @param int $itemId the item id or null for site wide settings
+     * @return array GalleryStatus a status code
+     *               string path to the body template
+     */
+    function loadSettingsTemplate(&$template, &$form, $itemId=null) {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+    }
+
+    /**
+     * Let the theme handle the incoming request.  Used for theme with advanced settings.
+     *
+     * @see isAdvancedSettings
+     * @see GalleryController::handleRequest
+     *
+     * @param array $form the form values
+     * @param int $itemId the item id or null for site wide settings
+     * @return array GalleryStatus a status code
+     *               array error messages
+     *               string status message (itemId!=null) or status key (itemId==null)
+     */
+    function handleSettingsRequest($form, $itemId=null) {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null, null);
+    }
+
+    /**
+     * @see GalleryPlugin::activate
+     */
+    function activate($postActivationEvent=true) {
+	if (!GalleryCoreApi::isPluginCompatibleWithApis($this)) {
+	    return array(GalleryCoreApi::error(ERROR_PLUGIN_VERSION_MISMATCH, __FILE__, __LINE__,
+		sprintf('incompatible %s %s', $this->getPluginType(), $this->getId())), null);
+	}
+
+	list ($ret, $redirect) = parent::activate($postActivationEvent);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (!empty($redirect)) {
+	    return array(null, $redirect);
+	}
+
+	/* Set the default value for all settings that don't have values */
+	list ($ret, $settings) = $this->getSettings();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $currentParameters) =
+	    GalleryCoreApi::fetchAllPluginParameters('theme', $this->getId());
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/*
+	 * Settings will have the correct value for all parameters, so if it's not in the map yet we
+	 * should store it now
+	 */
+	foreach ($settings as $setting) {
+	    if (!isset($currentParameters[$setting['key']])) {
+		$ret = $this->setParameter($setting['key'], $setting['value']);
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	}
+
+	return array(null, array());
+    }
+
+    /**
+     * Perform the module installation or upgrade, whatever is required.  It will do the
+     * following:
+     * 1. Get the current version of the theme (if its already installed)
+     * 2. Let the theme perform any necessary upgrade tasks.
+     * 3. Set the new theme version and api requirements into the database
+     *
+     * Themes should not need to override this method.  Instead they should override the upgrade
+     * method and put all their theme specific logic there
+     *
+     * @return GalleryStatus a status code
+     */
+    function installOrUpgrade() {
+	global $gallery;
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('GalleryTheme::installOrUpgrade %s theme', $this->getId()));
+	}
+
+	if (!GalleryCoreApi::isPluginCompatibleWithApis($this)) {
+	    return GalleryCoreApi::error(ERROR_PLUGIN_VERSION_MISMATCH, __FILE__, __LINE__,
+		sprintf('incompatible %s %s', $this->getPluginType(), $this->getId()));
+	}
+
+	list ($ret, $installedVersion) = $this->getParameter('_version');
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug('GalleryTheme::installOrUpgrade compare versions');
+	}
+
+	if ($installedVersion != $this->getVersion()) {
+	    if ($gallery->getDebug()) {
+		$gallery->debug('Old version: ' . $installedVersion
+				. '   New version: ' . $this->getVersion());
+	    }
+
+	    $ret = $this->upgrade($installedVersion);
+	    if ($ret) {
+		if ($gallery->getDebug()) {
+		    $gallery->debug(sprintf('Error: Failed to upgrade the %s theme, this ' .
+					    'is the error stack trace: %s', $this->getId(),
+					    $ret->getAsText()));
+		}
+		return $ret;
+	    }
+
+	    if ($gallery->getDebug()) {
+		$gallery->debug('GalleryTheme::installOrUpgrade set new theme version etc.');
+	    }
+
+	    $data = array('_version' => $this->getVersion(),
+			  '_requiredCoreApi' => join(',', $this->getRequiredCoreApi()),
+			  '_requiredThemeApi' => join(',', $this->getRequiredThemeApi()));
+	    foreach ($data as $key => $value) {
+		$ret = $this->setParameter($key, $value);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+
+	    /* Reactivate myself to perform any activate based tasks like adding new parameters */
+	    if ($gallery->getDebug()) {
+		$gallery->debug(sprintf('Reactivate %s theme', $this->getId()));
+	    }
+	    list ($ret, $redirect) = $this->reactivate();
+	    if ($ret) {
+		if ($gallery->getDebug()) {
+		    $gallery->debug(sprintf('Error: Failed to reactivate the theme, this' .
+					    ' is the error stack trace: %s', $ret->getAsText()));
+		}
+		return $ret;
+	    }
+	}
+
+	$ret = parent::installOrUpgrade();
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug('GalleryTheme::installOrUpgrade finished successfully');
+	}
+
+	return null;
+    }
+
+    /**
+     * Remove this theme from all albums.
+     *
+     * @return GalleryStatus a status code
+     */
+    function uninstall() {
+	global $gallery;
+
+	list ($ret, $searchResults) = $gallery->search(
+	    'SELECT [GalleryAlbumItem::id] FROM [GalleryAlbumItem] WHERE ' .
+	    '[GalleryAlbumItem::theme] = ?', array($this->getId()));
+	if ($ret) {
+	    return $ret;
+	}
+
+	for ($ids = array(); $result = $searchResults->nextResult();) {
+	    $ids[] = $result[0];
+	}
+	if (!empty($ids)) {
+	    /* Reset albums to default theme */
+	    list ($ret, $defaultTheme) =
+		GalleryCoreApi::getPluginParameter('module', 'core', 'default.theme');
+	    if ($ret) {
+		return $ret;
+	    }
+	    list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($ids);
+	    if ($ret) {
+		return $ret;
+	    }
+	    list ($ret, $albums) = GalleryCoreApi::loadEntitiesById($ids, 'GalleryAlbumItem');
+	    if ($ret) {
+		GalleryCoreApi::releaseLocks($lockId);
+		return $ret;
+	    }
+	    foreach ($albums as $album) {
+		$album->setTheme($defaultTheme);
+		$album->save();
+		if ($ret) {
+		    GalleryCoreApi::releaseLocks($lockId);
+		    return $ret;
+		}
+	    }
+	    $ret = GalleryCoreApi::releaseLocks($lockId);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	/* Remove this plugin */
+	$ret = parent::uninstall();
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryPlugin::deactivate
+     */
+    function deactivate($postDeactivationEvent=true) {
+	list ($ret, $defaultTheme) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'default.theme');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if ($defaultTheme == $this->getId() && $postDeactivationEvent) {
+	    /*
+	     * Can't deactivate default theme.  UI doesn't offer this option, so we should only
+	     * reach this code if default theme needs to be upgraded.  loadPlugin will see a
+	     * redirect URL is returned and jump to upgrader (the actual redirect returned below
+	     * isn't used).  Allow this deactivate if $postDeactivationEvent is false (during
+	     * reactivate)
+	     */
+	    return array(null, array('href' => 'upgrade/'));
+	}
+
+	list ($ret, $redirect) = parent::deactivate($postDeactivationEvent);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $redirect);
+    }
+
+    /**
+     * Load the template with data from this view.
+     *
+     * @param GalleryView $view
+     * @param GalleryTemplate $template
+     * @param GalleryItem $item the item to display
+     * @param array $params theme parameters
+     * @param array $viewResults results from the view
+     * @return array GalleryStatus a status code
+     *               array ('body' => string template or 'redirect' => array)
+     */
+    function loadTemplate($view, &$template, $item, $params, $viewResults) {
+	global $gallery;
+	$theme =& $template->getVariableByReference('theme');
+
+	$urlGenerator =& $gallery->getUrlGenerator();
+        $theme['themeId'] = $this->getId();
+	$theme['themeUrl'] =
+	    $urlGenerator->generateUrl(array('href' => 'themes/' . $this->getId()));
+	if (!isset($theme['pageUrl'])) {
+	    $theme['pageUrl'] = array('view' => 'core.ShowItem', 'itemId' => $item->getId());
+	}
+
+	list ($ret, $theme['markupType']) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'misc.markup');
+	if ($ret) {
+	    $theme['markupType'] = 'none';
+	}
+
+	$theme['params'] = $params;
+	$theme['useFullScreen'] = !empty($viewResults['useFullScreen']);
+
+	/* Unserialize our blocks and preload them if necessary */
+	$seen = array();
+	foreach ($theme['params'] as $key => $value) {
+	    if (substr($key, -6) != 'Blocks') {
+		continue;
+	    }
+	    $theme['params'][$key] = unserialize($value);
+
+	    if ($theme['params'][$key]) {
+		foreach ($theme['params'][$key] as $block) {
+		    $seen[$block[0]][] = $block[1];
+		}
+	    }
+	}
+	foreach ($seen as $blockId => $paramSet) {
+	    $ret = $this->preloadBlock($template, $blockId, $paramSet);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	if ($this->getId() == 'fallbackTheme') {
+	    /* If theme failed to load then we're done */
+	    $theme['isFallback'] = true;
+	    $theme['fallbackTemplate'] = $viewResults['body'];
+	    return array(null, array('body' => 'modules/core/templates/FallbackTheme.tpl'));
+	}
+
+	if (!$gallery->getConfig('showSidebarBlocks') && !empty($params['sidebarBlocks'])) {
+	    $extractedSidebarBlocks = $theme['params']['sidebarBlocks'];
+	    $theme['params']['sidebarBlocks'] = array();
+	}
+
+	/* Load icon pack if available */
+	list ($ret, $iconpack) = GalleryCoreApi::newFactoryInstance('IconsInterface_1_0');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (isset($iconpack)) {
+	    $ret = $iconpack->init($template);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	/* Load color pack if the theme supports them (and they're available) */
+	if (!empty($params['colorpack'])) {
+	    list ($ret, $colorpack) = GalleryCoreApi::newFactoryInstance('ColorPackInterface_1_0');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if (isset($colorpack)) {
+		$ret = $colorpack->selectColorPack($template, $params['colorpack']);
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	}
+
+	/*
+	 * Figure out what type of view we've got.  This is lame and not very OO.  We should create
+	 * a view hierarchy that lets them implement their own showPage() method
+	 */
+	switch ($view->getViewType()) {
+	case VIEW_TYPE_ADMIN:
+	    $theme['pageType'] = 'admin';
+	    $theme['adminTemplate'] = $viewResults['body'];
+	    $theme['adminL10Domain'] = $view->getL10Domain();
+	    list ($ret, $result) = $this->showAdminPage(
+		$template, $item, $params, $viewResults['body']);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    break;
+
+	case VIEW_TYPE_SHOW_ITEM:
+	    $this->_cacheablePage = true;
+	    $session =& $gallery->getSession();
+
+	    /* Albums page or Photo page */
+	    if ($item->getCanContainChildren()) {
+		$theme['pageType'] = 'album';
+
+		/* If we care about pagination, then figure out the current page and total pages */
+		$perPage = $this->getPageSize($params);
+		$page = GalleryUtilities::getRequestVariables('page');
+		if ($perPage == 0) {
+		    $page = 1;
+		} else if (empty($page)) {
+		    /*
+		     * We don't have a page number.  If we have a highlight id, then figure out what
+		     * page that id is on and redirect to that page.
+		     */
+		    $highlightId = GalleryUtilities::getRequestVariables('highlightId');
+		    if (!empty($highlightId)) {
+			if (isset($theme['allChildIds'])) {
+			    $childIds = $theme['allChildIds'];
+			} else {
+			    list ($ret, $childIds) = GalleryCoreApi::fetchChildItemIds($item);
+			    if ($ret) {
+				return array($ret, null);
+			    }
+			}
+
+			$page = 1;
+			for ($i = 0; $i < count($childIds); $i++) {
+			    if ($childIds[$i] == $highlightId) {
+				/* Found it */
+				$page = ceil(($i+1) / $perPage);
+				break;
+			    }
+			}
+
+			/* Redirect to the new page */
+			$redirect = $theme['pageUrl'];
+			if ($page != 1) {
+			    $redirect['page'] = $page;
+			}
+			return array(null, array('redirect' => $redirect));
+		    } else {
+			$page = 1;
+		    }
+		}
+
+		if (isset($theme['allChildIds'])) {
+		    /* Dynamic album has already loaded child ids */
+		    $isDynamicAlbum = true;
+		    $this->_cacheablePage = false;
+		}
+
+		if (!empty($perPage)) {
+		    /* Use the pagination to calculate the child item ids to load */
+		    $start = $perPage * ($page - 1);
+		    if (isset($isDynamicAlbum)) {
+			$childIds = array_slice($theme['allChildIds'], $start, $perPage);
+			$theme['totalPages'] = ceil(count($theme['allChildIds']) / $perPage);
+		    } else {
+			list ($ret, $childIds) = GalleryCoreApi::fetchChildItemIds(
+				$item, $start, $perPage, $theme['actingUserId']);
+			if ($ret) {
+			    return array($ret, null);
+			}
+
+			/* Load up our child count so that we can figure out the max pages */
+			$itemId = $item->getId();
+			list ($ret, $childCount) = GalleryCoreApi::fetchChildCounts(
+				array($itemId), $theme['actingUserId']);
+			if ($ret) {
+			    return array($ret, null);
+			}
+			/* $childCount shouldn't be empty; check/fallback here anyway */
+			$theme['childCount'] =
+			    isset($childCount[$itemId]) ? $childCount[$itemId] : count($childIds);
+
+			/* Store the total pages in the theme */
+			$theme['totalPages'] = ceil($theme['childCount'] / $perPage);
+		    }
+		    $theme['currentPage'] = $page;
+
+		    /* If our page is over the max, redirect the user to the max page */
+		    if ($page > $theme['totalPages'] && $theme['totalPages'] > 0) {
+			$redirect = $theme['pageUrl'];
+			if ($theme['totalPages'] != 1) {
+			    $redirect['page'] = $theme['totalPages'];
+			}
+			return array(null, array('redirect' => $redirect));
+		    }
+		} else {
+		    /*
+		     * No pagination; load all children.  This isn't going to scale, but the theme
+		     * is the boss.
+		     */
+		    if (isset($isDynamicAlbum)) {
+			$childIds = $theme['allChildIds'];
+		    } else {
+			list ($ret, $childIds) = GalleryCoreApi::fetchChildItemIds(
+				$item, null, null, $theme['actingUserId']);
+			if ($ret) {
+			    return array($ret, null);
+			}
+		    }
+		}
+
+		list ($ret, $result) = $this->showAlbumPage($template, $item, $params, $childIds);
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    } else {
+		$theme['pageType'] = 'photo';
+		list ($ret, $result) = $this->showPhotoPage($template, $item, $params);
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+
+	    /* Load image frames if the theme supports them (and they're available) */
+	    if (!empty($params['albumFrame']) ||
+		!empty($params['itemFrame']) ||
+		!empty($params['photoFrame'])) {
+		list ($ret, $imageframe) =
+		    GalleryCoreApi::newFactoryInstance('ImageFrameInterface_1_1');
+		if ($ret) {
+		    return array($ret, null);
+		}
+		if (isset($imageframe)) {
+		    $frameIds = array();
+		    if ($item->getCanContainChildren()) {
+			foreach (array('albumFrame', 'itemFrame') as $key) {
+			    if (!empty($params[$key])) {
+				$frameIds[] = $theme['params'][$key] = $params[$key];
+			    }
+			}
+		    } else {
+			if (!empty($params['photoFrame'])) {
+			    $frameIds[] = $theme['photoFrame'] = $params['photoFrame'];
+			}
+		    }
+		    if (!empty($frameIds)) {
+			$ret = $imageframe->init($template, $frameIds);
+			if ($ret) {
+			    return array($ret, null);
+			}
+		    }
+		} else {
+		    /* Not available; unset params so theme won't try to use imageframe */
+		    unset($theme['params']['albumFrame']);
+		    unset($theme['params']['itemFrame']);
+		    unset($theme['params']['photoFrame']);
+		}
+	    }
+	    break;
+
+	case VIEW_TYPE_PROGRESS_BAR:
+	    /* We only use this for progressbar views (for now) */
+	    $theme['pageType'] = 'progressbar';
+	    list ($ret, $result) = $this->showProgressBarPage($template, $item, $params);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    break;
+
+	case VIEW_TYPE_ERROR:
+	    $theme['pageType'] = 'error';
+	    $theme['errorTemplate'] = $viewResults['body'];
+	    list ($ret, $result) = $this->showErrorPage($template);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    break;
+
+
+	default: /* VIEW_TYPE_MODULE */
+	    $theme['pageType'] = 'module';
+	    $theme['moduleTemplate'] = $viewResults['body'];
+	    $theme['moduleL10Domain'] = $view->getL10Domain();
+	    list ($ret, $result) = $this->showModulePage(
+		$template, $item, $params, $viewResults['body']);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    break;
+	}
+
+	if (!is_array($result)) {
+	    $result = array('body' => sprintf('themes/%s/templates/%s', $this->getId(), $result),
+			    'cacheable' => $this->_cacheablePage ? $item->getId() : false);
+	}
+
+	if (isset($extractedSidebarBlocks)) {
+	    $templateAdapter =& $gallery->getTemplateAdapter();
+
+	    /* Render the sidebar blocks and save them */
+	    foreach ($extractedSidebarBlocks as $block) {
+		$template->setVariable(
+		    'SidebarBlock', array('type' => $block[0], 'params' => $block[1]));
+		list ($ret, $result['sidebarBlocksHtml'][]) =
+		    $template->fetch('gallery:modules/core/templates/SidebarBlock.tpl');
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	}
+
+	return array(null, $result);
+    }
+
+    /**
+     * Call preload for given block if the module is active and a preload exists.
+     *
+     * @param GalleryTemplate $template
+     * @param string $blockId (module.blockName)
+     * @param array $blockParams (optional) block parameters
+     * @return GalleryStatus a status code
+     */
+    function preloadBlock(&$template, $blockId, $blockParams=array()) {
+	global $gallery;
+	static $pluginStatus;
+	if (!isset($pluginStatus)) {
+	    list ($ret, $pluginStatus) = GalleryCoreApi::fetchPluginStatus('module');
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	list ($module, $blockName) = explode('.', $blockId);
+	if (empty($pluginStatus[$module]['active'])) {
+	    return null;
+	}
+
+	$path = "modules/$module/Preloads.inc";
+	$platform =& $gallery->getPlatform();
+	if ($platform->file_exists(GalleryCoreApi::getCodeBasePath($path))) {
+	    GalleryCoreApi::requireOnce($path);
+	    $className = $module . 'Preloads';
+	    $instance = new $className;
+	    $ret = $instance->preload($template, $blockName, $blockParams);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Load commonly used data into theme template.
+     * Always loaded:
+     *   item        item data
+     *   children    array of child item data
+     * Available keys to include in $dataToLoad parameter:
+     *   owner = item owner data
+     *      ^if childIds non-empty also fill ownerMap with array of ownerId => owner data
+     *   viewCount = number of views for item
+     *      ^if childIds non-empty also set viewCount on each child item
+     *   childCount = number of children for item
+     *      ^if childIds non-empty also set childCount on each child item that canContainChildren
+     *   descendentCount = number of descendents for item
+     *      ^if childIds non-empty also set descendentCount on each child that canContainChildren
+     *   parents = array of ancestor data; also set parent key (direct parent data)
+     *   systemLinks = array of array('text'=>.., 'params'=>.., 'moduleId'=>..)
+     *   itemLinks = array of id => array('text'=>.., 'params'=>.., 'moduleId'=>..)
+     *      ^if childIds non-empty also set itemLinks on each child item
+     *   childItemLinksDetailed = boolean.  true if you want detailed item links for children.
+     *                            you always get detailed item links for the current item
+     *   itemSummaries = set itemSummaries (array of moduleId => html) on each child item
+     *   thumbnails = if childIds non-empty then set thumbnail on each child item
+     *   pageNavigator = calculate URLs for first/back/next/last links for album page navigation
+     *   itemNavigator = calculate URLs for first/back/next/last links for photo navigation
+     *   navThumbnails = load the thumbnails for itemNavigator items
+     *   jumpRange = calculate page URLs for inter-album navigation (eg, "page: 1, 2 .. 7, 8")
+     *       Include 'pageWindowSize'=># in $params to override default of 6
+     *   imageViews = loads entity data for resizes and source images, suitable for display
+     *                when viewing a single image:
+     *                'imageViews' => derivatives,
+     *                'sourceImage' => data item,
+     *                   ^ contains 'viewInline' boolean, specifying if it can be displayed inline
+     *                   ^ contains 'itemTypeName' string, the type of item
+     *                   ^ contains 'isSource' member
+     *                'imageViewsIndex' => index to the resize currently displayed
+     *                'sourceImageViewIndex' => index to the source currently displayed
+     *                'fullSizeDimensions' => a string with dimensions of the orig. (eg, "640x480")
+     *   permissions array of item permissions, respecting the guest mode flag.
+     *               Periods in permissions have been converted to underscores
+     *               to make them more Smarty friendly, so if you want to check
+     *               a permission in smarty you'd do:
+     *                   {if isset($theme.permissions.core_addDataItem)}
+     *
+     * @param GalleryTemplate $template
+     * @param GalleryItem $item the item to display
+     * @param array $params theme parameters
+     * @param array $dataToLoad (string data key, ..) data to load into template
+     * @param array $childIds (optional) ids of child items to display
+     * @param boolean $useCache (optional)
+     * @return GalleryStatus a status code
+     */
+    function loadCommonTemplateData(&$template, $item, $params, $dataToLoad,
+				    $childIds=array(), $useCache=true) {
+	global $gallery;
+
+	$imageViewsIndex = GalleryUtilities::getRequestVariables('imageViewsIndex');
+	$imageViewsIndex = is_numeric($imageViewsIndex) ? abs((int)$imageViewsIndex) : null;
+	if ($useCache && $this->_cacheablePage) {
+	    list ($ret, $shouldCache) = GalleryDataCache::shouldCache('read', 'partial');
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if ($shouldCache) {
+		list ($ret, $serializedData) = GalleryDataCache::getPageData(
+		    'template', array($item->getId(), $params, $dataToLoad,
+				      $childIds, $imageViewsIndex));
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+
+	    if (!empty($serializedData)) {
+		$template->_smarty->_tpl_vars = unserialize($serializedData);
+		return null;
+	    }
+	}
+
+	list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return $ret;
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * Initialize
+	 */
+	$theme =& $template->getVariableByReference('theme');
+	$load = $childItems = $childData = array();
+
+	foreach ($dataToLoad as $key) {
+	    $load[$key] = true;
+	}
+	if (!empty($childIds)) {
+	    list ($ret, $childItems) = GalleryCoreApi::loadEntitiesById($childIds, 'GalleryItem');
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	$itemId = $item->getId();
+	$allItems = array_merge($itemId ? array($item) : array(), $childItems);
+	$allItemIds = array_merge($itemId ? array($itemId) : array(), $childIds);
+	$allAlbumIds = array();
+	foreach ($allItems as $it) {
+	    if ($it->getCanContainChildren()) {
+		$allAlbumIds[] = $it->getId();
+	    }
+	}
+	$perPage = $this->getPageSize($params);
+
+	if (!empty($childIds)) {
+	    /*
+	     * Study all permissions at once so that individual permission checks later don't lead
+	     * to multiple database queries
+	     */
+	    $ret = GalleryCoreApi::studyPermissions($childIds, $theme['actingUserId']);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * Load additional required entities
+	 */
+	$userIds = array();
+	$itemIds = array();
+	if (isset($load['owner'])) {
+	    $userIds[$item->getOwnerId()] = true;
+	    $childOwnerIds = array();
+	    foreach ($childItems as $child) {
+		$userIds[$child->getOwnerId()] = true;
+		$childOwnerIds[$child->getOwnerId()] = true;
+	    }
+	    $childOwnerIds = array_keys($childOwnerIds);
+	}
+	if (isset($load['parents'])) {
+	    /*
+	     * TODO: Should we have this obey the acting user permission?  It may make navigation
+	     * strange for the active user.
+	     */
+	    if ($itemId && !isset($item->parent)) {
+		list ($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($itemId, true);
+		if ($ret) {
+		    return $ret;
+		}
+	    } else {
+		list ($ret, $rootId) = GalleryCoreApi::getDefaultAlbumId();
+		if ($ret) {
+		    return $ret;
+		}
+		$parentSequence = array($rootId);
+	    }
+	    if (!empty($parentSequence)) {
+		$ret = GalleryCoreApi::studyPermissions($parentSequence, $theme['actingUserId']);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	    foreach ($parentSequence as $id) {
+		$itemIds[$id] = true;
+	    }
+	}
+	if (isset($load['itemNavigator'])) {
+	    $navigator = array();
+	    $canViewParent = false;
+	    if (isset($item->parent->getChildrenFunction)) {
+		list ($ret, $peerDataItemIds) =
+		    call_user_func($item->parent->getChildrenFunction, $theme['actingUserId']);
+		if ($ret) {
+		    return $ret;
+		}
+	    } else if ($item->getParentId()) {
+		list ($ret, $canViewParent) = GalleryCoreApi::hasItemPermission(
+		    $item->getParentId(), 'core.view', $theme['actingUserId']);
+		if ($ret) {
+		    return $ret;
+		}
+		if ($canViewParent) {
+		    list ($ret, $parent) =
+			GalleryCoreApi::loadEntitiesById($item->getParentId(), 'GalleryItem');
+		    if ($ret) {
+			return $ret;
+		    }
+		    list ($ret, $peerDataItemIds) = GalleryCoreApi::fetchChildDataItemIds(
+			    $parent, null, null, $theme['actingUserId']);
+		    if ($ret) {
+			return $ret;
+		    }
+		}
+	    }
+	    if (!empty($peerDataItemIds)) {
+		foreach ($peerDataItemIds as $i => $id) {
+		    if ($id == $itemId) {
+			$dataItemIndex = $i;
+			break;
+		    }
+		}
+		if (isset($dataItemIndex)) {
+		    if ($dataItemIndex > 0) {
+			$navigator['first'] = $peerDataItemIds[0];
+			$navigator['back'] = $peerDataItemIds[$dataItemIndex - 1];
+		    }
+		    $lastIndex = count($peerDataItemIds) - 1;
+		    if ($dataItemIndex < $lastIndex) {
+			$navigator['next'] = $peerDataItemIds[$dataItemIndex + 1];
+			$navigator['last'] = $peerDataItemIds[$lastIndex];
+		    }
+		    foreach ($navigator as $id) {
+			$itemIds[$id] = true;
+		    }
+		}
+	    }
+	    if (empty($navigator)) {
+		unset($load['itemNavigator']);
+	    }
+	}
+	if (!empty($userIds)) {
+	    list ($ret, $list) =
+		GalleryCoreApi::loadEntitiesById(array_keys($userIds), 'GalleryUser');
+	    if ($ret) {
+		return $ret;
+	    }
+	    foreach ($list as $it) {
+		$entities[$it->getId()] = $it;
+	    }
+	}
+	if (!empty($itemIds)) {
+	    list ($ret, $list) =
+		GalleryCoreApi::loadEntitiesById(array_keys($itemIds), 'GalleryItem');
+	    if ($ret) {
+		return $ret;
+	    }
+	    foreach ($list as $it) {
+		$entities[$it->getId()] = $it;
+	    }
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * Always load 'item' and 'children'
+	 */
+	$theme['item'] = (array)$item;
+	if (!isset($theme['children'])) {
+	    $theme['children'] = array();
+	    foreach ($childItems as $child) {
+		$tmp = (array)$child;
+		$theme['children'][] = $tmp;
+	    }
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * 'owner'
+	 */
+	if (isset($load['owner'])) {
+	    $theme['item']['owner'] = (array)$entities[$item->getOwnerId()];
+	    for ($i = 0; $i < count($theme['children']); $i++) {
+		$theme['children'][$i]['owner'] =
+		    (array)$entities[$theme['children'][$i]['ownerId']];
+	    }
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * 'viewCount'
+	 */
+	if (isset($load['viewCount'])) {
+	    if (!empty($allItemIds)) {
+		list ($ret, $viewCount) = GalleryCoreApi::fetchItemViewCounts($allItemIds);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	    $theme['item']['viewCount'] = isset($viewCount[$itemId]) ? $viewCount[$itemId] : 0;
+	    $childData[] = 'viewCount';
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * 'childCount'
+	 */
+	if (isset($load['childCount'])) {
+	    if (!empty($allAlbumIds)) {
+		list ($ret, $childCount) =
+		    GalleryCoreApi::fetchChildCounts($allAlbumIds, $theme['actingUserId']);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	    foreach ($allAlbumIds as $id) {
+		if (!isset($childCount[$id])) {
+		    $childCount[$id] = 0;
+		}
+	    }
+	    $theme['childCount'] = isset($childCount[$itemId]) ? $childCount[$itemId]
+		: (isset($theme['allChildIds']) ? count($theme['allChildIds']) : 0);
+	    $childData[] = 'childCount';
+	}
+	if (isset($theme['childCount'])) {
+	    $theme['item']['childCount'] = $theme['childCount'];
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * 'descendentCount'
+	 */
+	if (isset($load['descendentCount'])) {
+	    if (!empty($allAlbumIds)) {
+		list ($ret, $descendentCount) =
+		    GalleryCoreApi::fetchDescendentCounts($allAlbumIds, $theme['actingUserId']);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	    foreach ($allAlbumIds as $id) {
+		if (!isset($descendentCount[$id])) {
+		    $descendentCount[$id] = 0;
+		}
+	    }
+	    $theme['descendentCount'] =
+		isset($descendentCount[$itemId]) ? $descendentCount[$itemId] : 0;
+	    $theme['item']['descendentCount'] = $theme['descendentCount'];
+	    $childData[] = 'descendentCount';
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * 'parents'
+	 */
+	if (isset($load['parents'])) {
+	    $theme['parents'] = array();
+	    foreach ($parentSequence as $id) {
+		list ($ret, $canSee) =
+		    GalleryCoreApi::hasItemPermission($id, 'core.view', $theme['actingUserId']);
+		if ($ret) {
+		    return $ret;
+		}
+		if ($canSee) {
+		    $theme['parents'][] = (array)$entities[$id];
+		}
+	    }
+	    if (isset($item->parent)) {
+		$theme['parents'][] = (array)$item->parent;
+	    }
+	    foreach ($theme['parents'] as $i => $parent) {
+		if (!isset($parent['urlParams'])) {
+		    $urlParams = array('view' => 'core.ShowItem', 'itemId' => $parent['id']);
+		    if (!empty($theme['parents'][$i + 1]['id'])) {
+			$urlParams['highlightId'] = $theme['parents'][$i + 1]['id'];
+		    } else if ($itemId && ($i + 1) == count($theme['parents'])) {
+			$urlParams['highlightId'] = $itemId;
+		    }
+		    $theme['parents'][$i]['urlParams'] = $urlParams;
+		}
+	    }
+	    $theme['parent'] = empty($theme['parents']) ? null :
+		$theme['parents'][count($theme['parents']) - 1];
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * 'systemLinks', 'itemLinks', 'itemSummaries'
+	 * Load links and content from all active modules
+	 */
+	if (isset($load['systemLinks'])
+		|| isset($load['itemLinks']) || isset($load['itemSummaries'])) {
+	    if (!empty($allItemIds)) {
+		list ($ret, $permissions) =
+		    GalleryCoreApi::fetchPermissionsForItems($allItemIds, $theme['actingUserId']);
+		if ($ret) {
+		    return $ret;
+		}
+	    } else {
+                $permissions = array();
+            }
+	    foreach ($permissions as $permission) {
+		if (isset($permission['core.delete'])) {
+		    $template->javascript('lib/yui/utilities.js');
+		    $template->javascript('lib/yui/container-min.js');
+		    list ($ret, $lang) = $gallery->getActiveLanguageCode();
+		    if ($ret) {
+			return $ret;
+		    }
+		    $urlGenerator =& $gallery->getUrlGenerator();
+		    /*
+		     * Need forceFullUrl because values given to ->javascript() are later run thru
+		     * generateUrl(array('href'=>$path)); need full url to avoid any distortion.
+		     * (that later call will actually shorten the URL again if appropriate)
+		     */
+		    $url = $urlGenerator->generateUrl(array('view' => 'core.ItemDeleteJs', 
+			'lang' => $lang), array('forceDirect' => true, 'forceFullUrl' => true));
+		    $template->javascript($url);
+		    break;
+		}
+	    }
+
+	    if (isset($load['systemLinks'])) {
+		$theme['systemLinks'] = array();
+	    }
+	    if (isset($load['itemLinks'])) {
+		$itemLinks = array($itemId => array());
+		foreach ($childIds as $id) {
+		    $itemLinks[$id] = array();
+		}
+	    }
+	    if (isset($load['itemSummaries']) && !empty($childIds)) {
+		foreach ($childIds as $id) {
+		    $itemSummaries[$id] = array();
+		}
+		$childData[] = 'itemSummaries';
+	    }
+
+	    list ($ret, $moduleStatus) = GalleryCoreApi::fetchPluginStatus('module');
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if (empty($load['childItemLinksDetailed'])) {
+		/* We always want detailed links for the current item */
+		$wantsDetailedLinks = array($itemId => 1);
+	    } else {
+		/* We want detailed links for everybody */
+		$wantsDetailedLinks = array_flip($allItemIds);
+	    }
+
+	    foreach ($moduleStatus as $moduleId => $status) {
+		if (empty($status['active'])) {
+		    continue;
+		}
+		$callbacks = array_flip(explode('|', $status['callbacks']));
+
+		$required = false;
+		foreach (array('systemLinks' => 'getSystemLinks',
+			       'itemLinks' => 'getItemLinks',
+			       'itemSummaries' => 'getItemSummaries') as $key => $callbackKey) {
+		    if (isset($load[$key]) && isset($callbacks[$callbackKey])) {
+			$required = true;
+			break;
+		    }
+		}
+
+		if (!$required) {
+		    /* This module doesn't have anything we need.  Don't bother with it */
+		    continue;
+		}
+
+		list ($ret, $module) = GalleryCoreApi::loadPlugin('module', $moduleId);
+		if ($ret) {
+		    if ($ret->getErrorCode() & ERROR_PLUGIN_VERSION_MISMATCH) {
+			continue;
+		    }
+		    return $ret;
+		}
+
+		if (isset($load['systemLinks']) && isset($callbacks['getSystemLinks'])) {
+		    /* We don't use the acting user for system links -- it's too confusing */
+		    list ($ret, $links) = $module->getSystemLinks();
+		    if ($ret) {
+			return $ret;
+		    }
+		    /* Add URL/moduleId keys */
+		    foreach ($links as $key => $value) {
+			$theme['systemLinks'][$moduleId . '.' . $key] = $value;
+		    }
+		}
+
+		if (isset($itemLinks) && isset($callbacks['getItemLinks']) && !empty($allItems)) {
+		    list ($ret, $links) = $module->getItemLinks(
+			$allItems, $wantsDetailedLinks, $permissions, $theme['actingUserId']);
+		    if ($ret) {
+			return $ret;
+		    }
+
+		    /* Add URL/moduleId keys */
+		    foreach ($links as $id => $list) {
+			foreach ($list as $link) {
+			    $link['moduleId'] = $moduleId;
+			    if (!isset($link['params'])) {
+				$link['params'] = array();
+			    }
+			    if (!isset($link['options'])) {
+				$link['options'] = array();
+			    }
+			    $itemLinks[$id][] = $link;
+			}
+		    }
+		}
+
+		if (isset($itemSummaries) && isset($callbacks['getItemSummaries'])) {
+		    list ($ret, $content) =
+			$module->getItemSummaries($childItems, $permissions, $template);
+		    if ($ret) {
+			return $ret;
+		    }
+		    foreach ($content as $id => $html) {
+			if (!empty($html)) {
+			    $itemSummaries[$id][$moduleId] = $html;
+			}
+		    }
+		}
+	    }
+
+	    if (isset($itemLinks)) {
+		foreach (array_keys($itemLinks) as $id) {
+		    usort($itemLinks[$id], array('GalleryTheme', '_sortItemLinks'));
+		}
+		$theme['itemLinks'] = $itemLinks[$itemId];
+		$childData[] = 'itemLinks';
+	    }
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * 'thumbnails'
+	 */
+	if (isset($load['thumbnails']) && !empty($childIds)) {
+	    list ($ret, $thumbnail) = GalleryCoreApi::fetchThumbnailsByItemIds($childIds);
+	    if ($ret) {
+		return $ret;
+	    }
+	    foreach (array_keys($thumbnail) as $id) {
+		if (!($thumbnail[$id]->getWidth() && $thumbnail[$id]->getHeight())) {
+		    list ($ret, $thumbnail[$id]) =
+			GalleryCoreApi::rebuildDerivativeCacheIfNotCurrent(
+			    $thumbnail[$id]->getId());
+		    if ($ret) {
+			return $ret;
+		    }
+		}
+		$thumbnail[$id] = (array)$thumbnail[$id];
+	    }
+	    $childData[] = 'thumbnail';
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * Populate data in children list
+	 */
+	if (!empty($childData)) {
+	    foreach (array_keys($theme['children']) as $i) {
+		$id = $theme['children'][$i]['id'];
+		foreach ($childData as $key) {
+		    if (isset(${$key}[$id])) {
+			$theme['children'][$i][$key] = ${$key}[$id];
+		    }
+		}
+	    }
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * 'pageNavigator'
+	 */
+	if (isset($load['pageNavigator']) && isset($theme['totalPages'])) {
+	    $page = GalleryUtilities::getRequestVariables('page');
+	    if (empty($page)) {
+		$page = 1;
+	    }
+
+	    /* Set up the navigator */
+	    $navigator = array();
+	    if ($page > 1) {
+		$navigator['first']['urlParams'] = $navigator['back']['urlParams'] =
+		    $theme['pageUrl'];
+		if ($page - 1 != 1) {
+		    $navigator['back']['urlParams']['page'] = $page - 1;
+		}
+	    }
+	    if ($page < $theme['totalPages']) {
+		$navigator['next']['urlParams'] = $navigator['last']['urlParams'] =
+		    $theme['pageUrl'];
+		$navigator['next']['urlParams']['page'] = $page + 1;
+		$navigator['last']['urlParams']['page'] = $theme['totalPages'];
+	    }
+	    $theme['navigator'] = $navigator;
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * 'itemNavigator', 'navThumbnails'
+	 */
+	if (isset($load['itemNavigator'])) {
+	    $thumbTable = array();
+	    if (isset($load['navThumbnails'])) {
+		list ($ret, $thumbTable) = GalleryCoreApi::fetchThumbnailsByItemIds($navigator);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	    foreach ($navigator as $key => $id) {
+		$navigator[$key] = array('urlParams' => $theme['pageUrl'],
+					 'item' => (array)$entities[$id]);
+		$navigator[$key]['urlParams']['itemId'] = $id;
+		if (isset($thumbTable[$id])) {
+		    $navigator[$key]['thumbnail'] = (array)$thumbTable[$id];
+		}
+	    }
+	    $theme['navigator'] = $navigator;
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * 'jumpRange'
+	 */
+	if (isset($load['jumpRange']) && isset($theme['totalPages'])) {
+	    $page = GalleryUtilities::getRequestVariables('page');
+	    if (empty($page)) {
+		$page = 1;
+	    }
+	    $windowSize = isset($params['pageWindowSize']) ? $params['pageWindowSize'] : 6;
+	    $jumpRange = array();
+	    $lowerPage = max($page - (int)($windowSize / 2), 1);
+	    $upperPage = min($page + (int)($windowSize / 2), $theme['totalPages']);
+	    if ($upperPage == 0) {
+		$upperPage = 1;
+	    }
+	    if ($upperPage == $theme['totalPages']) {
+		$lowerPage = max($upperPage - $windowSize, 1);
+	    } else if ($lowerPage == 1) {
+		$upperPage = min($lowerPage + ($windowSize-1), $theme['totalPages']);
+	    }
+	    for ($i = $lowerPage; $i <= $upperPage; $i++) {
+		$jumpRange[] = $i;
+	    }
+	    if ($lowerPage > 1) {
+		array_unshift($jumpRange, 1);
+	    }
+	    if ($upperPage < $theme['totalPages']) {
+		$jumpRange[] = $theme['totalPages'];
+	    }
+	    $theme['jumpRange'] = $jumpRange;
+	}
+
+	/*
+	 * --------------------------------------------------------------------------------------
+	 * 'imageViews'
+	 */
+	if (isset($load['imageViews'])) {
+	    /*
+	     * Figure out all possible views of this item that the user can see and get them into an
+	     * acceptable format for the template engine
+	     */
+	    $imageViews = array();
+	    $can = array();
+	    list ($ret, $permissions) =
+		GalleryCoreApi::getPermissions($itemId, $theme['actingUserId']);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    /* If the user can see resized versions, add those to the list */
+	    if (isset($permissions['core.viewResizes'])) {
+		/* Load the resizes */
+		list ($ret, $resizes) = GalleryCoreApi::fetchResizesByItemIds(array($itemId));
+		if ($ret) {
+		    return $ret;
+		}
+
+		if (!empty($resizes)) {
+		    foreach ($resizes[$itemId] as $resize) {
+			/* Rebuild the derivative if we don't have its dimensions */
+			if ($resize->getWidth() == 0 || $resize->getHeight() == 0) {
+			    list ($ret, $resize) =
+				GalleryCoreApi::rebuildDerivativeCacheIfNotCurrent(
+				    $resize->getId());
+			    if ($ret) {
+				return $ret;
+			    }
+			}
+
+			$tmp = (array)$resize;
+			$tmp['viewInline'] = 1;
+			$imageViews[] = $tmp;
+		    }
+		}
+	    }
+
+	    /* If the user can see the full version, add it to the list */
+	    $sourceImage = null;
+	    if (isset($permissions['core.viewSource'])) {
+		/* Add the full version */
+		list ($ret, $preferred) = GalleryCoreApi::fetchPreferredsByItemIds(array($itemId));
+		if ($ret) {
+		    return $ret;
+		}
+
+		/* Show the preferred item, if it's there */
+		if (empty($preferred)) {
+		    $sourceImage = (array)$item;
+		    $sourceImage['viewInline'] = $item->canBeViewedInline();
+		} else {
+		    $sourceImage = (array)$preferred[$itemId];
+		    $sourceImage['viewInline'] = true;
+		}
+		$sourceImage['itemTypeName'] = $item->itemTypeName();
+		$sourceImage['isSource'] = true;
+		$imageViews[] = $sourceImage;
+		$sourceImageViewIndex = sizeof($imageViews)-1;
+	    }
+
+	    /* If all else fails, just show the thumbnail */
+	    if (empty($imageViews)) {
+		/* Load the thumbnail */
+		list ($ret, $thumbnails) = GalleryCoreApi::fetchThumbnailsByItemIds(array($itemId));
+		if ($ret) {
+		    return $ret;
+		}
+
+		if (!empty($thumbnails)) {
+		    $tmp = (array)$thumbnails[$itemId];
+		    $tmp['viewInline'] = true;
+		    $imageViews[] = $tmp;
+		}
+	    }
+
+	    if (empty($imageViewsIndex)) {
+		$imageViewsIndex = 0;
+	    }
+
+	    if (empty($sourceImage['width'])) {
+		$fullSizeDimensions = $sourceImage['itemTypeName'][0];
+	    } else {
+		$fullSizeDimensions = $core->translate(
+		    array('text' => '%dx%d',
+			  'arg1' => $sourceImage['width'],
+			  'arg2' => $sourceImage['height']));
+	    }
+
+	    /* Don't let the index overflow the images array */
+	    $imageViewsIndex = min($imageViewsIndex, count($imageViews) - 1);
+	    $imageViewsIndex = max(0, $imageViewsIndex);
+	    if (isset($sourceImageViewIndex)) {
+		$theme['sourceImageViewIndex'] = $sourceImageViewIndex;
+	    }
+	    $theme['imageViews'] = $imageViews;
+	    $theme['sourceImage'] = $sourceImage;
+	    $theme['imageViewsIndex'] = $imageViewsIndex;
+	    $theme['fullSizeDimensions'] = $fullSizeDimensions;
+	}
+
+	/* -------------------------------------------------------------------------------------- */
+	if (isset($load['permissions']) && !isset($theme['permissions']) && $itemId) {
+	    list ($ret, $permissions) =
+		GalleryCoreApi::getPermissions($itemId, $theme['actingUserId']);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    foreach (array_keys($permissions) as $perm) {
+		$theme['permissions'][str_replace('.', '_', $perm)] = 1;
+	    }
+	}
+
+	if ($useCache && $this->_cacheablePage) {
+	    list ($ret, $shouldCache) = GalleryDataCache::shouldCache('write', 'partial');
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if ($shouldCache) {
+		$ret = GalleryDataCache::putPageData(
+		    'template', $item->getId(),
+		    array($item->getId(), $params, $dataToLoad, $childIds, $imageViewsIndex),
+		    serialize($template->_smarty->_tpl_vars));
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Sort an array of associative arrays on the 'text' key.
+     * @access private
+     */
+    function _sortItemLinks($a, $b) {
+	return strcmp($a['text'], $b['text']);
+    }
+
+    /**
+     * Return the number of items per page, or 0 if there is no pagination in this theme.
+     *
+     * @param array $params the theme parameters
+     * @return int
+     */
+    function getPageSize($params) {
+	if (!empty($params['rows']) && !empty($params['columns'])) {
+	    return $params['rows'] * $params['columns'];
+	}
+
+	if (!empty($params['perPage'])) {
+	    return $params['perPage'];
+	}
+
+	return 0;
+    }
+
+    /**
+     * Load all the necessary template data to render a page for an album.
+     *
+     * @param GalleryTemplate $template
+     * @param GalleryAlbumItem $item the album item to render
+     * @param array $params the theme parameters
+     * @param int $childIds the child item ids
+     * @return array GalleryStatus a status code
+     *         string path to a template file or array(html/redirect)
+     * @access private
+     */
+    function showAlbumPage(&$template, $item, $params, $childIds) {
+	return array(null, null);
+    }
+
+    /**
+     * Load all the necessary template data to render a page for a single item.
+     *
+     * @param GalleryTemplate $template
+     * @param GalleryItem $item the item to render, can be any subclass of GalleryItem
+     * @param array $params the theme parameters
+     * @return array GalleryStatus a status code
+     *         string path to a template file or array(html/redirect)
+     * @access private
+     */
+    function showPhotoPage(&$template, $item, $params) {
+	return array(null, null);
+    }
+
+    /**
+     * Load all the necessary template data to render a page for an administrative (or other) view.
+     *
+     * @param GalleryTemplate $template
+     * @param GalleryItem $item the item to render
+     * @param array $params the theme parameters
+     * @param string $templateFile the body template file from the view
+     * @return array GalleryStatus a status code
+     *         string path to a template file or array(html/redirect)
+     * @access private
+     */
+    function showAdminPage(&$template, $item, $params, $templateFile) {
+	return array(null, null);
+    }
+
+    /**
+     * Load all the necessary template data to render a page for a module view (any views that
+     * aren't user, site, or item admin eg slideshow or members list).
+     *
+     * @param GalleryTemplate $template
+     * @param GalleryItem $item the item to render
+     * @param array $params the theme parameters
+     * @param string $templateFile the body template file from the view
+     * @return array GalleryStatus a status code
+     *         string path to a template file or array(html/redirect)
+     * @access private
+     */
+    function showModulePage(&$template, $item, $params, $templateFile) {
+	return array(null, null);
+    }
+
+    /**
+     * Load all the necessary template data to render an error page.
+     *
+     * @param GalleryTemplate $template
+     * @return array GalleryStatus a status code
+     *         string path to a template file or array(html/redirect)
+     * @access private
+     */
+    function showErrorPage(&$template) {
+	return array(null, null);
+    }
+
+    /**
+     * Load all the necessary template data to render a progress bar page.
+     *
+     * @param GalleryTemplate $template
+     * @param GalleryItem $item the item to render
+     * @param array $params the theme parameters
+     * @return array GalleryStatus a status code
+     *         string path to a template file or array(html/redirect)
+     * @access private
+     */
+    function showProgressBarPage(&$template, $item, $params) {
+	return array(null, null);
+    }
+
+    /**
+     * Split the HTML content into its various component pieces.
+     *
+     * @param string $mainHtml the main html (<head>, <body>, etc)
+     * @param array $extraHtml any extra html that we've generated, like sidebar HTML
+     * @return array('headHtml' => ..., 'bodyHtml' => ...)
+     */
+    function splitHtml($mainHtml, $extraHtml) {
+	/*
+	 * Avoid regular expressions on very large strings due to PHP's pcre.backtrack_limit.
+	 * It's faster (no excessive backtracking) and actually required due to PHP 5.2.0's
+	 * pcre.backtrack_limit which is reached with large pages like AdminPlugins.
+	 */
+	$results = array();
+	if (($headStart = strpos($mainHtml, '<head>')) !== false) {
+	    if (($headEnd = strpos($mainHtml, '</head>', $headStart)) !== false) {
+		$headStart += strlen('<head>');
+		$results['headHtml'] = substr($mainHtml, $headStart, $headEnd - $headStart);
+
+		if (($bodyStart = strpos($mainHtml, '<body', $headEnd)) !== false) {
+		    if (($bodyStart = strpos($mainHtml, '>', $bodyStart)) !== false) {
+			if (($bodyEnd = strpos($mainHtml, '</body>', $bodyStart)) !== false) {
+			    $results['bodyHtml'] =
+				substr($mainHtml, ++$bodyStart, $bodyEnd - $bodyStart);
+			    $mainHtml = null;
+			}
+		    }
+		}
+	    }
+	}
+
+	if (empty($results['bodyHtml'])) {
+	    $results = array('bodyHtml' => $mainHtml);
+	}
+
+	/* If we extracted the sidebar, it'll be in our extra html, so move that over */
+	if (isset($extraHtml['sidebarBlocksHtml'])) {
+	    $results['sidebarBlocksHtml'] = $extraHtml['sidebarBlocksHtml'];
+	}
+
+	return $results;
+    }
+
+    /**
+     * @see GalleryPlugin::getPluginType
+     */
+    function getPluginType() {
+	return 'theme';
+    }
+
+    function setRequiredThemeApi($requirement) {
+	$this->_requiredThemeApi = $requirement;
+    }
+
+    function getRequiredThemeApi() {
+	return $this->_requiredThemeApi;
+    }
+
+    function setStandardSettings($standardSettings) {
+	$this->_standardSettings = $standardSettings;
+    }
+
+    function getStandardSettings() {
+	return $this->_standardSettings;
+    }
+}
+?>

@@ -1,0 +1,112 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper class for GalleryFileSystemEntities
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryFileSystemEntityHelper_simple {
+
+    /**
+     * @see GalleryCoreApi::fetchItemIdByPath
+     */
+    function fetchItemIdByPath($path) {
+	global $gallery;
+	if (empty($path)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	list ($ret, $rootId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.rootAlbum');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$rootId = (int)$rootId;
+
+	if ($path == '/') {
+	    return array(null, $rootId);
+	}
+
+	$currentId = $rootId;
+	foreach (preg_split('|/|', $path, -1, PREG_SPLIT_NO_EMPTY) as $pathComponent) {
+	    list ($ret, $currentId) =
+		GalleryCoreApi::fetchChildIdByPathComponent($currentId, $pathComponent);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, $currentId);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchChildIdByPathComponent
+     */
+    function fetchChildIdByPathComponent($parentId, $pathComponent) {
+	global $gallery;
+
+	if (empty($parentId) || empty($pathComponent)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER),
+			 null);
+	}
+
+	$storage =& $gallery->getStorage();
+
+	$query = '
+	SELECT
+	  [GalleryFileSystemEntity::id]
+	FROM
+	  [GalleryFileSystemEntity], [GalleryChildEntity]
+	WHERE
+	  [GalleryChildEntity::parentId] = ?
+	  AND
+	  [GalleryChildEntity::id] = [GalleryFileSystemEntity::id]
+	  AND
+	  [GalleryFileSystemEntity::pathComponent] = ?
+	';
+	$data = array();
+	$data[] = (int)$parentId;
+	$data[] = $pathComponent;
+
+	list ($ret, $searchResults) = $gallery->search($query, $data);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($searchResults->resultCount() == 0) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT, __FILE__, __LINE__,
+					      "Parent $parentId path $pathComponent"), null);
+	}
+
+	if ($searchResults->resultCount() > 1) {
+	    return array(GalleryCoreApi::error(ERROR_COLLISION), null);
+	}
+
+	$data = array();
+	$result = $searchResults->nextResult();
+	$targetId = (int)$result[0];
+
+	return array(null, $targetId);
+    }
+}
+?>

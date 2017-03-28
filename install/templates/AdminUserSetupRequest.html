@@ -1,0 +1,114 @@
+    <h1><?php print _('Admin User Setup') ?></h1>
+    
+    <?php if (isset($templateData['error'])): ?>
+    <div class="error">
+      <h2>
+      <?php print _("Please correct the following errors") ?>
+      </h2>
+    </div>
+	<?php endif; ?>
+
+    <p>
+      <?php print _("Every Gallery will have at least one administrator user who has full access to view/modify everything. Please choose a username and password for your main administrator account. You can add additional users later.") ?>
+    </p>
+
+    <form method="post" action="<?php generateUrl(sprintf('%s?step=%s', INDEX_PHP, $stepNumber)) ?>">
+      <table>
+	<?php if ($templateData['freshInstall']): ?>
+	<tr>
+	  <td class="label">
+	    <?php print _('Admin username') ?>
+	  </td>
+	  <td>
+	    <input type="text" size="25"
+	     name="adminName" value="<?php print $templateData['adminName']?>" />
+	  </td>
+	</tr>
+	<?php if (isset($templateData['error']['invalid_adminName'])): ?>
+	<tr>
+	  <td colspan="2" class="error">
+	    <?php print _('Please enter a valid user name') ?>
+	  </td>
+	</tr>
+	<?php endif; ?>
+	<?php endif; ?>
+	<?php if (isset($templateData['error']['passwordA_missing'])): ?>
+	<tr>
+	  <td colspan="2" class="error">
+	    <?php print _('Please enter a password') ?>
+	  </td>
+	</tr>
+	<?php endif; ?>
+	<tr>
+	  <td class="label">
+	    <?php if ($templateData['freshInstall']): ?>
+	    <?php print _('Password') ?>
+	    <?php else: ?>
+	    <?php print _('Setup password') ?>
+	    <?php endif; ?>
+	  </td>
+	  <td>
+	    <input type="password" size="25"
+	     name="passwordA" value="<?php print $templateData['passwordA']?>" />
+	    <input type="hidden" name="action" value="create"/>
+	  </td>
+	</tr>
+	<tr>
+	  <td class="label">
+	    <?php print _('(type again)') ?>
+	  </td>
+	  <td>
+	    <input type="password" size="25"
+	     name="passwordB" value="<?php print $templateData['passwordB']?>" />
+	  </td>
+	</tr>
+	<?php if ($templateData['freshInstall']): ?>
+	<tr>
+	  <td class="label">
+	    <?php print _('Admin email address') ?>
+	  </td>
+	  <td>
+	    <input type="text" size="25"
+	     name="email" value="<?php print $templateData['email']?>" />
+	  </td>
+	</tr>
+	<?php if (isset($templateData['error']['invalid_email'])): ?>
+	<tr>
+	  <td colspan="2" class="error">
+	    <?php print _('Please enter a valid email address') ?>
+	  </td>
+	</tr>
+	<?php endif; ?>
+	<tr>
+	  <td class="label">
+	    <?php print _('Admin full name (optional)') ?>
+	  </td>
+	  <td>
+	    <input type="text" size="25"
+	     name="fullName" value="<?php print $templateData['fullName']?>" />
+	  </td>
+	</tr>
+	<?php endif; ?>
+      </table>
+      <?php if (isset($templateData['error']['passwordB_missing'])): ?>
+      <p class="error">
+	<?php print _('Missing password!  Please enter the same password twice') ?>
+      </p>
+      <?php endif; ?>
+
+      <?php if (isset($templateData['error']['password_mismatch'])): ?>
+      <p class="error">
+	<?php print _('The passwords you entered do not match!  Please try again.') ?>
+      </p>
+      <?php endif; ?>
+    </form>
+
+    <?php if (!$templateData['freshInstall']): ?>
+    <div class="warning">
+      <?php print _("As you are reusing existing database tables, this is not a fresh install. This will only change the setup password, but not change the password of the site admin. To change the password of the site admin, choose the forgot password mechanism of Gallery.") ?>
+    </div>
+    <?php endif; ?>
+
+    <div class="go">
+	  <a href="javascript:document.forms[0].submit();" class="btn continue"><i></i><span><span></span><i></i><?php print $templateData['freshInstall'] ? _('Create') : _('Save') ?></span></a>
+    </div>

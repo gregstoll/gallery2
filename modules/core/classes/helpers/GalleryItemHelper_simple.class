@@ -1,0 +1,429 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper class for GalleryItems
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryItemHelper_simple {
+
+    /**
+     * @see GalleryCoreApi::fetchThemeId
+     */
+    function fetchThemeId($item) {
+	global $gallery;
+
+	/* Find the right theme for this item */
+	if (GalleryUtilities::isA($item, 'GalleryAlbumItem')) {
+	    $themeId = $item->getTheme();
+	} else {
+	    list ($ret, $parent) =
+		GalleryCoreApi::loadEntitiesById($item->getParentId(), 'GalleryAlbumItem');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $themeId = $parent->getTheme();
+	}
+
+	if (empty($themeId)) {
+	    list ($ret, $themeId) =
+		GalleryCoreApi::getPluginParameter('module', 'core', 'default.theme');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	/* No default?  We're screwed */
+	if (empty($themeId)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	return array(null, $themeId);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchChildCounts
+     */
+    function fetchChildCounts($itemIds, $userId=null) {
+	global $gallery;
+	if (!isset($userId)) {
+	    $userId = $gallery->getActiveUserId();
+	}
+
+	if (empty($itemIds)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	$counts = $missing = array();
+	foreach ($itemIds as $itemId) {
+	    $cacheKey = "GalleryItemHelper::fetchChildCounts($itemId, $userId)";
+	    if (GalleryDataCache::containsKey($cacheKey)) {
+		$counts[$itemId] = GalleryDataCache::get($cacheKey);
+	    } else {
+		$missing[] = $itemId;
+	    }
+	}
+
+	if (empty($missing)) {
+	    return array(null, $counts);
+	}
+	$parentIdMarkers = GalleryUtilities::makeMarkers(count($missing));
+
+	list ($ret, $aclIds) = GalleryCoreApi::fetchAccessListIds('core.view', $userId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (!empty($aclIds)) {
+	    $aclMarkers = GalleryUtilities::makeMarkers(count($aclIds));
+
+	    $query = sprintf('
+	    SELECT
+	      [GalleryChildEntity::parentId],
+	      COUNT([GalleryChildEntity::id])
+	    FROM
+	      [GalleryChildEntity], [GalleryAccessSubscriberMap]
+	    WHERE
+	      [GalleryChildEntity::parentId] IN (%s)
+	      AND
+	      [GalleryAccessSubscriberMap::itemId] = [GalleryChildEntity::id]
+	      AND
+	      [GalleryAccessSubscriberMap::accessListId] IN (%s)
+	    GROUP BY
+	      [GalleryChildEntity::parentId]
+	    ', $parentIdMarkers, $aclMarkers);
+
+	    $data = array_merge($missing, $aclIds);
+
+	    list ($ret, $searchResults) = $gallery->search($query, $data);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    while ($result = $searchResults->nextResult()) {
+		$counts[$result[0]] = $result[1];
+		GalleryDataCache::put("GalleryItemHelper::fetchChildCounts($result[0], $userId)",
+				      $result[1]);
+	    }
+	}
+
+	return array(null, $counts);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchDescendentCounts
+     */
+    function fetchDescendentCounts($itemIds, $userId=null) {
+	global $gallery;
+	if (!isset($userId)) {
+	    $userId = $gallery->getActiveUserId();
+	}
+
+	foreach ($itemIds as $idx => $id) {
+	    $itemIds[$idx] = (int)$id;
+	}
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryDescendentCountsMap',
+	    array('itemId', 'descendentCount'),
+	    array('userId' => $userId, 'itemId' => $itemIds));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$counts = array();
+	while ($result = $searchResults->nextResult()) {
+	    $counts[$result[0]] = $result[1];
+	}
+
+	/* Now we have all the results that were cached.  Get the rest */
+	$remaining = array();
+	foreach ($itemIds as $itemId) {
+	    if (!isset($counts[$itemId])) {
+		$remaining[] = $itemId;
+	    }
+	}
+
+	if (!empty($remaining)) {
+	    list ($ret, $results) =
+		GalleryItemHelper_simple::fetchUncachedDescendentCounts($remaining, $userId);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    /* Update the cache */
+	    foreach ($results as $itemId => $count) {
+		$ret = GalleryCoreApi::addMapEntry(
+		    'GalleryDescendentCountsMap',
+		    array('userId' => $userId, 'itemId' => $itemId, 'descendentCount' => $count));
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+
+	    /*
+	     * Merge the results together.
+	     * Array_merge() renumbers numerical indices so we can't use it
+	     */
+	    foreach ($results as $key => $value) {
+		$counts[$key] = $value;
+	    }
+	}
+
+	return array(null, $counts);
+    }
+
+    /**
+     * Fetch the number of descendents for a given item
+     *
+     * @param array $itemIds the item ids
+     * @param int $userId an optional user id (default is the current user)
+     * @return array GalleryStatus a status code
+     *               array(id => ##, id => ##)
+     */
+    function fetchUncachedDescendentCounts($itemIds, $userId) {
+	global $gallery;
+
+	if (!isset($userId)) {
+	    $userId = $gallery->getActiveUserId();
+	}
+
+	foreach ($itemIds as $idx => $id) {
+	    $itemIds[$idx] = (int)$id;
+	}
+	list ($ret, $aclIds) = GalleryCoreApi::fetchAccessListIds('core.view', $userId, false);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (empty($aclIds)) {
+	    return array(null, array());
+	}
+
+	$aclMarkers = GalleryUtilities::makeMarkers(count($aclIds));
+	$itemMarkers = GalleryUtilities::makeMarkers(count($itemIds));
+
+	$storage =& $gallery->getStorage();
+	list ($ret, $concat) = $storage->getFunctionSql(
+	    'CONCAT',
+	    array('[GalleryItemAttributesMap=1::parentSequence]',
+		  '[GalleryItemAttributesMap=1::itemId]',
+		  '\'/%\''));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $like) =
+	    $storage->getFunctionSql(
+		'LIKE',
+		array('[GalleryItemAttributesMap=2::parentSequence]',
+		      $concat)
+		);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$query = sprintf('
+	SELECT
+	  [GalleryItemAttributesMap=1::itemId],
+	  COUNT([GalleryItemAttributesMap=2::itemId])
+	FROM
+	  [GalleryItemAttributesMap=1],
+	  [GalleryItemAttributesMap=2],
+	  [GalleryAccessSubscriberMap]
+	WHERE
+	  [GalleryItemAttributesMap=1::itemId] IN (%s)
+	  AND
+	  %s
+	  AND
+	  [GalleryItemAttributesMap=2::itemId] = [GalleryAccessSubscriberMap::itemId]
+	  AND
+	  [GalleryAccessSubscriberMap::accessListId] IN (%s)
+	GROUP BY
+	  [GalleryItemAttributesMap=1::itemId]
+	', $itemMarkers, $like, $aclMarkers);
+
+	$data = array_merge($itemIds, $aclIds);
+	list ($ret, $searchResults) = $gallery->search($query, $data);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$counts = array();
+	while ($result = $searchResults->nextResult()) {
+	    $counts[$result[0]] = $result[1];
+	}
+	foreach ($itemIds as $itemId) {
+	    if (!isset($counts[$itemId])) {
+		$counts[$itemId] = 0;
+	    }
+	}
+
+	return array(null, $counts);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchItemIdCount
+     */
+    function fetchItemIdCount($itemType, $permission='core.view', $userId=null) {
+	global $gallery;
+	if (!isset($userId)) {
+	    $userId = $gallery->getActiveUserId();
+	}
+
+	if (empty($itemType)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	$cacheKey = "GalleryItemHelper::fetchItemIdCount($itemType, $permission, $userId)";
+	if (GalleryDataCache::containsKey($cacheKey)) {
+	    $count = GalleryDataCache::get($cacheKey);
+	} else {
+	    list ($ret, $aclIds) =
+		GalleryCoreApi::fetchAccessListIds($permission, $userId);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if (!empty($aclIds)) {
+		$aclMarkers = GalleryUtilities::makeMarkers(count($aclIds));
+
+		$query = sprintf('
+		SELECT
+		  COUNT([GalleryItem::id])
+		FROM
+		  [GalleryEntity], [GalleryItem], [GalleryAccessSubscriberMap]
+		WHERE
+		  [GalleryEntity::entityType] = ?
+		  AND
+		  [GalleryItem::id] = [GalleryEntity::id]
+		  AND
+		  [GalleryAccessSubscriberMap::itemId] = [GalleryEntity::id]
+		  AND
+		  [GalleryAccessSubscriberMap::accessListId] IN (%s)
+		', $aclMarkers);
+		$data = array_merge(array($itemType), $aclIds);
+
+		list ($ret, $searchResults) = $gallery->search($query, $data);
+		if ($ret) {
+		    return array($ret, null);
+		}
+
+		if ($searchResults->resultCount() != 1) {
+		    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
+		}
+
+		$result = $searchResults->nextResult();
+		$count = (int)$result[0];
+	    } else {
+		$count = 0;
+	    }
+
+	    GalleryDataCache::put($cacheKey, $count);
+	}
+
+	return array(null, $count);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchAlbumTree
+     */
+    function fetchAlbumTree($itemId=null, $depth=null, $userId=null) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+	if (!isset($userId)) {
+	    $userId = $gallery->getActiveUserId();
+	}
+
+	list ($ret, $aclIds) = GalleryCoreApi::fetchAccessListIds('core.view', $userId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (empty($aclIds)) {
+	    return array(null, array());
+	}
+	$aclMarkers = GalleryUtilities::makeMarkers(count($aclIds));
+
+	if (!isset($itemId)) {
+	    list ($ret, $itemId) = GalleryCoreApi::getDefaultAlbumId();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+	list ($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($itemId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$ret = GalleryCoreApi::assertHasItemPermission($itemId, 'core.view');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$parentSequence[] = $itemId;
+	$parentSequence = implode('/', $parentSequence);
+
+	$query = sprintf('
+	SELECT
+	  [GalleryAlbumItem::id],
+	  [GalleryItemAttributesMap::parentSequence],
+	  [GalleryItemAttributesMap::orderWeight]
+	FROM
+	  [GalleryAlbumItem], [GalleryItemAttributesMap], [GalleryAccessSubscriberMap]
+	WHERE
+	  [GalleryAlbumItem::id] = [GalleryItemAttributesMap::itemId]
+	  AND
+	  [GalleryItemAttributesMap::parentSequence] LIKE \'%s/%%\'
+	  AND
+	  [GalleryAlbumItem::id] = [GalleryAccessSubscriberMap::itemId]
+	  AND
+	  [GalleryAccessSubscriberMap::accessListId] IN (%s)
+	ORDER BY
+	  [GalleryItemAttributesMap::parentSequence],
+	  [GalleryItemAttributesMap::orderWeight]
+	', $parentSequence, $aclMarkers);
+
+	$data = $aclIds;
+
+	list ($ret, $searchResults) = $gallery->search($query, $data);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$tree = array();
+	$pathlen = strlen($parentSequence) + 1;
+	while ($result = $searchResults->nextResult()) {
+	    $path = explode('/', substr($result[1], $pathlen) . $result[0]);
+	    if (isset($depth) && count($path) > $depth) {
+		continue;
+	    }
+	    $branch =& $tree;
+	    foreach ($path as $id) {
+		if (isset($branch[$id])) {
+		    $branch =& $branch[$id];
+		}
+	    }
+	    $branch[$result[0]] = array();
+	}
+
+	return array(null, $tree);
+    }
+}
+?>

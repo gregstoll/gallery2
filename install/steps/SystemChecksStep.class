@@ -1,0 +1,531 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * System checks
+ * @package Install
+ */
+class SystemChecksStep extends InstallStep {
+    function stepName() {
+	return _('System Checks');
+    }
+
+    /*
+     * Returns the exact bytes value from a php.ini setting
+     * Copied from PHP.net's manual entry for ini_get()
+     */
+    function _getBytes($val) {
+	$val = trim($val);
+	$last = $val{strlen($val)-1};
+	switch ($last) {
+	case 'g':
+	case 'G':
+	    $val *= 1024;
+	case 'm':
+	case 'M':
+	    $val *= 1024;
+	case 'k':
+	case 'K':
+	    $val *= 1024;
+	}
+	return $val;
+    }
+
+    function processRequest() {
+	/* Zend test */
+	if (!empty($_GET['zendtest'])) {
+	    header("Content-Type: text/plain");
+	    header("Content-Length: 8");
+	    $x = array(new stdclass());
+	    /* v-- This may cause PHP to crash! */
+	    $x = $x[0];
+	    print "SUCCESS\n";
+	    return false;
+	}
+	/* Normal request */
+
+	/* Create GalleryStub to store information for the install core step / install log */
+	global $galleryStub;
+	$galleryStub = new GalleryStub();
+	$failCount = 0;
+	$suggestedHtaccess = array();
+	$setTimeLimitAvailable = false;
+
+	$template = new StatusTemplate();
+	$template->renderHeader(true);
+	$template->renderStatusMessage(_('Performing system checks'), '', 0);
+
+	/* assert compatible version of PHP, we accept 4.3.0+ / 5.0.4+ */
+	if (!function_exists('version_compare') || version_compare(phpversion(), '4.3.0', '<')
+		|| (version_compare(phpversion(), '5.0.0', '>=')
+		    && version_compare(phpversion(), '5.0.4', '<'))) {
+	    $templateData['check'][] =
+		array('title' => _('PHP version &gt;= 4.3.0 or &gt;= 5.0.4'),
+		      'error' => true,
+		      'notice' => sprintf(
+			  _("Error: Gallery 2 requires PHP version 4.3.0 or newer or 5.0.4 or " .
+			    "newer. You have PHP version %s installed. Contact your webserver " .
+			    "administrator to request an upgrade, available at the %sPHP " .
+			    "website%s."), phpversion(), '<a href="http://php.net/">', '</a>'));
+	    $failCount++;
+	} else {
+	    $templateData['check'][] =
+		array('title' => _('PHP Version'), 'success' => true);
+	}
+
+	/* assert that __FILE__ works correctly */
+	if (!SystemChecksStep::CheckFileDirective()) {
+	    $templateData['check'][] =
+		array('title' => _('FILE directive supported'),
+		      'error' => true,
+		      'notice' => _('Error: your PHP __FILE__ directive is not functioning ' .
+				    'correctly. Please file a support request with your ' .
+				    'webserver administrator or in the Gallery forums.'));
+	    $failCount++;
+	} else {
+	    $templateData['check'][] =
+		array('title' => _('FILE Directive'), 'success' => true);
+	}
+
+	/* Make sure that safe mode is not enabled */
+	if (GalleryUtilities::getPhpIniBool('safe_mode')) {
+	    $templateData['check'][] =
+		array('title' => _('Safe mode disabled'),
+		      'error' => true,
+		      'notice' => _('Error: Your version of PHP is configured with safe mode ' .
+			  'enabled.  You must disable safe mode before Gallery will run.'));
+	    $failCount++;
+	} else {
+	    $templateData['check'][] =
+		array('title' => _('Safe Mode'), 'success' => true);
+	}
+
+	/* Make sure we have PCRE support */
+	if (!function_exists('preg_match') || !function_exists('preg_replace')) {
+	    $templateData['check'][] =
+		array('title' => _('Regular expressions'),
+		      'error' => true,
+		      'notice' => sprintf(
+			  _('Error: Your PHP is configured without support for %sPerl Compatible ' .
+			    'Regular Expressions%s. You must enable these functions before ' .
+			    'Gallery will run.'), '<a href="http://php.net/pcre">', '</a>'));
+	    $failCount++;
+	} /* skip showing 'success' for this one */
+
+	/* Warning when exec() is disabled */
+	if (in_array('exec', preg_split('/,\s*/', ini_get('disable_functions')))) {
+	    $templateData['check'][] =
+		array('title' => _('exec() allowed'),
+		      'warning' => true,
+		      'notice' =>
+		      _('Warning: The exec() function is disabled in your PHP by the <b>disabled' .
+			'_functions</b> parameter in php.ini. You won\'t be able to use modules ' .
+			'that require external binaries (e.g. ImageMagick, NetPBM or Ffmpeg). ' .
+			'This can only be set server-wide, so you will need to change it in the ' .
+			'global php.ini.'),
+		);
+	} else {
+	    $templateData['check'][] =
+		array('title' => _('exec() allowed'), 'success' => true);
+	}
+
+	/* Warning when set_time_limit() is disabled */
+	if (in_array('set_time_limit', preg_split('/,\s*/', ini_get('disable_functions')))) {
+	    $timeLimit = ini_get('max_execution_time');
+	    $templateData['check'][] =
+		array('title' => _('set_time_limit() allowed'),
+		      'warning' => true,
+		      'notice' => sprintf(
+			  _('Warning: The set_time_limit() function is disabled in your PHP by ' .
+			    'the <b>disabled_functions</b> parameter in php.ini.  Gallery can ' .
+			    'function with this setting, but it will not operate reliably.  ' .
+			    'Any operation that takes longer than %d seconds will fail (and in ' .
+			    'some cases just return a blank page) possibly leading to data ' .
+			    'corruption.'), $timeLimit),
+		);
+	} else {
+	    $templateData['check'][] =
+		array('title' => _('set_time_limit() allowed'), 'success' => true);
+
+	    /* Set the time limit large enough for the remaining checks (slow systems) */
+	    set_time_limit(180);
+	    $setTimeLimitAvailable = true;
+	}
+
+	$template->renderStatusMessage(_('Performing system checks'), '', 0.02);
+
+	/* Make sure filesystem operations are allowed */
+	$missingFilesystemFunctions = array();
+	foreach (array('fopen', 'fclose', 'fread', 'fwrite', 'file', 'copy', 'rename', 'readfile',
+		'file_get_contents', 'copy', 'move_uploaded_file', 'file_exists', 'tempnam', 'glob',
+		'closedir', 'stat', 'unlink', 'rmdir', 'mkdir', 'getcwd', 'chdir', 'opendir',
+		'readdir', 'chmod') as $function) {
+	    if (!function_exists($function)) {
+		$missingFilesystemFunctions[] = $function;
+	    }
+	}
+	if (!empty($missingFilesystemFunctions)) {
+	    $templateData['check'][] =
+		array('title' => _('Filesystem Operations'),
+		      'error' => true,
+		      'notice' => sprintf(
+			  _('Error: Essential filesystem operations are disabled in your PHP by ' .
+			    'the <b>disabled_functions</b> parameter in php.ini. You must allow ' .
+			    'these functions before Gallery will run. These functions are ' .
+			    'missing: %s.'),
+			  implode(', ', $missingFilesystemFunctions)));
+	    $failCount++;
+	} /* skip showing 'success' for this one */
+
+	/* Warning if memory_limit is set and is too low */
+	$memoryLimit = ini_get('memory_limit');
+	$title = sprintf('%s (%s)', _('Memory limit'),
+			 ($memoryLimit == '' ? _('no limit') : $memoryLimit . 'b'));
+	$minimumMemoryLimit = 16;
+	if ($memoryLimit != ''
+		&& ($this->_getBytes($memoryLimit) / (1024 * 1024)) < $minimumMemoryLimit) {
+	    $templateData['check'][] =
+		array('title' => $title,
+		      'warning' => true,
+		      'notice' => sprintf(
+			  _('Warning: Your PHP is configured to limit the memory to %sb (<b>' .
+			    'memory_limit</b> parameter in php.ini). You should raise this limit ' .
+			    'to at least <b>%sMB</b> for proper Gallery operation.'),
+			  $memoryLimit, $minimumMemoryLimit),
+		);
+	    $suggestedHtaccess[] = sprintf('php_value memory_limit %sM', $minimumMemoryLimit);
+	} else {
+	    $templateData['check'][] =
+		array('title' => $title, 'success' => true);
+	}
+
+	/* Warning if file_uploads are not allowed */
+	if (! GalleryUtilities::getPhpIniBool('file_uploads')) {
+	    $templateData['check'][] =
+		array('title' => _('File uploads allowed'),
+		      'warning' => true,
+		      'notice' =>
+		      _('Warning: Your PHP is configured not to allow file uploads (<b>file_' .
+			'uploads</b> parameter in php.ini). You will need to enable this option ' .
+			'if you want to upload files to your Gallery with a web browser.'),
+		);
+	    $suggestedHtaccess[] = 'php_flag file_uploads on';
+	} else {
+	    $templateData['check'][] =
+		array('title' => _('File uploads allowed'), 'success' => true);
+	}
+
+	/* Warning if upload_max_filesize is less than 2M */
+	$title = sprintf('%s (%sb)', _('Maximum upload size'), ini_get('upload_max_filesize'));
+	$minimumUploadsize = 2;
+	$uploadSize = $this->_getBytes(ini_get('upload_max_filesize')) / (1024 * 1024);
+	if ($uploadSize < $minimumUploadsize) {
+	    $templateData['check'][] =
+		array('title' => $title,
+		      'warning' => true,
+		      'notice' => sprintf(
+			  _('Warning: Your PHP is configured to limit the size of file uploads to' .
+			    ' %sb (<b>upload_max_filesize</b> parameter in php.ini). You should ' .
+			    'raise this limit to allow uploading bigger files.'),
+			  ini_get('upload_max_filesize')),
+		);
+	    $suggestedHtaccess[] = sprintf('php_value upload_max_filesize %sM', $minimumUploadsize);
+	} else {
+	    $templateData['check'][] =
+		array('title' => $title, 'success' => true);
+	}
+
+	/* Warning if post_max_size is less than 2M */
+	$title = sprintf('%s (%sb)', _('Maximum POST size'), ini_get('post_max_size'));
+	$minimumPostsize = 2;
+	$postSize = $this->_getBytes(ini_get('post_max_size')) / (1024 * 1024);
+	if ($postSize < $minimumPostsize) {
+	    $templateData['check'][] =
+		array('title' => $title,
+		      'warning' => true,
+		      'notice' => sprintf(
+			  _('Warning: Your PHP is configured to limit the post data to a maximum ' .
+			    'of %sb (<b>post_max_size</b> parameter in php.ini). You should raise' .
+			    ' this limit to allow uploading bigger files.'),
+			  ini_get('post_max_size')),
+		);
+	    $suggestedHtaccess[] = sprintf('php_value post_max_size %sM', $minimumPostsize);
+	} else {
+	    $templateData['check'][] =
+		array('title' => $title, 'success' => true);
+	}
+
+	/* Check for gettext support */
+	$title = _('Translation support');
+	if (!function_exists('dgettext')) {
+	    $templateData['check'][] =
+		array('title' => $title,
+		      'warning' => true,
+		      'notice' => sprintf(
+			  _('Your webserver does not support localization. To enable support for ' .
+			    'additional languages please instruct your system administrator to ' .
+			    'reconfigure PHP with the %sgettext%s option enabled.'),
+			  '<a href="http://php.net/gettext">', '</a>'));
+	} else if (!function_exists('bind_textdomain_codeset')) {
+	    $templateData['check'][] =
+		array('title' => $title,
+		      'warning' => true,
+		      'notice' => sprintf(
+			  _('Your PHP is missing the function %sbind_textdomain_codeset%s. This ' .
+			    'means Gallery may display extended characters for some languages ' .
+			    'incorrectly.'),
+			  '<a href="http://php.net/bind_textdomain_codeset">', '</a>'));
+	} else if (!function_exists('dngettext')) {
+	    $templateData['check'][] =
+		array('title' => $title,
+		      'warning' => true,
+		      'notice' => sprintf(
+			  _('Your PHP is missing the function %sdngettext%s. This means Gallery ' .
+			    'will be unable to translate plural forms.'),
+			  '<a href="http://php.net/dngettext">', '</a>'));
+	} else {
+	    $templateData['check'][] = array('title' => $title, 'success' => true);
+	}
+
+	/* $x=$x[0] <--(an object) can crash PHP with zend.ze1_compatibility_mode ON */
+	if (GalleryUtilities::getPhpIniBool('zend.ze1_compatibility_mode')) {
+	    $templateData['check'][] =
+		array('title' => _('Zend compatibility mode'),
+		      'warning' => true,
+		      'notice' => sprintf(
+			  _('Warning: Your PHP is configured with Zend ze1_compatibility_mode ' .
+			    'which can cause PHP to crash.  Click %shere%s to test your PHP.  ' .
+			    'If you see "SUCCESS" then your PHP is ok.  If you get an ' .
+			    'error or no response then you must turn off ze1_compatibility_mode ' .
+			    'before proceeding.'),
+			  sprintf('<a href="%s">',
+				  INDEX_PHP . '?step=' . $this->_stepNumber . '&amp;zendtest=1'),
+			  '</a>'),
+		);
+	} /* skip showing 'success' for this one */
+
+	/* Warning if putenv is disabled */
+	if (in_array('putenv', preg_split('/,\s*/', ini_get('disable_functions')))) {
+	    $templateData['check'][] =
+		array('title' => _('putenv() allowed'),
+		      'warning' => true,
+		      'notice' =>
+		      _('Warning: The putenv() function is disabled in your PHP by the <b>' .
+			'disabled_functions</b> parameter in php.ini.  Gallery can function with ' .
+			'this setting, but on some rare systems Gallery will be unable to run in ' .
+			'other languages than the system language and English.'),
+		);
+	} /* skip showing 'success' for this one */
+
+	/* Warning if output_buffering / handlers are enabled */
+	$outputBuffers = array();
+	foreach (array('output_buffering', 'zlib.output_compression') as $outputFunction) {
+	    if (GalleryUtilities::getPhpIniBool($outputFunction) ||
+		    (int) ini_get($outputFunction) > 0) {
+		$outputBuffers[] = $outputFunction;
+	    }
+	}
+	foreach (array('output_handler', 'zlib.output_handler') as $outputHandler) {
+	    if (($value = ini_get($outputHandler)) && !empty($value)) {
+		$outputBuffers[] = $outputHandler;
+	    }
+	}
+	if (!empty($outputBuffers)) {
+	    $templateData['check'][] =
+		array('title' => _('Output buffering disabled'),
+		      'warning' => true,
+		      'notice' => sprintf(
+			  _('Warning: Output buffering is enabled in your PHP by the <b>%s</b> ' .
+			    'parameter(s) in php.ini.  Gallery can function with this setting - ' .
+			    'downloading files is even faster - but Gallery might be unable to ' .
+			    'serve large files (e.g. large videos) and run into the memory limit.' .
+			    ' Also, some features like the progress bars might not work correctly' .
+			    ' if output buffering is enabled unless ini_set() is allowed.'),
+			  implode(', ', $outputBuffers)),
+		);
+	} /* skip showing 'success' for this one */
+
+	$template->renderStatusMessage(_('Performing system checks'), '', 0.06);
+
+	/* Check all files against MANIFEST */
+	$title = _('Gallery file integrity');
+	if (!SystemChecksStep::CheckFileDirective() || !empty($missingFilesystemFunctions)) {
+	    $templateData['check'][] =
+		array('title' => $title,
+		      'warning' => true,
+		      'notice' => _('Test skipped due to other errors.'));
+	} else {
+	    /* Error if no themes are available */
+	    if (!SystemChecksStep::AssertThemeIsAvailable()) {
+		$templateData['check'][] =
+		    array('title' => _('Theme available'),
+			  'error' => true,
+			  'notice' => sprintf(
+				_('Error: There must be at least one theme in the %s folder!'),
+				dirname(dirname(dirname(__FILE__)))
+					. DIRECTORY_SEPARATOR . 'themes')
+			);
+		$failCount++;
+	    } /* skip showing 'success' for this one */
+
+	    /* Now check the MANIFEST files */
+	    $isSvnInstall = file_exists(dirname(__FILE__) . '/.svn');
+	    $manifest = SystemChecksStep::CheckManifest($template, $setTimeLimitAvailable);
+	    if (!isset($manifest)) {
+		$templateData['check'][] =
+		    array('title' => $title,
+			  'warning' => true,
+			  'notice' => _('Manifest missing or inaccessible.'));
+
+		$galleryStub->setConfig('systemchecks.fileintegrity',
+					'Manifest missing or inaccessible.');
+	    } else if (empty($manifest['missing']) && empty($manifest['modified'])
+		       && empty($manifest['shouldRemove'])) {
+		$templateData['check'][] = array('title' => $title, 'success' => true);
+
+		$galleryStub->setConfig('systemchecks.fileintegrity',
+					'Ok');
+	    } else {
+		ob_start();
+		include(dirname(__FILE__) . '/../templates/ManifestSystemCheck.html');
+		$notice = ob_get_contents();
+		ob_end_clean();
+
+		$templateData['check'][] =
+		    array('title' => $title,
+			  'warning' => true,
+			  'notice' => $notice);
+
+		if (empty($manifest['missing']) && empty($manifest['modified'])) {
+		    $galleryStub->setConfig('systemchecks.fileintegrity',
+					    'There are some old files');
+		} else {
+		    $galleryStub->setConfig('systemchecks.fileintegrity',
+					    'There are missing/modified files!');
+		}
+	    }
+	    $galleryStub->setConfig('systemchecks.issvninstall', $isSvnInstall);
+	}
+
+	$template->renderStatusMessage(_('Performing system checks'), '', 1);
+	$template->hideStatusBlock();
+
+	$templateData['suggestedHtaccess'] = join("\n", $suggestedHtaccess);
+	$templateData['bodyFile'] = 'SystemChecks.html';
+	$this->setComplete($failCount == 0);
+	$this->setInError($failCount > 0);
+	$template->renderBodyAndFooter($templateData);
+	return false;
+    }
+
+    function CheckFileDirective() {
+	if (strstr(__FILE__, 'install/steps/SystemChecksStep.class') ||
+	    strstr(__FILE__, '\\install\\steps\\SystemChecksStep.class')) {
+	    return true;
+	} else {
+	    return false;
+	}
+    }
+
+    /** Verify that there is at least one themes/.../theme.inc file. */
+    function AssertThemeIsAvailable() {
+	$themesFolder = dirname(dirname(dirname(__FILE__))) . '/themes/' ;
+	if (!file_exists($themesFolder)) {
+	    return false;
+	}
+	$dh = opendir($themesFolder);
+	if (!$dh) {
+	    return false;
+	}
+	while (false !== ($folder = readdir($dh))) {
+	    if ($folder == '..' || $folder == '.') {
+		continue;
+	    }
+	    if (file_exists($themesFolder . $folder . '/theme.inc')) {
+		closedir($dh);
+		return true;
+	    }
+	}
+	closedir($dh);
+	return false;
+    }
+
+    function CheckManifest(&$statusMonitor, $useSetTimeLimit) {
+	$base = realpath(dirname(__FILE__) . '/../..') . '/';
+
+	if ($useSetTimeLimit) {
+	    set_time_limit(180);
+	}
+	$manifest = GalleryUtilities::readManifest();
+	if (empty($manifest)) {
+	    return null;
+	}
+
+	$statusMonitor->renderStatusMessage(_('Performing system checks'), '', 0.1);
+	if ($useSetTimeLimit) {
+	    set_time_limit(180);
+	}
+
+	$missing = $modified = $shouldRemove = array();
+	$stepSize = max((int)(count($manifest) / 22), 1);
+	$i = 0;
+	foreach ($manifest as $file => $info) {
+	    $i++;
+	    if ($file == 'MANIFEST') {
+		continue;
+	    }
+	    $path = $base . $file;
+
+	    if ($i % $stepSize == 0) {
+		$statusMonitor->renderStatusMessage(_('Performing system checks'), '',
+				0.12 + $i / $stepSize * 0.04);
+		if ($useSetTimeLimit) {
+		    set_time_limit(180);
+		}
+	    }
+
+	    if (!empty($info['removed'])) {
+		if (file_exists($path)) {
+		    $shouldRemove[] = $file;
+		}
+	    } else if (!file_exists($path)) {
+		$missing[] = $file;
+	    } else {
+		/*
+		 * Use size comparison instead of checksum for speed.  We have
+		 * two sizes, one calculated with unix eols, one with windows eols.
+		 */
+		$actualSize = filesize($path);
+		if ($actualSize != $info['size'] && $actualSize != $info['size_crlf']) {
+		    /* This can be useful debug info */
+		    if (false) {
+			printf("%s (expected: %s/%s, actual: %s)<br/>", $file,
+			       $info['size'], $info['size_crlf'], $actualSize);
+		    }
+		    $modified[] = $file;
+		}
+	    }
+	}
+
+	return array('missing' => $missing, 'modified' => $modified,
+		     'shouldRemove' => $shouldRemove);
+    }
+}
+?>

@@ -1,0 +1,293 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * The API for module controllers.
+ * This class defines the API for controller classes used by the various modules to
+ * perform requested operations.
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class GalleryController {
+
+    /**
+     * Take the appropriate action based on the user input provided.
+     *
+     * When done, we return a data structure with results from the controller's actions and
+     * information about where we should send the user next.  We can either delegate the user
+     * to a view in the same request, or we can redirect the user to a different url.  Whenever
+     * a controller makes a change to the data model, it should pass back a redirect so that
+     * the browser is sent to a fresh page.  Otherwise if you hit reload on the browser it will
+     * want to re-post the form data and it will attempt to change the model again, which may
+     * not be what the user wants.
+     *
+     * To redirect, return:
+     * <pre>
+     *     array('redirect' => [url params],
+     *           'status' => [status data])
+     * </pre>
+     *
+     * To delegate, return:
+     * <pre>
+     *     array('delegate' => [url params],
+     *           'return' => [boolean],   <i>optional</i>
+     *           'error' => [error],
+     *           'status' => [status data])
+     * </pre>
+     *
+     * If you delegate, your form and request variables will persist to the view, since it is
+     * being handled inside the same request.  However, if you redirect you'll have to put any
+     * form variables that you want to pass to the subsequent view into the redirect url, since
+     * it will be processed in a new request.  The browser will receive a redirect and then post
+     * the new url.  So for example, if you want to redirect to a confirmation view and specify
+     * a username to that view, you'd return:
+     *
+     * <pre>
+     *    array('redirect' => array('view' => 'module.Confirmation',
+     *                              'username' => 'johndoe'),
+     *          'status' => array('success' => 'true'),
+     *          'error' => array())
+     * </pre>
+     *
+     * <b>Status</b> data is passed to the view and can be in any form that you want.
+     * Typically it's simple key value pairs, like this:
+     * <pre>
+     *    array('myAction' => 'wasSuccessful')
+     * </pre>
+     *
+     * If you pass status data back on a redirect, it will be automatically stored in the session
+     * and the url will be modified to contain a marker to this status information.  After the
+     * redirect, we'll retrieve it back from the database and pass it to the view.  Status data
+     * sent back upon delegation is passed directly to the view.
+     *
+     * <b>Error</b> data is an array of values, like this:
+     * <pre>
+     *    array('form[widget][missing]')
+     * </pre>
+     *
+     * This data is only processed on delegation.  It gets put into the request and is accessible
+     * when the delegated view is called.  Since we only redirect on success, you never pass back
+     * error data when you redirect.
+     *
+     * <b>Return</b> is a special parameter.  If you set this to a non-false value, it will look
+     * for a special request variable called "return" in the request scope.  This variable is
+     * expected to contain a URL, and we'll return a redirect to that URL.  This is useful in
+     * the case where we want to use this controller in the middle of a workflow.  A good example
+     * of this is when we click the "Login" link on the main page.  We pass control to the
+     * UserLogin controller, and when its done, it uses the "return" flag to indicate that we
+     * should return to the URL where the login link was clicked.
+     *
+     * @param array $form the form values
+     * @return array GalleryStatus a status code
+     *               return-array
+     */
+    function handleRequest($form) {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+    }
+
+    /**
+     * Load a controller
+     *
+     * Be very security conscious about checking the inputs for possible misuse
+     *
+     * @param string $controllerName a controller name (eg. 'core.Logout')
+     * @return array GalleryStatus a status code
+     *               GalleryController a controller
+     * @static
+     */
+    function loadController($controllerName) {
+	global $gallery;
+
+	/* Continue to support old style : separator for a while */
+	if (preg_match('/^(\w+)[.:](\w+)$/', $controllerName, $regs) == 1) {
+	    $module = $regs[1];
+	    $class = $regs[2];
+	} else {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					       "$controllerName can't be parsed"), null);
+	}
+
+	/* If the module is not active, only let site admins use the config controller */
+	list ($ret, $plugin) = GalleryCoreApi::loadPlugin('module', $module);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	list ($ret, $isActive) = $plugin->isActive();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (!$isActive) {
+	    if ($controllerName == $plugin->getConfigurationView()) {
+		$ret = GalleryCoreApi::assertUserIsSiteAdministrator();
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    } else {
+		return array(GalleryCoreApi::error(ERROR_PERMISSION_DENIED), null);
+	    }
+	}
+
+	$controllerClassName = $class . 'Controller';
+	if (!class_exists($controllerClassName)) {
+	    $moduleBaseDir = GalleryCoreApi::getCodeBasePath();
+	    $fileName = 'modules/' . $module . '/' . $class . '.inc';
+
+	    $platform =& $gallery->getPlatform();
+	    if (!$platform->file_exists($moduleBaseDir . $fileName)) {
+		return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	    }
+
+	    GalleryCoreApi::requireOnce($fileName);
+
+	    if (!class_exists($controllerClassName)) {
+		return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+			     "Class $controllerClassName not defined in $controllerName"), null);
+	    }
+	}
+
+	return array(null, new $controllerClassName);
+    }
+
+    /**
+     * Does this controller allow access to non-admins when site is in maintenance mode?
+     *
+     * @return boolean true if access always allowed
+     */
+    function isAllowedInMaintenance() {
+	return false;
+    }
+
+    /**
+     * Does this controller allow direct access even in embed-only mode?
+     *
+     * @return boolean true if access always allowed
+     */
+    function isAllowedInEmbedOnly() {
+	return false;
+    }
+
+    /**
+     * Whether the controller opts-out from the framework's auth token check.
+     *
+     * Some protocols don't allow to add authentication tokens to controller requests, but all
+     * normal Gallery controllers should not override this method.
+     *
+     * @return boolean true if the controller opts-out from the auth token check
+     */
+    function omitAuthTokenCheck() {
+	return false;
+    }
+
+    /**
+     * Should session be saved and session cookie sent when this controller is used?
+     *
+     * @return boolean true to enable session
+     */
+    function shouldSaveSession() {
+	return true;
+    }
+
+    /**
+     * Verifies the genuineness of the request
+     * 
+     * All requests that modify data must be signed, except the request is by a guest.
+     * 
+     * @return GalleryStatus a status code null on success, ERROR_REQUEST_FORGED on failure
+     * @static
+     */
+    function assertIsGenuineRequest() {
+	global $gallery;
+	$session =& $gallery->getSession();
+
+	if (!$session->isPersistent()) {
+	    /*
+	     * Fake requests on behalf of guests is seen as a form of spam and spam protection
+	     * should take care of that.  Don't handle it here.
+	     */
+	    return null;
+	}
+
+	$authToken = GalleryUtilities::getRequestVariables('authToken');
+	if ($session->isCorrectAuthToken($authToken)) {
+	    return null;
+	} else {
+	    /* Omit check if we're in maintenance mode */
+	    if ($gallery->getConfig('mode.maintenance')) {
+		return null;
+	    } else {
+		return GalleryCoreApi::error(ERROR_REQUEST_FORGED);
+	    }
+	}
+    }
+
+    /**
+     * Return the current item, as specified in the itemId request variable.
+     *
+     * @param bool $checkPermissions (optional) Default true. Whether to enfore the required (view)
+     *                                          permission.
+     * @return array GalleryStatus a status code,
+     *               GalleryItem an item
+     * @throws ERROR_MISSING_VALUE if there is no itemId in the request parameters.
+     */
+    function getItem($checkPermissions=true) {
+	$itemId = (int)GalleryUtilities::getRequestVariables('itemId');
+
+	if (empty($itemId)) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_VALUE), null);
+	}
+
+	/* Load the item */
+	list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId, 'GalleryItem');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($checkPermissions) {
+	    list ($ret, $hasPermission) = GalleryCoreApi::hasItemPermission($itemId, 'core.view');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if (!$hasPermission) {
+		/* Avoid information disclosure by treating this as if the item didn't exist. */
+		return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	    }
+	}
+
+	return array(null, $item);
+    }
+
+    /**
+     * @see GalleryView::_permissionCheck()
+     */
+    function permissionCheck($ret) {
+	GalleryCoreApi::requireOnce('modules/core/classes/GalleryView.class');
+	$view = new GalleryView();
+	list ($ret, $results) = $view->_permissionCheck($ret);
+	if (!empty($results['redirect'])) {
+	    $results['status'] = $results['error'] = array();
+	}
+	return array($ret, $results);
+    }
+}
+?>

@@ -1,0 +1,240 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is a helper class for interacting with PhotoWorks.com
+ * @package PhotoAccess
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class PhotoAccessHelper {
+
+    /**
+     * Print the items on photoworks.com and provide them with the given return url
+     *
+     * @return array GalleryStatus a status code
+     *               string the url to the photoworks.com cart
+     */
+    function printPhotos($cartItemIds, $returnUrl) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$itemIds = array_keys($cartItemIds);
+
+	/* Load the necessary item data */
+	list ($ret, $items) = GalleryCoreApi::loadEntitiesById($itemIds, 'GalleryPhotoItem');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $permissions) = GalleryCoreApi::fetchPermissionsForItems($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	foreach ($itemIds as $id) {
+	    if (empty($permissions[$id]['core.view'])) {
+		/* Avoid information disclosure, act as if the item didn't exist. */
+		return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	    }
+	}
+
+	list ($ret, $thumbnails) = GalleryCoreApi::fetchThumbnailsByItemIds($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $resizes) = GalleryCoreApi::fetchResizesByItemIds($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $preferreds) = GalleryCoreApi::fetchPreferredsByItemIds($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* We want to know which are viewable to guests */
+	list ($ret, $anonymousUserId) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	list ($ret, $publicPermissions) =
+	    GalleryCoreApi::fetchPermissionsForItems($itemIds, $anonymousUserId, false);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$session =& $gallery->getSession();
+	$cartUrlFragment = $session->get('photoaccess.cartUrlFragment');
+
+	/* If we don't have a cart url that means we don't have a photoaccess session yet */
+	$photoAccessServer = 'www.photoworks.com';
+	if (empty($cartUrlFragment)) {
+	    $cartUrlFragment = '/sbo/anonCartXML.jsp';
+	}
+
+	/* Assemble all our data */
+	$entries = $protectedIds = array();
+	foreach ($items as $item) {
+	    $itemId = $item->getId();
+	    $entry = array();
+
+	    if (!isset($permissions[$itemId]['photoaccess.print'])) {
+		/* Skip any cart items for which we don't have print permission */
+		continue;
+	    }
+
+	    $source = isset($preferreds[$itemId]) ? $preferreds[$itemId] : $item;
+	    $needSession = !isset($publicPermissions[$itemId]['core.viewSource']);
+
+	    if ($needSession && !isset($pwSession)) {
+		/*
+		 * Get G2 session for photoaccess to access non-public images.
+		 * We can't use this session because hijack protection will prevent access
+		 * plus the current user could logout before photoaccess retrieves the images.
+		 * Create a new session with the rights of current user for photoaccess to use.
+		 */
+		$pwSession = new GallerySession();
+		$ret = $pwSession->initEmpty(true, $gallery->getActiveUserId());
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	    if ($needSession) {
+		$sessionParam = array($pwSession->getKey() => $pwSession->getId());
+		$protectedIds[] = $source->getId();
+	    } else {
+		$sessionParam = array();
+	    }
+
+	    $entry['id'] = $source->getId();
+	    $entry['imageUrl'] = $urlGenerator->generateUrl(
+		array_merge(array('view' => 'core.DownloadItem', 'itemId' => $source->getId()),
+			    $sessionParam),
+		array('forceSessionId' => false, 'forceFullUrl' => true));
+	    $entry['imageWidth'] = $source->getWidth();
+	    $entry['imageHeight'] = $source->getHeight();
+
+	    if (!isset($thumbnails[$itemId]) || $thumbnails[$itemId]->getPostFilterOperations()) {
+		/* Use the source if the thumbnail has a postfilter (like a watermark) */
+		$thumbSource = $source;
+	    } else {
+		$thumbSource = $thumbnails[$itemId];
+		if ($needSession) {
+		    $protectedIds[] = $thumbSource->getId();
+		}
+	    }
+
+	    $entry['thumbUrl'] = $urlGenerator->generateUrl(
+		array_merge(array('view' => 'core.DownloadItem',
+				  'itemId' => $thumbSource->getId()),
+			    $sessionParam),
+		array('forceSessionId' => false, 'forceFullUrl' => true));
+
+	    $entries[] = $entry;
+	    /* We should scan the results for a "200 OK" result */
+	}
+	if (isset($pwSession)) {
+	    /* Mark this session so that it can be treated specially */
+	    $pwSession->put('core.isPrintService', $protectedIds);
+
+	    /**
+	     * @todo Would like to enforce a particular session timeout to ensure this session
+	     * lasts long enough for photoworks to retrieve the images.  Maybe also store the
+	     * sessionid in this session so we can reuse it for multiple print requests (and
+	     * just bump timeout each time).
+	     */
+	    $ret = $pwSession->save();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	/*
+	 * Turn our data into an XML request like this:
+	 *
+	 * <add-cart-request cobrand="CB_GP"
+	 *                   pricelist="1"
+	 *                   entry-page="/sbo/anonCart.jsp"
+	 *                   return-url="http://localhost/anon/test.html">
+	 *     <image id="1" url="http://localhost/anon/John.jpg"
+	 *                   thumb-url="http://localhost/anon/John_BigThumb.jpg"
+	 *                   height="1200"
+	 *                   width="1600"/>
+	 *     <image id="2" url="http://localhost/anon/Jig.jpg"
+	 *                   thumb-url="http://localhost/anon/Jig_BigThumb.jpg"
+	 *                   height="1200"
+	 *                   width="1600"/>
+	 * </add-cart-request>
+	 */
+	$lines = array();
+	$lines[] = sprintf('<add-cart-request cobrand="CB_GP" pricelist="1" ' .
+			   'entry-page="/sbo/anonCart.jsp" return-url="%s">', $returnUrl);
+	for ($i = 0; $i < sizeof($entries); $i++) {
+	    $lines[] = sprintf('<image id="%d" url="%s" thumb-url="%s" height="%d" width="%d"/>',
+		$entries[$i]['id'], $entries[$i]['imageUrl'], $entries[$i]['thumbUrl'],
+			       $entries[$i]['imageHeight'], $entries[$i]['imageWidth']);
+	}
+	$lines[] = '</add-cart-request>';
+
+	$postData = array();
+	$postData['cb'] = 'CB_GP';
+	$postData['xml_request'] = join('', $lines);
+
+	$gallery->guaranteeTimeLimit(30);
+	$cartUrl = 'http://' . $photoAccessServer . $cartUrlFragment;
+	if ($gallery->getDebug()) {
+	    $gallery->debug('Post data:');
+	    $gallery->debug_r($postData, true);
+	}
+	list ($body, $response, $headers) = GalleryCoreApi::postToWebPage(
+	    $cartUrl, $postData,
+	    array('User-Agent' => GalleryUtilities::getServerVar('HTTP_USER_AGENT')));
+
+	/* Expect a response of the form:
+	 *
+	 * <add-cart-response request-err="Error: unable to parse request"/>
+	 *
+	 * or:
+	 *
+	 * <add-cart-response
+	 *   request-url="/sbo/anonCartXML.jsp;jsessionid=XXXXXXXX?cb=CB_GP&#38;svr=clay"
+	 *   redirect-url="/sbo/anonCart.jsp;jsessionid=XXXXXXXX?cb=CB_GP&#38;svr=clay"/>
+	 */
+	if ($gallery->getDebug()) {
+	    $gallery->debug('Response Data');
+	    $gallery->debug_r($body, true);
+	}
+	if (preg_match('{<add-cart-response\s*request-url="(\S+)"\s*redirect-url="(\S+)"/>}',
+		       $body, $matches)) {
+	    $cartUrlFragment = str_replace('&#38;', '&', $matches[1]);
+	    $session->put('photoaccess.cartUrlFragment', $cartUrlFragment);
+	    $redirectUrl = 'http://' . $photoAccessServer . str_replace('&#38;', '&', $matches[2]);
+	} else {
+	    $redirectUrl =
+		$urlGenerator->generateUrl(array('view' => 'photoaccess.FulfillmentError'));
+	}
+
+	return array(null, $redirectUrl);
+    }
+}
+?>

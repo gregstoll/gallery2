@@ -1,0 +1,158 @@
+    <h1><?php print _('Database Setup') ?></h1>
+
+    <p><?php print _('Please select your database type and enter your database authentication information.  The installer will not create the database for you, so you must create one yourself and enter the database name here.  If you are installing Gallery into a database that already has tables in it, the table and column prefixes will keep Gallery data from conflicting with what you already have.') ?> </p>
+
+    <?php if (!empty($templateData['isMultisite'])): ?>
+    <div class="warning">
+      <?php print _("This is a multisite installation. Remember that each multisite requires its own database tables. Either choose a different database or a different table prefix for each multisite!"); ?>
+    </div>
+    <?php endif; ?>
+
+    <form method="post" action="<?php generateUrl(sprintf('%s?step=%s', INDEX_PHP, $stepNumber)) ?>">
+      <table>
+        <thead>
+	<tr>
+	  <td class="label">
+	    <?php print _('Database type:') ?>
+	  </td>
+
+	  <td>
+	    <select name="type" onchange="dbTypeChange(this)">
+	      <?php foreach ($templateData['dbList'] as $key => $value): ?>
+	      <option value="<?php print $key ?>"
+		<?php if (!empty($templateData['dbSelected'][$key])): ?>
+		selected="selected"
+		<?php endif; ?>
+		><?php print $value ?></option>
+	      <?php endforeach; ?>
+	    </select>
+	    <script type="text/javascript">
+	      // <![CDATA[
+	      function dbTypeChange(sel) {
+		var type = sel.options[sel.selectedIndex].value;
+		document.getElementById('dbSchema').style.display =
+		  (type == 'postgres7') ? '' : 'none';
+		document.getElementById('hostSettings').style.display = 
+                  (type == 'pdo_sqlite') ? 'none' : '';
+	      }
+	      // ]]>
+	    </script>
+	  </td>
+	</tr>
+	<?php if (!empty($templateData['error']['phpDbMissing'])): ?>
+	<tr>
+	  <td colspan="2">
+	    <div class="error">
+	      <?php print $templateData['error']['phpDbMissing'] ?>
+	    </div>
+	  </td>
+	</tr>
+	<?php endif; ?>
+        </thead>
+        <tbody id="hostSettings"<?php
+	 if (!empty($templateData['dbSelected']['pdo_sqlite'])) print ' style="display:none"'; ?>>
+	<tr>
+	  <td class="label"><?php print _('DB Hostname:') ?></td>
+	  <td>
+	    <input name="hostname" type="text" size="30"
+	      value="<?php print $templateData['config']['hostname'] ?>" />
+	    <input type="hidden" name="action" value="save"/>
+	    <input type="hidden" name="confirmReuseTables" value=""/>
+	    <input type="hidden" name="confirmCleanInstall" value=""/>
+	  </td>
+	</tr>
+	<tr>
+	  <td class="label"><?php print _('DB Username:') ?></td>
+	  <td>
+	    <input name="username" type="text" size="30"
+	      value="<?php print $templateData['config']['username'] ?>" />
+	  </td>
+	</tr>
+	<tr>
+	  <td class="label"><?php print _('DB Password:') ?></td>
+	  <td>
+	    <input name="password" type="password" size="30"
+	      value="<?php print $templateData['password'] ?>" />
+	  </td>
+	</tr>
+	<tr>
+	  <td class="label"><?php print _('DB Name:') ?></td>
+	  <td>
+	    <input name="database" type="text" size="30"
+	      value="<?php print $templateData['config']['database'] ?>" />
+	  </td>
+	</tr>
+	<tr id="dbSchema"<?php
+	 if (empty($templateData['dbSelected']['postgres7'])) print ' style="display:none"'; ?>>
+	  <td class="label"><?php print _('DB Schema:') ?></td>
+	  <td>
+	    <input name="schema" type="text" size="30"
+	      value="<?php print $templateData['config']['schema'] ?>" />
+	    <?php print _('(optional)') ?>
+	  </td>
+	</tr>
+	<tr>
+	  <td class="label"><?php print _('Table Prefix:') ?></td>
+	  <td>
+	    <input name="tablePrefix" type="text" size="30"
+	      value="<?php print $templateData['config']['tablePrefix'] ?>" />
+	  </td>
+	</tr>
+	<?php if (!empty($templateData['error']['tablePrefix'])): ?>
+	<tr>
+	  <td colspan="2">
+	    <div  class="error">
+	      <?php print $templateData['error']['tablePrefix'] ?>
+	    </div>
+	  </td>
+	</tr>
+	<?php endif; ?>
+	<tr>
+	  <td class="label"><?php print _('Column Prefix:') ?></td>
+	  <td>
+	    <input name="columnPrefix" type="text" size="30"
+	      value="<?php print $templateData['config']['columnPrefix'] ?>" />
+	  </td>
+	</tr>
+	</tbody>
+	<tfoot>
+	<?php if (!empty($templateData['error']['columnPrefix'])): ?>
+	<tr>
+	  <td colspan="2">
+	    <div class="error">
+	      <?php print $templateData['error']['columnPrefix'] ?>
+	    </div>
+	  </td>
+	</tr>
+	<?php endif; ?>
+	</tfoot>
+      </table>
+    </form>
+
+    <?php if (!empty($templateData['errors'])): ?>
+    <div class="error">
+      <h2>
+	<?php print _('We received the following database related errors:') ?>
+      </h2>
+    </div>
+    <div class="debug">
+      <?php print $templateData['databaseErrors'] ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if (!empty($templateData['stackTrace'])): ?>
+    <div class="stack_trace">
+      <?php print implode('<br/>', $templateData['stackTrace']) ?>
+    </div>
+    <?php endif; ?>
+
+    <div class="go">
+      <?php if (isset($templateData['showConfirmCleanInstall'])): ?>
+	  <a href="javascript:document.forms[0].confirmCleanInstall.value='true'; document.forms[0].submit()" class="btn warn"><i></i><span><span></span><i></i><?php print _('Erase Data For A Clean Install') ?></span></a>
+      <?php endif; ?>
+	  <a href="javascript:document.forms[0].submit()" class="btn continue"><i></i><span><span></span><i></i><?php print _('Save') ?></span></a>
+      <?php if (isset($templateData['showConfirmReuseTables'])): ?>
+	  <a href="javascript:document.forms[0].confirmReuseTables.value='true'; document.forms[0].submit()" class="btn continue"><i></i><span><span></span><i></i><?php print _('Reuse Existing Tables') ?></span></a>
+      <?php endif; ?>
+    </div>
+

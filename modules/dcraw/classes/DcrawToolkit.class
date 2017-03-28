@@ -1,0 +1,155 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+GalleryCoreApi::requireOnce('modules/dcraw/classes/DcrawToolkitHelper.class');
+
+/**
+ * A Dcraw version of GalleryToolkit
+ * @package Dcraw
+ * @subpackage Classes
+ * @author Vallimar <vallimar@sexorcisto.net>
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class DcrawToolkit extends GalleryToolkit {
+
+    /**
+     * @see GalleryToolkit::getProperty
+     */
+    function getProperty($mimeType, $propertyName, $sourceFilename) {
+	global $gallery;
+
+	if (!in_array($mimeType, array('image/x-dcraw', 'image/x-adobe-dng'))) {
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION), null);
+	}
+
+	switch ($propertyName) {
+	case 'dimensions':
+	    /*
+	     * @todo In dcraw v7.90 or newer we can get dimensions directly from dcraw -i -v.
+	     * For older dcraw versions we'll look to see if there's another toolkit that
+	     * supports dimensions for PPM.  If we find one, then convert the image to PPM
+	     * and let that toolkit tell us its dimensions.
+	     */
+	    list ($ret, $toolkit) =
+		GalleryCoreApi::getToolkitByProperty('image/x-portable-pixmap', 'dimensions');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    if (isset($toolkit)) {
+		$platform =& $gallery->getPlatform();
+		$tempfile = $platform->tempnam($gallery->getConfig('data.gallery.tmp'), 'dcrw_');
+		list ($ret, $outputMimeType, $context) = $this->performOperation(
+		    'image/x-dcraw', 'convert-to-image/x-portable-pixmap', $sourceFilename,
+		    $tempfile, array(), array());
+		if ($ret) {
+		    return array($ret, null);
+		}
+
+		/* We now have a PPM file, get its dimensions */
+		list ($ret, $results) =
+		    $toolkit->getProperty('image/x-portable-pixmap', 'dimensions', $tempfile);
+		$platform->unlink($tempfile);
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    } else {
+		/* We have no idea :-( */
+		$results = array(0, 0);
+	    }
+	    break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION), null);
+	}
+
+	return array(null, $results);
+    }
+
+    /**
+     * @see GalleryToolkit::performOperation
+     */
+    function performOperation($mimeType, $operationName, $sourceFilename,
+			      $destFilename, $parameters, $context=array()) {
+	global $gallery;
+
+	if (!in_array($mimeType, array('image/x-dcraw', 'image/x-adobe-dng'))) {
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION), null, null);
+	}
+
+	switch ($operationName) {
+	case 'convert-to-image/x-portable-pixmap':
+	    list ($ret, $dcraw) = GalleryCoreApi::getPluginParameter('module', 'dcraw', 'path');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+	    $tmpDir = $gallery->getConfig('data.gallery.tmp');
+	    $platform =& $gallery->getPlatform();
+	    $tmpFilename = $platform->tempnam($tmpDir, 'dcraw_');
+	    if (empty($tmpFilename)) {
+		/* This can happen if the $tmpDir path is bad */
+		return array(GalleryCoreApi::error(ERROR_BAD_PATH), null, null);
+	    }
+
+	    list ($ret, $version) =
+		GalleryCoreApi::getPluginParameter('module', 'dcraw', 'version');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+	    /*
+	     * Interpolation setting.  Using high speed / lower quality setting by default.
+	     * If desired, change '0' to a different value for dcraw 7.73+ or remove the '-q'
+	     * for older versions.  See http://cybercom.net/~dcoffin/dcraw/dcraw.1.html
+	     */
+	    if (version_compare($version, '7.73', '>=')) {
+		$cmd = array($dcraw, '-c', '-a', '-q', '0', $sourceFilename, '>', $tmpFilename);
+	    } else {
+		$cmd = array($dcraw, '-c', '-a', '-q', $sourceFilename, '>', $tmpFilename);
+	    }
+
+	    $gallery->guaranteeTimeLimit(90);
+	    list ($success, $output) = $platform->exec(array($cmd));
+	    if (!$success) {
+		@$platform->unlink($tmpFilename);
+		return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE),
+			     null, null);
+	    }
+
+	    $success = $platform->rename($tmpFilename, $destFilename);
+	    if (!$success) {
+		@$platform->unlink($tmpFilename);
+		return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+						  "Failed renaming $tmpFilename -> $destFilename"),
+			     null, null);
+	    }
+	    $platform->chmod($destFilename);
+
+	    return array(null, 'image/x-portable-pixmap', $context);
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION), null, null);
+	}
+    }
+}
+?>

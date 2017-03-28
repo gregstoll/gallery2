@@ -1,0 +1,688 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+/* This class is extensively based on the adodb-sxmlschema03 class developed by Richard Tango-Lowy &
+ * Dan Cech, Released under both BSD license and Lesser GPL library license.  Whenever there is any
+ * discrepancy between the two licenses, the BSD license will take precedence.  The orignal class
+ * was copyright: Copyright (c) 2004-2005 ars Cognita Inc., all rights reserved.
+ */
+
+/**
+ * GalleryDatabaseExport provides the functionality to export the gallery database.
+ * Creating an GalleryDatabaseExport object is the first step in exporting the information store in
+ * the Gallery databases.  The export function exports all the versions.dat file, the config.php
+ * file, the tables for the modules and all the data contianed in a Gallery installation.  The
+ * actual albums and items are not exported as part of this process.
+ *
+ * For a complete backup, perform this export and then use the operating system faclities to
+ * back up both the g2data/album and g2data/backups directory.
+ *
+ * @package GalleryCore
+ * @subpackage Storage
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 18153 $
+ */
+class GalleryDatabaseExport {
+    /**
+     * Defines the number of rows to be read before letting the user know that we are still working.
+     */
+    var $_rowChunkSize = 200;
+
+    /**
+     * This array contains a list of tables that are transitory in nature and do not need to have
+     * the data in them backed up.  The schema table is not rally transitory, but will be recreated
+     * as part of the import.
+     */
+    var $_ignoreTables = array('cachemap' => 1, 'lock' => 1, 'sessionmap' => 1, 'schema' => 1);
+
+    /**
+     * This variable contains the call back information and contains the follwoing keys
+     * 'progress' current progress
+     * 'total' total work involved
+     * 'callback' progress bar notification callback
+     */
+    var $_callBack;
+
+    /*
+     * This variable contains the length of the column prefix.
+     */
+    var $_fieldPrefixLength;
+
+    /**
+     * Extracts an XML schema from an existing database.
+     *
+     * Call this method to create an XML schema string from an existing database.
+     * @param array $progressCallback Callback for progress reports. This callback function should
+     *      update the progress bar that is being used. Currently, the upgrader uses a different
+     *      mechanism to update the progress bar than the maintenance screens.
+     *      @see DatabaseBackupTask::progressCallBack and DatabaseBackupStep::backupCallback.
+     * @param string $fileName (optional) Name of the file to write the database extract xml to,
+     *      if not supplied will default to g2data/backups/backup_date.xml.
+     * @return array GalleryStatus a status code
+     *		     string Path name of the backup file
+     *		     array of warning messages to be displayed to the administrator.
+     * @todo When the progress bar handling is standardized for both upgrades and maintenance
+     * 	     screens, then replace the call back function with a StatusMonitor object.
+     */
+    function exportToXmlFile($progressCallback, $fileName=null) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$storage =& $gallery->getStorage();
+
+	$warnings = array();
+
+	$this->_callBack = array('callback' => $progressCallback, 'progress' => 0, 'total' => 100);
+
+	$storageConfig = $gallery->getConfig('storage.config');
+	$this->_fieldPrefixLength = strlen($storageConfig['columnPrefix']);
+
+	list ($ret, $fileHandle, $filepath) = $this->_openBackupFileForWriting($fileName);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	/* Calculate the number of tables that will probably be exported */
+	list ($tableName, $unused) = $storage->_translateTableName('Schema');
+
+	list ($ret, $results) = $storage->search('SELECT COUNT(*) FROM ' . $tableName);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$tableCount = 0;
+	if ($results->resultCount() > 0) {
+	    $row = $results->nextResult();
+	    $tableCount = $row[0];
+	}
+
+	list ($ret, $coreModule) = GalleryCoreApi::loadPlugin('module', 'core', true);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$versions = $coreModule->getInstalledVersions();
+
+	$string = '<?xml version="1.0"?>' . "\n";
+	$written = $platform->fwrite($fileHandle, $string);
+	if (!$written) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+								'Unable to write to export file'),
+			 null, null);
+	}
+
+	$written = $platform->fwrite($fileHandle,
+				     '<export schema-version="' . EXPORT_SCHEMA_VERSION
+				     . '" tables="' . $tableCount .'" core-version="'
+				     . $versions['core'] . '" gallery-version="'
+				     . $versions['gallery'] . '">' . "\n");
+
+	if (!$written) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+						'Unable to write to export file'),
+			 null, null);
+	}
+
+	$written = $platform->fwrite($fileHandle, '  <plugin-status-list>' . "\n");
+	if (!$written) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+						'Unable to write to export file'),
+			 null, null);
+	}
+
+	foreach (array('module', 'theme') as $pluginType) {
+	    list ($ret, $plugins) = GalleryCoreApi::fetchPluginStatus($pluginType, true);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    $this->_callBack['total'] = $this->_callBack['progress'] + count($plugins);
+
+	    $ret = $this->_exportPluginStatus($fileHandle, $pluginType, $plugins, $warnings);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    $this->updateStatus();
+	}
+
+	$written = $platform->fwrite($fileHandle, '  </plugin-status-list>' . "\n");
+	if (!$written) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+							  'Unable to write to export file'),
+			 null, null);
+	}
+
+	$this->updateStatus();
+
+	list ($ret, $plugins) = GalleryCoreApi::fetchPluginStatus('module', true);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$ret = $this->_exportModule($fileHandle, 'core', $warnings);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	unset($plugins['core']);
+	$this->updateStatus();
+
+	$this->_callBack['total'] = $this->_callBack['progress'] + count($plugins);
+	foreach ($plugins as $pluginId => $plugin) {
+	    /*
+	     * If the plugin version isn't set in the plugin data array, it's not installed. We
+	     * can't use fetchPluginList() to get the installed plugins because export could be
+	     * called as part of the upgrader.  If it is called during the upgrade process, the
+	     * core module has not been updated, fetchPluginList() might still exhibit old behavior.
+	     */
+	    if (empty($plugin['version'])) {
+		continue;
+	    }
+
+	    $ret = $this->_exportModule($fileHandle, $pluginId, $warnings);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	}
+
+	$written = $platform->fwrite($fileHandle, '</export>' . "\n");
+	if (!$written) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+								'Unable to write to export file'),
+			 null, null);
+	}
+
+	if (!$platform->fclose($fileHandle)) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+								'Unable to write to export file'),
+			 null, null);
+	}
+
+	$platform->chmod($filepath);
+	return array(null, $filepath, $warnings);
+    }
+
+    /**
+     * Export the list of installed plugins.  For each plugin include whether it is active or not,
+     * the module version number, the required core version and the required gallery version.
+     * @param resource $handle Handle to output export file.
+     * @param string $pluginType What type of plugin is it (module or theme)
+     * @param array $plugins A Gallery Plugin status array
+     * @param array $warnings An array of warning messages to be updated.
+     * @return GalleryStatus object
+     */
+    function _exportPluginStatus($handle, $pluginType, $plugins, &$warnings) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $coreModule) = GalleryCoreApi::loadPlugin('module', 'core', true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	foreach ($plugins as $pluginId => $plugin) {
+	    /* If the plugin version isn't set in the plugin data array, it's not installed */
+	    if (empty($plugin['version'])) {
+		/* This plugin is not installed so issue a warning message. */
+		$warnings[] = $coreModule->translate(
+			array('text' => 'The %s "%s" is not installed and will not be backed up.',
+			      'arg1' => $coreModule->translate($pluginType), 'arg2' => $pluginId));
+		if (false) {
+		    /* Specific translations for $pluginType */ _('module'); _('theme');
+		}
+		continue;
+	    }
+
+	    $coreApi = $plugin['requiredCoreApi'];
+	    $coreApi = $coreApi[0] . '.' . $coreApi[1];
+
+	    $api = ($pluginType == 'module') ? $plugin['requiredModuleApi']
+					     : $plugin['requiredThemeApi'];
+	    $api = $api[0] . '.' . $api[1];
+
+	    $active = isset($plugin['active']) ? $plugin['active'] : 0;
+
+	    $line = '    <plugin-status id="' . $pluginId . '" required-core-api="' . $coreApi
+			. '" required-api="' . $api . '" version="' . $plugin['version']
+			. '" active="' . $active . '" type="' . $pluginType . '"/>' . "\n";
+	    $written = $platform->fwrite($handle, $line);
+	    if (!$written) {
+		return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Simulate calling htmlspecialchars($value, ENT_COMPAT, 'UTF-8'). We avoid using
+     * htmlspecialchars directly because on some versions of PHP (notable PHP 4.1.2) it
+     * changes the character set of the input data (in one environment it converted the
+     * UTF-8 data to ISO-8859-1)
+     * @param string $valueToConvert String to escape the html special characters.
+     * @return string The escaped string.
+     * @todo Move this routine to GalleryUtilities as a common function.
+     */
+    function _encodeHtmlSpecialChars($valueToConvert) {
+	return str_replace(array('&', '"', '<', '>'), array('&amp;', '&quot;', '&lt;', '&gt;'),
+			   $valueToConvert);
+    }
+
+    /**
+     * Export a module to the export file.
+     * @param resource $handle Handle to output export file
+     * @param string $pluginId A plugin id
+     * @param array $warnings An array of warning messages to be updated.
+     * @return GalleryStatus A status code.
+     */
+    function _exportModule($handle, $pluginId, &$warnings) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$storage =& $gallery->getStorage();
+
+	$storageExtras =& $storage->_getExtras();
+	$sql = $storageExtras->getModuleSql($pluginId);
+	if (count($sql['table']) == 0){
+	    $this->updateStatus();
+	    return null;
+	}
+
+	$line = '  <plugin id="' . $this->_encodeHtmlSpecialChars($pluginId) . '" type="module">'
+			. "\n";
+	$written = $platform->fwrite($handle, $line);
+	if (!$written) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	}
+
+	$this->_callBack['total'] += count($sql['table']);
+	/* If the core module then export schema and sequence tables first */
+	if ($pluginId == 'core') {
+	    $this->_callBack['total'] += 3;
+
+	    $ret = $this->_exportTable($handle, 'Schema', $warnings);
+	    if ($ret) {
+		return $ret;
+	    }
+	    unset($sql['table']['Schema']);
+	    $this->updateStatus();
+
+	    $ret = $storage->checkPoint();
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    /* Export our sequences now */
+	    foreach (array(DATABASE_SEQUENCE_LOCK, DATABASE_SEQUENCE_ID,
+			   DATABASE_SEQUENCE_EVENT_LOG) as $sequenceId) {
+		$ret = $this->_exportSequence($handle, $sequenceId);
+		if ($ret) {
+		    return $ret;
+		}
+		$this->updateStatus();
+	    }
+	}
+
+	foreach ($sql['table'] as $table => $unused) {
+	    $ret = $this->_exportTable($handle, $table, $warnings);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	$written = $platform->fwrite($handle, '  </plugin>' . "\n");
+	if (!$written) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	}
+	$this->updateStatus();
+
+	return null;
+    }
+
+    /**
+     * Export the a sequence. Sequences are not defined by the schema.tpl file but are created by
+     * calling adoDB directly.
+     * @param resource $handle Handle to output export file
+     * @param string $sequenceId The sequence Id to export.
+     * @return GalleryStatus A status code.
+     */
+    function _exportSequence($handle, $sequenceId) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $sequenceValue) = $storage->getUniqueId($sequenceId);
+	if ($ret) {
+	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	}
+
+	$line = '    <sequence name="' . $sequenceId . '" start-value="'. $sequenceValue . '" />'
+		. "\n";
+	$written = $platform->fwrite($handle, $line);
+	if (!$written) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	}
+
+	$this->updateStatus();
+
+	return null;
+    }
+
+    /**
+     * Export a gallery table to the output stream
+     * @param resource $handle Handle to output export file
+     * @param string $table The table to export.
+     * @param array $warnings An array of warning messages to be updated.
+     * @return GalleryStatus A status code.
+     */
+    function _exportTable($handle, $table, &$warnings) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $coreModule) = GalleryCoreApi::loadPlugin('module', 'core', true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($name1, $name2, $nameInSchema) = $storage->_translateTableName($table);
+
+	$query = 'SELECT [::createSql], [::pluginId], [::type], [::info]
+		    FROM [GallerySchema]
+		   WHERE [::name] = ?';
+	list ($ret, $results) = $storage->search($query, array($nameInSchema));
+	if ($ret) {
+	    return $ret;
+	}
+	$row = $results->nextResult();
+
+	if (empty($row)) {
+	    $warnings[] = $coreModule->translate(
+		array('text' => '"%s" has no creation sql and will not be backed up.',
+		      'arg1' => $table));
+	    return null;
+	}
+	list ($createSql, $pluginId, $tableType, $tableInfo) = $row;
+
+	$written = $platform->fwrite($handle, '    <table name="' . $table . '">' . "\n");
+	if (!$written) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	}
+
+	$written =
+	    $platform->fwrite($handle, '      <definition module-id="' . $pluginId .'" >' . "\n");
+	if (!$written) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	}
+
+	$line = '        <create-sql>' . '<![CDATA[' . $this->_encodeHtmlSpecialChars($createSql)
+			. ']]></create-sql>' . "\n";
+	$written = $platform->fwrite($handle, $line);
+	if (!$written) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	}
+
+	if (!empty($tableType) && !empty($tableInfo)) {
+	    $line = '        <table-info type="' . $tableType .'">' . '<![CDATA['
+		    . $this->_encodeHtmlSpecialChars($tableInfo) . ']]>' . '</table-info>' . "\n";
+	    $written = $platform->fwrite($handle, $line);
+	    if (!$written) {
+		return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	    }
+	}
+
+	$written = $platform->fwrite($handle, '      </definition>' . "\n");
+	if (!$written) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	}
+
+	/*
+	 * Some databases (notably MySQL on Win32) don't support mixed case
+	 * table names.  So, when we get the meta table list back, it's lower
+	 * case.  Force all metatable listings to lower case and then expect
+	 * them to be lowercase so that we're consistent.
+	 */
+	$tableLower = GalleryUtilities::strToLower($nameInSchema);
+
+	/* Check to see if we want to skip the data. */
+	if (!array_key_exists($tableLower, $this->_ignoreTables)) {
+	    $ret = $this->_exportData($handle, $table, $warnings);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	$written = $platform->fwrite($handle, '    </table>' . "\n");
+	if (!$written) {
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	}
+
+	$this->updateStatus();
+	return null;
+    }
+
+    /**
+     * Export the table data to the output stream
+     * @param resource $handle Handle to output export file
+     * @param string $table The table to export.
+     * @param array $warnings An array of warning messages to be updated.
+     * @return GalleryStatus A status code.
+     */
+    function _exportData($handle, $table, &$warnings) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $coreModule) = GalleryCoreApi::loadPlugin('module', 'core', true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($tableName, $unused) = $storage->_translateTableName($table);
+
+	list ($ret, $results) = $storage->search('SELECT COUNT(*) FROM ' . $tableName);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$rowCount = 0;
+	if (is_object($results) && $results->resultCount() > 0) {
+	    $row = $results->nextResult();
+	    $rowCount = $row[0];
+	}
+
+	if ($rowCount > 0) {
+	    /* Calculate the number of data chunks to read. */
+	    $dataChunks = 1;
+
+	    /*
+	     * This table exceeds our chunk threshold, so let us split up the request
+	     * and provides some feedback that we are actually working.
+	     */
+	    if ($rowCount > $this->_rowChunkSize) {
+		/* Oops the amount of work just got bigger. */
+		$dataChunks = ceil($rowCount / $this->_rowChunkSize);
+		$this->_callBack['total'] += $dataChunks;
+	    }
+
+	    /* Check for Map definition; if not found try Entity */
+	    list ($ret, $fields) = $storage->describeMap($table);
+	    if ($ret && !($ret->getErrorCode() & ERROR_MISSING_VALUE)) {
+		return $ret;
+	    } else if ($ret) {
+		$fields = array('id' => array('type' => STORAGE_TYPE_INTEGER, 'notNull' => 1));
+		list ($ret, $entityFields) = $storage->describeEntity($table);
+		if ($ret && $ret->getErrorCode() & ERROR_MISSING_VALUE) {
+		    $warnings[] = $coreModule->translate(
+			array('text' => 'Unable to load table description for "%s", no data will '
+						. 'be exported.', 'arg1' => $table));
+		    return null;
+		} else if ($ret) {
+		    return $ret;
+		}
+		$fields = array_merge($fields, $entityFields[$table]['members']);
+	    }
+
+	    $written = $platform->fwrite($handle, "        <data>\n");
+	    if (!$written) {
+		return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	    }
+
+	    $fieldNames = array();
+	    $fieldDescriptor = array();
+	    foreach ($fields as $fieldName => $definition) {
+		$line = '          <field name="' . $this->_encodeHtmlSpecialChars($fieldName)
+		     . '" type="' . $definition['type'] . '" ';
+		if (!empty($definition['size'])) {
+		     $line .= 'size="' . (int)$definition['size'] . '" ';
+		}
+		if (!empty($definition['notNull'])) {
+		     $line .= 'not-null="' . (int)$definition['notNull'] . '" ';
+		}
+		if (!empty($definition['notNullEmptyAllowed'])) {
+		     $line .= 'not-null-empty-allowed="' . (int)$definition['notNullEmptyAllowed']
+				. '" ';
+		}
+		$line .= "/>\n";
+		$written = $platform->fwrite($handle,  $line);
+		if (!$written) {
+		    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+		}
+		$translatedName = $storage->_translateColumnName($fieldName);
+		$fieldNames[] = $translatedName;
+		$fieldDescriptor[$translatedName] = $definition;
+	    }
+
+	    /* Create Query Statement.  Just use all the fields to create an order */
+	    $query = 'SELECT ' . implode(', ', $fieldNames) . ' FROM ' . $tableName
+			. ' ORDER BY ' . implode(' ASC, ', $fieldNames) . ' ASC';
+
+	    $offset = 0;
+	    $options = array('limit' => array('count' => $this->_rowChunkSize));
+	    $rowsRead = 0;
+	    while ($rowsRead < $rowCount) {
+		$options['limit']['offset'] = $offset;
+		list ($ret, $results) = $storage->search($query, array(), $options);
+		if ($ret) {
+		    return $ret;
+		}
+
+		$rowsRead += $results->resultCount();
+		if ($results->resultCount() == 0) {
+		    break;
+		}
+		while ($row = $results->nextResult()) {
+		    $line = '          <row>';
+		    foreach ($row as $key => $val) {
+			if (is_null($val)) {
+			    $line .= '<f null="1" />';
+			} else {
+			    $val = $storage->_normalizeValue($val,
+							 $fieldDescriptor[$fieldNames[$key]], true);
+			    $line .= '<f>' . $this->_encodeHtmlSpecialChars($val) . '</f>';
+			}
+		    }
+		    $line .= "</row>\n";
+		    $written = $platform->fwrite($handle, $line);
+		    if (!$written) {
+			return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+		    }
+		}
+		$this->updateStatus();
+		$offset += $results->resultCount();
+	    }
+	    $written = $platform->fwrite($handle, '        </data>' . "\n");
+	    if (!$written) {
+		return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					                    'Unable to write to export file');
+	    }
+	} else {
+	    $this->updateStatus();
+	}
+
+	return null;
+    }
+
+    /**
+     * This method calls the the status update method that was passed by the caller to the Database
+     * Exporter class.
+     *
+     * @todo When the various progress bar methods are standardized, change this call to call the
+     *       update progress bar of a common status notifier.
+     */
+    function updateStatus() {
+	global $gallery;
+
+	$this->_callBack['progress']++;
+	$complete = $this->_callBack['progress'] / $this->_callBack['total'];
+	call_user_func_array($this->_callBack['callback'], array($complete));
+
+	$gallery->guaranteeTimeLimit(60);
+    }
+
+    /**
+     * Creates the file name and opens the file to write the content of the backup.
+     *
+     * @param string $fileName (optional) Name of the file to write the database extract xml to,
+     *		 if not supplied will default to g2data/backups/g2backup_date.txt
+     * @return array GalleryStatus a status code
+     *               fileHandle file handle to the open file
+     *               string path name of the backup file
+     */
+    function _openBackupFileForWriting($fileName=null) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$storage =& $gallery->getStorage();
+	$phpVm = $gallery->getPhpVm();
+
+	if (empty($fileName)) {
+	    $dirName = $gallery->getConfig('data.gallery.backup');
+	    list ($exists, $unused) = GalleryUtilities::guaranteeDirExists($dirName);
+	    if (!$exists) {
+		return array(GalleryCoreApi::error(ERROR_BAD_PATH, __FILE__, __LINE__,
+					'Unable to open the backup file for output'), null, null);
+	    }
+
+	    $storeConfig = $gallery->getConfig('storage.config');
+	    $databaseName = $storage->getType() == 'sqlite'
+		? basename($storeConfig['database']) : $storeConfig['database'];
+	    $rnd = substr($phpVm->md5($phpVm->rand()), 0, 5);
+	    $fileName = $dirName . $databaseName . '_' . $rnd . '_' . $phpVm->date('Y_m_d_Hi') 
+		. '.xml';
+	}
+
+	$handle = $platform->fopen($fileName, 'wb');
+	if (!$handle) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH, __FILE__, __LINE__,
+					'Unable to open the backup file for output'), null, null);
+	}
+
+	return array(null, $handle, $fileName);
+    }
+}
+?>

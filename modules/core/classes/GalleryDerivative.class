@@ -1,0 +1,758 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryChildEntity.class');
+
+/**
+ * A container for data that is derived from another data source.
+ * Known implementations include GalleryDerivativeImage for thumbnails and resizes of images.
+ *
+ * @g2 <class-name>GalleryDerivative</class-name>
+ * @g2 <parent-class-name>GalleryChildEntity</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>1</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryDerivative extends GalleryChildEntity {
+
+    /**
+     * What's the source of this derivative?  The source must be the id of another data container.
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>derivativeSourceId</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <indexed/>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $derivativeSourceId;
+
+    /**
+     * A sequence of operations used to derive this data from the original.
+     * Can be empty, because the derivative can have only a postfilter.
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>derivativeOperations</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>LARGE</member-size>
+     * @g2 </member>
+     */
+    var $derivativeOperations;
+
+    /**
+     * The order of this derivative relative to others
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>derivativeOrder</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <indexed/>
+     * @g2   <required/>
+     * @g2 </member>
+     */
+    var $derivativeOrder;
+
+    /**
+     * The size of the derived object
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>derivativeSize</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $derivativeSize;
+
+    /**
+     * The type of this derivative (eg, DERIVATIVE_TYPE_IMAGE_THUMBNAIL)
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>derivativeType</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <indexed/>
+     * @g2   <required/>
+     * @g2 </member>
+     */
+    var $derivativeType;
+
+    /**
+     * The mime type of data file
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>mimeType</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <required/>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     */
+    var $mimeType;
+
+    /**
+     * More operations that are applied at the very end of the derivative operations, and are
+     * not carried down to derivatives that depend on this one.  Useful for operations like
+     * watermarking that change the derivative in a way that we don't want to propagate.
+     * Can be empty, because the derivative can have only a regular derivative operations.
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>postFilterOperations</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>LARGE</member-size>
+     * @g2 </member>
+     */
+    var $postFilterOperations;
+
+    /**
+     * Is the derivative broken?
+     * We set this to true if a toolkit operation failed, or for similar reasons.
+     * Can be empty, which is interpreted as false.
+     * @var boolean
+     *
+     * @g2 <member>
+     * @g2   <member-name>isBroken</member-name>
+     * @g2   <member-type>BOOLEAN</member-type>
+     * @g2 </member>
+     */
+    var $isBroken;
+
+
+    /**
+     * Data items that can be viewed inline (photos, movies, etc) should return true.  Items that
+     * can't be viewed inline (word documents, text, etc) should return false.
+     *
+     * Classes that return true for this query must implement getWidth() and getHeight()
+     *
+     * @return boolean true if this data item can be viewed inline
+     */
+    function canBeViewedInline() {
+	return false;
+    }
+
+    /**
+     * Delete this GalleryEntity
+     *
+     * @return GalleryStatus a status code
+     */
+    function delete() {
+	global $gallery;
+
+	/* Find all derivatives for whom I am the source and whack them too */
+	/* TODO: just fetch the ids, instead of the entire entities */
+	list ($ret, $derivativesTable) =
+	    GalleryCoreApi::fetchDerivativesBySourceIds(array($this->getId()));
+	if ($ret) {
+	    return $ret;
+	}
+
+	foreach ($derivativesTable as $itemId => $derivatives) {
+	    foreach ($derivatives as $derivative) {
+		$ret = GalleryCoreApi::deleteEntityById($derivative->getId(), 'GalleryDerivative');
+		/*
+		 * Deletes can cascade in interesting ways.  For example, deleting a derivative
+		 * will get rid of any other derivatives that are sourced to it, so it's possible
+		 * that deleting children here can lead to a MISSING_OBJECT result unless we re-run
+		 * the parent/child query each time.  Easier to just ignore the MISSING_OBJECT
+		 * error since we only care that it's gone.
+		 * Note that we get a MISSING_OBJECT error as well if the requested entity isn't an
+		 * entity of type GalleryDerivative.
+		 */
+		if ($ret && !($ret->getErrorCode() & ERROR_MISSING_OBJECT)) {
+		    return $ret;
+		}
+	    }
+	}
+
+	/* Delete myself */
+	$ret = parent::delete();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Expire our cache, and don't abort if this fails */
+	$ret = $this->expireCache();
+
+	return null;
+    }
+
+    /**
+     * Create a new GalleryDerivative
+     *
+     * @param int $parentId the id of the parent GalleryItem
+     * @return GalleryStatus a status code
+     */
+    function create($parentId) {
+	$ret = parent::create($parentId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$this->setDerivativeOrder(0);
+	$this->setIsBroken(false);
+	$this->setMimeType(null);
+	$this->setDerivativeType(null);
+	$this->setDerivativeSourceId(null);
+	$this->setDerivativeSize(null);
+	$this->setDerivativeOperations(null);
+	$this->setPostFilterOperations(null);
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::save
+     */
+    function save($expire=true, $postEvent=true) {
+	$isNew = $this->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED);
+
+	/* Save myself */
+	$ret = parent::save($postEvent);
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (!$isNew) {
+	    /* Expire myself */
+	    if ($expire) {
+		$ret = $this->expireCache();
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+
+	    /* Expire anything that depends on me */
+	    $ret = GalleryCoreApi::expireDerivativeTreeBySourceIds(array($this->getId()));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Rebuild the cache.  This should never be called directly; instead you
+     * should call GalleryCoreApi::rebuildDerivativeCacheIfNotCurrent($derivativeId)
+     *
+     * Rebuilds the cache and marks the derivative as broken if we failed.
+     *
+     * @return GalleryStatus a status code
+     */
+    function rebuildCache() {
+	global $gallery;
+
+	$ret = $this->_rebuildCache();
+
+	if ($ret) {
+	    /*
+	     * Something went wrong with the toolkit
+	     * Mark the derivative as broken for later repair attempts
+	     */
+	    GalleryCoreApi::addEventLogEntry(
+		'Image Error', 'Unable to build image', $ret->getAsText());
+	    $this->setIsBroken(true);
+	    if ($gallery->getDebug()) {
+		$gallery->debug("\n" . $ret->getAsText() . "\n");
+	    }
+
+	    /*
+	     * Use our "busted" image / derivative instead.
+	     * Figure out our target path
+	     */
+	    list ($ret, $destPath) = $this->fetchPath();
+	    if (!$ret) {
+		/* Copy the broken derivative placeholder */
+		$platform =& $gallery->getPlatform();
+		if ($platform->copy($this->getBrokenDerivativePath(), $destPath)) {
+		    /* Get the mime type of the placeholder */
+		    list ($ret, $mimeType) =
+			GalleryCoreApi::getMimeType($this->getBrokenDerivativePath());
+		    if (!$ret) {
+			$this->setMimeType($mimeType);
+			if ($platform->file_exists($destPath)) {
+			    $size = $platform->filesize($destPath);
+			    $this->setDerivativeSize($size);
+			    $status = null;
+			} else {
+			    $status = GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+			}
+		    } else {
+			$status = $ret;
+		    }
+		} else {
+		    $status = GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+		}
+	    } else {
+		$status = $ret;
+	    }
+
+	    /*
+	     * It's important to remember that the derivative is broken and save wouldn't be
+	     * called if we sent an error as a return value
+	     */
+	    $ret = $this->save(false);
+	    if ($status) {
+		return $status;
+	    } else if ($ret) {
+		return $ret;
+	    }
+
+	    /* Pretend the operation was successful */
+	    $ret = null;
+	} elseif ($this->getIsBroken()) {
+	    $this->setIsBroken(false);
+	}
+
+	return $ret;
+    }
+
+    /**
+     * Rebuild the cache.  This should never be called directly; instead you
+     * should call GalleryCoreApi::rebuildDerivativeCacheIfNotCurrent($derivativeId)
+     *
+     * @return GalleryStatus a status code
+     * @access private
+     */
+    function _rebuildCache() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	/* Figure out our target path */
+	list ($ret, $destPath) = $this->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Make sure our path is legit */
+	GalleryUtilities::guaranteeDirExists(dirname($destPath));
+
+	list ($ret, $source, $operations) = $this->fetchFinalOperations();
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (GalleryUtilities::isA($source, 'GalleryDerivative')) {
+	    list ($ret, $rebuild) =
+		GalleryCoreApi::rebuildDerivativeCacheIfNotCurrent($source->getId());
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if ($rebuild) {
+		/* Fetch the updated version back from our entity cache */
+		list ($ret, $source) = GalleryCoreApi::loadEntitiesById(
+		    $source->getId(), array('GalleryFileSystemEntity', 'GalleryDerivative'));
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+
+	    list ($ret, $sourcePath) = $source->fetchPath();
+	    if ($ret) {
+		return $ret;
+	    }
+	} else {
+	    /* Get the path of the source file */
+	    if ($source->isLinked()) {
+		$linkedEntity = $source->getLinkedEntity();
+		list ($ret, $sourcePath) = $linkedEntity->fetchPath();
+		if ($ret) {
+		    return $ret;
+		}
+	    } else {
+		list ($ret, $sourcePath) = $source->fetchPath();
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	$context = array();
+	if (method_exists($source, 'getWidth') && method_exists($source, 'getHeight')) {
+	    $context['width'] = $source->getWidth();
+	    $context['height'] = $source->getHeight();
+	    if ($context['width'] == 0 && $context['height'] == 0) {
+		/* Don't put unknown size into context */
+		$context = array();
+	    }
+	}
+
+	/* Now apply our derivative commands to create the cache file */
+	$mimeType = $source->getMimeType();
+	for ($i = 0; $i < count($operations); $i++) {
+	    if (strpos($operations[$i], '|') === false) {
+		list ($operationName, $operationArgs) = array($operations[$i], null);
+	    } else {
+		list ($operationName, $operationArgs) = explode('|', $operations[$i]);
+	    }
+
+	    /* Get the appropriate toolkit */
+	    list ($ret, $toolkit, $nextMimeType) =
+		GalleryCoreApi::getToolkitByOperation($mimeType, $operationName);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if (!isset($toolkit)) {
+		return GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION, __FILE__, __LINE__,
+					    "$operationName $mimeType");
+	    }
+
+	    /*
+	     * Put look-ahead info in context, so toolkit can decide if it can
+	     * queue up parameters in the context for later processing, or just do it.
+	     */
+	    if ($i + 1 == count($operations)) {
+		$context['next.toolkit'] = null;
+		$context['next.operation'] = null;
+	    } else {
+		list ($nextOperationName) = explode('|', $operations[$i+1]);
+		list ($ret, $nextToolkit) =
+		    GalleryCoreApi::getToolkitByOperation($nextMimeType, $nextOperationName);
+		if ($ret) {
+		    return $ret;
+		}
+		$context['next.toolkit'] = isset($nextToolkit) ? $nextToolkit : null;
+		$context['next.operation'] = $nextOperationName;
+	    }
+
+	    /* Perform the operation */
+	    list ($ret, $outputMimeType, $context) = $toolkit->performOperation(
+		$mimeType, $operationName, $sourcePath, $destPath,
+		explode(',', $operationArgs), $context);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    /* Prepare for the next operation */
+	    $sourcePath = $destPath;
+	    $mimeType = $outputMimeType;
+	}
+	if (empty($operations)) {
+	    /* No operations.. just copy source file */
+	    if (!$platform->copy($sourcePath, $destPath)) {
+		return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+	    }
+	}
+
+	/* Get the size of the file */
+	if ($platform->file_exists($destPath)) {
+	    $size = $platform->filesize($destPath);
+	} else {
+	    $size = -1;
+	}
+
+	/* Update our info */
+	$this->setMimeType($mimeType);
+	$this->setDerivativeSize($size);
+
+	$data = array('derivativePath' => $destPath,
+		      'derivativeType' => $this->getDerivativeType(),
+		      'mimeType' => $this->getMimeType(),
+		      'parentId' => $this->getParentId());
+	list ($ret, $data['pseudoFileName']) = GalleryUtilities::getPseudoFileName($this);
+	if ($ret) {
+	    return $ret;
+	}
+
+	GalleryCoreApi::deleteFastDownloadFileById($this->getId());
+	$ret = GalleryCoreApi::createFastDownloadFile($this);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Get the complete set of operations required by this derivative.  This will return
+     * the original source GalleryDataItem or preferred GalleryDerivative and an array of
+     * all the operations that must be performed in order to create the correct output
+     * file, including the post filter.
+     *
+     * @return array GalleryStatus a status code
+     *               GalleryDataItem data item or GalleryDerivative preferred derivative
+     *               array the operations
+     */
+    function fetchFinalOperations() {
+	/* Load the source */
+	list ($ret, $source) = GalleryCoreApi::loadEntitiesById(
+	    $this->getDerivativeSourceId(), array('GalleryFileSystemEntity', 'GalleryDerivative'));
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	if (GalleryUtilities::isA($source, 'GalleryDerivative')) {
+	    /*
+	     * In order to build our derivative, we need to complete set of
+	     * commands from the original source file.  We can't rely on
+	     * intervening files for two reasons:
+	     *  1.  Larger derivatives sourced on derivatives would lead to upsampling
+	     *  2.  The source derivative's cached data file may have postfilters applied, which we
+	     *      don't want for our derivative
+	     *
+	     * So seek backwards to the source file, then merge and apply all
+	     * the derivative operations from the intervening parents to
+	     * discover the correct operations for this derivative.
+	     */
+	    $sources = array($source, $this);
+	    while (GalleryUtilities::isA($sources[0], 'GalleryDerivative')) {
+		list ($ret, $tmp) = GalleryCoreApi::loadEntitiesById(
+		    $sources[0]->getDerivativeSourceId(),
+		    array('GalleryFileSystemEntity', 'GalleryDerivative'));
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+
+		if (!GalleryUtilities::isA($tmp, 'GalleryDerivative')) {
+		    /* We've found our true source */
+		    $source = $tmp;
+		    break;
+		}
+
+		array_unshift($sources, $tmp);
+	    }
+
+	    /*
+	     * If we have a preferred at the head of the chain, and that preferred has no
+	     * postfilter operations then use that as the source.  We won't run any risk of
+	     * upsampling, and it is as good a source as the original (better in fact, since we
+	     * skip at least one operation).
+	     */
+	    if (count($sources) > 1 && /* we have at least one derivative in the chain */
+		    $sources[0]->getDerivativeType() == DERIVATIVE_TYPE_IMAGE_PREFERRED &&
+		    strlen($sources[0]->getPostFilterOperations()) == 0) {
+		$source = array_shift($sources);  /* the preferred is now our source */
+	    }
+
+	    /*
+	     * Now gather up all the remaining operations, and reduce them to the smallest
+	     * possible sequence.
+	     */
+	    $operations = $sources[0]->getDerivativeOperations();
+	    for ($i = 1; $i < sizeof($sources); $i++) {
+		foreach (explode(';', $sources[$i]->getDerivativeOperations()) as $newOperation) {
+		    list ($ret, $operations) =
+			GalleryCoreApi::mergeDerivativeOperations($operations, $newOperation);
+		    if ($ret) {
+			return array($ret, null, null);
+		    }
+		}
+	    }
+	} else {
+	    $operations = $this->getDerivativeOperations();
+	}
+
+	/* Merge in the postfilter operations */
+	$postFilters = $this->getPostFilterOperations();
+	if (empty($operations)) {
+	    $operations = empty($postFilters) ? array() : explode(';', $postFilters);
+	} else {
+	    foreach (explode(';', $postFilters) as $newOperation) {
+		list ($ret, $operations) =
+		    GalleryCoreApi::mergeDerivativeOperations($operations, $newOperation);
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+	    }
+
+	    $operations = explode(';', $operations);
+	}
+
+	return array(null, $source, $operations);
+    }
+
+    /**
+     * Is the cache for this item still current?
+     * If the cache is expired, it can be rebuilt with rebuildCache()
+     *
+     * @return array GalleryStatus a status code,
+     *               boolean false if the item is expired (ie, empty cache)
+     */
+    function isCacheCurrent() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $path) = $this->fetchPath();
+	if ($ret) {
+	    return array($ret, false);
+	}
+
+	$bool = $platform->file_exists($path);
+	return array(null, $bool);
+    }
+
+    /**
+     * Expire the cache.
+     * @return GalleryStatus a status code
+     */
+    function expireCache() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $path) = $this->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($platform->file_exists($path)) {
+	    $platform->unlink($path);
+	}
+
+	GalleryCoreApi::deleteFastDownloadFileById($this->getId());
+
+	return null;
+    }
+
+    /**
+     * Get the full path to the data file.
+     *
+     * @return array GalleryStatus a status code,
+     *               string a path where children can store their data files
+     */
+    function fetchPath() {
+	global $gallery;
+
+	$cacheFile = GalleryDataCache::getCachePath(array('type' => 'derivative',
+							  'itemId' => $this->getId()));
+	return array(null, $cacheFile);
+    }
+
+    /**
+     * Render this item in the given format.  For example,
+     * GalleryDerivativeImage may want to render as an <img> tag in the HTML format.
+     *
+     * @param string $format the format (eg. HTML)
+     * @param GalleryDataItem $item the data item
+     * @param array $params format specific key value pairs
+     * @return string output
+     */
+    function render($format, $item, $params) {
+	return null;
+    }
+
+    /**
+     * Return true if we have no derivative or postfilter operations
+     * @return boolean
+     */
+    function hasNoOperations() {
+	$derivativeOperations = $this->getDerivativeOperations();
+	$postfilterOperations = $this->getPostFilterOperations();
+	return (empty($derivativeOperations) && empty($postfilterOperations));
+    }
+
+    /**
+     * Return path for broken derivative placeholder which is shown when we fail to generate a
+     * derivative item.  Descendent classes can override this method to use their own broken
+     * derivative placeholder, which can be of any mime type, eg. a wav file for broken audio
+     * derivatives, etc.
+     *
+     * @return string the path of the broken derivative medium
+     */
+    function getBrokenDerivativePath() {
+	/* Default to the broken-image.gif */
+	return dirname(__FILE__) . '/../data/broken-image.gif';
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryDerivative';
+    }
+
+    function getDerivativeSourceId() {
+	return $this->derivativeSourceId;
+    }
+
+    function setDerivativeSourceId($derivativeSourceId) {
+	$this->derivativeSourceId = $derivativeSourceId;
+    }
+
+    function getDerivativeOperations() {
+	return $this->derivativeOperations;
+    }
+
+    function setDerivativeOperations($derivativeOperations) {
+	$this->derivativeOperations = $derivativeOperations;
+    }
+
+    function getDerivativeOrder() {
+	return $this->derivativeOrder;
+    }
+
+    function setDerivativeOrder($derivativeOrder) {
+	$this->derivativeOrder = $derivativeOrder;
+    }
+
+    function getDerivativeSize() {
+	return $this->derivativeSize;
+    }
+
+    function setDerivativeSize($derivativeSize) {
+	$this->derivativeSize = $derivativeSize;
+    }
+
+    function getDerivativeType() {
+	return $this->derivativeType;
+    }
+
+    function setDerivativeType($derivativeType) {
+	$this->derivativeType = $derivativeType;
+    }
+
+    function getMimeType() {
+	return $this->mimeType;
+    }
+
+    function setMimeType($mimeType) {
+	$this->mimeType = $mimeType;
+    }
+
+    function getPostFilterOperations() {
+	return $this->postFilterOperations;
+    }
+
+    function setPostFilterOperations($postFilterOperations) {
+	$this->postFilterOperations = $postFilterOperations;
+    }
+
+    function getIsBroken() {
+	return $this->isBroken;
+    }
+
+    function setIsBroken($isBroken) {
+	$this->isBroken = $isBroken;
+    }
+}
+?>

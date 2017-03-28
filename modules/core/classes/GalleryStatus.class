@@ -1,0 +1,246 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Container for error status.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryStatus {
+
+    /**
+     * The stack trace, if possible.
+     * @var array
+     * @access private
+     */
+    var $_stack;
+
+    /**
+     * The actual error code
+     * @var int
+     * @access private
+     */
+    var $_errorCode;
+
+    /**
+     * A descriptive message of the error
+     * @var string
+     * @access private
+     */
+    var $_errorMessage;
+
+
+    /**
+     * Constructor
+     * @param int $errorCode an error code
+     * @param string $errorMessage (optional) descriptive message of the error
+     */
+    function GalleryStatus($errorCode, $errorMessage=null) {
+	$this->_errorCode = $errorCode;
+	$this->_errorMessage = $errorMessage;
+    }
+
+    /**
+     * Set the stack trace
+     * @param array $trace (array, array)
+     */
+    function setStackTrace($trace) {
+	$this->_stackTrace = $trace;
+    }
+
+    /**
+     * Return the actual error code
+     * @return int
+     */
+    function getErrorCode() {
+	return $this->_errorCode;
+    }
+
+    /**
+     * Return the error message
+     * @return string
+     */
+    function getErrorMessage() {
+	return $this->_errorMessage;
+    }
+
+    /**
+     * Add a new code to our set of codes
+     * @param int $code an error code
+     */
+    function addErrorCode($code) {
+	$this->_errorCode |= $code;
+    }
+
+    /**
+     * Deprecated.  Remove in the next major API bump.
+     *
+     * Add a new file name and line number to our stack trace
+     * @return GalleryStatus the new status object
+     * @deprecated
+     */
+    function wrap() {
+	return $this;
+    }
+
+    /**
+     * Return the error as an HTML string
+     *
+     * @param boolean $showMessage (optional) false to omit errorMessage
+     * @return string
+     */
+    function getAsHtml($showMessage=true) {
+	list ($codes, $trace) = $this->_getAsArray();
+
+	$message = $showMessage ? $this->_errorMessage : '';
+	$buf = 'Error  (' . join(', ', $codes) . ')';
+	if (!is_null($message)) {
+	    $buf .= ' : ' . htmlentities($message) . ' ';
+	}
+	$buf .= '<ul>';
+	foreach ($trace as $traceEntry) {
+	    $buf .= sprintf("<li><b>in</b> %s <b>at line</b> %d",
+			    $traceEntry['file'], $traceEntry['line']);
+	    if (isset($traceEntry['class']) && isset($traceEntry['function'])) {
+		$buf .= " ($traceEntry[class]::$traceEntry[function]) ";
+	    } else if (isset($traceEntry['class'])) {
+		$buf .= " ($traceEntry[function]) ";
+	    }
+	    $buf .= '</li>';
+	}
+	$buf .= '</ul>';
+
+	return $buf;
+    }
+
+    /**
+     * Return the error as a plain text string delimited by newlines
+     *
+     * @param boolean $showMessage (optional) false to omit errorMessage
+     * @return string
+     */
+    function getAsText($showMessage=true) {
+	list ($codes, $trace) = $this->_getAsArray();
+
+	$message = $showMessage ? $this->_errorMessage : '';
+	$buf = 'Error (' . join(', ', $codes) . ')';
+	if (!is_null($message)) {
+	    $buf .= ' : ' . htmlentities($message) . ' ';
+	}
+	foreach ($trace as $traceEntry) {
+	    $buf .= sprintf("<b>in</b> %s <b>at line</b> %d",
+			    $traceEntry['file'], $traceEntry['line']);
+	    if (isset($traceEntry['class']) && isset($traceEntry['function'])) {
+		$buf .= " ($traceEntry[class]::$traceEntry[function]) ";
+	    } else if (isset($traceEntry['class'])) {
+		$buf .= " ($traceEntry[function]) ";
+	    }
+	    $buf .= "\n";
+	}
+	return $buf;
+    }
+
+    /**
+     * Store error in session for reporting after a redirect
+     */
+    function putInSession() {
+	global $gallery;
+	$session =& $gallery->getSession();
+
+	list ($ret, $isAdmin) = GalleryCoreApi::isUserInSiteAdminGroup();
+	$isAdmin = !$ret && $isAdmin;
+
+	$session->put('core.error.code', $this->getErrorCode());
+	$session->put('core.error.trace', $this->getAsHtml($isAdmin));
+    }
+
+    /**
+     * Break down an error code into a list of constants
+     * @return array of strings
+     */
+    function getErrorCodeConstants($errorCode) {
+	if ($errorCode == 0) {
+	    $codes = array('GALLERY_SUCCESS');
+	} else {
+	    $codes = array();
+	    foreach (get_defined_constants() as $constantName => $constantValue) {
+		if (strpos($constantName, 'ERROR_') === 0) {
+		    if ($errorCode & $constantValue) {
+			$codes[] = $constantName;
+		    }
+		}
+	    }
+	    if (empty($codes)) {
+		/* No specific error specified */
+		$codes = array('GALLERY_ERROR');
+	    }
+	}
+
+	return $codes;
+    }
+
+    /**
+     * Internal function collect error code and stack trace info
+     * @access private
+     */
+    function _getAsArray() {
+	global $gallery;
+
+	$codes = $this->getErrorCodeConstants($this->_errorCode);
+	$trace = array();
+	$basePaths = array();
+	if (!class_exists('GalleryTestCase')) {
+	    $platform =& $gallery->getPlatform();
+	    $basePaths[] = $platform->realpath(dirname(__FILE__) . '/../../../') .
+		$platform->getDirectorySeparator();
+	    /* The codebase isn't necessarily the config dir (multisites) */
+	    $basePaths[] = $platform->realpath(GALLERY_CONFIG_DIR . '/') .
+		$platform->getDirectorySeparator();
+	}
+	if (empty($this->_stackTrace)) {
+	    for ($i = 0; $i < count($this->_fileName); $i++) {
+		$trace[] = array('file' => str_replace($base, '', $this->_fileName[$i]),
+				 'line' => $this->_lineNumber[$i],
+				 'class' => null,
+				 'function' => null);
+	    }
+	} else {
+	    foreach ($this->_stackTrace as $traceEntry) {
+		if (empty($traceEntry['file'])) {
+		    $traceEntry['file'] = '???';
+		}
+		if (empty($traceEntry['line'])) {
+		    $traceEntry['line'] = '???';
+		}
+		$trace[] =
+		    array('file' => str_replace($basePaths, '', $traceEntry['file']),
+			  'line' => $traceEntry['line'],
+			  'class' => empty($traceEntry['class']) ? null : $traceEntry['class'],
+			  'function' => empty($traceEntry['function']) ?
+			  null : $traceEntry['function']);
+	    }
+	}
+
+	return array($codes, $trace);
+    }
+}
+?>

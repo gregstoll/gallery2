@@ -1,0 +1,182 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryEntity.class');
+
+/**
+ * Representation of a group of users
+ *
+ * A group is a set of GalleryUsers that can be treated as if they were a single user.
+ * This is very useful for managing permissions.
+ *
+ * @g2 <class-name>GalleryGroup</class-name>
+ * @g2 <parent-class-name>GalleryEntity</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>1</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryGroup extends GalleryEntity {
+
+    /**
+     * The group type
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>groupType</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <required/>
+     * @g2 </member>
+     */
+    var $groupType;
+
+    /**
+     * The group name
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>groupName</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <unique/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $groupName;
+
+
+    /**
+     * Create a new instance of this GalleryGroup in the persistent store
+     *
+     * @param string $groupName the name of the new group
+     * @param int $groupType the type of group
+     * @return GalleryStatus a status code
+     */
+    function create($groupName, $groupType=GROUP_NORMAL) {
+	global $gallery;
+
+	/* Check to see if we have a collision */
+	$query = '
+	SELECT
+	  [GalleryGroup::id]
+	FROM
+	  [GalleryGroup]
+	WHERE
+	  [GalleryGroup::groupName] = ?
+	';
+	list ($ret, $results) =
+	    $gallery->search($query, array($groupName),
+			     array('limit' => array('count' => 1)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$result = $results->nextResult();
+	if ($result[0] > 0) {
+	    return GalleryCoreApi::error(ERROR_COLLISION);
+	}
+
+	$ret = parent::create();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$this->setGroupName($groupName);
+	$this->setGroupType($groupType);
+
+	return null;
+    }
+
+    /**
+     * Delete this GalleryGroup.
+     * Do some bookkeeping, like removing any user/group mappings.
+     *
+     * @return GalleryStatus a status code
+     */
+    function delete() {
+	/* Don't allow to delete the special groups (admin, registered, everybody) */
+	if ($this->getGroupType() != GROUP_NORMAL) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					 'Special groups cannot be deleted!');
+	}
+
+	$ret = GalleryCoreApi::removeAllUsersFromGroup($this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Delete all permissions from the permissions map table */
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'GalleryAccessMap', array('userOrGroupId' => $this->getId()));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = parent::delete();
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::itemTypeName
+     */
+    function itemTypeName($localized = true) {
+	if ($localized) {
+	    list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+	    if (! $ret) {
+		return array($core->translate('Group'), $core->translate('group'));
+	    }
+	}
+	return array('Group', 'group');
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryGroup';
+    }
+
+    function getGroupType() {
+	return $this->groupType;
+    }
+
+    function setGroupType($groupType) {
+	$this->groupType = $groupType;
+    }
+
+    function getGroupName() {
+	return $this->groupName;
+    }
+
+    function setGroupName($groupName) {
+	$this->groupName = $groupName;
+    }
+}
+?>

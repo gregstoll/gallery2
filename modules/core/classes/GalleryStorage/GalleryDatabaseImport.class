@@ -1,0 +1,970 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+/* This class is extensively based on the adodb-sxmlschema03 class developed by Richard Tango-Lowy &
+ * Dan Cech, Released under both BSD license and Lesser GPL library license.  Whenever there is any
+ * discrepancy between the two licenses, the BSD license will take precedence.  The orignal class
+ * was copyright: Copyright (c) 2004-2005 ars Cognita Inc., all rights reserved.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryTheme.class');
+
+/**
+ * This class provides basic methods for importing Gallery information from an exported Gallery 
+ * file.  It provides additional error handling and status reporting not provided by the 
+ * GalleryXmlHandler.
+ */
+class GalleryImportElement extends GalleryXmlHandler {
+    /**
+     * Defines the number of rows to be read before letting the user know that we are still working.
+     */
+    var $_rowChunkSize = 200;
+
+    /**
+     * Storage object.
+     */
+    var $_storage;
+
+    /**
+     * Parent GalleryImportElement
+     */
+    var $_parent;
+
+    /**
+     * current element
+     */
+    var $_currentElement;
+
+    /**
+     * This is a place holder for a list of errors that have occurred.
+     */
+    var $_errors;
+
+    /**
+     * This variable contains the call back information and contains the following keys
+     * 'progress' current progress
+     * 'total' total work involved
+     * 'callback' progress bar notification callback
+     */
+    var $_callBack;
+
+    /**
+     * Constructor
+     * @param GalleryImportElement $parent The parent object. Used to follow the parent chain in
+     *           order to set error messages and to provide status information to the caller.
+     */
+    function GalleryImportElement($parent=null) {
+	global $gallery;
+
+	$this->_parent = $parent;
+	$this->_storage =& $gallery->getStorage();
+    }
+
+    /**
+     * Stores an error message for later display.  Follows the parent chain until a $_error
+     * variable is found.
+     * @param GalleryStatus $status A Gallery status object.
+     */
+    function setError($status) {
+	if (isset($this->_parent)) {
+	    $this->_parent->setError($status);
+	} else {
+	    $this->_errors[] = $status;
+	}
+    }
+
+    /**
+     * Walks the tag chain to find the parent that has the callback information and then does the
+     * callback.
+     * @param integer $progress (optional) The amount to increase the progress bar by.
+     * @param integer $total (optional) The amount to increase the total work units by.
+     */
+    function updateStatus($progress=1, $total=0) {
+	global $gallery;
+
+	if (isset($this->_parent)) {
+	    $this->_parent->updateStatus($progress, $total);
+	} else {
+	    $this->_callBack['progress'] += $progress;
+   	    $this->_callBack['total'] += $total;
+	    $complete = $this->_callBack['progress'] / $this->_callBack['total'];
+	    $callback = $this->_callBack['callBack'];
+	    call_user_func_array($callback, array($complete));
+	    $gallery->guaranteeTimeLimit(120);
+	}
+    }
+
+    /**
+     * Undo the effects of calling GalleryDatabaseExport::_encodeHtmlspecialchars($value). If the
+     * exported field is contained in a CDATA block, then we need to do the decoding ourselves.
+     * @param $string $valueToConvert String to escape the html special characters.
+     * @return string The decoded string.
+     * @todo Move this routine to GalleryUtilities as a common function.
+     */
+    function _decodeHtmlSpecialChars($valueToConvert) {
+	return str_replace(array('&amp;', '&quot;', '&lt;', '&gt;'), array('&', '"', '<', '>'),
+			   $valueToConvert);
+    }
+}
+
+/**
+ * GalleryDatabaseImport provides the functionality to import the Gallery database.
+ * @package GalleryCore
+ * @subpackage Storage
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17580 $
+ */
+class GalleryDatabaseImport extends GalleryImportElement {
+    /**
+     * Defines the number of bytes to read before letting the user know that we haven't forgotten
+     * them.
+     */
+    var $_fileReadChunkSize = 8192;
+
+    function GalleryDatabaseImport() {
+	parent::GalleryImportElement();
+    }
+
+    /**
+     * This method prescans the exported Gallery database before doing an upload
+     * @param string $fileName Filename to be imported.
+     * @return array List of error messages and warning messages generated by status check.  Errors
+     *      are contained in the key 'errors' and the warnings are contained in the key 'warnings'.
+     */
+    function verifyVersions($fileName) {
+	global $gallery;
+
+	$parseString = '#<plugin-status\s+id="(.*?)"\s+required-core-api="(.*?)"\s+required-api="'
+			. '(.*?)"\s+version="(.*?)"\s+active="(1|0)"\s+type="(module|theme)"#';
+
+	$platform =& $gallery->getPlatform();
+
+	$errors = array('errors' => array(), 'warnings' => array());
+
+	$this->_installedModuleVersion = GalleryModule::getApiVersion();
+	$this->_installedCoreVersion = GalleryCoreApi::getApiVersion();
+	$this->_installedThemeVersion = GalleryTheme::getApiVersion();
+
+	list ($ret, $coreModule) = GalleryCoreApi::loadPlugin('module', 'core', true);
+	if ($ret) {
+	    $errors['errors'][] = $ret->getAsHtml();
+	    return $errors;
+	}
+
+	if (!function_exists('xml_parse')) {
+	    $errors['errors'][] = $coreModule->translate('Unable to find the XML parser.  The PHP'
+			. ' XML parsing extension must be loaded.  Terminating database import.');
+	} else {
+	    if ($platform->file_exists($fileName)) {
+		$handle = $platform->fopen($fileName, 'r');
+		if ($handle) {
+		    while (!$platform->feof($handle)) {
+			$line = rtrim($platform->fgets($handle, 4096));
+			$versions = array();
+			if (preg_match('#<export schema-version="(.*?)"#', $line, $versions)) {
+			    if (EXPORT_SCHEMA_VERSION != $versions[1]) {
+				$errors['errors'][] = $coreModule->translate(
+				    array('text' => 'The exported file is not the correct '
+							. 'version. Expecting %s received %s.',
+					  'arg1' => EXPORT_SCHEMA_VERSION, 'arg2' => $versions[1]));
+			    }
+			    continue;
+			}
+			if (strpos($line, '</plugin-status-list>') !== false) {
+			    break;
+			}
+			/* Find the module definition lines. */
+			if (preg_match($parseString, $line, $versions)) {
+			    $this->_doStatusCheck($versions, $errors);
+			}
+		    }
+		    if (!$platform->fclose($handle)) {
+			$errors['errors'][] =
+			    $coreModule->translate(array('text' => 'Unable to close import file: '
+								   . '%s', 'arg1' => $fileName));
+		    }
+		} else {
+		    $errors['errors'][] =
+			$coreModule->translate(array('text' => 'Unable to open import file: %s',
+						     'arg1' => $fileName));
+		}
+	    } else {
+		$errors['errors'][] =
+		    $coreModule->translate(array('text' => 'Import file doesn\'t exist: %s',
+						 'arg1' => $fileName));
+	    }
+	}
+
+	return $errors;
+    }
+
+    /**
+     * Do the version validation prior actually reloading the Gallery installation
+     * @param array $versions The plugin status as extracted from the <plugin-status> tag.
+     * 				$versions[1] - The plugin id
+     * 				$versions[2] - Required Core Api
+     * 				$versions[3] - Require Api (Module or Theme)
+     * 				$versions[4] - Plugin Version number
+     * 				$versions[5] - The plugin active flag.
+     * 				$versions[6] - The plugin type module | theme.
+     * @param array A keyed array for errors and warnings. Keys are 'errors' and 'warnings'.
+     */
+    function _doStatusCheck($versions, &$errors) {
+	$pluginType = $versions[6];
+	list ($ret, $pluginStatus) = GalleryCoreApi::fetchPluginStatus($pluginType);
+	if ($ret) {
+	    $errors['errors'][] = $ret->getAsHtml();
+	    return;
+	}
+
+	list ($ret, $coreModule) = GalleryCoreApi::loadPlugin('module', 'core', true);
+	if ($ret) {
+	    $errors['errors'][] = $ret->getAsHtml();
+	    return;
+	}
+
+	list ($ret, $version) =
+	    GalleryCoreApi::getPluginParameter('module', $versions[1], '_version');
+	if ($ret) {
+	    $errors['errors'][] = $ret->getAsHtml();
+	    return;
+	}
+	if (!empty($version) && empty($pluginStatus[$versions[1]]['available'])) {
+	    $errors['warnings'][] =
+		$coreModule->translate(array('text' => 'Plugin %s is not currently available.',
+					     'arg1' => $versions[1]));
+	    return;
+	}
+
+	list ($ret, $plugin) = GalleryCoreApi::loadPlugin($pluginType, $versions[1], true);
+	if ($ret) {
+	    $errors['errors'][] = $ret->getAsHtml();
+	    return;
+	}
+
+	$availableVersion =  $plugin->getVersion();
+	if ($availableVersion < $versions[4]) {
+	    $errors['errors'][] =
+		$coreModule->translate(array('text' => 'The available version of plugin "%s" may '
+			 . 'not be compatible with the imported version.', 'arg1' => $versions[1]));
+	}
+
+	$importVersion = array_map('intval', explode('.', $versions[2]));
+	if (!GalleryUtilities::isCompatibleWithApi($importVersion, $this->_installedCoreVersion)) {
+	    $errors['warnings'][] =
+		$coreModule->translate(array('text' => 'The currently installed core API version '
+			      . 'required by "%s" may not be compatible with the imported version.',
+			      'arg1' => $versions[1]));
+	}
+
+	$importVersion = array_map('intval', explode('.', $versions[3]));
+	if ($pluginType == 'module') {
+	    if (!GalleryUtilities::isCompatibleWithApi($importVersion,
+						       $this->_installedModuleVersion)) {
+		$errors['warnings'][] =
+		    $coreModule->translate(array('text' => 'The installed module API version'
+			 . ' required by "%s" may not be compatible with the imported version.',
+				'arg1' => $versions[1]));
+	    }
+	} else {
+	    if (!GalleryUtilities::isCompatibleWithApi($importVersion,
+						       $this->_installedThemeVersion)) {
+		$errors['warnings'][] =
+		    $coreModule->translate(array('text' => 'The installed theme API version '
+				. 'required by "%s" is not compatible with the imported version.',
+				'arg1' => $versions[1]));;
+	    }
+	}
+    }
+
+    /**
+     * Imports a file in Gallery export format.
+     *
+     * This method will load an XML file, in the Gallery export format to the data base.  It will
+     * restore the config.ini file and reset the versions.dat file.
+     * @param string $fileName Name of the file containing file database backup to restore.
+     * @param string $progressCallback Name of the routine to return call with progress reports
+     * @return array GalleryStatus
+     *               array Array of GalleryStatus's containing errors encountered or null on success
+     */
+    function importToDb($fileName, $progressCallback) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	/* Preallocate at least 1 minutes for the database import. */
+	$gallery->guaranteeTimeLimit(60);
+
+	$this->_callBack = array('progress' => 0, 'total' => 0, 'callBack' => $progressCallback);
+
+	if ($platform->file_exists($fileName)) {
+	    $fileSize = $platform->filesize($fileName);
+	    $this->_callBack['total'] = ceil($fileSize / $this->_fileReadChunkSize);
+
+	    /* Open the file */
+	    if (!($handle = $platform->fopen($fileName, 'r'))) {
+		return array(GalleryCoreApi::error(ERROR_BAD_PATH, __FILE__, __LINE__,
+						 'Unable to open the backup file for input'), null);
+	    }
+
+	    $xmlParser = new GalleryXmlProcessor($this);
+	    
+	    /* Process the file until complete or errors occur. */
+	    while (empty($this->_errors)
+		   && $data = $platform->fread($handle, $this->_fileReadChunkSize)) {
+		/*
+		 * When the file was exported, the data and fields were encoded to remove any
+		 * significant HTML characters (i.e $, <, >, ").  There is no special handling
+		 * in our import process, as we are relying on the PHP xml parser to decode these
+		 * special characters.
+		 */
+		if (!$xmlParser->xmlParse($data, $platform->feof($handle))) {
+		    return array($xmlParser->getParserError(), null); 
+		}
+		$this->updateStatus();
+	    }
+
+	    $xmlParser->release();
+
+	    call_user_func_array($progressCallback, array(1.0));
+	} else {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH, __FILE__, __LINE__,
+					       'Import file doesn\'t exist: ' . $fileName), null);
+	}
+
+	$cacheBaseDir = $gallery->getConfig('data.gallery.cache');
+
+	foreach (array('entity', 'theme', 'module') as $dir) {
+	    $dir = sprintf('%s%s', $cacheBaseDir, $dir);
+	    if ($platform->file_exists($dir)) {
+	    	/* A failure is as good as a success. Assume removed and carry on. */
+		$platform->recursiveRmDir($dir);
+	    }
+	}
+
+	return array(null, empty($this->_errors) ? null : $this->_errors);
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processStartElement
+     * @access protected
+     */
+    function _processStartElement($tag, $attributes) {
+	return ($tag === 'export') ? new _GalleryExportTag($this, $attributes) : null;
+    }
+}
+
+/**
+ * Represents the root element of a Gallery2 database export file.
+ * @private
+ */
+class _GalleryExportTag extends GalleryImportElement {
+    function _GalleryExportTag($parent, $attributes) {
+	parent::GalleryImportElement($parent);
+	$this->writeVersions($attributes['core-version'], $attributes['gallery-version']);
+	$this->updateStatus(0, $attributes['tables']);
+    }
+
+    /**
+     * Write a new copy of the versions.dat file based on the versions contained in the import file.
+     * When writing, set Gallery into maintenance mode.
+     * @param string $coreVersion The core API version number to write.
+     * @param string $galleryVersion The Gallery API version number to write.
+     * @return GalleryStatus
+     */
+    function writeVersions($coreVersion, $galleryVersion) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$versionFile = $gallery->getConfig('data.gallery.version');
+
+	$versionsData = implode("\n", array($coreVersion, $galleryVersion, 'maintenance-mode'));
+
+	if (!$platform->atomicWrite($versionFile, $versionsData)) {
+	    $gallery->debug('Error: Can\'t write to versions file');
+	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+							       'Can\'t write to the versions file');
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processStartElement
+     * @access protected
+     */
+    function _processStartElement($tag, $attributes) {
+    	if ($tag == 'config') {
+	    return new _GalleryConfigTag($this, $attributes);
+    	} else if ($tag == 'plugin') {
+	    return new _GalleryPluginTag($this, $attributes);
+    	} else {
+	    return null;
+    	}
+    }
+}
+
+/**
+ * Processes the <plugin> tag and its children.
+ */
+class _GalleryPluginTag extends GalleryImportElement {
+    /** Variable to hold the module id */
+    var $_id;
+
+    function _GalleryPluginTag($parent, $attributes) {
+	parent::GalleryImportElement($parent);
+	$this->_id = $attributes['id'];
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processStartElement
+     * @access protected
+     */
+    function _processStartTag($tag, $attributes) {
+    	if ($tag == 'sequence') {
+	    return new _GallerySequenceTag($this, $attributes);
+    	} else if ($tag == 'table') {
+	    return new _GalleryTableTag($this, $attributes);
+    	} else {
+	    return null;
+    	}
+    }
+}
+
+/**
+ * Processes the <sequence> tag an initializes a sequence.
+ * @private
+ */
+class _GallerySequenceTag extends GalleryImportElement {
+    /** The name of this sequence. */
+    var $_sequenceName;
+    /** The starting value. */
+    var $_startValue;
+    
+    function _GallerySequenceTag($parent, $attributes) {
+	parent::GalleryImportElement($parent);
+	$this->_sequenceName = $attributes['name'];
+	$this->_startValue = $attributes['start-value'];
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processEndElement
+     * @access protected
+     */
+    function _processEndElement($tag) {
+    	$this->importSequence();
+    }
+
+    /**
+     * Import a sequence
+     */
+    function importSequence() {
+    	$storageExtras =& $this->_storage->_getExtras();
+	$ret = $storageExtras->dropSequence($this->_sequenceName);
+	/* Ignore any errors and assume that if we get an error, then the sequence doesn't exist */
+
+	$ret = $storageExtras->createSequence($this->_sequenceName, $this->_startValue);
+	if ($ret) {
+	    $this->setError($ret);
+	}
+    }
+}
+
+/**
+ * Processes the <table> tag and creates the table and loads the data.
+ */
+class _GalleryTableTag extends GalleryImportElement {
+    /** Variable to hold the table name */
+    var $_name;
+
+    function _GalleryTableTag($parent, $attributes) {
+    	parent::GalleryImportElement($parent);
+	$this->_name = $attributes['name'];
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processStartElement
+     * @access protected
+     */
+    function _processStartElement($tag, $attributes) {
+	global $gallery;
+	/* Start with 2 minutes and we will increase it later. */
+	$gallery->guaranteeTimeLimit(120);
+	if ($tag == 'definition') {
+	    return new _GalleryTableDefinitionTag($this, $this->_name, $attributes);
+    	} else if ($tag == 'data') {
+	    return new _GalleryDataTag($this, $this->_name, $attributes);
+    	} else {
+	    return null;
+    	}
+    }
+}
+
+/**
+ * Processes the <definition> tag from the input source.
+ */
+class _GalleryTableDefinitionTag extends GalleryImportElement {
+    /** Variable to hold the table name */
+    var $_name;
+
+    /** Variable to hold the defining module id */
+    var $_moduleId;
+
+    /** Holds the generated insert for this table */
+    var $_currentSql = '';
+    
+    /** Holds the table description information */
+    var $_tableInfo = null;
+
+    /** Holds the table type */
+    var $_tableType = null;
+
+    function _GalleryTableDefinitionTag($parent, $tableName, $attributes) {
+	parent::GalleryImportElement($parent);
+	$this->_name = $tableName;
+	$this->_moduleId = $attributes['module-id'];
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processStartElement
+     * @access protected
+     */
+    function _processStartElement($tag, $attributes) {
+	global $gallery;
+	if ($tag == 'create-sql') {
+	    return new _GalleryCreateSqlTag($this, $attributes);
+    	} else if ($tag == 'table-info') {
+	    return new _GalleryTableInfoTag($this, $attributes);
+    	} else {
+	    return null;
+    	}
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processEndElement
+     * @access protected
+     */
+    function _processEndElement($tag) {
+	list ($table, $unused, $nameInSchema) = $this->_storage->_translateTableName($this->_name);
+
+	$ret = $this->_storage->execute('DROP TABLE ' . $table);
+	/* Don't check the return code. Assume the table doesn't exist and create it. */
+
+	$storageExtras =& $this->_storage->_getExtras();
+	$ret = $storageExtras->_executeSql($this->_currentSql);
+	if ($ret) {
+	    $this->setError($ret);
+	    return null;
+	}
+	
+	/* Only need to decode if the data is in a CDATA section, which these fields are */
+	$sql = $this->_decodeHtmlSpecialChars($this->_currentSql);
+	$info = $this->_decodeHtmlSpecialChars($this->_tableInfo);
+	$ret = $storageExtras->_updateSchemaTableInfo($nameInSchema, $sql, $this->_moduleId,
+							  $this->_tableType, $info, true);
+	if ($ret) {
+	    $this->setError($ret);
+	    return null;
+	}
+	$ret = $this->_storage->checkPoint();
+	if ($ret) {
+	    $this->setError($ret);
+	}
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processChildElement
+     * @access protected
+     */
+    function _processChildElement($childElement) {
+    	if (GalleryUtilities::isA($childElement, '_GalleryCreateSqlTag')) {
+	    $this->_currentSql = $childElement->_currentSql;
+    	} else if (GalleryUtilities::isA($childElement, '_GalleryTableInfoTag')) {
+	    $this->_tableInfo = $childElement->_tableInfo;
+	    $this->_tableType = $childElement->_tableType;
+    	}
+    }
+}
+
+/**
+ * Process the <create-sql> tag from the input source.
+ */
+class _GalleryCreateSqlTag extends GalleryImportElement {
+    /** Holds the generated insert for this table */
+    var $_currentSql = '';
+
+    function GalleryTableImport($parent, $attributes) {
+	parent::GalleryImportElement($parent);
+	$this->_currentSql = '';
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processCData
+     * @access protected
+     */
+    function _processCData($cdata) {
+	$this->_currentSql .= $cdata;
+    }
+}
+
+/**
+ * Processes the <table-info> tag from the input source.
+ */
+class _GalleryTableInfoTag extends GalleryImportElement {
+    /** Holds the table description information */
+    var $_tableInfo = null;
+
+    /** Holds the table type */
+    var $_tableType = null;
+
+    function _GalleryTableInfoTag($parent, $attributes) {
+	parent::GalleryImportElement($parent);
+	$this->_tableInfo = '';
+	$this->_tableType = $attributes['type'];
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processCData
+     * @access protected
+     */
+    function _processCData($cdata) {
+	$this->_tableInfo .= $cdata;
+    }
+}
+
+/**
+ * Processes the <data> tag from the input source.
+ */
+class _GalleryDataTag extends GalleryImportElement {
+    /** Variable to hold the table name. */
+    var $_tableName;
+
+    /** Array of field names, in the order that the data was exported. */
+    var $_fields = array();
+
+    /** Row counter so we can provide feedback to the user. */
+    var $_rowCounter;
+
+    function _GalleryDataTag($parent, $tableName, $attributes) {
+	parent::GalleryImportElement($parent);
+
+	list ($this->_tableName) = $this->_storage->_translateTableName($tableName);
+	$this->_rowCounter = 0;
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processStartElement
+     * @access protected
+     */
+    function _processStartElement($tag, $attributes) {
+    	global $gallery;
+	/* Start with 2 minutes and we will increase it later. */
+	$gallery->guaranteeTimeLimit(120);
+    	if ($tag == 'field') {
+	    return new _GalleryFieldDefinitionTag($this, $attributes);
+    	} else if ($tag == 'row') {
+	    return new _GalleryRowTag($this, $this->_tableName, $this->_fields, $attributes);
+    	} else {
+	    return null;
+    	}
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processChildElement
+     * @access protected
+     */
+    function _processChildElement($childElement) {
+    	if (GalleryUtilities::isA($childElement, '_GalleryFieldDefinitionTag')) {
+	    $this->_fields[$childElement->_translatedName] = $childElement->_fieldDefinition;
+    	} else if (GalleryUtilities::isA($childElement, '_GalleryRowTag')) {
+	    $this->_rowCounter++;
+	    if ($this->_rowCounter >= $this->_rowChunkSize) {
+		$this->updateStatus(1, 1);
+		$this->_rowCounter = 0;
+	    }
+    	}
+    }
+}
+
+/**
+ * Processes the <field> tag from the input source.
+ */
+class _GalleryFieldDefinitionTag extends GalleryImportElement {
+    /** Variable to hold the field definition */
+    var $_fieldDefinition = array();
+
+    /** Name of the column */
+    var $_translatedName = array();
+    
+    function _GalleryFieldDefinitionTag($parent, $attributes) {
+	parent::GalleryImportElement($parent);
+	$colName = GalleryUtilities::strToLower($attributes['name']);
+	$this->_translatedName = $this->_storage->_translateColumnName($colName);
+	$this->_fieldDefinition['type'] = $attributes['type'];
+	if (!empty($attributes['size'])) {
+	    $this->_fieldDefinition['size'] = $attributes['size'];
+	}
+	if (!empty($attributes['not-null'])) {
+	    $this->_fieldDefinition['notNull'] = $attributes['not-null'];
+	}
+	if (!empty($attributes['not-null-empty-allowed'])) {
+	    $this->$this->_fieldDefinition['notNullEmptyAllowed'] =
+		    		$attributes['not-null-empty-allowed'];
+	}
+    }
+}
+
+/**
+ * Processes the <row> tag from the input source.
+ */
+class _GalleryRowTag extends GalleryImportElement {
+    /** Index to field array. */
+    var $_fieldIndex;
+
+    /** Contains the data for each field in a row */
+    var $_rowData = array();
+
+    /** Holds the generated insert for this table */
+    var $_currentSql;
+
+    function _GalleryRowTag($parent, $tableName, $fields, $attributes) {
+	parent::GalleryImportElement($parent);
+	$this->_fields = $fields;
+	$this->_fieldNames = array_keys($fields);
+	$this->_currentSql = 'INSERT INTO ' . $tableName . ' (' . implode(', ', $this->_fieldNames) 
+		   . ') VALUES (' . GalleryUtilities::makeMarkers(count($this->_fieldNames)) . ')';
+	$this->_rowData = array();
+	$this->_fieldIndex = 0;
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processStartElement
+     * @access protected
+     */
+    function _processStartElement($tag, $attributes) {
+	if ($tag == 'f') {
+	    $memberData = $this->_fields[$this->_fieldNames[$this->_fieldIndex++]];
+	    return new _GalleryFieldValueTag($this, $memberData, $attributes);
+    	} else {
+	    return null;
+    	}
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processEndElement
+     * @access protected
+     */
+    function _processEndElement($tag) {
+	$ret = $this->_storage->execute($this->_currentSql, $this->_rowData);
+	if ($ret) {
+	    $this->setError($ret);
+	    return null;
+	}
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processChildElement
+     * @access protected
+     */
+    function _processChildElement($childElement) {
+    	if (GalleryUtilities::isA($childElement, '_GalleryFieldValueTag')) {
+	    $this->_rowData[] = $childElement->_fieldData;
+    	}
+    }
+}
+
+/**
+ * Processes the <f> tag from the input source.
+ */
+class _GalleryFieldValueTag extends GalleryImportElement {
+    /** Temporary storage for the field data */
+    var $_fieldData;
+
+    /** Temporary storage for the null field value indicator */
+    var $_isFieldNull;
+
+    /** Temporary storage for the null field value indicator */
+    var $_memberData;
+
+    function _GalleryFieldValueTag($parent, $memberData, $attributes) {
+	parent::GalleryImportElement($parent);
+	$this->_fieldData = '';
+	$this->_isFieldNull = !empty($attributes['null']);
+	$this->_memberData = $memberData;
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processCData
+     * @access protected
+     */
+    function _processCData($cdata) {
+    	$this->_fieldData .= $cdata;
+    }
+
+    /**
+     * @see GalleryXmlHandler::_processEndElement
+     * @todo At some future date, decode the data from base64 encoded.  Only if a similiar change
+     * 	     is done to GalleryDatabaseExport.
+     * @access protected
+     */
+    function _processEndElement($tag) {
+	$this->_fieldData = $this->_isFieldNull ? null
+			  : $this->_storage->_normalizeValue($this->_fieldData, $this->_memberData);
+    }
+}
+
+/**
+ * GalleryXmlProcessor provides a simple xml processor. It doesn't support anything fancy like 
+ * namespaces and such.
+ * @package GalleryCore
+ * @subpackage Storage
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17580 $
+ */
+class GalleryXmlProcessor {
+    /**
+     * Push down stack for xml processing.
+     */
+    var $_elementStack = array();
+    /**
+     * a reference to the PHP supplied XML parser.
+     */
+    var $_xmlParser;
+    
+    function GalleryXmlProcessor($rootElement) {
+	$this->_elementStack[] = $rootElement;
+
+	$this->_xmlParser = xml_parser_create('UTF-8');
+	xml_parser_set_option($this->_xmlParser, XML_OPTION_CASE_FOLDING, 0);
+	xml_set_object($this->_xmlParser, $this);
+
+	/* Initialize the XML callback functions */
+	xml_set_element_handler($this->_xmlParser, '_processStartElement', '_processEndElement');
+	xml_set_character_data_handler($this->_xmlParser, '_processCData');
+        }
+
+    /**
+     * Parses the data buffer.
+     * @param string $data The buffer of data to parse.
+     * @param boolean $isFinal Flag to indicate if this is the final buffer of data.
+     * @return boolean Returns true on success.
+     */
+    function xmlParse($data, $isFinal) {
+	return xml_parse($this->_xmlParser, $data, $isFinal);
+    }
+
+    /**
+     * This method releases the php parser.
+     * @todo After PHP 4.x.x then change to a __destruct and change the call to an unset()
+     */
+    function release() {
+	xml_parser_free($this->_xmlParser);
+    }
+    
+    function getParserError() { 
+	return GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+				     sprintf('XML error: %s at line %d',
+					   xml_error_string(xml_get_error_code($this->_xmlParser)),
+					   xml_get_current_line_number($this->_xmlParser)));
+    }
+    
+    /**
+     * XML Callback to process start elements. Called by the PHP Xml parser
+     * @param object $parser A reference to the php parser
+     * @param string $tag The name of the tage being processed
+     * @param array $attributes The attributes that were present on the xml element.
+     * @access private
+     */
+    function _processStartElement(&$parser, $tag, $attributes) {
+    	$topItem =& $this->_elementStack[count($this->_elementStack) - 1];
+	$newChild = $topItem->_processStartElement($tag, $attributes);
+	if (isset($newChild)) {
+	    
+	    $this->_elementStack[] = $newChild;
+	} else {
+	    /* Put a dummy entry on the stack */
+	    $this->_elementStack[] = new GalleryXmlHandler();
+	}
+    }
+
+    /**
+     * XML Callback to process CDATA elements.  Called by the PHP Xml parser
+     * @param object $parser A reference to the php parser
+     * @param string $cdata A buffer of data that represents the body of the xml element
+     * @access private
+     */
+    function _processCData(&$parser, $cdata) {
+	$topItem =& $this->_elementStack[count($this->_elementStack) - 1];
+	$topItem->_processCData($cdata);
+    }
+
+    /**
+     * XML Callback to process end elements. Called by the PHP Xml parser
+     * @param object $parser A reference to the php parser
+     * @param string $tag The name of the tage being processed
+     * @access private
+     */
+    function _processEndElement(&$parser, $tag) {
+	$topItem = array_pop($this->_elementStack);
+	$topItem->_processEndElement($tag);
+	$newTopItem =& $this->_elementStack[count($this->_elementStack) - 1];
+	$newTopItem->_processChildElement($topItem);
+    }
+}
+
+/**
+ * Base Import Element. This class provides the basic methods that content handlers need to 
+ * implement.  It can't just be an interface or flagged as abstract, because it is used as a 
+ * place holder, the the content handler doesn't supply a new class on start element.
+ */
+class GalleryXmlHandler {
+    /**
+     * XML Callback to process start elements
+     * @param string $tag The name of the tage being processed
+     * @param array $attributes The attributes that were present on the xml element.
+     * @access protected
+     */
+    function _processStartElement($tag, $attributes) {
+    }
+
+    /**
+     * XML Callback to process CDATA elements
+     * @param string $cdata A buffer of data that represents the body of the xml element
+     * @access protected
+     */
+    function _processCData($cdata) {
+    }
+
+    /**
+     * XML Callback to process end elements
+     * @param string $tag The name of the tage being processed
+     * @access protected
+     */
+    function _processEndElement($tag) {
+    }
+
+    /**
+     * This call back processes the child as it is pooped off the stack. Allows the parent element
+     * to aggregate data from the children elements.
+     * @param object $childeElement The child element that was just completed.
+     * @access protected
+     */
+    function _processChildElement($childElement) {
+    }
+}
+?>

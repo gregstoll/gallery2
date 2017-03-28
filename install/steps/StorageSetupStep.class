@@ -1,0 +1,320 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Setup filesytem storage directory
+ * @package Install
+ */
+class StorageSetupStep extends InstallStep {
+    function stepName() {
+	return _('Storage Setup');
+    }
+
+    function loadTemplateData(&$templateData) {
+	global $galleryStub;
+
+	if (empty($this->_dir)) {
+	    $this->_dir = $galleryStub->getConfig('data.gallery.base');
+	    if (empty($this->_dir)) {
+		$this->_dir = $_SESSION['configPath'] . DIRECTORY_SEPARATOR . 'g2data';
+	    }
+	}
+	/*
+	 * An example for a slightly obfuscated g2data folder name such that the location
+	 * of the storage folder can't be guessed too easily.
+	 */
+	$templateData['suggested_obfuscated_g2data_name'] = 'g2data_' . substr(md5(rand()),0 , 10);
+
+	$templateData['isMultisite'] = $galleryStub->getConfig('isMultisite');
+
+	if (!empty($_POST['action']) && $_POST['action'] == 'save') {
+	    if (empty($_POST['dir'])) {
+		$templateData['error']['missing_value'] = 1;
+	    } else {
+		$dir = rtrim($this->sanitize($_POST['dir']));
+		/* Normalize the path, add a traling slash if necessary */
+		if (substr($dir, -1) != DIRECTORY_SEPARATOR) {
+		    $dir .= DIRECTORY_SEPARATOR;
+		}
+		$originalDir = $dir;
+		/*
+		 * Make the path absolute since relative to the install/ folder isn't the same as
+		 * relative to the main.php entry file. And also check if it exists.
+		 */
+		$realPath = @realpath($dir);
+		if (empty($realPath)) {
+		    /*
+		     * The folder does not exist yet. If we have already write permission on the
+		     * parent folder, create the storage folder.
+		     */
+		    $parentDir = realpath(dirname($dir));
+		    if (!empty($parentDir) && is_dir($parentDir)
+			    && is_readable($parentDir) && is_writeable($parentDir)) {
+			$dir = $parentDir . DIRECTORY_SEPARATOR
+			     . basename($dir) . DIRECTORY_SEPARATOR;
+			/* Create the storage folder with restrictive permissions */
+			if (@mkdir($dir)) {
+			    chmod($dir, 0700);
+			}
+		    }
+		}
+		/* Ensure that it is an absolute filesystem path */
+		$dir = @realpath($dir);
+		if (!empty($dir) && substr($dir, -1) != DIRECTORY_SEPARATOR) {
+		    $dir .= DIRECTORY_SEPARATOR;
+		}
+		/* Check if the (newly created) dir exists, is writeable etc. */
+		if (!is_dir($dir)) {
+		    $templateData['error']['missing_dir'] = 1;
+		} else if (substr($dir, 0, -1) === $_SESSION['configPath']
+			|| ($galleryStub->getConfig('isMultisite')
+			    && substr($dir, 0, -1) === dirname(dirname(dirname(__FILE__))))) {
+		    $templateData['error']['in_gallery_dir'] = 1;
+		} else if (!is_readable($dir)) {
+		    $templateData['error']['inaccessible_dir'] = 1;
+		} else if (!is_writeable($dir)) {
+		    $templateData['error']['readonly_dir'] = 1;
+		} else {
+		    /*
+		     * Security check:
+		     * If the user ticks the checkbox and thereby acknowledges that the storage
+		     * folder might be accessible from the web, we proceed with the installation.
+		     */
+		    list ($checkExecuted, $webAccessible) =
+			$this->_isStoragePathWebAccessible($dir);
+		    if (empty($_POST['i_acknowledge_the_risk'])
+			    && (!$checkExecuted || $webAccessible)) {
+			if (!$checkExecuted) {
+			    /* Show a warning suggesting an obfuscated path. */
+			    $templateData['error']['possibly_web_accessible_dir'] = 1;
+			} else if ($webAccessible) {
+			    $templateData['error']['web_accessible_dir'] = 1;
+			}
+		    } else {
+			/*
+			 * Populate the dir.
+			 */
+			if (!populateDataDirectory($dir)) {
+			    $templateData['error']['creation_error'] = 1;
+			} else {
+			    $this->_dir = $dir;
+			    $this->setComplete(true);
+			}
+		    }
+		}
+	    }
+	    $templateData['dir'] = isset($originalDir) ? $originalDir : $this->_dir;
+	} else {
+	    $templateData['dir'] = $this->_dir;
+	}
+
+	if ($this->isComplete()) {
+	    $galleryStub->setConfig('data.gallery.base', $this->_dir);
+	    $templateData['bodyFile'] = 'StorageSetupSuccess.html';
+	} else {
+	    $templateData['bodyFile'] = 'StorageSetupRequest.html';
+	}
+
+	if (!strncasecmp(PHP_OS, 'win', 3)) {
+	    $templateData['OS'] = 'winnt';
+	} else {
+	    $templateData['OS'] = 'unix';
+	}
+    }
+
+    function processRequest() {
+	if (!empty($_GET['doAutoComplete'])) {
+	    processAutoCompleteRequest();
+	    return false;
+	}
+
+	return true;
+    }
+
+    function isRedoable() {
+	return true;
+    }
+
+    /**
+     * Try to protect the given folder with a .htaccess file from direct web-access.
+     * And then check if the given folder is web-accessible either way.
+     * Precondition: gallery and g2data folders exist.
+     *
+     * @return array(boolean false if check procedure failed due to platform issues,
+     *               boolean true if the folder is accessible from the web (=insecure))
+     */
+    function _isStoragePathWebAccessible($dir) {
+	/* Check if we can use fsockopen. Else we can't test it at all. */
+	if (!function_exists('fsockopen')
+		|| in_array('fsockopen', preg_split('/,\s*/', ini_get('disable_functions')))) {
+	    return array(false, false);
+	}
+
+	/* Add a .htaccess file. */
+	if (!secureStorageFolder($dir)) {
+	    return array(false, false);
+	}
+	/* Add a probe file. */
+	$probeFileName = 'probe_' . substr(md5(uniqid(rand())), 0, 10) . '.html';
+	$probeFilePath = $dir . $probeFileName;
+	$checkString = md5(rand());
+	$fh = @fopen($probeFilePath, 'w');
+	if ($fh) {
+	    $contents = "<html><head><title>Probe</title><body>$checkString</body></html>";
+	    fwrite($fh, $contents);
+	    fclose($fh);
+	}
+
+	if (!file_exists($probeFilePath)) {
+	    return array(false, false);
+	}
+
+	/* Try to guess the URL to the g2data folder. */
+	$storageUrlCandidates = array();
+	/* Get the URL of the G2 folder. */
+	$galleryUrl = getGalleryDirUrl();
+	/* Get the relative path of the g2data folder to the gallery dir. */
+	$storagePath = realpath($dir);
+	$galleryPath = realpath(dirname(dirname(dirname(__FILE__))));
+	if (strpos($storagePath, $galleryPath) === 0) {
+	    /* The g2data folder is within the gallery folder. */
+	    $relativeStoragePath = substr($storagePath, strlen($galleryPath) + 1);
+	    $relativeStoragePath = str_replace("\\", '/', $relativeStoragePath);
+	    $storageUrlCandidates[] = $galleryUrl . $relativeStoragePath . '/';
+	} else {
+	    /*
+	     * The g2data folder is in another directory tree.
+	     * Try to remove the common part of the paths and then construct a URL.
+	     */
+	    $galleryPathElements = explode(DIRECTORY_SEPARATOR, $galleryPath);
+	    $storagePathElements = explode(DIRECTORY_SEPARATOR, $storagePath);
+	    $max = 30;
+	    /* Before: e.g. /foo/bar/gallery2/ and /foo/bar/g2data/. */
+	    while (!empty($galleryPathElements) && !empty($storagePathElements) && $max-- > 0
+		    && $galleryPathElements[0] == $storagePathElements[0]) {
+		array_shift($storagePathElements);
+		array_shift($galleryPathElements);
+	    }
+	    /* After, e.g. /g2data/ (common part removed). */
+	    $relativeStoragePath = implode('/', $storagePathElements);
+
+	    $storageUrlCandidates[] = getBaseUrl() . '/' . $relativeStoragePath . '/';
+	    if (preg_match('!^.*?://.*?/[^/]+!', $galleryUrl, $matches)) {
+		$storageUrlCandidates[] = $matches[0] . '/' . $relativeStoragePath . '/';
+	    }
+	}
+
+	/* Also try the default path and other common paths. */
+	$storageUrlCandidates[] = $galleryUrl . basename($dir) . '/';
+	$storageUrlCandidates[] = getBaseUrl() . '/' . basename($dir) . '/';
+
+	/* Try to fetch the probe file. */
+	$isAccessible = false;
+	foreach ($storageUrlCandidates as $storageFolderUrl) {
+	    $url = $storageFolderUrl . $probeFileName;
+	    list ($urlFetched, $isAccessible) = $this->_isUrlAccessible($url, $checkString);
+	    if ($urlFetched && $isAccessible) {
+		$isAccessible = true;
+		break;
+	    }
+	}
+
+	/* Cleanup: Delete the probe file. */
+	unlink($probeFilePath);
+
+	return array(true, $isAccessible);
+    }
+
+    /**
+     * Try to fetch a a probe file from the storage folder and check if the returned page contains
+     * the probe string. If so, the storage folder is web-accessible (read: not secure).
+     *
+     * @param string $url the URL that should be fetched
+     * @param string $probeString expected string from the fetched file
+     * @return array(boolean false if check procedure failed due to platform issues,
+     *               boolean true if the folder is accessible from the web (=insecure))
+     */
+    function _isUrlAccessible($url, $probeString) {
+	$components = @parse_url($url);
+	if (!$components) {
+	    return array(false, false);
+	}
+	$port = empty($components['port']) ? 80 : $components['port'];
+	if (empty($components['path'])) {
+	    $components['path'] = '/';
+	}
+
+	$fd = @fsockopen($components['host'], $port, $errno, $errstr, 1);
+	if (empty($fd)) {
+	    return array(false, false);
+	}
+
+	$get = $components['path'];
+
+	/* Read the web page into a buffer */
+	$ok = fwrite($fd, sprintf("GET %s HTTP/1.0\r\n" .
+				  "Host: %s\r\n" .
+				  "\r\n",
+				  $get,
+				  $components['host']));
+
+	if (!$ok) {
+	    /* Zero bytes written or false was returned */
+	    return array(false, false);
+	}
+	fflush($fd);
+
+	/*
+	 * Read the response code. fgets stops after newlines.
+	 * The first line contains only the status code (200, 404, etc.).
+	 */
+	$headers = array();
+	$response = trim(fgets($fd, 4096));
+	/*
+	 * Ignore the status code.
+	 * We expect either a 2xx code which would mean that the file has been fetched successfully
+	 * (or there's a 404 -> redirect that suppresses the 404) and we check that later
+	 * with the probe text.
+	 * Or we expect an internal server 500 because mod_access is not installed.
+	 * Or a 403 Forbidden since the .htaccess rule works correctly.
+	 * Or a 404 because the URL is just plain wrong.
+	 *
+	 * Let's interpret everything but a successfully detected probe page as "secure".
+	 */
+
+	/* Ignore the headers. */
+	while (!feof($fd)) {
+	    $line = trim(fgets($fd, 4096));
+	    if (empty($line)) {
+		break;
+	    }
+	}
+	/* Read the body */
+	$fetchedPage = '';
+	while (!feof($fd)) {
+	    $fetchedPage .= fread($fd, 4096);
+	}
+	fclose($fd);
+
+	/* Check if the expected string is present. */
+	return array(true, strpos($fetchedPage, $probeString) !== false);
+    }
+}
+?>

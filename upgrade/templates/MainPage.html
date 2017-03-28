@@ -1,0 +1,155 @@
+<?php if (isset($templateData['MainPage']['showHeader'])): ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html>
+  <head>
+    <title> <?php print _('Welcome to the Gallery Upgrader') ?> </title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <link rel="stylesheet" type="text/css" href="<?php generateUrl('upgrade.css') ?>"/>
+  </head>
+
+  <body<?php global $translator; if (isset($translator)
+		 && $translator->isRightToLeft()) print ' style="direction:rtl"' ?>>
+    <div id="box">
+<?php endif; ?>
+
+<?php
+/*
+ * This page is the main upgrade template. It shows a header, the navigation menu (overview over
+ * all upgrade steps with links), the body of the current step by including the corresponding
+ * template, a "Continue to step x" link, and an upgrade status bar.
+ * In the UpgradeCoreModule / UpgradeOtherModule steps, it shows a active progress bar for the
+ * progress within the step. Once the step is finished, it shows the overall progress bar and the
+ * redo/continue links again.
+ * Note: The page is divided into two <table>s because Internet Explorer doesn't start rendering a
+ * table before it receives the closing </table> tag. If the whole page was in a single <table>,
+ * IE would not display the progress bar at all (because as soon as the progress bar reaches 100%,
+ * we hide it and display a success message).
+ */
+ ?>
+<?php if (isset($templateData['MainPage']['showStatusBlock'])): ?>
+  <table id="progressBarTable" class="boxTable" cellspacing="0">
+    <?php include(dirname(__FILE__) . '/Header.html'); ?>
+	<tr>
+	  <td id="navbar">
+	    <?php include(dirname(__FILE__) . '/NavBar.html'); ?>
+	  </td>
+	  <td class="main">
+	    <div id="MainPageStatus_statusBlock">
+	      <p>
+		<h3> <span id="MainPageStatus_title">&nbsp;</span> </h3>
+	      </p>
+
+	      <p>
+		<h4><span id="MainPageStatus_description">&nbsp;</span></h4>
+	      </p>
+
+	    <table id="statusTable" cellspacing="0">
+		<tr>
+		  <td id="MainPageStatus_progressMade" class="progressMade">&nbsp;</td>
+		  <td id="MainPageStatus_progressToGo" class="progressToGo">&nbsp;</td>
+		</tr>
+	    </table>
+	    </div>
+
+	    <script type="text/javascript">
+	      // <![CDATA[
+	      var saveToGoDisplay = document.getElementById('MainPageStatus_progressToGo').style.display;
+	      function updateStatus(title, description, percentComplete) {
+		document.getElementById('MainPageStatus_title').innerHTML = title;
+		document.getElementById('MainPageStatus_description').innerHTML = description;
+
+		var progressMade = Math.round(percentComplete * 100);
+		var progressToGo = document.getElementById('MainPageStatus_progressToGo');
+
+		if (progressMade == 100) {
+		  progressToGo.style.display = 'none';
+		} else {
+		  progressToGo.style.display = saveToGoDisplay;
+		  progressToGo.style.width = (100 - progressMade) + "%";
+		}
+
+		document.getElementById('MainPageStatus_progressMade').style.width = progressMade + "%"
+	      }
+	      // ]]>
+	    </script>
+	  </td>
+	</tr>
+      </table>
+<?php endif; ?>
+
+<?php if (isset($templateData['MainPage']['showStatus'])): ?>
+<script type="text/javascript">updateStatus(<?php printf('"%s", "%s", %s', $templateData['MainPage']['status']['title'], $templateData['MainPage']['status']['description'], $templateData['MainPage']['status']['percentComplete']); ?>)</script>
+<?php endif; ?>
+
+<?php if (isset($templateData['MainPage']['hideStatusBlock'])): ?>
+<script type="text/javascript">document.getElementById("progressBarTable").style.display="none"</script>
+<?php endif; ?>
+
+<?php if (isset($templateData['MainPage']['showBodyAndFooter'])): ?>
+      <table id="regularTable" class="boxTable" cellspacing="0">
+        <?php include(dirname(__FILE__) . '/Header.html'); ?>
+	<tr>
+	  <td id="navbar">
+	    <?php include(dirname(__FILE__) . '/NavBar.html'); ?>
+	  </td>
+
+	  <td class="main">
+
+	    <table id="statusTable" cellspacing="0">
+	      <tr>
+		<?php if ($templateData['percentComplete'] != 0): ?>
+		<td class="progressMade"
+		    style="width:<?php print $templateData['percentComplete'] ?>%">&nbsp;</td>
+		<?php endif; ?>
+
+		<?php if ($templateData['percentComplete'] != 100): ?>
+		<td class="progressToGo"
+		    style="width:<?php print (100 - $templateData['percentComplete']) . '%' .
+		      (($templateData['percentComplete'] == 0) ? '' : ';border-left:none')
+		    ?>">&nbsp;</td>
+		<?php endif; ?>
+	      </tr>
+	    </table>
+            <p id="progressStatus"><?php printf(_('Upgrade %d%% complete'), $templateData['percentComplete']); ?></p>
+
+	    <?php if (!empty($templateData['errors'])): ?>
+	    <div class="error">
+	      <h2>
+	        <?php foreach ($templateData['errors'] as $error): ?>
+	        <?php print $error ?>
+	        <?php if (count($templateData['errors']) > 2) print "<br/>\n" ?>
+	          <?php endforeach; ?>
+	      </h2>
+	    </div>
+	    <?php endif; ?>
+
+	    <?php if (!empty($templateData['warnings'])): ?>
+	    <h2 class="warning">
+	      <?php foreach ($templateData['warnings'] as $warning): ?>
+	      <?php print $warning ?> <br/>
+	      <?php endforeach; ?>
+	    </h2>
+	    <?php endif; ?>
+
+	    <?php include(dirname(__FILE__) . '/' . $templateData['bodyFile']); ?>
+
+	    <?php if ($currentStep->isComplete() && !$currentStep->isLastStep()): ?>
+	    <div class="go">
+	      <?php if ($currentStep->isRedoable()): ?>
+		  <a href="<?php generateUrl('index.php?step=' . $stepNumber . '&amp;doOver=1') ?>" class="btn redo"><i></i><span><span></span><i></i><?php print _('Redo this step'); ?></span></a>
+	      <?php endif; ?>
+	      <?php $nextStep = $stepNumber + 1 ?>
+	      <a href="<?php generateUrl('index.php?step=' . $nextStep) ?>" class="btn continue"><i></i><span><span></span><i></i><?php printf(_('Continue to Step %d&raquo;'), $nextStep); ?></span></a>
+        </div>
+	    <?php endif; ?>
+	  </td>
+	</tr>
+      </table>
+    </div>
+    <div id="footer">
+      <?php print _('Gallery: <strong>your photos</strong> on <strong>your website</strong>') ?>
+      &raquo; <a target="_blank" href="http://gallery.sourceforge.net/">gallery.sourceforge.net</a>
+    </div>
+  </body>
+</html>
+<?php endif; ?>

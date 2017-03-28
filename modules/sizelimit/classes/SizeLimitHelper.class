@@ -1,0 +1,236 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper functions for SizeLimit module
+ * @package SizeLimit
+ * @subpackage Helpers
+ * @author Felix Rabinovich
+ * @version $Revision: 17580 $
+ * @static
+ */
+class SizeLimitHelper {
+
+    /**
+     * Reduce the item file size without preserving the original
+     *
+     * @param GalleryPhotoItem $item
+     * @param string $operation ('scale' to reduce dimensions, 'compress' to reduce filesize)
+     * @param array $args operation arguments to pass through to the toolkit
+     * @return array GalleryStatus a status code,
+     *               array (errors), array (warnings)
+     */
+    function applyLimits(&$item, $operation, $args) {
+
+	/* Get the path of the source */
+	list ($ret, $sourcePath) = $item->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Get the appropriate toolkit */
+	list ($ret, $toolkit) =
+	    GalleryCoreApi::getToolkitByOperation($item->getMimeType(), $operation);
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (!isset($toolkit)) {
+	    return GalleryCoreApi::error(ERROR_UNSUPPORTED_FILE_TYPE);
+	}
+
+	list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($item->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $item) = $item->refresh();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+
+	/* Perform the operation */
+	list ($ret, $outputMimeType) = $toolkit->performOperation(
+		$item->getMimeType(), $operation, $sourcePath, $sourcePath, $args);
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+	$item->setMimeType($outputMimeType);
+
+	/* Get the item to rescan its data object */
+	$ret = $item->rescan();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+
+	/* Save the item */
+	$ret = $item->save();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+
+	$ret = GalleryCoreApi::releaseLocks($lockId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($operation == 'scale') {
+	    $ret = SizeLimitHelper::_updateResizes(
+		    $item->getId(), $item->getWidth(), $item->getHeight());
+	     if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Set up a preferred derivative that conforms to size limits
+     *
+     * @param GalleryPhotoItem $item
+     * @param string $operation ('scale' to reduce dimensions, 'compress' to reduce filesize)
+     * @param array $args passthru to the toolkit
+     * @return array GalleryStatus a status code,
+     *               array (errors), array (warnings)
+     */
+    function buildDerivativeWithLimits($item, $operation, $args) {
+	/* Check to see if we have a preferred source */
+	list ($ret, $preferred) = GalleryCoreApi::fetchPreferredSource($item);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Make sure we support the given operation */
+	list ($ret, $toolkit) =
+	    GalleryCoreApi::getToolkitByOperation($item->getMimeType(), $operation);
+	if ($ret) {
+	    return $ret;
+	}
+	if (!isset($toolkit)) {
+	    return GalleryCoreApi::error(ERROR_UNSUPPORTED_FILE_TYPE);
+	}
+
+	/*
+	 * If we don't have derivative preferred (for example, from resize), create one
+	 * Otherwise, just merge operations
+	 */
+	if ($preferred->getId() == $item->getId()) {
+	    list ($ret, $preferred) = GalleryCoreApi::newFactoryInstanceByHint(
+		'GalleryDerivative', $item->getEntityType());
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if (!isset($preferred)) {
+		return $ret;
+	    }
+
+	    $ret = $preferred->create($item->getId(), DERIVATIVE_TYPE_IMAGE_PREFERRED);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $preferred->setDerivativeSourceId($item->getId());
+	    $preferred->setMimeType($item->getMimeType());
+
+	    $ret = GalleryCoreApi::remapSourceIds($item->getId(), $preferred->getId());
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	$operationString = $operation . '|' . implode(',', $args);
+	list ($ret, $operations) = GalleryCoreApi::mergeDerivativeOperations(
+	    $preferred->getDerivativeOperations(), $operationString);
+	if ($ret) {
+	    return $ret;
+	}
+	$preferred->setDerivativeOperations($operations);
+
+	list ($ret, $lockIds) = GalleryCoreApi::acquireWriteLock($preferred->getId());
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = $preferred->save();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockIds);
+	    return $ret;
+	}
+
+	if (!empty($lockIds)) {
+	    $ret = GalleryCoreApi::releaseLocks($lockIds);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	if ($operation == 'scale') {
+	    list ($width, $height) = GalleryUtilities::scaleDimensionsToFit(
+		    $item->getWidth(), $item->getHeight(), $args[0], $args[1]);
+	    $ret = SizeLimitHelper::_updateResizes($item->getId(), $width, $height);
+	     if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * After shrinking the fullsize, we might need to delete resizes
+     *
+     * @param int $itemId
+     * @param int $imageWidth new fullsize width
+     * @param int $imageHeight new fullsize height
+     * @return GalleryStatus a status code
+     */
+    function _updateResizes($itemId, $imageWidth, $imageHeight) {
+	/* Remove larger or equal sized resizes if necessary */
+	list ($ret, $resizes) = GalleryCoreApi::fetchResizesByItemIds(array($itemId));
+	if ($ret) {
+	    return $ret;
+	}
+	if (!empty($resizes[$itemId])) {
+	    foreach ($resizes[$itemId] as $derivative) {
+		if (preg_match('/(?:resize|scale)\|(\d+)(?:,(\d+))?/',
+			       $derivative->getDerivativeOperations(), $matches)) {
+		    $width = $matches[1];
+		    $height = empty($matches[2]) ? $width : $matches[2];
+		    if ($imageWidth <= $width && $imageHeight <= $height) {
+			/* The resize is larger or has the same size as the fullsize */
+			$ret = GalleryCoreApi::deleteEntityById($derivative->getId(),
+								'GalleryDerivative');
+			if ($ret) {
+			    return $ret;
+			}
+		    }
+		}
+	    }
+	}
+
+	return null;
+    }
+}
+?>

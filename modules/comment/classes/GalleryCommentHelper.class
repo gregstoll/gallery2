@@ -1,0 +1,567 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/comment/module.inc');
+
+/**
+ * Utility functions useful in managing GalleryComments
+ *
+ * @package Comment
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17990 $
+ * @static
+ */
+class GalleryCommentHelper /* implements GalleryEventListener */ {
+
+    /**
+     * Return the comments associated with the given item
+     *
+     * @param int $itemId GalleryItem id
+     * @param int $count (optional) max number to retrieve
+     * @param string $orderDirection (optional) ORDER_DESCENDING to list newest first
+     * @param int $publishStatus One of the COMMENT_PUBLISH_STATUS_XXX constants or null to
+     *            get all comments
+     * @return array GalleryStatus a status code,
+     *               array (entityId => GalleryComment, ...)
+     */
+    function fetchComments($itemId, $count=null, $orderDirection=ORDER_ASCENDING,
+			   $publishStatus=COMMENT_PUBLISH_STATUS_PUBLISHED) {
+	global $gallery;
+
+	switch($orderDirection) {
+	case ORDER_ASCENDING:
+	    $direction = 'ASC';
+	    break;
+
+	case ORDER_DESCENDING:
+	    $direction = 'DESC';
+	    break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	$data = array((int)$itemId);
+	$query = '
+	SELECT
+	  [GalleryComment::id]
+	FROM
+	  [GalleryComment], [GalleryChildEntity]
+	WHERE
+	  [GalleryChildEntity::parentId] = ?
+	  AND
+	  [GalleryChildEntity::id] = [GalleryComment::id]
+        ';
+	if (isset($publishStatus)) {
+	    $query .= '
+          AND
+          [GalleryComment::publishStatus] = ?
+            ';
+	    $data[] = $publishStatus;
+	}
+	$query .= '
+	ORDER BY
+	  [GalleryComment::date] ' . $direction . '
+	';
+	list ($ret, $searchResults) = $gallery->search(
+	    $query, $data, array('limit' => array('count' => (int)$count)));
+
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Get all of our ids */
+	$allIds = array();
+	while ($result = $searchResults->nextResult()) {
+	    $allIds[] = (int)$result[0];
+	}
+
+	/* Load all the comments at once */
+	$comments = array();
+	if (!empty($allIds)) {
+	    list ($ret, $comments) = GalleryCoreApi::loadEntitiesById($allIds, 'GalleryComment');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, $comments);
+    }
+
+    /**
+     * Return all comments in subtree under given item, with comment.view permission
+     *
+     * @param array $itemId int GalleryItem id
+     * @param int $count (optional) max number to retrieve
+     * @param int $offset (optional) start of the range
+     * @param string $orderDirection (optional) ORDER_DESCENDING to list newest first
+     * @param mixed $publishStatus (optional) A single COMMENT_PUBLISH_STATUX_XXX constant, an array
+     *               of constants or null to get all comments. Default is
+     *               COMMENT_PUBLISH_STATUS_PUBLISHED.
+     * @return array GalleryStatus a status code,
+     *               array (entityId => GalleryComment, ...)
+     *               int total number of comments available
+     */
+    function fetchAllComments($itemId, $count=null, $offset=null, $orderDirection=ORDER_ASCENDING,
+			      $publishStatus=COMMENT_PUBLISH_STATUS_PUBLISHED) {
+	global $gallery;
+
+	switch($orderDirection) {
+	case ORDER_ASCENDING:
+	    $direction = 'ASC';
+	    break;
+
+	case ORDER_DESCENDING:
+	    $direction = 'DESC';
+	    break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER),
+			 null, null);
+	}
+	list ($ret, $sequence) = GalleryCoreApi::fetchParentSequence($itemId);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$sequence = implode('/', $sequence);
+	if (!empty($sequence)) {
+	    $sequence .= '/';
+	}
+	$sequence .= $itemId . '/%';
+
+	list ($ret, $aclIds) = GalleryCoreApi::fetchAccessListIds(
+	    array('comment.view', 'core.view'), $gallery->getActiveUserId());
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$aclMarkers = GalleryUtilities::makeMarkers(count($aclIds));
+
+	if (empty($aclIds)) {
+	    return array(null, array(), 0);
+	}
+
+	$queryBase = '
+	FROM
+	  [GalleryItemAttributesMap], [GalleryAccessSubscriberMap],
+	  [GalleryChildEntity], [GalleryComment]
+	WHERE
+	  ([GalleryItemAttributesMap::itemId] = ?
+	   OR
+	   [GalleryItemAttributesMap::parentSequence] LIKE ?)
+	 AND
+	   [GalleryAccessSubscriberMap::itemId] = [GalleryItemAttributesMap::itemId]';
+	if ($publishStatus !== null) {
+	    $statusMarkers = GalleryUtilities::makeMarkers(count($publishStatus));
+	    $queryBase .= '
+	 AND
+	   [GalleryComment::publishStatus] IN (' . $statusMarkers . ')';
+	}
+	$queryBase .= '
+	 AND
+	   [GalleryAccessSubscriberMap::accessListId] IN (' . $aclMarkers . ')
+	 AND
+	   [GalleryChildEntity::parentId] = [GalleryItemAttributesMap::itemId]
+	 AND
+	   [GalleryComment::id] = [GalleryChildEntity::id]
+	';
+	$query = '
+	SELECT
+	  [GalleryComment::id] ' . $queryBase . '
+	ORDER BY
+	  [GalleryComment::date] ' . $direction . '
+	';
+	$data = array((int)$itemId, $sequence);
+	if ($publishStatus !== null) {
+	    if (!is_array($publishStatus)) {
+		$data[] = $publishStatus;
+	    } else {
+		$data = array_merge($data, $publishStatus);
+	    }
+	};
+	$data = array_merge($data, $aclIds);
+
+	list ($ret, $searchResults) =
+	    $gallery->search($query, $data, array('limit' => array('count' => (int)$count,
+								   'offset' => (int)$offset)));
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	/* Get all of our ids */
+	$allIds = array();
+	while ($result = $searchResults->nextResult()) {
+	    $allIds[] = (int)$result[0];
+	}
+
+	/* Load all the comments at once */
+	$comments = array();
+	if (!empty($allIds)) {
+	    list ($ret, $comments) = GalleryCoreApi::loadEntitiesById($allIds, 'GalleryComment');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	}
+
+	/* Get total count of comments */
+	if (!$count && !$offset) {
+	    $totalCount = count($allIds);
+	} else {
+	    $query = '
+	    SELECT
+	      COUNT([GalleryComment::id]) ' . $queryBase;
+	    list ($ret, $searchResults) = $gallery->search($query, $data);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    if ($result = $searchResults->nextResult()) {
+		$totalCount = (int)$result[0];
+	    } else {
+		$totalCount = count($allIds);
+	    }
+	}
+
+	return array(null, $comments, $totalCount);
+    }
+
+    /**
+     * Return the number of comments associated with the given item ids
+     *
+     * @param array $itemIds int GalleryItem ids
+     * @return array GalleryStatus a status code
+     *               int a count
+     */
+    function fetchCommentCounts($itemIds) {
+	global $gallery;
+
+	$markers = GalleryUtilities::makeMarkers(sizeof($itemIds));
+	$query = '
+	SELECT
+	  [GalleryChildEntity::parentId],
+	  COUNT([GalleryComment::id])
+	FROM
+	  [GalleryComment], [GalleryChildEntity]
+	WHERE
+	  [GalleryChildEntity::parentId] IN (' . $markers . ')
+	  AND
+	  [GalleryChildEntity::id] = [GalleryComment::id]
+          AND
+          [GalleryComment::publishStatus] = ?
+	GROUP BY
+	  [GalleryChildEntity::parentId]
+	';
+
+	$data = $itemIds;
+	$data[] = COMMENT_PUBLISH_STATUS_PUBLISHED;
+	list ($ret, $searchResults) = $gallery->search($query, $data);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$data = array();
+	while ($result = $searchResults->nextResult()) {
+	    $data[$result[0]] = (int)$result[1];
+	}
+
+	return array(null, $data);
+    }
+
+    /**
+     * Return the timestamp of the most recent comment from this IP
+     *
+     * @param int $hostAddress IP address in question
+     * @return array GalleryStatus a status code,
+     *               int latest comment time
+     */
+    function getLatestCommentTime($hostAddress) {
+	global $gallery;
+
+	$data = array($hostAddress);
+	$query = '
+	SELECT
+	  [GalleryComment::date]
+	FROM
+	  [GalleryComment]
+	WHERE
+	  [GalleryComment::host] = ?
+	ORDER BY
+	  [GalleryComment::date] DESC
+        ';
+	list ($ret, $searchResults) = $gallery->search(
+	    $query, $data, array('limit' => array('count' => 1)));
+
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$result = $searchResults->nextResult();
+	if ($result) {
+	    $result = (int)$result[0];
+	} else {
+	    $result = 0;
+	}
+
+	return array(null, $result);
+    }
+    
+    /**
+     * Get information needed for the AddComment page
+     *
+     * @param GalleryItem $item to work from
+     * @param array $form form being modified
+     * @return array GalleryStatus a status code
+     *               array values used for the AddComment page (itemId, host, validation plugins)
+     */
+    function getAddComment(&$item, &$form) {
+	/* Make sure we have permission to add a comment */
+	list ($ret, $permissions) = GalleryCoreApi::getPermissions($item->getId());
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (empty($permissions['core.view'])) {
+	    /* Avoid information disclosure, act as if the item didn't exist. */
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	}
+	if (empty($permissions['comment.add'])) {
+	    return array(GalleryCoreApi::error(ERROR_PERMISSION_DENIED), null);
+	}
+
+	if ($form['formName'] != 'AddComment') {
+	    $form['formName'] = 'AddComment';
+	    $form['subject'] = $form['comment'] = $form['author'] = '';
+	} else {
+	    foreach (array('subject', 'comment', 'author') as $key) {
+		if (empty($form[$key])) {
+		    $form[$key] = '';
+		}
+	    }
+	}
+
+	/* Check if we should use validation plugins for new comments */
+	$plugins = array();
+	list ($ret, $useValidationPlugins) = GalleryCommentHelper::useValidationPlugins();
+	if ($ret) {
+	    return array($ret, null);
+	} else if ($useValidationPlugins) {
+	    list ($ret, $allPluginIds) =
+		GalleryCoreApi::getAllFactoryImplementationIds('GalleryValidationPlugin');
+	    if ( $ret) {
+		return array($ret, null);
+	    }
+
+	    /* Let each plugin load its template data */
+	    foreach (array_keys($allPluginIds) as $pluginId) {
+		list ($ret, $plugin) =
+		    GalleryCoreApi::newFactoryInstanceById('GalleryValidationPlugin', $pluginId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+		list ($ret, $data['file'], $data['l10Domain']) = $plugin->loadTemplate($form);
+		if ($ret) {
+		    return array($ret, null);
+		} else if (isset($data['file'])) {
+		    $plugins[] = $data;
+		}
+	    }
+	}
+
+	$AddComment = array('itemId' => $item->getId(),
+		'host' => GalleryUtilities::getRemoteHostAddress(),
+		'plugins' => $plugins);
+
+	return array(null, $AddComment);
+    }
+
+    /**
+     * Determine if we should use validation plugins for new comments.
+     *
+     * @return array GalleryStatus a status code
+     *               boolean true to use validation plugins
+     */
+    function useValidationPlugins() {
+	list ($ret, $level) =
+	    GalleryCoreApi::getPluginParameter('module', 'comment', 'validation.level');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if ($level == 'OFF') {
+	    return array(null, false);
+	}
+
+	list ($ret, $isAnonymous) = GalleryCoreApi::isAnonymousUser();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $isAnonymous);
+    }
+
+     /**
+      * Event handler.
+      *
+      * GalleryEntity::delete
+      *   Delete all comments by a user (Item deletion and their attached comments is already
+      *   handled in GalleryItem::delete).
+      * GalleryEntity::save
+      *   Run newly created comments through Akismet and unpublish spam.
+      *
+      * @see GalleryEventListener::handleEvent
+      */
+    function handleEvent($event) {
+	global $gallery;
+
+	switch ($event->getEventName()) {
+	case 'GalleryEntity::delete':
+	    $entity = $event->getEntity();
+	    if (!GalleryUtilities::isA($entity, 'GalleryUser')) {
+		return array(null, null);
+	    }
+
+	    /* Delete all comments owned by this user */
+	    $query = '
+	    SELECT
+	      [GalleryComment::id]
+	    FROM
+	      [GalleryComment]
+	    WHERE
+	      [GalleryComment::commenterId] = ?
+	    ';
+
+	    list ($ret, $searchResults) = $gallery->search($query, array((int)$entity->getId()));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    while ($result = $searchResults->nextResult()) {
+		$ret = GalleryCoreApi::deleteEntityById((int)$result[0], 'GalleryComment');
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	    break;
+
+	case 'GalleryEntity::save':
+	    if (!GalleryCommentHelper::getAkismetSaveListenerSwitch()) {
+		break;
+	    }
+	    $comment =& $event->getEntity();
+	    if (GalleryUtilities::isA($comment, 'GalleryComment')) {
+		list ($ret, $akismetActive) =
+		    GalleryCoreApi::getPluginParameter('module', 'comment', 'akismet.active');
+		if ($ret) {
+		    return array($ret, null);
+		}
+		if ($akismetActive) {
+		    GalleryCoreApi::requireOnce('modules/comment/classes/AkismetApi.class');
+		    $akismet = new AkismetApi();
+		    $ret = $this->checkWithAkismet($comment, $akismet);
+		    if ($ret) {
+			return array($ret, null);
+		    }
+		}
+	    }
+	    break;
+	}
+
+	return array(null, null);
+    }
+
+    /**
+     * Enable or disable the Akismet save listener for the rest of this request.  Set this value
+     * to false to ignore changes to entities for the rest of this request.  You should disable
+     * the save listener if you're changing a comment's publish status to match what you learned
+     * with checkWithAkismet, so that we don't report a comment back to Akismet as spam, if it was
+     * Akismet that told us this in the first place. The initial value for this switch is true.
+     * @param $enabled bool true to enable the listener, false to disable it
+     * @static
+     */
+    function setAkismetSaveListenerSwitch($enabled) {
+	$switch =& GalleryCommentHelper::getAkismetSaveListenerSwitch();
+	$switch = $enabled;
+    }
+
+    /**
+     * Return a reference to a boolean that controls whether Akismet is used for this request.
+     * @return bool the current status
+     * @static
+     */
+    function &getAkismetSaveListenerSwitch() {
+	static $enabled = true;
+	return $enabled;
+    }
+
+    /**
+     * Run a comment by Akismet.  If it's a new comment, check with Akismet to see if the comment
+     * is spam.  If it's a modified comment, submit it as ham or spam as appropriate of the
+     * publish status has changed.
+     *
+     * @param GalleryComment $comment an instance of GalleryComment
+     * @param AkismetApi $akismet an instance of AkismetApi
+     * @return GalleryStatus a status code
+     */
+    function checkWithAkismet(&$comment, $akismet) {
+	$logError = false;
+	if ($comment->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED)) {
+	    list ($ret, $isSpam) = $akismet->checkComment($comment);
+	    if ($ret && $ret->getErrorCode() & ERROR_UNKNOWN) {
+		/* Akismet returned an error or akismet couldn't be contacted */
+		$logError = true;
+		if ($comment->getPublishStatus() == COMMENT_PUBLISH_STATUS_PUBLISHED) {
+		    $comment->setPublishStatus(COMMENT_PUBLISH_STATUS_UNPUBLISHED);
+		}
+	    } else if ($ret) {
+		return $ret;
+	    } else if ($isSpam) {
+		$comment->setPublishStatus(COMMENT_PUBLISH_STATUS_SPAM);
+	    }
+	} else {
+	    $oldStatus = $comment->getOriginalValue('publishStatus');
+	    if ($comment->isModified('publishStatus')) {
+		if ($oldStatus == COMMENT_PUBLISH_STATUS_SPAM) {
+		    $ret = $akismet->submitHam($comment);
+		    if ($ret && $ret->getErrorCode() & ERROR_UNKNOWN) {
+			/* Akismet returned an error or akismet couldn't be contacted */
+			$logError = true;
+		    } else if ($ret) {
+			return $ret;
+		    }
+		} else if ($comment->getPublishStatus() == COMMENT_PUBLISH_STATUS_SPAM) {
+		    $ret = $akismet->submitSpam($comment);
+		    if ($ret && $ret->getErrorCode() & ERROR_UNKNOWN) {
+			/* Akismet returned an error or akismet couldn't be contacted */
+			$logError = true;
+		    } else if ($ret) {
+			return $ret;
+		    }
+		}
+	    }
+	}
+
+	if ($logError) {
+	    $ret = GalleryCoreApi::addEventLogEntry('Gallery Error', 'Error contacting Akismet',
+		    'Failed to contact Akismet (an external spam filtering service) or Akismet '
+		  . 'was unable to process the request.');
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+    }
+}
+?>

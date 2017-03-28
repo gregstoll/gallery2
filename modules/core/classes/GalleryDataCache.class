@@ -1,0 +1,861 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Utility class for caching data
+ *
+ * Very useful in the case where retrieving or building data sets is expensive, and the data
+ * doesn't change during the lifetime of the request.  This class serves as a hash table where
+ * any data class can store and retrieve cached data.
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryDataCache {
+
+    /**
+     * Get the static cache
+     *
+     * @return array the cache
+     * @staticvar cache the singleton cache
+     * @access private
+     */
+    function &_getCache() {
+	static $cache;
+	if (!isset($cache)) {
+	    $cache['maxKeys'] = 800;
+	    $cache['minKeys'] = 400;
+	    $cache['positions'] = array();
+	    $cache['latestPosition'] = 0;
+	    $cache['keys'] = array();
+	    $cache['protected'] = array();
+	    $cache['memoryCacheEnabled'] = 1;
+	    $cache['fileCacheEnabled'] = 1;
+	}
+	return $cache;
+    }
+
+    /**
+     * Is in-memory caching enabled?
+     * @return boolean true if it's enabled
+     */
+    function isMemoryCachingEnabled() {
+	$cache =& GalleryDataCache::_getCache();
+	return $cache['memoryCacheEnabled'];
+    }
+
+    /**
+     * Turn in-memory caching on or off
+     * @param boolean $bool
+     */
+    function setMemoryCachingEnabled($bool) {
+	$cache =& GalleryDataCache::_getCache();
+	$cache['memoryCacheEnabled'] = $bool;
+    }
+
+    /**
+     * Store data in the cache
+     * You must provide a unique key.  Existing keys are overwritten.
+     *
+     * @param string $key
+     * @param mixed $data
+     * @param boolean $protected should this key survive a reset call?
+     */
+    function put($key, $data, $protected=false) {
+	$cache =& GalleryDataCache::_getCache();
+	if (!$cache['memoryCacheEnabled']) {
+	    return;
+	}
+
+	if (count($cache['positions']) >= $cache['maxKeys']) {
+	    GalleryDataCache::_performMaintenance();
+	}
+
+	$cache['keys'][$key] = $data;
+	if ($protected) {
+	    $cache['protected'][$key] = 1;
+	} else {
+	    $cache['positions'][$key] = $cache['latestPosition']++;
+	}
+    }
+
+    /**
+     * Remove data from the cache
+     * @param string $key
+     */
+    function remove($key) {
+	$cache =& GalleryDataCache::_getCache();
+	if (!$cache['memoryCacheEnabled']) {
+	    return;
+	}
+
+	unset($cache['positions'][$key]);
+	unset($cache['keys'][$key]);
+	unset($cache['protected'][$key]);
+    }
+
+    /**
+     * Remove data from the cache
+     * @param string $pattern regexp
+     */
+    function removeByPattern($pattern) {
+	$cache =& GalleryDataCache::_getCache();
+	if (!$cache['memoryCacheEnabled']) {
+	    return;
+	}
+
+	foreach (preg_grep("/$pattern/", array_keys($cache['keys'])) as $key) {
+	    unset($cache['positions'][$key]);
+	    unset($cache['keys'][$key]);
+	    unset($cache['protected'][$key]);
+	}
+    }
+
+    /**
+     * Store a reference to the data in the cache
+     *
+     * You must provide a unique key.  Existing keys are overwritten.
+     *
+     * @param string $key
+     * @param mixed $data
+     * @param boolean $protected (optional) should this key survive a reset call?
+     */
+    function putByReference($key, &$data, $protected=false) {
+	$cache =& GalleryDataCache::_getCache();
+	if (!$cache['memoryCacheEnabled']) {
+	    return;
+	}
+
+	if (count($cache['positions']) >= $cache['maxKeys']) {
+	    GalleryDataCache::_performMaintenance();
+	}
+
+	$cache['keys'][$key] =& $data;
+	if ($protected) {
+	    $cache['protected'][$key] = 1;
+	} else {
+	    $cache['positions'][$key] = $cache['latestPosition']++;
+	}
+    }
+
+    /**
+     * Perform some pruning of our cache to prevent it from growing too large when we're doing
+     * exceptionally long operations like adding many items in one request.
+     *
+     * @access private
+     */
+    function _performMaintenance() {
+	$cache =& GalleryDataCache::_getCache();
+	$numToExpire = count($cache['positions']) - $cache['minKeys'];
+	asort($cache['positions']);
+	foreach ($cache['positions'] as $key => $position) {
+	    unset($cache['keys'][$key]);
+	    unset($cache['positions'][$key]);
+	    if ($numToExpire-- == 0) {
+		break;
+	    }
+	}
+    }
+
+    /**
+     * Retrieve data from the cache
+     * @param string $key
+     * @return mixed the cached data
+     */
+    function get($key) {
+	$cache =& GalleryDataCache::_getCache();
+	if (!$cache['memoryCacheEnabled']) {
+	    return null;
+	}
+
+	if (!isset($cache['protected'][$key])) {
+	    $cache['positions'][$key] = $cache['latestPosition']++;
+	}
+	return $cache['keys'][$key];
+    }
+
+    /**
+     * Does the cache contain the key specified?
+     * @param string $key
+     * @return boolean true if the cache contains the key given
+     */
+    function containsKey($key) {
+	$cache =& GalleryDataCache::_getCache();
+	if (!$cache['memoryCacheEnabled']) {
+	    return false;
+	}
+	return isset($cache['keys'][$key]);
+    }
+
+    /**
+     * Return all the keys in the cache
+     * @return array string keys
+     */
+    function getAllKeys() {
+	$cache =& GalleryDataCache::_getCache();
+	if (!$cache['memoryCacheEnabled']) {
+	    return array();
+	}
+
+	return array_keys($cache['keys']);
+    }
+
+    /**
+     * Empty the cache of all but protected entries
+     * @param boolean $purgeProtected (optional) purge protected also?
+     */
+    function reset($purgeProtected=false) {
+	$cache =& GalleryDataCache::_getCache();
+	if (!$cache['memoryCacheEnabled']) {
+	    return;
+	}
+
+	if ($purgeProtected) {
+	    $cache['positions'] = array();
+	    $cache['keys'] = array();
+	} else {
+	    foreach (array_keys($cache['keys']) as $key) {
+		if (!isset($cache['protected'][$key])) {
+		    unset($cache['positions'][$key]);
+		    unset($cache['keys'][$key]);
+		}
+	    }
+	}
+    }
+
+    /**
+     * Is caching to disk enabled?
+     * @return boolean
+     */
+    function &isFileCachingEnabled() {
+	$cache =& GalleryDataCache::_getCache();
+	return $cache['fileCacheEnabled'];
+    }
+
+    /**
+     * Turn caching to disk on or off
+     * @param boolean $bool
+
+     */
+    function setFileCachingEnabled($bool) {
+	$cache =& GalleryDataCache::_getCache();
+	$cache['fileCacheEnabled'] = $bool;
+    }
+
+    /**
+     * Get the file from disk.  PathInfo is of the form that can be passed to getCachePath
+     * @see GalleryDataCache::getCachePath
+     * @param array $pathInfo the path info
+     * @return mixed object data
+     */
+    function &getFromDisk($pathInfo) {
+	$null = null;
+	$cache =& GalleryDataCache::_getCache();
+	if (!$cache['fileCacheEnabled']) {
+	    return $null;
+	}
+
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$cacheFile = GalleryDataCache::getCachePath($pathInfo);
+	if ($platform->file_exists($cacheFile) &&
+		$buf = $platform->file_get_contents($cacheFile)) {
+	    /* Parse the cache file */
+	    $marker = strcspn($buf, '|');
+	    foreach (explode(',', substr($buf, 0, $marker)) as $classFile) {
+		if ($classFile) {
+		    GalleryCoreApi::requireOnce($classFile);
+		}
+	    }
+	    $data = unserialize(substr($buf, $marker+1));
+	    return $data;
+	}
+
+	return $null;
+    }
+
+    /**
+     * Remove the cache file from disk.  PathInfo is of the form that can be passed to getCachePath
+     * @see GalleryDataCache::getCachePath
+     * @param array $pathInfo the path info
+     */
+    function removeFromDisk($pathInfo) {
+	$cache =& GalleryDataCache::_getCache();
+	if (!$cache['fileCacheEnabled']) {
+	    return null;
+	}
+
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	if (in_array($pathInfo['type'],
+		     array('entity', 'module-data', 'local-url-map'))
+		|| isset($pathInfo['id'])) {
+	    $cacheFile = GalleryDataCache::getCachePath($pathInfo);
+	    if ($platform->file_exists($cacheFile)) {
+		if ($platform->is_dir($cacheFile)) {
+		    $platform->recursiveRmDir($cacheFile);
+		} else {
+		    $platform->unlink($cacheFile);
+		}
+	    }
+	} else if ($pathInfo['type'] == 'module' || $pathInfo['type'] == 'theme') {
+	    list ($ret, $pluginStatus) = GalleryCoreApi::fetchPluginStatus($pathInfo['type']);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    foreach (array_keys($pluginStatus) as $pluginId) {
+		GalleryDataCache::removeFromDisk(array('type' => $pathInfo['type'],
+						       'id' => $pluginId,
+						       'itemId' => $pathInfo['itemId']));
+	    }
+	}
+    }
+
+    /**
+     * Put the specified data into a cache file from disk.  PathInfo is of the form that can
+     * be passed to getCachePath.
+     *
+     * @param array $pathInfo the path info
+     * @param mixed $data the object data
+     * @param array $requiredClasses classes that must be loaded in order to retrieve this data
+     * @see GalleryDataCache::getCachePath
+     */
+    function putToDisk($pathInfo, &$data, $requiredClasses=array()) {
+	$cache =& GalleryDataCache::_getCache();
+	if (!$cache['fileCacheEnabled']) {
+	    return;
+	}
+
+	global $gallery;
+	$cacheFile = GalleryDataCache::getCachePath($pathInfo);
+	$platform =& $gallery->getPlatform();
+	GalleryUtilities::guaranteeDirExists(dirname($cacheFile));
+
+	/* This will either succeed, or leave no trace of its attempt. */
+	$platform->atomicWrite(
+	    $cacheFile, implode(',', $requiredClasses) . "|" . serialize($data));
+    }
+
+    /**
+     * For a given id, return a tuple with the breakdown of the id.  The caching mechanism uses
+     * this to determine where in the cache tree to place the file.  The breakdown happens
+     * according to the digits of the id.  The first element returned is the hundreds digit,
+     * the second element is the tens digit.
+     *
+     *  0..9     =>  0, 0
+     *  10..19   =>  0, 1
+     *  20..29   =>  0, 2
+     *   ...
+     *  100..109 =>  1, 0
+     *  110..119 =>  1, 1
+     *
+     * @param int $id
+     * @return array the tuple
+     */
+    function getCacheTuple($id) {
+	$id = "$id";
+	if ($id > 100) {
+	    return array($id[0], $id[1]);
+	} else if ($id > 10) {
+	    return array('0', $id[0]);
+	} else {
+	    return array('0', '0');
+	}
+    }
+
+    /**
+     * Given a path info descriptor, return the path to the appropriate cache file.
+     *
+     * Path info contains the following variables:
+     *  type:    entity, derivative, derivative-relative, fast-download,
+     *           module, module-data, theme, local-url-map
+     *  itemId:  the item id
+     *  id:      (module, theme only) a refinement of the type
+     *
+     * @return string the path
+     */
+    function getCachePath($pathInfo) {
+	global $gallery;
+
+	$base = $gallery->getConfig('data.gallery.cache');
+	$cacheFile = null;
+	switch ($pathInfo['type']) {
+	case 'entity':
+	    list ($first, $second) = GalleryDataCache::getCacheTuple($pathInfo['itemId']);
+	    $cacheFile = sprintf('%sentity/%s/%s/%d.inc',
+				 $base, $first, $second, $pathInfo['itemId']);
+	    break;
+
+	case 'derivative':
+	    list ($first, $second) = GalleryDataCache::getCacheTuple($pathInfo['itemId']);
+	    $cacheFile = sprintf('%sderivative/%s/%s/%d.dat',
+				 $base, $first, $second, $pathInfo['itemId']);
+	    break;
+
+	case 'derivative-relative':
+	    list ($first, $second) = GalleryDataCache::getCacheTuple($pathInfo['itemId']);
+	    $cacheFile = sprintf('derivative/%s/%s/%d.dat',
+				 $first, $second, $pathInfo['itemId']);
+	    break;
+
+	case 'fast-download':
+	    list ($first, $second) = GalleryDataCache::getCacheTuple($pathInfo['itemId']);
+	    $cacheFile = sprintf('%sentity/%s/%s/%d-fast.inc',
+				 $base, $first, $second, $pathInfo['itemId']);
+	    break;
+
+	case 'module':
+	case 'theme':
+	    if (isset($pathInfo['id'])) {
+		if (strstr($pathInfo['id'], '..') !== false) {
+		    $pathInfo['id'] = '0';
+		}
+		if (isset($pathInfo['itemId'])) {
+		    if (strstr($pathInfo['itemId'], '..') !== false) {
+			$pathInfo['itemId'] = '0';
+		    }
+		    list ($first, $second) = GalleryDataCache::getCacheTuple($pathInfo['itemId']);
+		    $cacheFile = sprintf('%s%s/%s/%s/%s/%s.inc',
+					 $base, $pathInfo['type'], $pathInfo['id'],
+					 $first, $second, $pathInfo['itemId']);
+		} else {
+		    $cacheFile = sprintf('%s%s/%s', $base, $pathInfo['type'], $pathInfo['id']);
+		}
+	    }
+	    break;
+
+	case 'module-data':
+	    if (strstr($pathInfo['module'], '..') !== false) {
+		$pathInfo['module'] = '0';
+	    }
+	    if (isset($pathInfo['itemId'])) {
+		list ($first, $second) = GalleryDataCache::getCacheTuple($pathInfo['itemId']);
+
+		/* $itemId is overloaded here; sanitize it so that it only accepts [0-9A-Za-z_]+ */
+		$itemId = preg_replace('/[^0-9A-Za-z_]/', '_', $pathInfo['itemId']);
+		$cacheFile = sprintf('%s%s/%s/%s/%s/%s.dat',
+				     $base, 'module', $pathInfo['module'],
+				     $first, $second, $itemId);
+	    } else {
+		$cacheFile = sprintf('%s%s/%s/', $base, 'module', $pathInfo['module']);
+	    }
+	    break;
+
+	case 'local-url-map':
+	    $cacheFile = "{$base}theme/_all/localUrlMap.txt";
+	    break;
+	}
+
+	return $cacheFile;
+    }
+
+    /**
+     * Store the given permission => ids mapping in the session cache
+     * @param mixed $ids item ids (can be an array of ids or a single id)
+     * @param string $permission
+     */
+    function cachePermissions($ids, $permission) {
+	global $gallery;
+	$session =& $gallery->getSession();
+	if (!isset($session)) {
+	    /* No session means we've got no cache */
+	    return;
+	}
+
+	if (!is_array($ids)) {
+	    $ids = array($ids);
+	}
+
+	$permissions = $session->get('permissionCache');
+
+	/*
+	 * We want to put all the permissions that we cache in this request into one entry in
+	 * the session.  However we're going to get several separate requests.  So start by
+	 * pruning down the total number of cached permission sets, then create a new set
+	 * and add all cached values to that.
+	 */
+	static $initialized;
+	if (!isset($initialized)) {
+	    if (!isset($permissions)) {
+		$permissions = array();
+	    }
+
+	    array_unshift($permissions, array());
+	    /* Trim down the cache */
+	    $max = 6;
+	    if (sizeof($permissions) > $max) {
+		array_splice($permissions, -1, sizeof($permissions) - $max);
+	    }
+
+	    $initialized = 1;
+	}
+
+	$cacheKey = 'GalleryDataCache::cachePermissions::newEntries';
+	if (GalleryDataCache::containsKey($cacheKey)) {
+	    $newEntries = GalleryDataCache::get($cacheKey);
+	} else {
+	    $newEntries = 0;
+	}
+
+	/* Make sure the session permission cache is not too large */
+	$maxEntries = 40;
+	/* Add our new data to the head of the list */
+	while (($id = array_shift($ids)) && $maxEntries > $newEntries++) {
+	    $permissions[0][$permission][$id] = 1;
+	}
+
+	GalleryDataCache::put($cacheKey, $newEntries);
+	$session->put('permissionCache', $permissions);
+    }
+
+    /**
+     * Look up the given permission in the cache.  Return true if the permission
+     * exists in the cache, false if it doesn't.  A return of false doesn't mean
+     * that the user doesn't have the permission -- just that it's not in the
+     * cache.
+     *
+     * @param int $id the item id
+     * @param string $permission
+     * @return boolean
+     */
+    function hasPermission($id, $permission) {
+	global $gallery;
+	$session =& $gallery->getSession();
+	if (!isset($session)) {
+	    return;
+	}
+
+	$permissions = $session->get('permissionCache');
+	/*
+	 * Since we add all new data to the head of the list, the odds are good
+	 * that we should find our answer in the first iteration of this loop.
+	 */
+	for ($i = 0; $i < sizeof($permissions); $i++) {
+	    if (isset($permissions[$i][$permission][$id])) {
+		return true;
+	    }
+	}
+
+	return false;
+    }
+
+    /**
+     * Clear permission cache for active user.
+     */
+    function clearPermissionCache() {
+	global $gallery;
+	$session =& $gallery->getSession();
+	if (isset($session)) {
+	    $session->remove('permissionCache');
+	}
+    }
+
+    /**
+     * Get page data from the cache.
+     *
+     * @param string $type the page type
+     * @param mixed $keyData data to use to generate the unique key for this cache entry
+     * @return array GalleryStatus a status code
+     *               string the page data
+     */
+    function getPageData($type, $keyData) {
+	global $gallery;
+
+	list ($ret, $acceleration) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'acceleration');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$acceleration = unserialize($acceleration);
+
+	list ($ret, $isAnonymous) = GalleryCoreApi::isAnonymousUser();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$expiration = $acceleration[$isAnonymous ? 'guest' : 'user']['expiration'];
+	$phpVm = $gallery->getPhpVm();
+	$cutoff = $phpVm->time() - $expiration;
+
+	list ($ret, $aclIds) =
+	    GalleryCoreApi::fetchAccessListIds('core.view', $gallery->getActiveUserId());
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $extraKey) = GalleryDataCache::_getExtraPageCacheKey();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$key = md5(serialize($keyData) . '|' . $extraKey . '|' . implode(",", $aclIds));
+	$userId = $gallery->getActiveUserId();
+	/*
+	 * Note: there is no complete index for this WHERE clause because the MySQL query optimizer
+	 * would still use the PK for this query. This should not lead to a performance decrease as
+	 * PK is a unique index thus returning only 0/1 rows that need to be compared with isEmpty
+	 * and timestamp.
+	 */
+	list ($ret, $results) = GalleryCoreApi::getMapEntry('GalleryCacheMap',
+	    array('value'),
+	    array('key' => $key, 'type' => $type, 'userId' => $userId,
+		  'timestamp' => new GallerySqlFragment('>?', $cutoff), 'isEmpty' => 0));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($results->resultCount() > 0) {
+	    $result = $results->nextResult();
+	    $value = $result[0];
+	    if (function_exists('gzinflate')) {
+		$storage =& $gallery->getStorage();
+		$value = $storage->decodeBlob($value);
+		$value = gzinflate($value);
+	    }
+	} else {
+	    $value = null;
+	}
+
+	return array(null, $value);
+    }
+
+    /**
+     * Store page data from the cache.
+     *
+     * @param string $type the page type
+     * @param int $itemId the itemId of the item this page is rendering
+     * @param mixed $keyData data to use to generate the unique key for this cache entry
+     * @param string $value the page data
+     * @return GalleryStatus a status code
+     */
+    function putPageData($type, $itemId, $keyData, $value) {
+	global $gallery;
+
+	$userId = $gallery->getActiveUserId();
+	list ($ret, $aclIds) = GalleryCoreApi::fetchAccessListIds('core.view', $userId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $extraKey) = GalleryDataCache::_getExtraPageCacheKey();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$key = md5(serialize($keyData) . '|' . $extraKey . '|' . implode(",", $aclIds));
+
+	if (function_exists('gzdeflate')) {
+	    $value = gzdeflate($value);
+	    $storage =& $gallery->getStorage();
+	    $value = $storage->encodeBlob($value);
+	}
+
+	$phpVm = $gallery->getPhpVm();
+	$now = $phpVm->time();
+	for ($i = 0; $i < 2; $i++) {
+	    $ret = GalleryCoreApi::updateMapEntry(
+		'GalleryCacheMap',
+		array('key' => $key, 'userId' => $userId, 'itemId' => $itemId, 'type' => $type),
+		array('value' => $value, 'timestamp' => $now, 'isEmpty' => 0));
+
+	    $storage =& $gallery->getStorage();
+	    list ($ret, $affectedRows) = $storage->getAffectedRows();
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if (!$affectedRows) {
+		$ret = GalleryCoreApi::addMapEntry(
+		    'GalleryCacheMap',
+		    array('key' => $key, 'value' => $value, 'userId' => $userId, 'type' => $type,
+			  'itemId' => $itemId, 'timestamp' => $now, 'isEmpty' => 0));
+		if ($ret) {
+		    /*
+		     * Nearly always this update/insert should be OK in one pass.
+		     * However, 2 simultaneous requests may both fail to update, then both
+		     * try to insert.. the 2nd insert will fail.  In this rare case we'll
+		     * loop and try once more to update.. if it still fails we'll error out.
+		     */
+		    if ($i < 1) {
+			continue;
+		    }
+		    return $ret;
+		}
+	    }
+	    break;
+	}
+
+	/* Clear expired data only 5% of the time. */
+	$dieRoll = $phpVm->rand(1, 100);
+	if ($dieRoll <= 5){
+	    $ret = GalleryDataCache::_cleanPageDataCache();
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Remove all cached page data for the given item ids
+     *
+     * @param mixed $itemIds one item id, or an array of item ids
+     * @return GalleryStatus a status code
+     */
+    function removePageData($itemIds) {
+	$ret = GalleryCoreApi::removeMapEntry('GalleryCacheMap', array('itemId' => $itemIds));
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * Should we use the cache for this page or not?  Right now we cache a page if it's a GET
+     * request, the browser hasn't specified that it wants uncached data, and the caching policy
+     * for the given user class is appropriate.
+     *
+     * @param string $action
+     * @param string $type the page type
+     * @return GalleryStatus a status code
+     */
+    function shouldCache($action, $type) {
+	global $gallery;
+
+	if (GalleryUtilities::getServerVar('REQUEST_METHOD') != 'GET') {
+	    return array(null, false);
+	}
+
+	$phpVm = $gallery->getPhpVm();
+	if ($action == 'read') {
+	    $noCache = (GalleryUtilities::getServerVar('HTTP_PRAGMA') == 'no-cache' ||
+			GalleryUtilities::getServerVar('HTTP_CACHE_CONTROL') == 'no-cache');
+	    if ($noCache) {
+		return array(null, false);
+	    }
+	}
+
+	/*
+	 * Don't cache guest preview pages since we want a realtime preview
+	 * and they are infrequently visited
+	 */
+	$session =& $gallery->getSession();
+	if ($session->get('theme.guestPreviewMode')) {
+	    return array(null, false);
+	}
+
+	list ($ret, $acceleration) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'acceleration');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$acceleration = unserialize($acceleration);
+	list ($ret, $isAnonymous) = GalleryCoreApi::isAnonymousUser();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $acceleration[$isAnonymous ? 'guest' : 'user']['type'] == $type);
+    }
+
+    /**
+     * Returns session related page cache key, eg. to make the page cache language sensitive
+     * @todo The extra key for exif module is a quick fix, not a permanent fix; it should be
+     *       cached on the block level not on page level.
+     *
+     * @return array GalleryStatus a status code
+     *               string extra cache key
+     */
+    function _getExtraPageCacheKey() {
+	global $gallery;
+	$session =& $gallery->getSession();
+
+	/* Add session specific flags & values to the cache key */
+	list ($ret, $languageCode) = $gallery->getActiveLanguageCode();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$isEmbedded = (int)$gallery->isEmbedded();
+	$extraKey = (int)($session->isUsingCookies()) . '-' . $languageCode . '-' . $isEmbedded;
+
+	$mode = $session->get('exif.module.LoadExifInfo.mode');
+	if (!empty($mode) && $mode != 'summary') {
+	    $extraKey .= '-exif' . $mode;
+	}
+
+	return array(null, $extraKey);
+    }
+
+    /**
+     * Delete value of obsolete cache data.
+     *
+     * @return GalleryStatus a status code
+     */
+    function _cleanPageDataCache() {
+	global $gallery;
+
+	list ($ret, $anonymousUserId) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $acceleration) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'acceleration');
+	if ($ret) {
+	    return $ret;
+	}
+	$acceleration = unserialize($acceleration);
+
+	list ($ret, $isAnonymous) = GalleryCoreApi::isAnonymousUser();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$expiration = $acceleration[$isAnonymous ? 'guest' : 'user']['expiration'];
+	$phpVm = $gallery->getPhpVm();
+	$cutoff = $phpVm->time() - $expiration;
+
+	/* Use UPDATE instead of DELETE since UPDATE is faster and we reuse the rows. */
+	$storage =& $gallery->getStorage();
+
+	if ($isAnonymous) {
+	    $userIdForSql = (int)$anonymousUserId;
+	} else {
+	    $userIdForSql = new GallerySqlFragment('<> ?', (int)$anonymousUserId);
+	}
+
+	$ret = GalleryCoreApi::updateMapEntry('GalleryCacheMap',
+		array('userId' => $userIdForSql,
+		      'timestamp' => new GallerySqlFragment('< ?', (int)$cutoff), 'isEmpty' => 0),
+		array('value' => null, 'isEmpty' => 1));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+}
+?>

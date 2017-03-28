@@ -1,0 +1,222 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A collection of useful utilities for managing translations
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryTranslatorHelper_medium {
+
+    /**
+     * @see GalleryCoreApi::installTranslationsForPlugin
+     */
+    function installTranslationsForPlugin($pluginType, $pluginId) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$codeBase = GalleryCoreApi::getCodeBasePath();
+
+	$gallery->guaranteeTimeLimit(30);  /* the glob may take a long time */
+	$pluginPath = "$codeBase${pluginType}s/$pluginId/";
+	$moFilesInPoDir = $platform->glob("${pluginPath}po/*.mo");
+	if (!empty($moFilesInPoDir)) {
+	    $moFiles = $moFilesInPoDir;
+	    $codePattern = '#(\w+).mo$#';
+	} else {
+	    $moFiles = $platform->glob("${pluginPath}locale/*/LC_MESSAGES/*.mo");
+	    $codePattern = '#locale/(\w+)/LC_MESSAGES#';
+	}
+
+	$g2locale = $gallery->getConfig('data.gallery.locale');
+	if (!empty($moFiles)) {
+	    $localeDirPattern = '%s/LC_MESSAGES/';
+	    foreach ($moFiles as $moPath) {
+		$gallery->guaranteeTimeLimit(30);
+
+		if (!preg_match($codePattern, $moPath, $matches)) {
+		    continue;
+		}
+		$destinationDir = $g2locale . sprintf($localeDirPattern, $matches[1]);
+
+		list ($success, $created) =
+		    GalleryUtilities::guaranteeDirExists($destinationDir);
+		if (!$success) {
+		    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+		}
+
+		$destinationPath = $destinationDir . "${pluginType}s_$pluginId.mo";
+		$success = $platform->copy($moPath, $destinationPath);
+		if (!$success) {
+		    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+		}
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::removeTranslationsForPlugin
+     */
+    function removeTranslationsForPlugin($pluginType, $pluginId) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$gallery->guaranteeTimeLimit(30);  /* the glob may take a long time */
+	$moFiles = $platform->glob($gallery->getConfig('data.gallery.locale')
+				   . "*/LC_MESSAGES/${pluginType}s_$pluginId.mo");
+	$success = true;
+	if (!empty($moFiles)) {
+	    foreach ($moFiles as $moPath) {
+		$gallery->guaranteeTimeLimit(30);
+		$success &= $platform->unlink($moPath);
+	    }
+	}
+	return $success ? null : GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+    }
+
+    /**
+     * @see GalleryCoreApi::installTranslationsForLocale
+     */
+    function installTranslationsForLocale($locale=null) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$codeBase = GalleryCoreApi::getCodeBasePath();
+	$localeBase = $gallery->getConfig('data.gallery.locale');
+
+	if (!isset($locale)) {
+	    $translator =& $gallery->getTranslator();
+	    $locale = $translator->getActiveLanguageCode();
+	}
+	if (empty($locale) || $locale == 'en_US') {
+	    /* Nothing to do */
+	    return null;
+	}
+	$language = substr($locale, 0, 2);
+
+	foreach (array('modules', 'themes') as $pluginType) {
+	    $gallery->guaranteeTimeLimit(30);
+	    $poDirs = $platform->glob("$codeBase$pluginType/*/po");
+	    $gallery->guaranteeTimeLimit(60);
+	    foreach ($poDirs as $poDir) {
+		preg_match('{/(\w+)/po$}', $poDir, $matches);
+		$filename = $pluginType . '_' . $matches[1] . '.mo';
+		foreach (array($locale, $language) as $prefix) {
+		    $destinationDir = $localeBase . $prefix . '/LC_MESSAGES/';
+		    $sourcePath = "$poDir/$prefix.mo";
+		    if (!$platform->file_exists($destinationDir . $filename)
+			    && $platform->file_exists($sourcePath)) {
+			list ($success) = GalleryUtilities::guaranteeDirExists($destinationDir);
+			if (!$success) {
+			    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+			}
+			$success = $platform->copy($sourcePath, $destinationDir . $filename);
+			if (!$success) {
+			    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
+			}
+		    }
+		}
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::getLanguageDescription
+     */
+    function getLanguageDescription($languageCode) {
+	$cacheKey = "GalleryTranslator::LanguageDescription::$languageCode";
+	if (!GalleryDataCache::containsKey($cacheKey)) {
+	    list ($newLanguageCode, $languageData) =
+		GalleryTranslator::getSupportedLanguageCode($languageCode, false);
+		if (!$newLanguageCode) {
+		    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					       "Invalid language code specified [$languageCode]"),
+				 null);
+		}
+
+		if (!isset($languageData['description'])) {
+		    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					       "Language not supported [{$language}_{$country}]"),
+				 null);
+	    }
+	    $languageDescription = $languageData['description'];
+	    GalleryDataCache::put($cacheKey, $languageDescription);
+	} else {
+	    $languageDescription = GalleryDataCache::get($cacheKey);
+	}
+	return array(null, $languageDescription);
+    }
+
+    /**
+     * @see GalleryCoreApi::getSupportedLanguages
+     */
+    function getSupportedLanguages() {
+	global $gallery;
+
+	$cacheKey = 'GalleryTranslator::SupportedLanguages';
+
+	if (!GalleryDataCache::containsKey($cacheKey)) {
+	    /* Get our language data */
+	    list ($supportedLanguages, $defaultCountry) = GalleryTranslator::getLanguageData();
+
+	    $installedLanguages = array();
+	    $localeBase = $gallery->getConfig('data.gallery.locale');
+	    $platform =& $gallery->getPlatform();
+	    $languageDirectories = $platform->glob($localeBase . '*');
+	    if ($languageDirectories) {
+		foreach ($languageDirectories as $directory) {
+		    if (!in_array($directory, array('..', '.'))
+			    && $platform->is_dir($directory)) {
+			$installedLanguages[basename($directory)] = 1;
+		    }
+		}
+
+		foreach ($supportedLanguages as $language => $countryList) {
+		    foreach ($countryList as $country => $languageData) {
+			/* Don't apply default to Chinese for political correctness */
+			if ($defaultCountry[$language] == $country && $language != 'zh') {
+			    $langCode = $language;
+			} else {
+			    $langCode = $language . '_' . $country;
+			}
+			if ($langCode != 'en' && empty($installedLanguages[$langCode])) {
+			    unset($supportedLanguages[$language][$country]);
+			    if (empty($supportedLanguages[$language])) {
+				unset($supportedLanguages[$language]);
+			    }
+			}
+		    }
+		}
+	    } else {
+		$default['en']['US'] = $supportedLanguages['en']['US'];
+		$supportedLanguages = $default;
+	    }
+	    GalleryDataCache::put($cacheKey, $supportedLanguages);
+	} else {
+	    $supportedLanguages = GalleryDataCache::get($cacheKey);
+	}
+	
+	return $supportedLanguages;
+    }
+}
+?>

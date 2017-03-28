@@ -1,0 +1,442 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A helper class for the Thumbnail module.
+ * @package Thumbnail
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class ThumbnailHelper {
+
+    /**
+     * Return a map of itemId => fileName for ThumbnailImage entities
+     *
+     * You can specify how many items to list, and where the windows is in
+     * the list of all items.
+     *
+     * @param boolean $listAll (optional) true to list all; by default only items with mimeTypeList
+     * @param int $count (optional) the number of items desired
+     * @param int $offset (optional) the start of the range
+     * @param string $substring (optional) a substring to match
+     * @return array GalleryStatus a status code
+     *               array of itemId=>fileName
+     */
+    function fetchThumbnails($listAll=false, $count=null, $offset=null, $substring=null) {
+	global $gallery;
+
+	$where = $data = array();
+	$query = '
+	SELECT [ThumbnailImage::id], [GalleryFileSystemEntity::pathComponent]
+	FROM [ThumbnailImage], [GalleryFileSystemEntity]
+	';
+	$where[] = '[GalleryFileSystemEntity::id] = [ThumbnailImage::id]';
+
+	if (!$listAll) {
+	    $where[] = '[ThumbnailImage::itemMimeTypes] IS NOT NULL';
+	}
+	if (!empty($substring)) {
+	    $where[] = '[GalleryFileSystemEntity::pathComponent] LIKE ?';
+	    $data[] = "%$substring%";
+	}
+	if (!empty($where)) {
+	    $query .= ' WHERE ' . implode(' AND ', $where);
+	}
+
+	$query .= ' ORDER BY [GalleryFileSystemEntity::pathComponent] ASC';
+
+	list ($ret, $searchResults) = $gallery->search($query, $data,
+		array('limit' => array('count' => (int)$count, 'offset' => (int)$offset)));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$items = array();
+	while ($result = $searchResults->nextResult()) {
+	    $items[(int)$result[0]] = $result[1];
+	}
+
+	return array(null, $items);
+    }
+
+    /**
+     * Fetch ThumbnailImage for given item
+     *
+     * @param int $itemId
+     * @return array GalleryStatus a status code
+     *               ThumbnailImage or null
+     */
+    function fetchThumbnail($itemId) {
+	global $gallery;
+
+	list ($ret, $searchResults) = $gallery->search(
+	    'SELECT [ThumbnailImage::id] FROM [ThumbnailImage], [ChildEntity]
+	     WHERE [ThumbnailImage::id] = [ChildEntity::id] AND [ChildEntity::parentId] = ?',
+	    array((int)$itemId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$thumbnailImage = null;
+	if ($result = $searchResults->nextResult()) {
+	    list ($ret, $thumbnailImage) =
+		GalleryCoreApi::loadEntitiesById((int)$result[0], 'ThumbnailImage');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, $thumbnailImage);
+    }
+
+    /**
+     * Get supported mime types
+     *
+     * @return array GalleryStatus a status code
+     *               array of mimeType=>itemId
+     */
+    function fetchMimeTypeMap() {
+	global $gallery;
+	list ($ret, $searchResults) = $gallery->search(
+	    'SELECT [ThumbnailImage::id], [ThumbnailImage::itemMimeTypes]
+	     FROM [ThumbnailImage] WHERE [ThumbnailImage::itemMimeTypes] IS NOT NULL');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$data = array();
+	while ($result = $searchResults->nextResult()) {
+	    foreach (explode('|', $result[1]) as $mimeType) {
+		$data[$mimeType] = (int)$result[0];
+	    }
+	}
+	return array(null, $data);
+    }
+
+    /**
+     * Get information about thumbnail support from other toolkits
+     *
+     * @param boolean $byMimeType (optional) true for data by-mimeType, false for data by-toolkit
+     * @return array GalleryStatus a status code,
+     *               :by-mimeType: array of mimeType=>array(toolkit ids)
+     *                or by-toolkit: array of toolkitId=>array(mimeTypes),
+     *               :by-mimeType: null
+     *                or by-toolkit: array of mimeType conflicts
+     */
+    function fetchToolkitSupport($byMimeType=true) {
+	list ($ret, $tList) = GalleryCoreApi::getToolkitOperationMimeTypes('thumbnail');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	list ($ret, $cList) = GalleryCoreApi::getToolkitOperationMimeTypes('convert-to-image/jpeg');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$data = array_merge_recursive($tList, $cList);
+	if ($byMimeType) {
+	    return array(null, $data, null);
+	}
+	$badMime = array();
+	$toolkitMime = array();
+	foreach ($data as $mime => $toolkits) {
+	    foreach ($toolkits as $id) {
+		if (!isset($toolkitMime[$id]) || !in_array($mime, $toolkitMime[$id])) {
+		    $toolkitMime[$id][] = $mime;
+		}
+	    }
+	    if (in_array('Thumbnail', $toolkits) && count($toolkits) > 1) {
+		$badMime[] = $mime;
+	    }
+	}
+	return array(null, $toolkitMime, $badMime);
+    }
+
+    /**
+     * Register toolkit operation for given mime type(s).
+     * @param mixed $mimeTypes array or single string
+     * @return GalleryStatus a status code
+     */
+    function registerToolkitOperation($mimeTypes) {
+	global $gallery;
+	if (!is_array($mimeTypes)) {
+	    $mimeTypes = array($mimeTypes);
+	}
+
+	/* Returns image/jpeg, but register as null mimeType to avoid operation CRC mismatch */
+	$ret = GalleryCoreApi::registerToolkitOperation(
+		'Thumbnail', $mimeTypes, 'thumbnail',
+		array(array('type' => 'int', 'description' =>
+			$gallery->i18n(array('text' => 'target width (# pixels or #% of full size)',
+					     'cFormat' => false))),
+		    array('type' => 'int', 'description' =>
+			$gallery->i18n('(optional) target height, defaults to same as width'))),
+		$gallery->i18n('Scale the image to the target size, maintain aspect ratio'),
+		null, 50);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Add new ThumbnailImage
+     *
+     * @param string $mimeType mime type to be supported, or null
+     * @param int $parentId parent item id, or null
+     * @param string $filename name for image
+     * @param string $tmpfile path to image file
+     * @param string $fileMimeType mime type of image file
+     * @param array $knownSize known width and height of image (used if toolkit unable to get size)
+     * @param ThumbnailImage $item (optional -- if you don't provide it we'll
+     *                                     get one from the Factory)
+     * @return array GalleryStatus a status code,
+     *               int id of newly created object
+     */
+    function addItem($mimeType, $parentId,
+		     $filename, $tmpfile, $fileMimeType, $knownSize=array(), $item=null) {
+	/* Get the mime type. */
+	list ($ret, $fileMimeType) = GalleryCoreApi::getMimeType($filename, $fileMimeType);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($fileMimeType != 'image/jpeg') {
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_FILE_TYPE), null);
+	}
+
+	if (!isset($item)) {
+	    list ($ret, $item) =
+		GalleryCoreApi::newFactoryInstance('GalleryEntity', 'ThumbnailImage');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if (!isset($item)) {
+		return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	    }
+	}
+
+	$ret = $item->create($tmpfile, $fileMimeType, $filename, $parentId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (isset($mimeType)) {
+	    $item->setItemMimeTypes($mimeType);
+	}
+	if (isset($parentId)) {
+	    $item->setParentId($parentId);
+	}
+	if ($item->getWidth() == 0 && $item->getHeight() == 0
+		&& isset($knownSize['width']) && isset($knownSize['height'])) {
+	    $item->setWidth($knownSize['width']);
+	    $item->setHeight($knownSize['height']);
+	}
+	$ret = $item->save();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $adminGroupId) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$ret = GalleryCoreApi::addGroupPermission($item->getId(), $adminGroupId, 'core.viewSource');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (isset($mimeType)) {
+	    $ret = ThumbnailHelper::registerToolkitOperation($mimeType);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, $item->getId());
+    }
+
+    /**
+     * Add or delete a mime type from an existing ThumbnailImage
+     *
+     * @param int $itemId id of the ThumbnailImage
+     * @param string $mimeType mime type
+     * @param boolean $isAdd (optional) true to add mime type, false to delete
+     * @return GalleryStatus a status code
+     */
+    function updateItem($itemId, $mimeType, $isAdd=true) {
+	list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId, 'ThumbnailImage');
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($itemId);
+	if ($ret) {
+	    return $ret;
+	}
+	$mimeTypes = $item->getItemMimeTypesList();
+	if ($isAdd) {
+	    $mimeTypes[] = $mimeType;
+	    $item->setItemMimeTypesList($mimeTypes);
+	} else {
+	    $newList = array();
+	    foreach ($mimeTypes as $mime) {
+		if ($mime != $mimeType) {
+		    $newList[] = $mime;
+		}
+	    }
+	    $item->setItemMimeTypesList($newList);
+	}
+	$ret = $item->save();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::releaseLocks($lockId);
+	if ($ret) {
+	    return $ret;
+	}
+	if ($isAdd) {
+	    $ret = ThumbnailHelper::registerToolkitOperation($mimeType);
+	    if ($ret) {
+		return $ret;
+	    }
+	} else {
+	    $ret = GalleryCoreApi::unregisterToolkitOperation(
+		    'Thumbnail', 'thumbnail', array($mimeType));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * Create or update thumbnail derivative to be sourced from a ThumbnailImage
+     *
+     * @param GalleryItem $item
+     * @param int $thumbnailId id of ThumbnailImage
+     * @return GalleryStatus a status code
+     */
+    function applyThumbnail(&$item, $thumbnailId) {
+	list ($ret, $derivative) = GalleryCoreApi::fetchThumbnailsByItemIds(array($item->getId()));
+	if ($ret) {
+	    return $ret;
+	}
+	if (!empty($derivative)) {
+	    $derivative = array_shift($derivative);
+	    list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($derivative->getId());
+	    if ($ret) {
+		return $ret;
+	    }
+	    /* Make sure operations contains only thumbnail and composite */
+	    $derivative->setDerivativeOperations(
+		rtrim(preg_replace('/(^|;)((?!thumbnail\||composite\|).*?(;|$))+/', '$1',
+				   $derivative->getDerivativeOperations()), ';'));
+	} else {
+	    list ($ret, $derivative) =
+		GalleryCoreApi::newFactoryInstanceByHint('GalleryDerivative', 'ThumbnailImage');
+	    if ($ret) {
+		return $ret;
+	    }
+	    if (!isset($derivative)) {
+		return GalleryCoreApi::error(ERROR_MISSING_OBJECT);
+	    }
+	    $ret = $derivative->create($item->getId(), DERIVATIVE_TYPE_IMAGE_THUMBNAIL);
+	    if ($ret) {
+		return $ret;
+	    }
+	    list ($ret, $prefs) =
+		GalleryCoreApi::fetchDerivativePreferencesForItem($item->getParentId());
+	    if ($ret) {
+		return $ret;
+	    }
+	    $op = 'thumbnail|150';
+	    foreach ($prefs as $pref) {
+		if ($pref['derivativeType'] == DERIVATIVE_TYPE_IMAGE_THUMBNAIL) {
+		    $op = $pref['derivativeOperations'];
+		    break;
+		}
+	    }
+	    $derivative->setDerivativeOperations($op);
+	}
+
+	list ($ret, $mimeList) = GalleryCoreApi::getToolkitOperationMimeTypes('thumbnail');
+	if ($ret) {
+	    return $ret;
+	}
+	if (!isset($mimeList['image/jpeg'])) {
+	    /*
+	     * No toolkit for jpeg thumbnails.
+	     * Omit thumbnail operation to just use custom thumbnail in its original size.
+	     */
+	    $derivative->setDerivativeOperations(
+		rtrim(preg_replace('/(^|;)thumbnail\|.*?(;|$)/', '$1',
+				   $derivative->getDerivativeOperations()), ';'));
+	}
+
+	$derivative->setDerivativeSourceId($thumbnailId);
+	$derivative->setMimeType('image/jpeg');
+	$ret = $derivative->save();
+	if ($ret) {
+	    if (isset($lockId)) {
+		GalleryCoreApi::releaseLocks($lockId);
+	    }
+	    return $ret;
+	}
+	if (isset($lockId)) {
+	    $ret = GalleryCoreApi::releaseLocks($lockId);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Return mime types and applicable file extensions
+     *
+     * @return array GalleryStatus a status code
+     *               array (string mime type => string list of extensions)
+     */
+    function getMimeTypeMap() {
+	global $gallery;
+
+	$query = '
+	    SELECT [GalleryMimeTypeMap::mimeType], [GalleryMimeTypeMap::extension]
+	    FROM [GalleryMimeTypeMap]
+	    ORDER BY [GalleryMimeTypeMap::mimeType]
+	';
+	list ($ret, $searchResults) = $gallery->search($query);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	while ($result = $searchResults->nextResult()) {
+	    $typeMap[$result[0]][] = $result[1];
+	}
+
+	foreach (array_keys($typeMap) as $mimeType) {
+	    $typeMap[$mimeType] = implode(' ', $typeMap[$mimeType]);
+	}
+	return array(null, $typeMap);
+    }
+}
+?>

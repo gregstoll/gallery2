@@ -1,0 +1,123 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/notification/classes/NotificationHelper.class');
+
+/**
+ * Notification Item State Change Handler
+ *
+ * Handles item delete and save events.  If it is a delete event, then any subscriptions for the
+ * item are removed.  In the case of the save event, if there are any subscriptions on the
+ * parent item, then these are propagated to the new item.
+ */
+class NotificationItemStateChangeHandler /* extends GalleryEventListener */ {
+    /**
+     * @see GalleryEventListener::handleEvent
+     */
+    function handleEvent($event) {
+	global $gallery;
+
+	$eventName = $event->getEventName();
+	$entity = $event->getEntity();
+	
+	if (empty($entity)) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT, null, null,
+	    				       'No entity supplied for ' . $eventName), null);
+	}
+	if ($eventName == 'GalleryEntity::save') {
+	    if (!$entity->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED)
+		|| !method_exists($entity, 'getParentId')) {
+		return array(null, null);
+	    }
+
+	    $parentId = $entity->getParentId();
+	    list ($ret, $eventMap) = NotificationHelper::getSubscriberByEntityId($parentId);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $ret = $this->_propagateSubscriptions($entity, $eventMap);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	} else if ($eventName == 'GalleryEntity::delete') {
+	    $deleteByColumn = GalleryUtilities::isA($entity, 'GalleryUser') ? 'userId' : 'itemId';
+	    $ret = GalleryCoreApi::removeMapEntry('SubscriptionMap',
+						  array($deleteByColumn => $entity->getId()));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, null);
+    }
+
+    /**
+     * For the specified entityId, this method will retrieve all the events that have users
+     * subscribed to. If the user has permission to the new item, the subscription will be applied
+     * to the new item.
+     *
+     * @param GalleryItem $entity The entity which triggered the save or delete event.
+     * @param array $eventMap Associative array: eventId => array(userId, handlerName)
+     * @return GalleryStatus
+     * @access private
+     */
+    function _propagateSubscriptions($entity, $eventMap) {
+	foreach ($eventMap as $notificationName => $subscribers) {
+	    list ($ret, $notification) = GalleryCoreApi::newFactoryInstanceById(
+						     'NotificationEvent_1_0', $notificationName);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if (!$notification->isAppropriateForItem($entity)) {
+		continue;
+	    }
+
+	    list ($ret, $hints) = GalleryCoreApi::getFactoryDefinitionHints('NotificationEvent_1_0',
+									    $notificationName);
+	    if ($ret) {
+		return $ret;
+	    }
+	    $eventName = $hints[0];
+
+	    $requiredPermission = $notification->getPermission();
+	    foreach ($subscribers as $data) {
+		list ($ret, $permissions) =
+		    GalleryCoreApi::getPermissions($entity->getId(), $data[0]);
+		if ($ret) {
+		    return $ret;
+		}
+
+		if (empty($requiredPermission) || empty($permissions[$requiredPermission])) {
+		    continue;
+		}
+
+		$ret = NotificationHelper::subscribe($data[0], $entity, $eventName,
+						     $notificationName, $data[1], true);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+	return null;
+    }
+}
+?>

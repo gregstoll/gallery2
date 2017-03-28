@@ -1,0 +1,236 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Create config.php
+ * @package Install
+ */
+class CreateConfigFileStep extends InstallStep {
+    var $_firstTime;
+
+    function CreateConfigFileStep() {
+	$this->_firstTime = true;
+    }
+
+    function stepName() {
+	return _('Create Config File');
+    }
+
+    function processRequest() {
+	if (!empty($_GET['downloadConfig'])) {
+	    GallerySetupUtilities::generateTextFileForDownload(
+		'config.php', $this->_getConfigContents());
+	    return false;
+	}
+
+	return true;
+    }
+
+    function loadTemplateData(&$templateData) {
+	global $galleryStub;
+
+	$configDir = $_SESSION['configPath'];
+	$configFilePath = $configDir . '/config.php';
+	$templateData['OS'] = strncasecmp(PHP_OS, 'win', 3) ? 'unix' : 'winnt';
+	if (file_exists($configFilePath) && !is_writeable($configFilePath)) {
+	    /* The file exists but we can't write to it */
+	    if (file_get_contents($configFilePath) == $this->_getConfigContents()) {
+		/* The proper contents are in the file, we can advance to the next step */
+		$this->setComplete(true);
+		$templateData['bodyFile'] = 'CreateConfigFileSuccess.html';
+	    } else {
+		$this->setInError(true);
+		$templateData['error']['configWriteError'] = 1;
+		$templateData['bodyFile'] = 'CreateConfigFileInstructions.html';
+		$templateData['galleryDir'] = basename($configDir);
+	    }
+	} else {
+	    /* Don't (overwrite) the config file, if we recommend an upgrade */
+	    $writeConfigFile = false;
+	    $freshInstall = $galleryStub->getConfig('freshInstall');
+	    $versionStatus = $upgradeRecommended = false;
+	    $versions = array('installed' => '', 'codebase' => false);
+	    if (!$freshInstall) {
+		/* We are reusing database tables, it's not a fresh install */
+		list ($versionStatus, $upgradeRecommended, $versions) = $this->_versionCheck();
+		if (!$versionStatus && file_exists($configFilePath)) {
+		    if ($upgradeRecommended) {
+			/*
+			 * Only write config.php, if it's empty. Else, the upgrader would
+			 * assume a wrong state of config.php when it tries to update it.
+			 */
+			$configContents = implode('', file($configFilePath));
+			if (empty($configContents) || strlen($configContents) < 100) {
+			    $writeConfigFile = true;
+			}
+		    }
+		} else {
+		    $writeConfigFile = true;
+		}
+	    } else {
+		$writeConfigFile = true;
+	    }
+
+	    /* Before writing, check if the file is writable and give instructions if it isn't */
+	    if ($writeConfigFile && !$out = @fopen($configFilePath, 'w')) {
+		/* Give the user instructions */
+		$templateData['bodyFile'] = 'CreateConfigFileInstructions.html';
+		$templateData['galleryDir'] = basename($configDir);
+
+		if (!$this->_firstTime) {
+		    if (!file_exists($configFilePath)) {
+			$templateData['error'] = sprintf(
+			    _('The config.php file does not exist in your %s directory'),
+			    $configDir);
+		    } else {
+			$templateData['error'] = sprintf(
+			    _('The config.php file exists but is not writeable.  If your server ' .
+			      'is Windows, you may have to disable file sharing for config.php ' .
+			      'and set its permissions manually.'),
+			    $configDir);
+		    }
+		}
+	    } else {
+		if (!$freshInstall && !$versionStatus) {
+		    $this->setComplete(false);
+		    $templateData['recommendUpgrade'] = $upgradeRecommended;
+		    $templateData['versions'] = $versions;
+		    $templateData['isMultisite'] = $galleryStub->getConfig('isMultisite');
+		    $templateData['galleryDir'] = basename($configDir);
+		    $templateData['configFileWritten'] = $writeConfigFile;
+		    $templateData['bodyFile'] = 'VersionCheckFailed.html';
+		} else {
+		    /* It's a fresh install or the installed version matches the codebase version */
+		    $this->setComplete(true);
+		    $templateData['bodyFile'] = 'CreateConfigFileSuccess.html';
+		}
+
+		/* Finally write the config file */
+		if ($writeConfigFile) {
+		    fwrite($out, $this->_getConfigContents());
+		    fclose($out);
+		}
+	    }
+	}
+	$this->_firstTime = false;
+    }
+
+    function _getConfigContents() {
+	global $galleryStub;
+	$configDir = $_SESSION['configPath'];
+	$baseDir = dirname(dirname(dirname(__FILE__)));
+	require_once($baseDir . '/modules/core/classes/GalleryUrlGenerator.class');
+	$baseUrl = getBaseUrl() . preg_replace('{install/' . INDEX_PHP . '\?.*}', '',
+					       GalleryUrlGenerator::getCurrentRequestUri());
+
+	$contents = '';
+	$addslashes = array('\\' => '\\\\', "'" => "\\'");
+	$newStoreConfig = $galleryStub->getConfig('storage.config');
+	$in = @fopen($baseDir . '/install/config.php-template', 'r');
+	while ($line = fgets($in, 2000)) {
+	    if (trim($line) == '$gallery->setConfig(\'setup.password\', \'\');') {
+		$tmp = strtr($galleryStub->getConfig('setup.password'), $addslashes);
+		$line = sprintf("\$gallery->setConfig('setup.password', '%s');\n", $tmp);
+	    }
+
+	    if (trim($line) == '$gallery->setConfig(\'data.gallery.base\', \'\');') {
+		$tmp = strtr($galleryStub->getConfig('data.gallery.base'), $addslashes);
+		$line = sprintf("\$gallery->setConfig('data.gallery.base', '%s');\n", $tmp);
+	    }
+
+	    foreach (array('type', 'hostname', 'database', 'username',
+			   'password', 'schema', 'tablePrefix', 'columnPrefix') as $key) {
+		if (preg_match("/^.storeConfig\['$key'\] = '.*';/", $line)) {
+		    $newStoreConfig[$key] = strtr($newStoreConfig[$key], $addslashes);
+		    $line = "\$storeConfig['$key'] = '$newStoreConfig[$key]';\n";
+		}
+	    }
+
+	    if (trim($line) == '$gallery->setConfig(\'galleryBaseUrl\', \'\');' &&
+		    $configDir != $baseDir) {
+		/* galleryBaseUrl not required for config.php in codebase dir */
+		$tmp = strtr($baseUrl, $addslashes);
+		$line = sprintf("\$gallery->setConfig('galleryBaseUrl', '%s');\n", $tmp);
+	    }
+
+	    if (trim($line) == '$gallery->setConfig(\'baseUri\', \'\');') {
+		$line = sprintf("\$gallery->setConfig('baseUri', '%s');\n", $_SESSION['baseUri']);
+	    }
+
+	    $contents .= $line;
+	}
+	fclose($in);
+
+	return $contents;
+    }
+
+    /**
+     * Check installed version vs. codebase version
+     *
+     * If G2 isn't installed at the moment or the installed version is the same as the codebase
+     * version, advance to the next step. Else, give a warning and instruct to run the upgrader if
+     * codebase version > installed version.
+     * Note: database = g2data version, checked in db step
+     *
+     * @return array (boolean versionsOk, boolean upgradeRecommended,
+     *                array ('codebase' => string version, 'installed' => string version))
+     */
+    function _versionCheck() {
+	global $galleryStub;
+
+	$freshInstall = $galleryStub->getConfig('freshInstall');
+	$versions = array();
+	$versionsOk = false;
+	$recommendUpgrade = false;
+
+	if ($freshInstall) {
+	    /* It's a fresh install */
+	    $versionsOk = true;
+	} else {
+	    /* Get the installed version from the DatabaseSetup Step */
+	    $tmp = $galleryStub->getConfig('installed.version');
+	    $versions['installed'] = empty($tmp) ? ' ' : $tmp;
+	    /* ^Avoid http://bugs.php.net/bug.php?id=17433 */
+	    /* Get the codebase version, also from the DB setup step */
+	    $versions['codebase'] = $galleryStub->getConfig('codebase.version');
+
+	    /* Compare the versions */
+	    if (($cmp = version_compare($versions['installed'], $versions['codebase'])) == 0) {
+		/* Installed version and codebase version are the same. Good. */
+		$versionsOk = true;
+	    } else if ($cmp < 0) {
+		/*
+		 * G2 is installed, but its version doesn't match the codebase version.
+		 * Recommend an upgrade (redirect to the upgrader)
+		 */
+		$recommendUpgrade = true;
+	    } else {
+		/*
+		 * G2 is installed, but its version doesn't match the codebase version.
+		 * And no upgrade is recommended because the codebase version is not newer than
+		 * the installed version. Something's wrong.
+		 */
+	    }
+	}
+
+	return array($versionsOk, $recommendUpgrade, $versions);
+    }
+}
+?>

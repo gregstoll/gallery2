@@ -1,0 +1,596 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+/**
+ * A helper class for the Getid3 module.
+ * @package Getid3
+ * @subpackage Classes
+ * @author Don Willingham <donwillingham@users.sf.net>
+ * @version $Revision: 17580 $
+ * @static
+ */
+
+/**
+ * Summary Getid3 setting
+ */
+define('GETID3_SUMMARY', 1);
+
+/**
+ * Detailed Getid3 setting
+ */
+define('GETID3_DETAILED', 2);
+
+/**
+ * Import mp3 title into item title
+ */
+define('GETID3_MP3_TITLE', 1);
+
+/**
+ * A helper class for the Getid3 module.
+ * @static
+ */
+class Getid3Helper {
+
+    /**
+     * Reset the given view mode back to its default settings
+     *
+     * @param int $viewMode
+     * @return GalleryStatus a status code
+     */
+    function setDefaultProperties($viewMode) {
+	switch($viewMode) {
+	case GETID3_SUMMARY:
+	    /* This is an initial install; make sure that we have some reasonable defaults */
+	    $properties[] = 'Artist';
+	    $properties[] = 'Album';
+	    $properties[] = 'Track';
+	    $properties[] = 'Title';
+	    $properties[] = 'DateTime';
+	    break;
+
+	case GETID3_DETAILED:
+	    $properties[] = 'Artist';
+	    $properties[] = 'Album';
+	    $properties[] = 'Track';
+	    $properties[] = 'Title';
+	    $properties[] = 'Genre';
+	    $properties[] = 'Year';
+	    $properties[] = 'DateTime';
+	    $properties[] = 'AudioBitRate';
+	    $properties[] = 'AudioBitRateMode';
+	    $properties[] = 'AudioChannels';
+	    $properties[] = 'AudioCodec';
+	    $properties[] = 'ChannelMode';
+	    $properties[] = 'VideoBitRate';
+	    $properties[] = 'VideoBitRateMode';
+	    $properties[] = 'VideoCodec';
+	    break;
+
+	default:
+	    return GalleryStatus::error(ERROR_BAD_PARAMETER);
+	}
+
+	$ret = Getid3Helper::setProperties($viewMode, $properties);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * Return the raw data as returned by Getid3
+     *
+     * @param string $path the path to the file
+     * @param array $rawGetid3Data reference to an array where to store the results
+     *        as returned by getid3()
+     * @access private
+     */
+    function _fetchRawGetid3Data($path, &$rawGetid3Data) {
+	global $gallery;
+	GalleryCoreApi::requireOnce('modules/getid3/lib/getid3/getid3.inc');
+
+	$platform =& $gallery->getPlatform();
+	if (!$platform->file_exists($path)) {
+	    $rawGetid3Data = null;
+	    return;
+	}
+
+	$getID3 = new getID3;
+	$rawGetid3Data = $getID3->analyze($path);
+    }
+
+    function getId3ArchiveRecurse($results, $fileArray, $nameprefix='') {
+	foreach (array_keys($fileArray) as $filename) {
+	    /* Only prepend a non-empty nameprefix and '/' to filename */
+	    if ($nameprefix == '') {
+		$prefixedname = $filename;
+	    } else {
+		$prefixedname = $nameprefix.'/'.$filename;
+	    }
+	    if (is_array($fileArray[$filename])) {
+		$results = Getid3Helper::getId3ArchiveRecurse(
+			       $results, $fileArray[$filename], $prefixedname);
+	    } else {
+		if (($nameprefix == '') || ($filename != 0) || ($fileArray[$filename] != 0)) {
+		    $results[] = array('name' => $prefixedname, 'size' => $fileArray[$filename]);
+		}
+	    }
+	}
+	return ($results);
+    }
+
+    function getId3ArchiveTar($fileDetails) {
+	$results = array();
+	foreach (array_keys($fileDetails) as $filename) {
+	    if (is_array($fileDetails[$filename])) {
+		$results[] = array('name' => $filename,
+				   'size' => $fileDetails[$filename]['size']);
+	    }
+	}
+	return ($results);
+    }
+
+    function getId3ArchiveData($path, $viewMode) {
+	Getid3Helper::_fetchRawGetid3Data($path, $rawGetid3Data);
+	$fileArray = null;
+	if (isset($rawGetid3Data['zip']['files'])) {
+	    /* We must recurse through files array */
+	    return(array(null,
+		 Getid3Helper::getId3ArchiveRecurse(array(), $rawGetid3Data['zip']['files'])));
+	}
+	if (isset($rawGetid3Data['iso']['files'])) {
+	    /* Recurse through files like zip */
+	    return(array(null,
+		Getid3Helper::getId3ArchiveRecurse(array(), $rawGetid3Data['iso']['files'])));
+	}
+	if (isset($rawGetid3Data['tar']['file_details'])) {
+	    /* getid3's tar output allows us to simply look, and not have to recurse */
+	    return(array(null,
+		 Getid3Helper::getId3ArchiveTar($rawGetid3Data['tar']['file_details'])));
+	}
+	if (isset($rawGetid3Data['gzip']['member_header']['1']['tar']['file_details'])) {
+	    /* tar-gzip is like tar, just buried a little deeper */
+	    return(array(null, Getid3Helper::getId3ArchiveTar(
+	       $rawGetid3Data['gzip']['member_header']['1']['tar']['file_details'])));
+	}
+	/* File probably isn't an archive */
+	return (array(null, null));
+    }
+
+    /**
+     * Return the Getid3 data for a specific view and file
+     *
+     * @param string $path the path to the file
+     * @param int $viewMode
+     * @return array GalleryStatus a status code
+     *               array title/value pairs
+     */
+    function getId3Data($path, $viewMode) {
+	Getid3Helper::_fetchRawGetid3Data($path, $rawGetid3Data);
+	$getid3Keys = Getid3Helper::getGetid3Keys();
+	$results = array();
+
+	list ($ret, $properties) = Getid3Helper::getProperties($viewMode);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$errors = Getid3Helper::_getValue($rawGetid3Data, explode('.', 'error.0'));
+	if (isset($errors) && strlen($errors)) {
+		/* If there was an error, return nothing */
+		return array(null, array());
+	}
+	foreach ($properties as $property) {
+	    $title = $getid3Keys[$property][0];
+	    for ($i = 1; $i < count($getid3Keys[$property]); $i++) {
+		$value = Getid3Helper::_getValue(
+		    $rawGetid3Data, explode('.', $getid3Keys[$property][$i]));
+		if (isset($value)) {
+		    $value = Getid3Helper::postProcessValue($property, $value);
+		    $results[] = array('title' => $title, 'value' => $value);
+		    break;
+		}
+	    }
+	}
+
+	return array(null, $results);
+    }
+
+    /**
+     * Return the timestamp of a time string in Day of week, Month, Day, Hour, Minute, Second,
+     * Year format.
+     *
+     * @param string $value time string
+     * @return int an unix timestamp, null if not parsed
+     */
+    function getTimeDowMDHMSY($value) {
+	/* Match "WED DEC 21 19:19:17 2005" format produced by a Canon SD400 */
+	if (preg_match('#(\w+)\ +(\w+)\ +(\d+)\ +(\d+):(\d+):(\d+)\ +(\d+)#', $value, $m)) {
+	    $month = 0;
+	    switch($m[2]) {
+	    case 'JAN': $month =  1; break;
+	    case 'FEB': $month =  2; break;
+	    case 'MAR': $month =  3; break;
+	    case 'APR': $month =  4; break;
+	    case 'MAY': $month =  5; break;
+	    case 'JUN': $month =  6; break;
+	    case 'JUL': $month =  7; break;
+	    case 'AUG': $month =  8; break;
+	    case 'SEP': $month =  9; break;
+	    case 'OCT': $month = 10; break;
+	    case 'NOV': $month = 11; break;
+	    case 'DEC': $month = 12; break;
+	    default: return null;
+	    }
+	    $time = mktime((int)$m[4], (int)$m[5], (int)$m[6],
+		       $month,     (int)$m[3], (int)$m[7]);
+	    return $time;
+	}
+	return null;
+    }
+
+    /**
+     * Return the timestamp of a time string in Year, Month, Day, Hour, Minute, Second format.
+     *
+     * @param string $value time string
+     * @return int an unix timestamp, null if not parsed
+     */
+    function getTimeYMDHMS($value) {
+	/*
+	 * Match "2000:05:28 21:18:18" format produced by a
+	 *  TOSHIBA DIGITAL CAMERA PDRM70 VERSION 1.07
+	 */
+	if (preg_match('#(\d+):(\d+):(\d+)\ +(\d+):(\d+):(\d+)#', $value, $m)) {
+	    $time = mktime((int)$m[4], (int)$m[5], (int)$m[6],
+			   (int)$m[2], (int)$m[3], (int)$m[1]);
+	    return $time;
+	}
+	return null;
+    }
+
+    /**
+     * Return the timestamp of a time string already a time stamp.
+     *
+     * @param string $value time string
+     * @return int an unix timestamp, null if not parsed
+     */
+    function getTimeInt($value) {
+	if (preg_match('/^\d+$/', $value)) {
+	    $time = intval($value);
+	    /* Adjust time by time zone offset */
+	    /* Get difference to UTC in seconds, then add to time */
+	    $utcdiff = date('Z', $time);
+	    $time = $time + $utcdiff;
+	    return $time;
+	}
+	return null;
+    }
+
+    /**
+     * Sometimes the values that are returned aren't quite as we'd like to
+     * present them, so do a little post processing on the text
+     *
+     * @param string $property the property name (eg. "ShutterSpeedValue")
+     * @param string $value the value (eg. "25/10000 sec")
+     * @return string the result (eg. "1/400 sec")
+     * @todo (donw) Implement postProcessValue
+     */
+    function postProcessValue($property, $value) {
+	global $gallery;
+
+	if (!is_numeric($value)) {
+	    GalleryUtilities::sanitizeInputValues($value, false);
+	}
+
+	switch ($property) {
+	case 'DateTime':
+	    /* If it is already a timestamp, as a string */
+	    $tmp = Getid3Helper::getTimeInt($value);
+	    if (isset($tmp)) {
+		$time = $tmp;
+	    } else {
+		$tmp = Getid3Helper::getTimeDowMDHMSY($value);
+		if (isset($tmp)) {
+		    $time = $tmp;
+		} else {
+		    $tmp = Getid3Helper::getTimeYMDHMS($value);
+		    if (isset($tmp)) {
+			$time = $tmp;
+		    } else {
+			/* If we couldn't turn it into a timestamp, just use the original value */
+			return $value;
+		    }
+		}
+	    }
+
+	    list ($ret, $format) =
+		GalleryCoreApi::getPluginParameter('module', 'core', 'format.datetime');
+	    if ($ret || empty($format)) {
+		$format = '$x $X';
+	    }
+	    $platform =& $gallery->getPlatform();
+	    $value = $platform->strftime($format, $time);
+	    break;
+	}
+	return ($value);
+    }
+
+    /**
+     * Return the timestamp when the item was taken, as recorded in exif, id3, or other meta tag
+     *
+     * @param string $path the path to the file
+     * @return int an unix timestamp
+     */
+    function getOriginationTimestamp($path) {
+	$rawGetid3Data = array();
+	Getid3Helper::_fetchRawGetid3Data($path, $rawGetid3Data);
+	foreach (
+	    array('riff.AVI .hdrl.IDIT.0.data',
+		  'riff.AVI .INFO.IDIT.0.data',
+		  'quicktime.moov.subatoms.0.creation_time_unix',
+		  'quicktime.moov.subatoms.0.subatoms.1.subatoms.0.subatoms.0.creation_time_unix')
+		 as $tag) {
+	    $value = Getid3Helper::_getValue($rawGetid3Data, explode('.', $tag));
+	    if (isset($value)) {
+		$tmp = Getid3Helper::getTimeInt($value);
+		if (isset($tmp)) {
+		    return $tmp;
+		}
+		$tmp = Getid3Helper::getTimeDowMDHMSY($value);
+		if (isset($tmp)) {
+		    return $tmp;
+		}
+		$tmp = Getid3Helper::getTimeYMDHMS($value);
+		if (isset($tmp)) {
+		    return $tmp;
+		}
+	    }
+	}
+	return null;
+    }
+
+
+    /**
+     * Retrieve a single value by path from a nested associative array.
+     * The data source is an array like this:
+     *
+     * foo =>
+     *   bar => (a => 1, b => 2, c => 3)
+     *   baz => (d => 4, e => 5, f => 6)
+     *
+     * the key path is an array like this:
+     *
+     * (foo, bar, d)
+     *
+     * the resulting value would be "4"
+     *
+     * @param array $source the data source
+     * @param array $keyPath
+     * @return array GalleryStatus a status code
+     *               string value
+     * @access private
+     */
+    function _getValue(&$source, $keyPath) {
+	$key = array_shift($keyPath);
+	if (!isset($source[$key])) {
+	    return null;
+	}
+
+	if (empty($keyPath)) {
+	    return is_string($source[$key]) ? str_replace("\0", '', $source[$key]) : $source[$key];
+	} else {
+	    return Getid3Helper::_getValue($source[$key], $keyPath);
+	}
+    }
+
+    /**
+     * Return the target properties for the given view mode
+     *
+     * @param int $viewMode the view mode (GETID3_SUMMARY, etc)
+     * @return array GalleryStatus a status code
+     *               array logical exif property names
+     */
+    function getProperties($viewMode) {
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('Getid3PropsMap',
+	    array('property', 'sequence'), array('viewMode' => $viewMode),
+	    array('orderBy' => array('sequence' => ORDER_ASCENDING)));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$data = array();
+	while ($result = $searchResults->nextResult()) {
+	    $data[] = $result[0];
+	}
+
+	return array(null, $data);
+    }
+
+    /**
+     * Set the target properties for the given view mode
+     *
+     * @param int $viewMode the view mode (GETID3_SUMMARY, etc)
+     * @param array $properties logical property key/value pairs
+     * @return GalleryStatus a status code
+     */
+    function setProperties($viewMode, $properties) {
+	/* Remove all old map entries */
+	$ret = GalleryCoreApi::removeMapEntry('Getid3PropsMap', array('viewMode' => $viewMode));
+	if ($ret) {
+	    return $ret;
+	}
+
+	for ($i = 0; $i < sizeof($properties); $i++) {
+	    $ret = GalleryCoreApi::addMapEntry('Getid3PropsMap',
+		    array('property' => $properties[$i],
+			  'viewMode' => $viewMode,
+			  'sequence' => $i));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Return the Getid3 keys that we know about (from Getid3).
+     *
+     * The resulting array is of the form:
+     *
+     *   logical getid3 property => (physical getid3 property, internationalized title, group)
+     *   logical getid3 property => (physical getid3 property, internationalized title, group)
+     *
+     * The logical getid3 properties are unique and have some correlation to the
+     * physical property, but have been changed for our convenience.  The physical
+     * getid3 property is the actual getid3 property name (as reported by Getid3).  The group
+     * is an internationalized name of a group like "General Properties", etc.
+     *
+     * @return array getID3() keys
+     */
+    function getGetid3Keys() {
+	global $gallery;
+	static $data;
+
+	if (!empty($data)) {
+	    return $data;
+	}
+
+	/* Must haves */
+	$data['Album'] =
+	    array($gallery->i18n('Album'),
+		    'tags.vorbiscomment.album.0',
+		    'tags.id3v1.album.0',
+		    'id3v1.album',
+		    'id3v1.comments.album.0',
+		    'tags_html.id3v1.album.0');
+	$data['Artist'] =
+	    array($gallery->i18n('Artist'),
+		    'tags.vorbiscomment.artist.0',
+		    'comments.artist.0',
+		    'tags.id3v1.artist.0',
+		    'id3v1.artist',
+		    'id3v1.comments.artist.0',
+		    'tags_html.id3v1.artist.0');
+	$data['AudioBitRate'] =
+	    array($gallery->i18n('Audio Bit Rate'),
+		    'audio.bitrate',
+		    'audio.streams.0.bitrate',
+		    'mpeg.audio.bitrate',
+		    'bitrate');
+	$data['AudioBitRateMode'] =
+	    array($gallery->i18n('Audio Bit Rate Mode'),
+		    'audio.bitrate_mode',
+		    'audio.streams.0.bitrate_mode',
+		    'mpeg.audio.bitrate_mode');
+	$data['AudioChannels'] =
+	    array($gallery->i18n('Audio Channels'),
+		    'audio.channels',
+		    'audio.streams.0.channels',
+		    'mpeg.audio.channels');
+	$data['AudioCodec'] =
+	    array($gallery->i18n('Audio Codec'),
+		    'audio.codec');
+
+	$data['ChannelMode'] =
+	    array($gallery->i18n('Channel Mode'),
+		    'mpeg.audio.channelmode',
+		    'audio.channelmode',
+		    'audio.streams.0.channelmode');
+	$data['AudioSampleRate'] =
+	    array($gallery->i18n('Audio Sample Rate'),
+		    'audio.sample_rate');
+	$data['Copyright'] =
+	    array($gallery->i18n('Copyright'),
+		    'comments.copyright',
+		    'tags.quicktime.copyright');
+	$data['DateTime'] =
+	    array($gallery->i18n('Date/Time'),
+		  'riff.AVI .hdrl.IDIT.0.data',
+		  'riff.AVI .INFO.IDIT.0.data',
+		  'quicktime.moov.subatoms.0.creation_time_unix',
+		  'quicktime.moov.subatoms.0.subatoms.1.subatoms.0.subatoms.0.creation_time_unix');
+	$data['Genre'] =
+	    array($gallery->i18n('Genre'),
+		    'tags.vorbiscomment.genre.0',
+		    'comments.genre.0',
+		    'tags.id3v1.genre.0',
+		    'id3v1.genre',
+		    'id3v1.comments.genre',
+		    'tags_html.id3v1.genre.0');
+	$data['PlaytimeSeconds'] =
+	    array($gallery->i18n('Playtime (Seconds)'),
+		    'playtime_seconds');
+	$data['PlaytimeString'] =
+	    array($gallery->i18n('Playtime'),
+		    'playtime_string');
+	$data['Title'] =
+	    array($gallery->i18n('Title'),
+		    'tags.vorbiscomment.title.0',
+		    'comments.title.0',
+		    'tags.id3v1.title.0',
+		    'id3v1.title',
+		    'id3v1.comments.title.0',
+		    'tags_html.id3v1.title.0',
+		    'comments.title.0',
+		    'tags.quicktime.title');
+	$data['Track'] =
+	    array($gallery->i18n('Track'),
+		    'tags.id3v1.track.0',
+		    'id3v1.track',
+		    'id3v1.comments.track.0',
+		    'tags_html.id3v1.track.0');
+	$data['VideoBitRate'] =
+	    array($gallery->i18n('Video Bit Rate'),
+		    'video.bitrate');
+	$data['VideoBitRateMode'] =
+	    array($gallery->i18n('Video Bit Rate Mode'),
+		    'video.bitrate_mode');
+	$data['VideoCodec'] =
+	    array($gallery->i18n('Video Codec'),
+		    'video.codec',
+		    'quicktime.video.codec',
+		    'riff.video.0.codec');
+	$data['VideoDataFormat'] =
+	    array($gallery->i18n('Video Data Format'),
+		    'video.dataformat');
+	$data['VideoFrameRate'] =
+	    array($gallery->i18n('Video Frame Rate'),
+		    'video.frame_rate');
+	$data['VideoResolutionX'] =
+	    array($gallery->i18n('Video Resolution X'),
+		    'video.resolution_x');
+	$data['VideoResolutionY'] =
+	    array($gallery->i18n('Video Resolution Y'),
+		    'video.resolution_y');
+	$data['VideoSoftware'] =
+	    array($gallery->i18n('Video Software'),
+		    'riff.AVI .INFO.ISFT.0.data');
+	$data['Year'] =
+	    array($gallery->i18n('Year'),
+		    'tags.id3v1.year.0',
+		    'id3v1.year',
+		    'id3v1.comments.year.0',
+		    'tags_html.id3v1.year.0');
+
+	return $data;
+    }
+}
+?>

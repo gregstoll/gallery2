@@ -1,0 +1,1123 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Access point for external application in which Gallery is embedded.
+ * See {@link http://codex.gallery2.org/index.php/Gallery2:Embedding} for more information
+ * on embedding / integration.
+ *
+ * Three interaction modes:
+ * - 1. GalleryEmbed::init(array(..)) followed by GalleryEmbed::handleRequest()
+ * - 2. GalleryEmbed::init(array(.., 'fullInit' => true)) followed by other
+ *      GalleryEmbed/G2 calls, end with GalleryEmbed::done() <-- REQUIRED
+ * - 3. Single GalleryEmbed::logout(array(..)) call
+ *
+ * All of these methods should be accessed in a static sense, ie: GalleryEmbed::handleRequest();
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @author Andy Staudacher <ast@gmx.ch>
+ * @version $Revision: 17962 $
+ * @static
+ */
+class GalleryEmbed /* implements GalleryEventListener */ {
+
+    /**
+     * Return the major and minor version of the Embedding API.
+     * Make sure to specify the 'apiVersion' parameter in the GalleryEmbed::init call!
+     *
+     * @see GalleryCoreApi::getApiVersion, the same rules and notes apply to the Embedding API
+     * @return array major number, minor number
+     */
+    function getApiVersion() {
+	return array(1, 5);
+    }
+
+    /**
+     * Return whether the supplied Embedding API version is compatible or not
+     *
+     * @param array $apiVersion int major, int minor
+     * @return boolean
+     */
+    function isCompatibleWithEmbedApi($apiVersion) {
+	return GalleryUtilities::isCompatibleWithApi($apiVersion, GalleryEmbed::getApiVersion());
+    }
+
+    /**
+     * Initialize Gallery; must be called before most GalleryEmbed methods can be used.
+     * This method should only be called once during the lifetime of the request.
+     *
+     * @param array $initParams (optional--required before calling handleRequest) (
+     *   'embedUri' => URI to access G2 via CMS application
+     *                 (example: /portal/index.php?module=gallery2)
+     *   'g2Uri'    =  URL path to G2
+     *                 (example: /gallery2/, see extended docs for special character '|')
+     *   'loginRedirect' => (optional) URI for redirect to CMS login view (example: /cms/index.php)
+     *   'embedSessionString' => (optional) To support cookieless browsing, pass in key=value for
+     *                CMS session key and session id value to be added as query parameter in urls
+     *   'gallerySessionId' => (optional) To support cookieless browsing, pass in G2 session id
+     *                    (when cookies not in use, CMS must track this value between requests)
+     *   'activeUserId' => (optional) external user id of active user
+     *                                (empty string for anonymous/guest user)
+     *   'activeLanguage' => (optional) language code in use for this session
+     *   'fullInit' => (optional) call GalleryInitSecondPass
+     *                            (only use when not calling handleRequest)
+     *   'apiVersion' => (optional) array int major, int minor (check if your integration is
+     *                   compatible)
+     * )
+     * @return GalleryStatus a status object
+     */
+    function init($initParams=array()) {
+	/* GDC as static var replacement for better testability */
+	static $firstCacheKey = 'GalleryEmbed::initFirstPass';
+	static $secondCacheKey = 'GalleryEmbed::initSecondPass';
+
+	/* Only InitFirstPass if not already done so in a prior call */
+	if (!GalleryDataCache::containsKey($firstCacheKey)) {
+	    if (isset($initParams['embedUri'])) {
+		$initParams['baseUri'] = $initParams['embedUri'];
+		unset($initParams['embedUri']);
+	    }
+	    $ret = GalleryInitFirstPass($initParams);
+	    if ($ret) {
+		return $ret;
+	    }
+	    GalleryDataCache::put($firstCacheKey, true);
+	}
+
+	if (isset($initParams['apiVersion'])) {
+	    if (!GalleryEmbed::isCompatibleWithEmbedApi($initParams['apiVersion'])) {
+		return GalleryCoreApi::error(ERROR_PLUGIN_VERSION_MISMATCH, __FILE__, __LINE__,
+					     'Embedding API version is incompatible');
+	    }
+	}
+
+	global $gallery;
+	$gallery->setConfig('login', false);
+	if (isset($initParams['loginRedirect'])) {
+	    $gallery->setConfig('loginRedirect', array('href' => $initParams['loginRedirect']));
+	}
+
+	if (isset($initParams['activeUserId'])) {
+	    $ret = GalleryEmbed::checkActiveUser($initParams['activeUserId']);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	if (empty($initParams) || (isset($initParams['fullInit']) && $initParams['fullInit'])) {
+	    /* Only InitSecondPass if not already done so in a prior call */
+	    if (!GalleryDataCache::containsKey($secondCacheKey)) {
+		$ret = GalleryInitSecondPass();
+		if ($ret) {
+		    return $ret;
+		}
+		GalleryDataCache::put($secondCacheKey, true);
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Complete the G2 transaction.
+     *
+     * @return GalleryStatus a status object
+     */
+    function done() {
+	global $gallery;
+	global $gallerySetErrorHandler;
+
+	$session =& $gallery->getSession();
+	$ret = $session->save();
+	if ($ret) {
+	    return $ret;
+	}
+	if ($gallery->isStorageInitialized()) {
+	    $storage =& $gallery->getStorage();
+	    $ret = $storage->commitTransaction();
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	if (!empty($gallerySetErrorHandler)) {
+	    restore_error_handler();
+	    $gallerySetErrorHandler = false;
+	}
+	return null;
+    }
+
+    /**
+     * Process the G2 request.
+     * Return value contains 'isDone'=>true if output has already been sent
+     * (redirect, or output from G2 immediate view like core.DownloadItem) and
+     * CMS should not send any additional output.  If isDone is false then check
+     * headHtml and bodyHtml keys for content to display via CMS.
+     *
+     * Include activeUserName parameter if integration is not calling GalleryEmbed::login()
+     * at CMS login time.
+     *
+     * themeData is set if isDone is false and populated with the corresponding template
+     * variable.
+     *
+     * @return array ('isDone' => boolean,
+     *                [optional: 'headHtml' => string, 'bodyHtml' => string,
+     *                           'sidebarBlocksHtml' => array('blockHtml', 'blockHtml'),
+     *                           'themeData' => mixed theme data]
+     */
+    function handleRequest() {
+	global $gallerySetErrorHandler;
+	$result = GalleryMain(true);
+
+	if (!empty($gallerySetErrorHandler)) {
+	    restore_error_handler();
+	    $gallerySetErrorHandler = false;
+	}
+	return $result;
+    }
+
+    /**
+     * Ensure G2 session has same active user as CMS session.
+     * No need to call directly if activeUserId is passed to init().
+     *
+     * @param string $activeUserId external user id of active user
+     *               (null or empty for anonymous/guest user)
+     * @return GalleryStatus a status object
+     * @access private
+     * @todo Ensure that the active user ($gallery->getActiveUser) is changed as well
+     */
+    function checkActiveUser($activeUserId) {
+	global $gallery;
+	$session =& $gallery->getSession();
+	$phpVm = $gallery->getPhpVm();
+
+	if (!empty($activeUserId)) {
+	    list ($ret, $results) = GalleryCoreApi::getMapEntry(
+		'ExternalIdMap', array('entityId'), array('externalId' => $activeUserId, 
+							  'entityType' => 'GalleryUser'));
+	    if ($ret) {
+		return $ret;
+	    }
+	    if ($results->resultCount()) {
+		$row = $results->nextResult();
+		list ($ret, $isSiteAdmin)  = GalleryCoreApi::isUserInSiteAdminGroup($row[0]);
+		if ($ret) {
+		    return $ret;
+		}
+		/** @todo Figure out a way to enable site admin session timeouts when embedded */
+		if ($isSiteAdmin) {
+		    $session->put('session.siteAdminActivityTimestamp', $phpVm->time());
+		}
+	    }
+	}
+
+	$idInSession = $session->get('embed.id.externalUser');
+	if ($idInSession === $activeUserId) {
+	    return null;
+	}
+
+	$language = $session->get('core.language');
+
+	/* Logout the existing user from Gallery */
+	if (!empty($idInSession)) {
+	    list ($ret, $anonymousUserId) = GalleryCoreApi::getAnonymousUserId();
+	    if ($ret) {
+		return $ret;
+	    }
+	    /* Can't use getActiveUser() since it might not be set at this point */
+	    $activeGalleryUserId = $gallery->getActiveUserId();
+	    if ($anonymousUserId != $activeGalleryUserId) {
+	    	list ($ret, $activeUser) =
+		    GalleryCoreApi::loadEntitiesById($activeGalleryUserId, 'GalleryUser');
+		if ($ret) {
+		    return $ret;
+		}
+		$event = GalleryCoreApi::newEvent('Gallery::Logout');
+		$event->setEntity($activeUser);
+		list ($ret, $ignored) = GalleryCoreApi::postEvent($event);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	    $ret = $session->reset();
+	    if ($ret) {
+		return $ret;
+	    }
+	    $session->put('embed.id.externalUser', $activeUserId);
+	}
+
+	/* Set G2 active user */
+	if (!empty($activeUserId)) {
+	    $ret = GalleryEmbed::login($activeUserId);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	/* The session language has precedence over the user default language */
+	if (!empty($language)) {
+	    $session->put('core.language', $language);
+	}
+
+	return null;
+    }
+
+    /**
+     * Login the specified user in the G2 session.
+     * This method is not usually needed (passing activeUserId to init() or calling
+     * checkActiveUser will login the user as needed); this method included for completeness.
+     *
+     * @param string $extUserId external user id
+     * @return GalleryStatus a status object
+     */
+    function login($extUserId) {
+	global $gallery;
+	list ($ret, $user) = GalleryCoreApi::loadEntityByExternalId($extUserId, 'GalleryUser');
+	if ($ret) {
+	    return $ret;
+	}
+	$gallery->setActiveUser($user);
+	$session =& $gallery->getSession();
+	$session->put('embed.id.externalUser', $extUserId);
+
+	list ($ret, $anonymousUserId) = GalleryCoreApi::getAnonymousUserId();
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($anonymousUserId != $user->getId()) {
+	    $event = GalleryCoreApi::newEvent('Gallery::Login');
+	    $event->setEntity($user);
+	    list ($ret, $ignored) = GalleryCoreApi::postEvent($event);
+	    if ($ret) {
+		return $ret;
+	    }
+	} else {
+	    $session->regenerate();
+	}
+
+	return null;
+    }
+
+    /**
+     * Reset the G2 session.  Do not call init() before this method.
+     *
+     * Specify embedUri (the same embedUri as the one from ::init())
+     *
+     * @param array $params ('embedUri' => string the embedUri (e.g. /cms/index.php))
+     * @return GalleryStatus a status object
+     */
+    function logout($params=array()) {
+	require_once(dirname(__FILE__) . '/GalleryCoreApi.class');
+	require_once(dirname(__FILE__) . '/GallerySession.class');
+	$hasSession = GalleryUtilities::getCookieVar(SESSION_ID_PARAMETER);
+	if (empty($hasSession)) {
+	    $hasSession = GalleryUtilities::hasRequestVariable(SESSION_ID_PARAMETER);
+	}
+	if (!empty($hasSession)) {
+	    $ret = GalleryInitFirstPass($params);
+	    if ($ret) {
+		return $ret;
+	    }
+	    global $gallery;
+
+	    $event = GalleryCoreApi::newEvent('Gallery::Logout');
+	    $activeUser = $gallery->getActiveUser();
+	    $event->setEntity($activeUser);
+	    list ($ret, $ignored) = GalleryCoreApi::postEvent($event);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $session =& $gallery->getSession();
+	    $ret = $session->reset();
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    /* Commit the transaction */
+	    $ret = GalleryEmbed::done();
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * Retrieve G2 session id.  This method can be called after init() or handleRequest().
+     *
+     * @return string session id
+     */
+    function getSessionId() {
+	global $gallery;
+	$session =& $gallery->getSession();
+	return $session->getId();
+    }
+
+    /**
+     * Create a G2 user.
+     *
+     * @param string $extUserId external user id
+     * @param array $args user data (username required; others optional)
+     *              ['username' => string, 'email' => string, 'fullname' => string,
+     *               'language' => string, 'password' => string,
+     *               'hashedpassword' => string, 'hashmethod' => string,
+     *               'creationtimestamp' => integer]
+     * @return GalleryStatus a status object
+     */
+    function createUser($extUserId, $args) {
+	if (empty($extUserId) || empty($args['username'])) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+	list ($ret, $user) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryUser');
+	if ($ret) {
+	    return $ret;
+	}
+	if (!isset($user)) {
+	    return GalleryCoreApi::error(ERROR_MISSING_OBJECT);
+	}
+
+	$ret = $user->create($args['username']);
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = GalleryEmbed::_setUserData($user, $args, true);
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = $user->save();
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::addMapEntry(
+	    'ExternalIdMap',
+	    array('externalId' => $extUserId,
+		  'entityType' => 'GalleryUser', 'entityId' => $user->getId()));
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * Update a G2 user.
+     *
+     * @param string $extUserId external user id
+     * @param array $args user data
+     *              ['username' => string, 'email' => string, 'fullname' => string,
+     *               'language' => string, 'password' => string,
+     *               'hashedpassword' => string, 'hashmethod' => string,
+     *               'creationtimestamp' => integer]
+     * @return GalleryStatus a status object
+     */
+    function updateUser($extUserId, $args) {
+	list ($ret, $user) = GalleryCoreApi::loadEntityByExternalId($extUserId, 'GalleryUser');
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($user->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = GalleryEmbed::_setUserData($user, $args);
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+	$ret = $user->save();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::releaseLocks($lockId);
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * Set values in user object based on given args.
+     *
+     * @param GalleryUser $user
+     * @param array $args additional user data
+     * @param bool $create (optional) Whether to use creation mode (applying default values).
+     *                                Default false.
+     * @return GalleryStatus a status object
+     * @access private
+     */
+    function _setUserData(&$user, $args, $create=false) {
+	if (!empty($args['password'])) {
+	    $user->changePassword($args['password']);
+	} else if (!empty($args['hashedpassword'])) {
+	    if (!isset($args['hashmethod'])
+		    || !in_array($args['hashmethod'], array('md5', 'phpass'))) {
+		return GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+			'hashmethod must be either md5 or phpass');
+	    }
+	    $user->setHashedPassword($args['hashedpassword']);
+	} else if ($create) {
+	    /* Create a random password */
+	    $user->changePassword('G' . rand(100000,999999) . '2');
+	}
+
+	if (isset($args['username'])) {
+	    $user->setUserName($args['username']);
+	}
+	if (isset($args['email'])) {
+	    $user->setEmail($args['email']);
+	}
+	if (isset($args['fullname'])) {
+	    $user->setFullName($args['fullname']);
+	}
+	if (isset($args['language'])) {
+	    list ($languageCode) = GalleryTranslator::getSupportedLanguageCode($args['language']);
+	    $user->setLanguage($languageCode);
+	}
+	if (isset($args['creationtimestamp'])) {
+	    $user->setCreationTimestamp($args['creationtimestamp']);
+	}
+    }
+
+    /**
+     * Delete a G2 user.
+     *
+     * @param string $extUserId external user id
+     * @return GalleryStatus a status object
+     */
+    function deleteUser($extUserId) {
+	list ($ret, $user) = GalleryCoreApi::loadEntityByExternalId($extUserId, 'GalleryUser');
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::deleteEntityById($user->getId(), 'GalleryUser');
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'ExternalIdMap',
+	    array('externalId' => $extUserId, 'entityType' => 'GalleryUser'));
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * Create a G2 group.
+     *
+     * @param string $extGroupId external group id
+     * @param string $groupName group name
+     * @return GalleryStatus a status object
+     */
+    function createGroup($extGroupId, $groupName) {
+	if (empty($extGroupId) || empty($groupName)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+	list ($ret, $group) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryGroup');
+	if ($ret) {
+	    return $ret;
+	}
+	if (!isset($group)) {
+	    return GalleryCoreApi::error(ERROR_MISSING_OBJECT);
+	}
+
+	$ret = $group->create($groupName);
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = $group->save();
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::addMapEntry(
+	    'ExternalIdMap',
+	    array('externalId' => $extGroupId,
+		  'entityType' => 'GalleryGroup', 'entityId' => $group->getId()));
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * Delete a G2 group.
+     *
+     * @param string $extGroupId external group id
+     * @return GalleryStatus a status object
+     */
+    function deleteGroup($extGroupId) {
+	list ($ret, $group) = GalleryCoreApi::loadEntityByExternalId($extGroupId, 'GalleryGroup');
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::deleteEntityById($group->getId(), 'GalleryGroup');
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'ExternalIdMap', array('externalId' => $extGroupId, 'entityType' => 'GalleryGroup'));
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * Update a G2 Group.
+     *
+     * @param string $extGroupId external group id
+     * @param array $args group data
+     *              ['groupname' => string]
+     * @return GalleryStatus a status object
+     */
+    function updateGroup($extGroupId, $args) {
+	list ($ret, $group) = GalleryCoreApi::loadEntityByExternalId($extGroupId, 'GalleryGroup');
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($group->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (isset($args['groupname'])) {
+	    $group->setGroupName($args['groupname']);
+	}
+	$ret = $group->save();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::releaseLocks($lockId);
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * Add a user to a G2 group.
+     *
+     * @param string $extUserId external user id
+     * @param string $extGroupId external group id
+     * @return GalleryStatus a status object
+     */
+    function addUserToGroup($extUserId, $extGroupId) {
+	list ($ret, $user) = GalleryCoreApi::loadEntityByExternalId($extUserId, 'GalleryUser');
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $group) = GalleryCoreApi::loadEntityByExternalId($extGroupId, 'GalleryGroup');
+	if ($ret) {
+	    return $ret;
+	}
+	/* First check if the user is not already a member of the group */
+	list ($ret, $membership) = GalleryCoreApi::fetchGroupsForUser($user->getId());
+	if ($ret) {
+	    return $ret;
+	}
+	/* Only add user to group if not already done so */
+	if (!isset($membership[$group->getId()])) {
+	    $ret = GalleryCoreApi::addUserToGroup($user->getId(), $group->getId());
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * Remove a user from a G2 group.
+     *
+     * @param string $extUserId external user id
+     * @param string $extGroupId external group id
+     * @return GalleryStatus a status object
+     */
+    function removeUserFromGroup($extUserId, $extGroupId) {
+	list ($ret, $user) = GalleryCoreApi::loadEntityByExternalId($extUserId, 'GalleryUser');
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $group) = GalleryCoreApi::loadEntityByExternalId($extGroupId, 'GalleryGroup');
+	if ($ret) {
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::removeUserFromGroup($user->getId(), $group->getId());
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * Perform a search across all available searchable modules.
+     *
+     * @param string $searchString search criteria
+     * @param int $resultsPerModule (optional) max number of results to return from each module,
+     *            defaults to 3
+     * @return array GalleryStatus a status object,
+     *               array of {module_id} => results array plus 'name' key with module name>
+     * @see GallerySearchInterface_1_0::search for contents of results arrays
+     */
+    function searchScan($searchString, $resultsPerModule=3) {
+	global $gallery;
+
+	$session =& $gallery->getSession();
+	$ret = $session->start();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$session->doNotUseTempId();
+
+	GalleryCoreApi::requireOnce('modules/search/classes/SearchUtilities.class');
+	$searchInstances = $searchResults = array();
+	list ($ret, $ids) =
+	    GalleryCoreApi::getAllFactoryImplementationIds('GallerySearchInterface_1_0');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	foreach ($ids as $id => $className) {
+	    list ($ret, $searchInstances[$id]) =
+		GalleryCoreApi::newFactoryInstance('GallerySearchInterface_1_0', $className);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+	foreach ($searchInstances as $id => $instance) {
+	    list ($ret, $searchInfo) = $instance->getSearchModuleInfo();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $options = array();
+	    foreach ($searchInfo['options'] as $option => $info) {
+		if ($info['enabled']) {
+		    $options[$option] = true;
+		}
+	    }
+	    list ($ret, $searchResults[$id]) =
+		$instance->search($options,
+				  SearchUtilities::sanitizeSearchCriteria($searchString),
+				  0, $resultsPerModule);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $searchResults[$id]['name'] = $searchInfo['name'];
+	}
+	return array(null, $searchResults);
+    }
+
+    /**
+     * Search specific module.
+     *
+     * @param string $searchString search criteria
+     * @param string $moduleId id of module to search
+     * @param int $offset start index
+     * @param int $count number of results to retrieve
+     * @return array GalleryStatus a status object
+     *               results array plus 'name' key with module name
+     * @see GallerySearchInterface_1_0::search for contents of results array
+     */
+    function search($searchString, $moduleId, $offset, $count) {
+	global $gallery;
+
+	$session =& $gallery->getSession();
+	$ret = $session->start();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$session->doNotUseTempId();
+
+	GalleryCoreApi::requireOnce('modules/search/classes/SearchUtilities.class');
+	list ($ret, $searchInstance) =
+	    GalleryCoreApi::newFactoryInstanceById('GallerySearchInterface_1_0', $moduleId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (!isset($searchInstance)) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	}
+	list ($ret, $searchInfo) = $searchInstance->getSearchModuleInfo();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$options = array();
+	foreach ($searchInfo['options'] as $option => $info) {
+	    if ($info['enabled']) {
+		$options[$option] = true;
+	    }
+	}
+	list ($ret, $searchResults) =
+	    $searchInstance->search($options,
+				    SearchUtilities::sanitizeSearchCriteria($searchString),
+				    $offset, $count);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$searchResults['name'] = $searchInfo['name'];
+	return array(null, $searchResults);
+    }
+
+    /**
+     * Parse html (headHtml) for css links, javascript, meta tags and page title
+     *
+     * Note: meta are parsed for since Embed API version 1.4
+     *
+     * @param string $headhtml
+     * @return array string title, array (string css1, string css2, ...),
+     *               array (string javascript1, string javascript2, ...),
+     *               array (string meta1, string meta2, ...)
+     */
+    function parseHead($headhtml) {
+	$title = '';
+	$css = $javascript = $meta = array();
+
+	/* Only one title allowed */
+	if (preg_match("|<title(?:\s[^>]*)?>(.*)</title>|Usi", $headhtml, $regs)) {
+	    $title = $regs[1];
+	}
+
+	/* More than one script section allowed */
+	if (preg_match_all(
+		"|<script(?:\s[^>]*)?(?:\ssrc=[\"\'].+[\"\'])?(?:\s[^>]*)?>.*</script>|Usi",
+		$headhtml, $regs, PREG_PATTERN_ORDER)) {
+	    foreach ($regs[0] as $script) {
+		$javascript[] = $script;
+	    }
+	}
+
+	/* More than one style allowed */
+	if (preg_match_all("/<link .*\/>|<style(?:\s[^>]*)?>.*<\/style>/Usi",
+			   $headhtml, $regs, PREG_PATTERN_ORDER)) {
+	    foreach ($regs[0] as $style) {
+		$css[] = $style;
+	    }
+	}
+
+	/* More than one meta tag allowed */
+	if (preg_match_all('/<meta .*\/>/Usi', $headhtml, $regs, PREG_PATTERN_ORDER)) {
+	    foreach ($regs[0] as $metaTag) {
+		$meta[] = $metaTag;
+	    }
+	}
+
+	return array($title, $css, $javascript, $meta);
+    }
+
+    /**
+     * Get HTML for an image block
+     * Example:
+     *   list ($ret, $html, $headHtml) =
+     *       GalleryEmbed::getImageBlock(array('blocks' => 'randomImage', 'show' => 'title|date'));
+     *
+     * @param array $params ('blocks' => string, 'show' => string,
+     *        (optional)'itemId' => int, (optional)'maxSize' => int, (optional)'exactSize' => int,
+     *        (optional)'itemFrame' => frameId, (optional)'albumFrame' => frameId)
+     * - 'blocks' is a pipe (|) separated list, of one or more possible blocks which are:
+     *   randomImage|recentImage|viewedImage|randomAlbum|recentAlbum|viewedAlbum|specificItem
+     *   dailyImage|weeklyImage|monthlyImage|dailyAlbum|weeklyAlbum|monthlyAlbum
+     * - 'show' is a pipe (|) separated list of one or more possible choices which are:
+     *   title|date|views|owner|heading|fullSize or just 'none'
+     * - If you choose 'blocks' => 'specificItem', you must specify 'itemId' too.<li>
+     * - itemFrame/albumFrame may require CSS to be displayed.
+     * - See Image Block Site Admin page for info on optional parameters.
+     * @return array GalleryStatus,
+     *               string html content,
+     *               string head content or null if none required
+     * @deprecated Use getBlock() instead
+     */
+    function getImageBlock($params) {
+	return GalleryEmbed::getBlock('imageblock', 'ImageBlock', $params);
+    }
+
+    /**
+     * Add an externalId<->entityId map entry for existing G2/emApp users/groups
+     * Example:
+     *   <code>GalleryEmbed::addExternalIdMapEntry($uid, $g2user->getId(), 'GalleryUser');</code>
+     *
+     * @param string $externalId the user/group id in the embedded application
+     * @param int $entityId the entityId of the user/group in G2
+     * @param string $entityType 'GalleryUser' for user mapping, 'GalleryGroup' for group mapping
+     * @return GalleryStatus
+     */
+    function addExternalIdMapEntry($externalId, $entityId, $entityType) {
+	$ret = GalleryCoreApi::addMapEntry(
+	    'ExternalIdMap',
+	    array('externalId' => $externalId,
+		  'entityType' => $entityType,
+		  'entityId' => $entityId));
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * Get the complete externalId<->entityId map (for users and groups).
+     * The return array is organized by externalId or by entityId.
+     *
+     * @param string $key 'externalId' or 'entityId', array is organized by this key
+     * @return array GalleryStatus,
+     *               array(externalId|entityId => array(externalId => int/string,
+     *                                                  entityId => int, entityType => string))
+     */
+    function getExternalIdMap($key) {
+	/* Input validation */
+	if ($key != 'externalId' && $key != 'entityId') {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+	list ($ret, $results) = GalleryCoreApi::getMapEntry('ExternalIdMap',
+	    array('entityId', 'externalId', 'entityType'));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$map = array();
+	while ($result = $results->nextResult()) {
+	    $entry = array('externalId' => $result[1],
+			   'entityId' => $result[0], 'entityType' => $result[2]);
+	    if ($key == 'externalId') {
+		$map[$result[1]] = $entry;
+	    } else if ($key == 'entityId') {
+		$map[$result[0]] = $entry;
+	    }
+	}
+	return array(null, $map);
+    }
+
+    /**
+     * Check if externalId is mapped to a G2 user/group.
+     * - If GalleryStatus is a success, the externalId is mapped. Else, check for the status code.
+     * - ERROR_MISSING_OBJECT -> externalId is not mapped to a G2 entity.
+     * - other error codes -> unexpected behavior / bug.
+     *
+     * @param string $externalId the user/group id in the embedded application
+     * @param string $entityType 'GalleryUser' for user mapping, 'GalleryGroup' for group mapping
+     * @return GalleryStatus
+     */
+    function isExternalIdMapped($externalId, $entityType) {
+	list ($ret, $results) = GalleryCoreApi::getMapEntry('ExternalIdMap',
+	    array('entityId'), array('externalId' => $externalId, 'entityType' => $entityType));
+	if ($ret) {
+	    return $ret;
+	}
+	if (!($result = $results->nextResult())) {
+	    return GalleryCoreApi::error(ERROR_MISSING_OBJECT, __FILE__, __LINE__,
+					"$externalId $entityType");
+	}
+	return null;
+    }
+
+    /**
+     * Override the theme for this request.
+     *
+     * If the specified theme is unavailable, incompatible or inactive, it is ignored.
+     *
+     * @param string $themeId A GalleryTheme id
+     * @param array $themeParams (optional) Theme parameters to be used.
+     * @return GalleryStatus
+     */
+    function setThemeForRequest($themeId, $themeParams=null) {
+	global $gallery;
+
+	$gallery->setConfig('embeddedTheme', array($themeId, $themeParams));
+
+	return GalleryCoreApi::registerFactoryImplementationForRequest('GalleryEventListener',
+	    'GalleryEmbed', 'GalleryEmbed', 'modules/core/classes/GalleryEmbed.class', 'core',
+	    array('Gallery::LoadThemeAndParameters'));
+    }
+
+    /**
+     * @see GalleryEventListener::handleRequest
+     */
+    function handleEvent($event) {
+	global $gallery;
+
+	switch ($event->getEventName()) {
+	case 'Gallery::LoadThemeAndParameters':
+	    list ($themeId, $params) = $gallery->getConfig('embeddedTheme');
+	    return array(null, array('themeId' => $themeId, 'params' => $params));
+	}
+
+	return array(null, null);
+    }
+
+    /**
+     * Get a module block
+     *
+     * @param string $moduleId A Gallery module id
+     * @param string $blockName The name of the requested block
+     * @param array $params (optional) Block parameters
+     * @return array GalleryStatus A status code,
+     *               string HTML content: the block HTML, 
+     *               string head HTML to be inserted into the <head> section
+     * @since 1.4
+     */
+    function getBlock($moduleId, $blockName, $params=array()) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$session =& $gallery->getSession();
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	$blockHtml = $headHtml = null;
+	$css = $javascript = array();
+
+	$ret = $session->start();
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$session->doNotUseTempId();
+
+	/* Load the module list */
+	list ($ret, $moduleStatus) = GalleryCoreApi::fetchPluginStatus('module');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$blockTpl = "modules/$moduleId/templates/blocks/$blockName.tpl";
+	if (!$platform->file_exists(GalleryCoreApi::getCodeBasePath($blockTpl))) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null, null);
+	} else if (!isset($moduleStatus[$moduleId]) || empty($moduleStatus[$moduleId]['active'])) {
+	    return array(GalleryCoreApi::error(ERROR_CONFIGURATION_REQUIRED), null, null);
+	} else {
+	    /* Load the G2 templating engine */
+	    GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+	    $template = new GalleryTemplate(dirname(__FILE__) . '/../../..');
+	    $template->setVariable('l10Domain', 'modules_' . $moduleId);
+
+	    /* Invoke the preload, if available */
+	    $blockId = $moduleId . '.' . $blockName;
+	    GalleryCoreApi::requireOnce('modules/core/classes/GalleryTheme.class');
+	    $theme = new GalleryTheme();
+	    $ret = $theme->preloadBlock($template, $blockId, $params);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+	    /* Default theme variables */	    
+	    GalleryCoreApi::requireOnce('modules/core/classes/GalleryView.class');
+	    $ret = GalleryView::setStandardTemplateVariables($template);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+	    /* Assign template variables */
+	    $domClass = empty($params['class']) ? '' : ' ' . $params['class'];
+	    $params['class'] = "block-$moduleId-$blockName$domClass";
+	    foreach ($params as $key => $value) {
+		$template->setVariable($key, $value);
+	    }
+
+	    /* Render the block */
+	    list ($ret, $blockHtml) = $template->fetch("gallery:$blockTpl");
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+	    /* Check for any required CSS / JavaScript */
+	    if ($template->hasVariable('head')) {
+		$head = $template->getVariable('head');
+		if (!empty($head['tpl'])) {
+		    list ($tpl) = each($head['tpl']);
+		    list ($ret, $headHtml) = $template->fetch("gallery:$tpl");
+		    if ($ret) {
+			return array($ret, null, null);
+		    }
+		}
+		if (isset($head['style'])) {
+		    foreach ($head['style'] as $style => $ignored) {
+		    	$cssUrl = $urlGenerator->generateUrl(
+			    array('href' => $style), array('forceFullUrl' => true));
+			$css[] = '<link rel="stylesheet" type="text/css" href="' . $cssUrl . '"/>';
+		    }
+		}
+		if (isset($head['javascript'])) {
+		    foreach ($head['javascript'] as $script => $ignored) {
+		    	$jsUrl = $urlGenerator->generateUrl(
+			    array('href' => $script), array('forceFullUrl' => true));
+			$javascript[] =
+			    '<script type="text/javascript" src="' . $jsUrl . '"></script>';
+		    }
+		}
+	    }
+	}
+
+	$headHtml .= empty($css) ? '' : "\n" . implode("\n", $css);
+	$headHtml .= empty($javascript) ? '' : "\n" . implode("\n", $javascript);
+
+	return array(null, $blockHtml, $headHtml);
+    }
+
+    /**
+     * Simplify finding the path to embed.php by sending it as a HTTP header
+     * Idea:
+     *   In your integration setup you need to find out
+     *     - the filesystem path for embed.php
+     *     - the g2Uri and the embedUri.
+     * You can get the embed.php path with your g2Uri by fetching
+     * http://example.com/gallery2/embed.php?getEmbedPath=1 via fsockopen.
+     * @static 
+     */
+    function getEmbedPathByHttpRequest() {
+	global $gallery;
+
+	if (!class_exists('GalleryCoreApi')) {
+	    require(dirname(__FILE__) . '/GalleryCoreApi.class');
+	}
+
+	$phpVm = $gallery->getPhpVm();
+
+	$getEmbedPath = GalleryUtilities::getRequestVariablesNoPrefix('getEmbedPath');
+	if (!empty($getEmbedPath) && !$phpVm->headers_sent()){
+	    /*
+	     * Don't use GalleryUtilities::getRemoteHostAddress()
+	     * since it checks headers that can be forged easily too
+	     */
+	    $remotehost = GalleryUtilities::getServerVar('REMOTE_ADDR');
+	    $remotehost = !empty($remotehost) ? $phpVm->gethostbyname($remotehost) : '';
+	    /* Try SERVER_ADDR first, back up is config::baseUri */
+	    $localhost = GalleryUtilities::getServerVar('SERVER_ADDR');
+	    if (empty($localhost)) {
+		$baseUri = $gallery->getConfig('baseUri');
+		$urlComponents = parse_url($baseUri);
+		if (!empty($urlComponents['host'])) {
+		    $localhost = $phpVm->gethostbyname($urlComponents['host']);
+		}
+	    }
+
+	    if (!empty($remotehost) && !empty($localhost) && $remotehost === $localhost) {
+		if ($phpVm->defined('GALLERY_CONFIG_DIR')) {
+		    /* GALLERY_CONFIG_DIR is multisite-aware */
+		    $phpVm->header('X-G2-EMBED-PATH: ' . GALLERY_CONFIG_DIR . '/embed.php');
+		} else {
+		    /* Fallback if G2 isn't installed yet */
+		    $phpVm->header('X-G2-EMBED-PATH: ' 
+					. GalleryCoreApi::getCodeBasePath('embed.php'));
+		}
+	    }
+	}
+    }
+}
+?>

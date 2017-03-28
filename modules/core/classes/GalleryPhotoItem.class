@@ -1,0 +1,270 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryDataItem.class');
+
+/**
+ * A subclass of DataItem for containing Photos.
+ * A GalleryItem whose source is an image (eg. JPEG, PNG, GIF, etc).
+ *
+ * @g2 <class-name>GalleryPhotoItem</class-name>
+ * @g2 <parent-class-name>GalleryDataItem</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>0</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryPhotoItem extends GalleryDataItem {
+
+    /**
+     * The width of this image.
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>width</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <linked/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $width;
+
+    /**
+     * The height of this image.
+     * @var int
+     *
+     * @g2 <member>
+     * @g2   <member-name>height</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <linked/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $height;
+
+
+    /**
+     * @see GalleryDataItem::canBeViewedInline
+     */
+    function canBeViewedInline() {
+	static $mimeList = array('image/jpeg', 'image/pjpeg', 'image/png',
+				 'image/gif', 'image/vnd.wap.wbmp');
+	return $this->_canBeViewedInline($mimeList);
+    }
+
+    /**
+     * Create a new GalleryPhotoItem from an image file
+     *
+     * @param int $parentId the id of the parent GalleryItem
+     * @param string $imageFileName the path to the source image
+     * @param string $mimeType
+     * @param string $targetName the desired name of the new item
+     * @param boolean $symlink (optional) a boolean true if we should symlink instead
+     *        of copy (default is false).
+     * @return GalleryStatus a status code
+     */
+    function create($parentId, $imageFileName, $mimeType, $targetName=null, $symlink=false) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	/* Validate the input filename */
+	if (empty($imageFileName)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+
+	if (!$platform->file_exists($imageFileName)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PATH, __FILE__, __LINE__, $imageFileName);
+	}
+
+	/* Create our data item */
+	$ret = parent::create($parentId, $imageFileName,
+			      $mimeType, $targetName, $symlink);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* We're linkable */
+	$this->setIsLinkable(true);
+
+	/* Default to empty dimensions */
+	$this->setWidth(0);
+	$this->setHeight(0);
+
+	/* Detect our dimensions, if possible */
+	$ret = $this->rescan();
+	if ($ret) {
+	    /* Cleanup our datafile on failure */
+	    list ($ret2, $path) = $this->fetchPath();
+	    if (!$ret2) {
+		@$platform->unlink($path);
+	    }
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryDataItem::rescan
+     */
+    function rescan() {
+	$ret = parent::rescan();
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $path) = $this->fetchPath();
+	if ($ret) {
+	    return $ret;
+	}
+	$mimeType = $this->getMimeType();
+
+	/* Check for CMYK colorspace and alter mime type if detected */
+	list ($ret, $toolkit) = GalleryCoreApi::getToolkitByProperty($mimeType, 'colorspace');
+	if ($ret) {
+	    return $ret;
+	}
+	if (isset($toolkit)) {
+	    list ($ret, $colorspace) = $toolkit->getProperty($mimeType, 'colorspace', $path);
+	    if ($ret) {
+		$ret->addErrorCode(ERROR_BAD_DATA_TYPE); /* See BAD_DATA_TYPE comment below */
+		return $ret;
+	    }
+	    if ($colorspace[0] == 'CMYK') {
+		$this->setMimeType($mimeType .= '-cmyk');
+	    }
+	    $toolkit = null;
+	}
+
+	list ($ret, $toolkit) = GalleryCoreApi::getToolkitByProperty($mimeType, 'dimensions');
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (isset($toolkit)) {
+	    list ($ret, $dimensions) = $toolkit->getProperty($mimeType, 'dimensions', $path);
+	    if ($ret) {
+
+		/*
+		 * If we can't get the dimensions, it may be a bad image
+		 * Or our graphics code is broken.  Hard to tell which at this point.
+		 */
+		$ret->addErrorCode(ERROR_BAD_DATA_TYPE);
+		return $ret;
+	    }
+
+	    $this->setWidth($dimensions[0]);
+	    $this->setHeight($dimensions[1]);
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::itemTypeName
+     */
+    function itemTypeName($localized = true) {
+	if ($localized) {
+	    list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+	    if (! $ret) {
+		return array($core->translate('Photo'), $core->translate('photo'));
+	    }
+	}
+	return array('Photo', 'photo');
+    }
+
+    /**
+     * @see GalleryDataItem::render
+     */
+    function render($format, $params) {
+	global $gallery;
+
+	switch($format) {
+	case 'HTML':
+	    $urlGenerator =& $gallery->getUrlGenerator();
+	    $src = $urlGenerator->generateUrl(
+		array('view' => 'core.DownloadItem', 'itemId' => $this->getId(),
+		      'serialNumber' => $this->getSerialNumber()),
+		array('forceFullUrl' => !empty($params['forceFullUrl'])));
+	    list ($width, $height) = array($this->getWidth(), $this->getHeight());
+
+	    /* Shrink our dimensions if necessary */
+	    if (isset($params['maxSize'])) {
+		list ($width, $height) =
+		    GalleryUtilities::shrinkDimensionsToFit($width, $height, $params['maxSize']);
+		unset($params['maxSize']);
+	    }
+
+	    $sizeStr = '';
+	    if ($width > 0 && $height > 0) {
+		$sizeStr = sprintf(' width="%s" height="%s"', $width, $height);
+	    }
+	    if (!isset($params['alt'])) {
+		$params['alt'] =
+		    $this->getTitle() ? GalleryUtilities::markup($this->getTitle(), 'strip')
+				      : $this->getPathComponent();
+	    }
+
+	    $html = sprintf('<img src="%s"%s', $src, $sizeStr);
+	    unset($params['fallback']);
+	    unset($params['forceFullUrl']);
+	    unset($params['forceRawImage']);
+	    foreach ($params as $attr => $value) {
+		if (isset($value)) {
+		    $html .= " $attr=\"$value\"";
+		}
+	    }
+	    return $html . '/>';
+
+	default:
+	    return null;
+	}
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryPhotoItem';
+    }
+
+    function getWidth() {
+	return $this->width;
+    }
+
+    function setWidth($width) {
+	$this->width = $width;
+    }
+
+    function getHeight() {
+	return $this->height;
+    }
+
+    function setHeight($height) {
+	$this->height = $height;
+    }
+}
+?>

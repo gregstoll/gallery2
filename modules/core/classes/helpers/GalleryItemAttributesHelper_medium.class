@@ -1,0 +1,70 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper functions for ItemAttributes map
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryItemAttributesHelper_medium {
+
+    /**
+     * @see GalleryCoreApi::fetchItemOrderWeight
+     */
+    function fetchOrderWeight($itemId) {
+	list ($ret, $orderWeights) =
+	    GalleryItemAttributesHelper_medium::fetchOrderWeights(array($itemId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (!isset($orderWeights[$itemId])) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	}
+
+	return array(null, (int)$orderWeights[$itemId]);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchItemOrderWeights
+     */
+    function fetchOrderWeights($itemIds) {
+	global $gallery;
+
+	foreach ($itemIds as $idx => $id) {
+	    $itemIds[$idx] = (int)$id;
+	}
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryItemAttributesMap',
+	    array('itemId', 'orderWeight'), array('itemId' => $itemIds));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$data = array();
+	while ($result = $searchResults->nextResult()) {
+	    $data[(int)$result[0]] = $result[1];
+	}
+	return array(null, $data);
+    }
+}
+?>

@@ -1,0 +1,262 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryEntity.class');
+
+/**
+ * Representation of a single pending self-registered user (not yet a valid GalleryUser).
+ *
+ * This class is the container for information about Gallery users.  Each instance of User
+ * contains a unique user id. It must be implemented by a class that has a persistent store for
+ * the relevant user data.
+ *
+ * @g2 <class-name>GalleryPendingUser</class-name>
+ * @g2 <parent-class-name>GalleryEntity</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>0</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package Registration
+ * @subpackage Classes
+ * @author Sebastian Eichner <mailsp@sebastian-eichner.de>
+ * @version $Revision: 17580 $
+ */
+class GalleryPendingUser extends GalleryEntity {
+
+    /**
+     * The User's username
+     *
+     * @g2 <member>
+     * @g2   <member-name>userName</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>SMALL</member-size>
+     * @g2   <unique/>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $userName
+     * @access public
+     */
+    var $userName;
+
+    /**
+     * The User's full name
+     *
+     * @g2 <member>
+     * @g2   <member-name>fullName</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $fullName
+     * @access public
+     */
+    var $fullName;
+
+    /**
+     * The User's password in a hashed form.
+     *
+     * @g2 <member>
+     * @g2   <member-name>hashedPassword</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2 </member>
+     *
+     * @var string $hashedPassword
+     * @access public
+     */
+    var $hashedPassword;
+
+    /**
+     * The User's email address.
+     *
+     * @g2 <member>
+     * @g2   <member-name>email</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2 </member>
+     *
+     * @var string $email
+     * @access public
+     */
+    var $email;
+
+    /**
+     * The User's language preference
+     *
+     * @g2 <member>
+     * @g2   <member-name>language</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2 </member>
+     *
+     * @var string $language
+     * @access public
+     */
+    var $language;
+
+    /**
+     * The registration key (used in confirmation url)
+     *
+     * @g2 <member>
+     * @g2   <member-name>registrationKey</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>SMALL</member-size>
+     * @g2 </member>
+     *
+     * @var string $registrationKey
+     * @access public
+     */
+    var $registrationKey;
+
+    /**
+     * Create a new instance of this user in the persistent store
+     *
+     * @return GalleryStatus a status code
+     */
+    function create($userName) {
+	global $gallery;
+
+	/* first check for a collision in the pending users table */
+	$query = '
+	SELECT
+	  [GalleryPendingUser::id]
+	FROM
+	  [GalleryPendingUser]
+	WHERE
+	  [GalleryPendingUser::userName] = ?
+	';
+
+	/* Check to see if we have a collision */
+	list ($ret, $results) =
+	    $gallery->search($query, array($userName),
+			     array('limit' => array('count' => 1)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$result = $results->nextResult();
+	if ($result[0] > 0) {
+	    return GalleryCoreApi::error(ERROR_COLLISION);
+	}
+
+	/* then check for a collision in the real user table */
+	$query = '
+	SELECT
+	  [GalleryUser::id]
+	FROM
+	  [GalleryUser]
+	WHERE
+	  [GalleryUser::userName] = ?
+	';
+
+	/* Check to see if we have a collision */
+	list ($ret, $results) =
+	    $gallery->search($query, array($userName),
+			     array('limit' => array('count' => 1)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$result = $results->nextResult();
+	if ($result[0] > 0) {
+	    return GalleryCoreApi::error(ERROR_COLLISION);
+	}
+
+	/* okay, we don't have any collisions, so go on */
+	$ret = parent::create();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$this->setUserName($userName);
+	$this->setRegistrationKey('G' . rand(100000,999999) . '2');
+	return null;
+    }
+
+    /**
+     * Change the user's password to the new value provided.
+     *
+     * @param string $newPassword a plaintext password
+     */
+    function changePassword($newPassword) {
+	$this->setHashedPassword(GalleryUtilities::md5Salt($newPassword));
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryPendingUser';
+    }
+
+    function getUserName() {
+	return $this->userName;
+    }
+
+    function setUserName($userName) {
+	$this->userName = $userName;
+    }
+
+    function getFullName() {
+	return $this->fullName;
+    }
+
+    function setFullName($fullName) {
+	$this->fullName = $fullName;
+    }
+
+    function getHashedPassword() {
+	return $this->hashedPassword;
+    }
+
+    function setHashedPassword($hashedPassword) {
+	$this->hashedPassword = $hashedPassword;
+    }
+
+    function getEmail() {
+	return $this->email;
+    }
+
+    function setEmail($email) {
+	$this->email = $email;
+    }
+
+    function getLanguage() {
+	return $this->language;
+    }
+
+    function setLanguage($language) {
+	$this->language = $language;
+    }
+
+    function getRegistrationKey() {
+	return $this->registrationKey;
+    }
+
+    function setRegistrationKey($registrationKey) {
+	$this->registrationKey = $registrationKey;
+    }
+}
+?>

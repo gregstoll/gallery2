@@ -1,0 +1,360 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+
+/**
+ * A Ffmpeg version of GalleryToolkit
+ * @package Ffmpeg
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 20954 $
+ */
+class FfmpegToolkit extends GalleryToolkit {
+    /**
+     * @see GalleryToolkit::getProperty
+     */
+    function getProperty($mimeType, $propertyName, $sourceFilename) {
+	list ($ret, $width, $height, $duration, $frameRate, $sampleRate, $audioChannels) =
+	    $this->_getMovieDimensions($mimeType, $sourceFilename);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	switch($propertyName) {
+	case 'dimensions':
+	    $results = array($width, $height);
+	    break;
+
+	case 'dimensions-and-duration':
+	    $results = array($width, $height, $duration);
+	    break;
+
+	case 'video-framerate':
+	    $results = array($frameRate);
+	    break;
+
+        case 'audio-samplerate':
+            $results = array($sampleRate);
+            break;
+
+	case 'audio-channels':
+            $results = array($audioChannels);
+            break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+	}
+
+	return array(null, $results);
+    }
+
+    /**
+     * @see GalleryToolkit::performOperation
+     */
+    function performOperation($mimeType, $operationName, $sourceFilename,
+			      $destFilename, $parameters, $context=array()) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$tmpDir = $gallery->getConfig('data.gallery.tmp');
+	$tmpFilename = $platform->tempnam($tmpDir, 'fmpg_');
+	if (empty($tmpFilename)) {
+	    /* This can happen if the $tmpDir path is bad */
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH), null, null);
+	}
+
+	$outputMimeType = null;
+	$futureOp = false;
+	switch($operationName) {
+	case 'convert-to-image/jpeg':
+	    $args = array('-f', 'mjpeg', '-t', '0.001', '-y', $tmpFilename);
+	    if (isset($context['ffmpeg.offset'])) {
+		array_unshift($args, '-ss', $context['ffmpeg.offset']);
+		unset($context['ffmpeg.offset']);
+	    }
+	    list ($ret, $results) = $this->_ffmpeg($sourceFilename, $args);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+	    $success = $platform->rename($tmpFilename, $destFilename);
+	    if (!$success) {
+		@$platform->unlink($tmpFilename);
+		return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+			     "Failed renaming $tmpFilename -> $destFilename"), null, null);
+	    }
+	    $platform->chmod($destFilename);
+	    $outputMimeType = 'image/jpeg';
+	    break;
+
+	case 'convert-to-video/x-flv':
+	    /* overwrite output files */
+	    $args = array('-y');
+	    /* TODO: no longer append .flv when a better work around is found */
+	    $tmpFilename = $tmpFilename . '.flv';
+	    /* Add video dimensions (size) */
+	    if (isset($context['width']) && isset($context['height'])) {
+		$args[] = '-s';
+		$args[] = $context['width'] . 'x' . $context['height'];
+		unset($context['width']);
+		unset($context['height']);
+	    }
+	    /* Add video frame rate */
+	    if (isset($context['frameRate'])) {
+		$args[] = '-r';
+		$args[] = $context['frameRate'];
+		unset($context['frameRate']);
+	    }
+	    $muted = false;
+	    /* Add audio channels, and remember args index */
+	    $audioChannelIndex = -1;
+	    if (isset($context['audioChannels'])) {
+		if ($context['audioChannels'] > 0) {
+		    $audioChannelIndex = count($args);
+		    $args[] = '-ac';
+		    $args[] = $context['audioChannels'];
+		} else {
+		    $args[] = '-an';
+		    $muted = true;
+		}
+		unset($context['audioChannels']);
+	    }
+	    /* Add audio sample rate, and remember args index */
+	    $audioRateIndex = -1;
+	    if (isset($context['sampleRate'])) {
+		if (!$muted) {
+		    $audioRateIndex = count($args);
+		    $args[] = '-ar';
+		    $args[] = $context['sampleRate'];
+		}
+		unset($context['sampleRate']);
+	    }
+	    /** @todo: Add $args[] = '-acodec'; $args[] = 'adpcm_swf' */
+	    /* However, -acodec and -vcodec were added in 0.4.1 */
+
+	    /* Use same video quality as source (implies VBR) */
+	    if (isset($context['ffmpeg.videosameq'])) {
+		$args[] = '-sameq';
+		unset($context['ffmpeg.videosameq']);
+	    }
+	    /* Final argument is filename */
+	    $args[] = $tmpFilename;
+	    /* Call ffmpeg */
+	    list ($ret, $stdout, $stderr) = $this->_ffmpeg($sourceFilename, $args);
+	    if ($ret) {
+		/* Test for known audio conversion errors */
+		$audioError = false;
+		foreach ($stderr as $resultLine) {
+		    if (preg_match('/Resampling with input channels greater than 2 unsupported./',
+			    $resultLine, $regs)) {
+			$audioError = true;
+		    }
+		}
+		/* Return if already muted or known error not found */
+		if ($muted || !$audioError || $audioRateIndex == -1) {
+		    return array($ret, null, null);
+		}
+		$spliceWith = array('-an');
+		/* Try muting audio */
+		if ($audioRateIndex > -1) {
+		    array_splice($args, $audioRateIndex, 2, $spliceWith);
+		    $spliceWith = array();
+		}
+		if ($audioChannelIndex > -1) {
+		    array_splice($args, $audioChannelIndex, 2, $spliceWith);
+		}
+		/* Run ffmpeg again with new args */
+		list ($ret, $stdout, $stderr) = $this->_ffmpeg($sourceFilename, $args);
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+	    }
+
+	    /** @todo: Refactor: Extract common code from both convert operations */
+	    $success = $platform->rename($tmpFilename, $destFilename);
+	    if (!$success) {
+		@$platform->unlink($tmpFilename);
+		return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+			     "Failed renaming $tmpFilename -> $destFilename"), null, null);
+	    }
+	    $platform->chmod($destFilename);
+	    $outputMimeType = 'video/x-flv';
+	    break;
+
+	case 'set-audio-channels':
+	    /* Doesn't change file; just remembers audio setting for future operation */
+	    $futureOp = true;
+	    $context['audioChannels'] = $parameters[0];
+	    break;
+
+	case 'set-audio-samplerate':
+	    /* Doesn't change file; just remembers audio setting for future operation */
+	    $futureOp = true;
+	    $context['sampleRate'] = $parameters[0];
+	    break;
+
+	case 'set-video-dimensions':
+	    /* Doesn't change file; just remembers video settings for future operation */
+	    $futureOp = true;
+	    $context['width']  = $parameters[0];
+	    $context['height'] = $parameters[1];
+	    break;
+
+	case 'set-video-framerate':
+	    /* Doesn't change file; just remembers video setting for future operation */
+	    $futureOp = true;
+	    $context['frameRate'] = $parameters[0];
+	    break;
+
+	case 'set-video-sameq':
+	    /* Doesn't change file; just remembers video setting for future operation */
+	    $futureOp = true;
+	    $context['ffmpeg.videosameq'] = true;
+	    break;
+
+	case 'select-offset':
+	    /* Doesn't change file; just remembers offset for future operation */
+	    $futureOp = true;
+	    $context['ffmpeg.offset'] = $parameters[0];
+	    break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION, __FILE__, __LINE__,
+					       "$operationName $mimeType"), null, null);
+	}
+
+	/* If operation just remembers something for the future operation */
+	if ($futureOp) {
+	    if ($sourceFilename != $destFilename) {
+		if (!$platform->copy($sourceFilename, $destFilename)) {
+		    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+				 "Failed copying $sourceFilename -> $destFilename"), null, null);
+		}
+	    }
+	    $outputMimeType = $mimeType;
+	}
+
+	return array(null, $outputMimeType, $context);
+    }
+
+    /**
+     * @access private
+     */
+    function _getMovieDimensions($mimeType, $sourceFilename) {
+	global $gallery;
+
+	list ($ret, $results, $stderr) = $this->_ffmpeg($sourceFilename, array('-vstats'));
+
+	/*
+	 * Ffmpeg 0.4.6 demands an output file and we're not providing one, so we'll always
+	 * get a toolkit failure here.  :-/  Ignore it for now, but fail if we don't get
+	 * the output we want.
+	 */
+	if ($ret && !($ret->getErrorCode() & ERROR_TOOLKIT_FAILURE)) {
+	    return array($ret, null, null, null, null, null, null);
+	}
+
+	/*
+	 * Search for a line like:
+	 *
+	 *   Duration: 00:00:03.0
+	 *   Stream #0.0: Video: mjpeg, yuvj422p, 320x240, 15.00 fps(r)
+	 *   Stream #0.1: Audio: pcm_u8, 11024 Hz, mono, 88 kb/s
+	 */
+/*
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'dscn3232.mov':
+  Duration: 00:00:04.0, start: 0.000000, bitrate: 2539 kb/s
+    Stream #0.0(eng): Video: mjpeg, yuvj422p, 320x240 [PAR 0:1 DAR 0:1], 15.00 tb(r)
+*/
+	$unknownFormat = false;
+	$successfulRun = false;
+	$width = $height = $duration = $vframerate = $asamplerate = $achannels = 0;
+	foreach ($stderr as $resultLine) {
+	    if (preg_match("/Unknown format/", $resultLine, $regs)) {
+		$unknownFormat = true;
+		$successfulRun = true;
+	    }
+
+	    if (preg_match("/Duration: (\d+):(\d+):(\d+\.\d+)/", $resultLine, $regs)) {
+		$successfulRun = true;
+		$duration = 3600*$regs[1] + 60*$regs[2] + $regs[3];
+	    }
+
+	    if (preg_match("/Stream.*?Video:.*?(\d+)x(\d+).*\ +([0-9\.]+) (fps|tb).*/",
+			   $resultLine, $regs)) {
+		$successfulRun = true;
+		list ($width, $height, $vframerate) = array($regs[1], $regs[2], $regs[3]);
+	    }
+	    if (preg_match("/Stream.*?Audio:(.*)/", $resultLine, $regs)) {
+		$successfulRun = true;
+		$audioInfo = $regs[1];
+		if (preg_match("/(\d+) Hz/", $audioInfo, $regs)) {
+		    $asamplerate = $regs[1];
+		    $audioInfo = preg_replace("/(\d+) Hz/", '', $audioInfo, 1);
+		}
+		if (preg_match("/(\d+) kb\/s/", $audioInfo, $regs)) {
+		    $kbps = $regs[1];
+		    $audioInfo = preg_replace("/(\d+) kb\/s/", '', $audioInfo, 1);
+		}
+		if (preg_match("/mono/", $audioInfo)) {
+		    $achannels = 1;
+		} else if (preg_match("/stereo/", $audioInfo)) {
+		    $achannels = 2;
+		} else if (preg_match("/5:1/", $audioInfo)) {
+		    $achannels = 6;
+		}
+	    }
+	}
+	if ($successfulRun) {
+	    return array(null, $width, $height, $duration, $vframerate, $asamplerate, $achannels);
+	} else {
+	    return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE),
+			 null, null, null, null, null, null);
+	}
+    }
+
+    /**
+     * Run a given ffmpeg command on the source file name and return the command line results.
+     * @param string $sourceFilename the input file name
+     * @param array $args the command line arguments
+     * @access private
+     */
+    function _ffmpeg($sourceFilename, $args) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $ffmpegPath) = GalleryCoreApi::getPluginParameter('module', 'ffmpeg', 'path');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	/* Get error output back, because ffmpeg 0.4.6 returns some useful info only to stderr! */
+	list ($success, $results, $error) =
+	    $platform->exec(array(array_merge(array($ffmpegPath, '-i', $sourceFilename), $args)));
+
+	if (!$success) {
+	    /* Return the output even if there's a failure */
+	    return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE), $results, $error);
+	}
+
+	return array(null, $results, $error);
+    }
+}
+?>

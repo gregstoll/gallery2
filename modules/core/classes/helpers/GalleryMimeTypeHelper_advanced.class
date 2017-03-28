@@ -1,0 +1,278 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce(
+    'modules/core/classes/helpers/GalleryMimeTypeHelper_simple.class');
+
+/**
+ * A collection of useful mime type related utilities
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryMimeTypeHelper_advanced {
+
+    /**
+     * Initialize mime types and store them in the database
+     * @return GalleryStatus a status code
+     */
+    function initializeMimeTypes() {
+	$mimeTypes = array(
+	    /* This data was lifted from Apache's mime.types listing. */
+	    'z' => 'application/x-compress',
+	    'ai' => 'application/postscript',
+	    'aif' => 'audio/x-aiff',
+	    'aifc' => 'audio/x-aiff',
+	    'aiff' => 'audio/x-aiff',
+	    'asc' => 'text/plain',
+	    'au' => 'audio/basic',
+	    'avi' => 'video/x-msvideo',
+	    'bcpio' => 'application/x-bcpio',
+	    'bin' => 'application/octet-stream',
+	    'bmp' => 'image/bmp',
+	    'cdf' => 'application/x-netcdf',
+	    'class' => 'application/octet-stream',
+	    'cpio' => 'application/x-cpio',
+	    'cpt' => 'application/mac-compactpro',
+	    'csh' => 'application/x-csh',
+	    'css' => 'text/css',
+	    'dcr' => 'application/x-director',
+	    'dir' => 'application/x-director',
+	    'djv' => 'image/vnd.djvu',
+	    'djvu' => 'image/vnd.djvu',
+	    'dll' => 'application/octet-stream',
+	    'dms' => 'application/octet-stream',
+	    'doc' => 'application/msword',
+	    'dvi' => 'application/x-dvi',
+	    'dxr' => 'application/x-director',
+	    'eps' => 'application/postscript',
+	    'etx' => 'text/x-setext',
+	    'exe' => 'application/octet-stream',
+	    'ez' => 'application/andrew-inset',
+	    'gif' => 'image/gif',
+	    'gtar' => 'application/x-gtar',
+	    'gz' => 'application/x-gzip',
+	    'hdf' => 'application/x-hdf',
+	    'hqx' => 'application/mac-binhex40',
+	    'ice' => 'x-conference/x-cooltalk',
+	    'ief' => 'image/ief',
+	    'iges' => 'model/iges',
+	    'igs' => 'model/iges',
+	    'jpg' => 'image/jpeg',
+	    'jpeg' => 'image/jpeg',
+	    'jpe' => 'image/jpeg',
+	    'js' => 'application/x-javascript',
+	    'kar' => 'audio/midi',
+	    'latex' => 'application/x-latex',
+	    'lha' => 'application/octet-stream',
+	    'lzh' => 'application/octet-stream',
+	    'm3u' => 'audio/x-mpegurl',
+	    'man' => 'application/x-troff-man',
+	    'me' => 'application/x-troff-me',
+	    'mesh' => 'model/mesh',
+	    'mid' => 'audio/midi',
+	    'midi' => 'audio/midi',
+	    'mif' => 'application/vnd.mif',
+	    'mov' => 'video/quicktime',
+	    'movie' => 'video/x-sgi-movie',
+	    'mp2' => 'audio/mpeg',
+	    'mp3' => 'audio/mpeg',
+	    'mpe' => 'video/mpeg',
+	    'mpeg' => 'video/mpeg',
+	    'mpg' => 'video/mpeg',
+	    'mpga' => 'audio/mpeg',
+	    'ms' => 'application/x-troff-ms',
+	    'msh' => 'model/mesh',
+	    'mxu' => 'video/vnd.mpegurl',
+	    'nc' => 'application/x-netcdf',
+	    'oda' => 'application/oda',
+	    'pbm' => 'image/x-portable-bitmap',
+	    'pdb' => 'chemical/x-pdb',
+	    'pdf' => 'application/pdf',
+	    'pgm' => 'image/x-portable-graymap',
+	    'pgn' => 'application/x-chess-pgn',
+	    'png' => 'image/png',
+	    'pnm' => 'image/x-portable-anymap',
+	    'ppm' => 'image/x-portable-pixmap',
+	    'ppt' => 'application/vnd.ms-powerpoint',
+	    'ps' => 'application/postscript',
+	    'qt' => 'video/quicktime',
+	    'ra' => 'audio/x-realaudio',
+	    'ram' => 'audio/x-pn-realaudio',
+	    'ras' => 'image/x-cmu-raster',
+	    'rgb' => 'image/x-rgb',
+	    'rm' => 'audio/x-pn-realaudio',
+	    'roff' => 'application/x-troff',
+	    'rpm' => 'audio/x-pn-realaudio-plugin',
+	    'rtf' => 'text/rtf',
+	    'rtx' => 'text/richtext',
+	    'sgm' => 'text/sgml',
+	    'sgml' => 'text/sgml',
+	    'sh' => 'application/x-sh',
+	    'shar' => 'application/x-shar',
+	    'silo' => 'model/mesh',
+	    'sit' => 'application/x-stuffit',
+	    'skd' => 'application/x-koan',
+	    'skm' => 'application/x-koan',
+	    'skp' => 'application/x-koan',
+	    'skt' => 'application/x-koan',
+	    'smi' => 'application/smil',
+	    'smil' => 'application/smil',
+	    'snd' => 'audio/basic',
+	    'so' => 'application/octet-stream',
+	    'spl' => 'application/x-futuresplash',
+	    'src' => 'application/x-wais-source',
+	    'sv4cpio' => 'application/x-sv4cpio',
+	    'sv4crc' => 'application/x-sv4crc',
+	    'svg' => 'image/svg+xml',
+	    'swf' => 'application/x-shockwave-flash',
+	    't' => 'application/x-troff',
+	    'tar' => 'application/x-tar',
+	    'tcl' => 'application/x-tcl',
+	    'tex' => 'application/x-tex',
+	    'texi' => 'application/x-texinfo',
+	    'texinfo' => 'application/x-texinfo',
+	    'tif' => 'image/tiff',
+	    'tiff' => 'image/tiff',
+	    'tr' => 'application/x-troff',
+	    'tsv' => 'text/tab-separated-values',
+	    'txt' => 'text/plain',
+	    'ustar' => 'application/x-ustar',
+	    'vcd' => 'application/x-cdlink',
+	    'vrml' => 'model/vrml',
+	    'vsd' => 'application/vnd.visio',
+	    'wav' => 'audio/x-wav',
+	    'wbmp' => 'image/vnd.wap.wbmp',
+	    'wbxml' => 'application/vnd.wap.wbxml',
+	    'wml' => 'text/vnd.wap.wml',
+	    'wmlc' => 'application/vnd.wap.wmlc',
+	    'wmls' => 'text/vnd.wap.wmlscript',
+	    'wmlsc' => 'application/vnd.wap.wmlscriptc',
+	    'wrl' => 'model/vrml',
+	    'xbm' => 'image/x-xbitmap',
+	    'xls' => 'application/vnd.ms-excel',
+	    'xpm' => 'image/x-xpixmap',
+	    'xsl' => 'text/xml',
+	    'xwd' => 'image/x-xwindowdump',
+	    'xyz' => 'chemical/x-xyz',
+	    'zip' => 'application/zip',
+
+	    /* And some of my own additions */
+	    /* From support.microsoft.com/support/kb/articles/Q284/0/94.ASP */
+	    'asf' => 'video/x-ms-asf',
+	    'asx' => 'video/x-ms-asx',
+	    'wmv' => 'video/x-ms-wmv',
+	    'wma' => 'audio/x-ms-wma',
+
+	    /* JPEG 2000: From RFC 3745: http://www.faqs.org/rfcs/rfc3745.html */
+	    'jp2' => 'image/jp2',
+	    'jpg2' => 'image/jp2',
+	    'jpf' => 'image/jpx',
+	    'jpx' => 'image/jpx',
+	    'mj2' => 'video/mj2',
+	    'mjp2' => 'video/mj2',
+	    'jpm' => 'image/jpm',
+	    'jpgm' => 'image/jpgm',
+
+	    /* Other */
+	    'psd' => 'application/photoshop',
+	    'pcd' => 'image/x-photo-cd',
+	    'jpgcmyk' => 'image/jpeg-cmyk',
+	    'tifcmyk' => 'image/tiff-cmyk',
+	    'wmf' => 'image/wmf',
+	    'tga' => 'image/tga',
+	    'flv' => 'video/x-flv',
+	    'mp4' => 'video/mp4',
+	);
+	$viewableMimeTypes = array('image/jpeg' => 1, 'image/pjpeg' => 1,
+	    'image/gif' => 1, 'image/png' => 1);
+
+	/* Start with a clean slate */
+	$ret = GalleryCoreApi::removeAllMapEntries('GalleryMimeTypeMap');
+	if ($ret) {
+	    return $ret;
+	}
+
+	foreach ($mimeTypes as $ext => $mime) {
+	    $mimeTypeMap = array('extension' => $ext, 'mimeType' => $mime,
+		'viewable' => (int) isset($viewableMimeTypes[$mime]));
+	    $ret = GalleryCoreApi::addMapEntry('GalleryMimeTypeMap', $mimeTypeMap);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	GalleryMimeTypeHelper_simple::_deleteCache();
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::removeMimeType
+     */
+    function removeMimeType($mimeMatch) {
+	$ret = GalleryCoreApi::removeMapEntry('GalleryMimeTypeMap', $mimeMatch);
+	if ($ret) {
+	    return $ret;
+	}
+	GalleryMimeTypeHelper_simple::_deleteCache();
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::addMimeType
+     */
+    function addMimeType($extension, $mimeType, $viewable) {
+	global $gallery;
+
+	/* Check to see if the extension already exists. */
+	$query = '
+	SELECT
+	    [GalleryMimeTypeMap::extension]
+	FROM
+	    [GalleryMimeTypeMap]
+	WHERE
+	    [GalleryMimeTypeMap::extension] = ?
+	';
+	list ($ret, $results) =
+	    $gallery->search($query, array($extension), array('limit' => array('count' => 1)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($results->resultCount() > 0) {
+	    return GalleryCoreApi::error(ERROR_COLLISION);
+	}
+
+	/* Insert the record */
+	$ret = GalleryCoreApi::addMapEntry(
+	    'GalleryMimeTypeMap',
+	    array('extension' => $extension, 'mimeType' => $mimeType,
+		  'viewable' => $viewable ? 1 : 0));
+	if ($ret) {
+	    return $ret;
+	}
+
+	GalleryMimeTypeHelper_simple::_deleteCache();
+	return null;
+    }
+}
+?>

@@ -1,0 +1,255 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Install core module.
+ * @package Install
+ */
+class InstallCoreModuleStep extends InstallStep {
+
+    function stepName() {
+	return _('Install Gallery Core');
+    }
+
+    function processRequest() {
+	global $galleryStub;
+	define('GALLERY_CONFIG_DIR', $_SESSION['configPath']);
+	require(dirname(__FILE__) . '/../../bootstrap.inc');
+	require(dirname(__FILE__) . '/../../init.inc');
+
+	$template = new StatusTemplate();
+	$template->renderHeader(true);
+	$template->renderStatusMessage(_('Installing the core module'), null, 0);
+
+	$templateData = array();
+
+	/* GalleryInitFirstPass does this, but need it earlier to avoid warnings in code below */
+	if (function_exists('date_default_timezone_set')) {
+	    @date_default_timezone_set(date_default_timezone_get());
+	}
+
+	/* We want to log all debug output in our install log */
+	global $gallery;
+	$gallery->setDebug('logged');
+	$tag = substr(md5(microtime() . rand(1, 32767)), 0, 10);
+	$dataBase = $gallery->getConfig('data.gallery.base');
+	$installLogPath = sprintf('%s/install_%s.log', $dataBase, $tag);
+	$gallery->setDebugLogFile($installLogPath);
+	$templateData['installLogPath'] = $installLogPath;
+	$this->_createDebugLogHeader();
+	$gallery->guaranteeTimeLimit(120);
+
+	$gallery->debug('Init first pass');
+	$ret = GalleryInitFirstPass(array('noDatabase' => true,
+					  'activeLanguage' => $_SESSION['language']));
+	if ($ret) {
+	    $gallery->debug(sprintf('Error: Unable to initialize our Gallery data, this is the ' .
+				    'error stack trace: %s', $ret->getAsText()));
+	    $templateData['errors'][] = _('Unable to initialize our Gallery data');
+	    $templateData['stackTrace'][] = $ret->getAsHtml();
+	}
+
+	$this->_addSystemInformationToDebugLog();
+
+	/* We want to avoid using the cache */
+	GalleryDataCache::setFileCachingEnabled(false);
+
+	/*
+	 * Delete anything in the cache, which can be left around if we're installing on top of an
+	 * older install
+	 */
+	$platform =& $gallery->getPlatform();
+	$gallery->debug('Clear the cache directory');
+	$cacheDirs = array('entity', 'theme', 'module', 'derivative');
+	foreach ($cacheDirs as $dir) {
+	    $dir = sprintf('%s/cache/%s', $dataBase, $dir);
+	    if ($platform->file_exists($dir)) {
+		if (!$platform->recursiveRmDir($dir)) {
+		    return false;
+		}
+	    }
+	}
+
+	$template->renderStatusMessage(_('Installing the core module'), null, 0.05);
+	$gallery->guaranteeTimeLimit(180);
+
+	if (empty($templateData['errors'])) {
+	    $gallery->debug('Check if the persistent storage is installed');
+	    /*
+	     * Check to see if the database tables already exist.  If they do then we should assume
+	     * that they said that it was ok to reuse existing tables in the database setup step,
+	     * which means we don't have to perform an install now.
+	     */
+	    $storage =& $gallery->getStorage();
+	    list ($ret, $isInstalled) = $storage->isInstalled();
+	    if ($ret) {
+		$gallery->debug(sprintf('Error: Unable to communicate with the database, this ' .
+					'is the error stack trace; %s', $ret->getAsText()));
+		$templateData['errors'][] = _('Unable to communicate with the database');
+		$templateData['stackTrace'][] = $ret->getAsHtml();
+	    }
+	}
+
+	if (empty($templateData['errors'])) {
+	    $gallery->debug('Load core module');
+	    list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core', true);
+	    $this->resetL10Domain();
+	    if ($ret) {
+		$gallery->debug(sprintf('Error: Unable to load the core module, this ' .
+					'is the error stack trace; %s', $ret->getAsText()));
+		$templateData['errors'][] = _('Unable to load the core module');
+		$templateData['stackTrace'][] = $ret->getAsHtml();
+	    }
+	}
+
+	$template->renderStatusMessage(_('Installing the core module'), null, 0.1);
+	$gallery->guaranteeTimeLimit(180);
+
+	$freshInstall = $galleryStub->getConfig('freshInstall');
+	if ($freshInstall) {
+	    $gallery->debug('Hand over admin user parameters');
+	    /* It's a fresh install.  Hand over install config parameters. */
+	    $gallery->setConfig('setup.admin.userName',
+				$galleryStub->getConfig('setup.admin.userName'));
+	    $gallery->setConfig('setup.admin.email',
+				$galleryStub->getConfig('setup.admin.email'));
+	    $gallery->setConfig('setup.admin.fullName',
+				$galleryStub->getConfig('setup.admin.fullName'));
+	}
+
+	if (empty($templateData['errors'])) {
+	    if (!$isInstalled) {
+		/* Ensure translations for active language are available */
+		GalleryCoreApi::installTranslationsForLocale();
+
+		$gallery->debug('Install core module now!');
+		$ret = $core->installOrUpgrade(true, $template);
+		if ($ret) {
+		    $this->resetL10Domain();
+		    $gallery->debug(sprintf('Error: Unable to install the core module, this ' .
+					'is the error stack trace; %s', $ret->getAsText()));
+		    $templateData['errors'][] = _('Unable to install the core module');
+		    $templateData['stackTrace'][] = $ret->getAsHtml();
+		} else {
+		    $gallery->debug('Core module installed successfully');
+		}
+
+		$template->renderStatusMessage(_('Installing the core module'), '', 0.8);
+		$gallery->guaranteeTimeLimit(180);
+
+		$gallery->debug('Activate core module');
+		list ($ret, $ignored) = $core->activate(false);
+		$this->resetL10Domain();
+		if ($ret) {
+		    $gallery->debug(sprintf('Error: Unable to activate the core module, this ' .
+					'is the error stack trace; %s', $ret->getAsText()));
+		    $templateData['errors'][] = _('Unable to activate the core module');
+		    $templateData['stackTrace'][] = $ret->getAsHtml();
+		} else {
+		    $gallery->debug('Core module activated successfully');
+		}
+
+		$template->renderStatusMessage(_('Installing the core module'), '', 0.9);
+		$gallery->guaranteeTimeLimit(180);
+
+		$gallery->debug('Commit transaction');
+		$ret = $storage->commitTransaction();
+		if ($ret) {
+		    $gallery->debug(sprintf('Error: Unable to commit database transaction, this ' .
+					'is the error stack trace; %s', $ret->getAsText()));
+		    $templateData['errors'][] = _('Unable to commit database transaction');
+		    $templateData['stackTrace'][] = $ret->getAsHtml();
+		} else {
+		    $gallery->debug('Committed transaction successfully');
+		}
+	    } else {
+		$gallery->debug('NOT installing, rollback!');
+		$storage->rollbackTransaction(); /* Ignore any errors from this */
+		/*
+		 * Don't allow this step to complete when only partially installed.  Verify that
+		 * versions.dat is up to date.
+		 */
+		$versions = $core->getInstalledVersions();
+		if (empty($versions['core']) || $versions['core'] != $core->getVersion()) {
+		    $gallery->debug('Error: Core module is only partially installed');
+		    $templateData['errors'][] = _('Core module is only partially installed.');
+		} else {
+		    $gallery->debug('Core module version is ok');
+		}
+	    }
+	}
+
+	$this->resetL10Domain();
+	$template->renderStatusMessage(_('Installing the core module'), '', 1.0);
+	$gallery->guaranteeTimeLimit(120);
+
+	$gallery->debug('Finish install core module step');
+	if (empty($templateData['errors'])) {
+	    $gallery->debug('Install core module step completed successfully');
+	    $this->setComplete(true);
+	    $templateData['bodyFile'] = 'InstallCoreModuleSuccess.html';
+	} else {
+	    $gallery->debug('Error: Failure during install core module step');
+	    $templateData['bodyFile'] = 'InstallCoreModuleError.html';
+	}
+	$template->hideStatusBlock();
+	$template->renderBodyAndFooter($templateData);
+	return false;
+    }
+
+    /* Adds a header to the debug log */
+    function _createDebugLogHeader() {
+	global $gallery;
+
+	$gallery->debug("\n\n
+--------------------------------------------------------
+        Prepare installation of the core module
+--------------------------------------------------------\n\n");
+    }
+
+    /* Adds some system information to the log */
+    function _addSystemInformationToDebugLog() {
+	global $gallery;
+	global $galleryStub;
+
+	$storage =& $gallery->getStorage();
+	$isSvnInstall = $galleryStub->getConfig('systemchecks.issvninstall');
+	$isSvnInstall = empty($isSvnInstall) ? "No" : "Yes";
+
+	$gallery->debug("\n
+--------------------------------------------------------
+System and Gallery information:
+--------------------------------------------------------
+    Gallery version:\t" . $galleryStub->getConfig('codebase.version') . "
+    File integrity:\t" . $galleryStub->getConfig('systemchecks.fileintegrity') . "
+    SVN install:\t" . $isSvnInstall . "
+    PHP version:\t" . phpversion() . " " . php_sapi_name() . "
+    PHP memory limit:\t" . ini_get('memory_limit') . "
+    PHP disable_functions:\t" . ini_get('disable_functions') . "
+    PHP zend.ze1_compatibility_mode:\t" . ini_get('zend.ze1_compatibility_mode') . "
+    Webserver:\t" . GalleryUtilities::getServerVar('SERVER_SOFTWARE') . "
+    Database:\t" . $storage->getAdoDbType() . " " . @$storage->getVersion() . "
+    Operating system:\t" . php_uname() . "
+    Browser:\t " . GalleryUtilities::getServerVar('HTTP_USER_AGENT') . "
+--------------------------------------------------------\n\n
+");
+    }
+}
+?>

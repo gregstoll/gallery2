@@ -1,0 +1,244 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Retrieves information for ratings.
+ * @package Rating
+ * @subpackage Classes
+ * @author  Don Seiler <don@seiler.us>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class RatingHelper {
+
+    /**
+     * Return the average rating of the given itemId
+     *
+     * @param int $itemIds GalleryItem id
+     * @param int $userId User id to fetch rating of
+     * @return array GalleryStatus a status code
+     *               array  double  latest average rating
+     *                      int     count of total ratings
+     */
+    function fetchRatings($itemIds, $userId) {
+	global $gallery;
+
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('RatingCacheMap',
+	    array('itemId', 'averageRating', 'voteCount'),
+	    array('itemId' => $itemIds));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$data = array();
+	while ($result = $searchResults->nextResult()) {
+	    $rating = $result[1] / 1000;
+	    $data[(int)$result[0]] = array('itemId' => (int)$result[0],
+		    'rating' => GalleryUtilities::roundToString($rating, 3),
+		    'votes' => (int)$result[2],
+		    'averagePercent' => GalleryUtilities::roundToString(($rating * 100 / 5), 3),
+		    'stars' => round($rating * 2),
+		    'userRating' => 'N/A', 'userStars' => 0
+		    );
+
+	    if ($rating == 0) {
+		$data[(int)$result[0]]['stars'] = 1;
+	    }
+	}
+
+	/* Set defaults if a requested ID isn't found */
+	foreach ($itemIds as $itemId) {
+	    if (!isset($data[$itemId])) {
+		$data[$itemId] = array('itemId' => $itemId, 'rating' => 0, 'votes' => 0,
+		    'userRating' => 'N/A', 'userStars' => 0, 'stars' => 0, 'averagePercent' => 0);
+	    }
+	}
+
+	/* Check for existing votes from this user! */
+	$session =& $gallery->getSession();
+	/*
+	 * If the user doesn't have a persistent session yet, it's a guest user without a session
+	 * and since we create a persistent session when a guest rates, we know that this guest
+	 * user hasn't rated any item yet
+	 */
+	if ($session->isPersistent()) {
+	    $searchParams = array('itemId' => $itemIds, 'userId' => (int)$userId);
+
+	    /* Handle extra checks for anonymous users */
+	    list ($ret, $isAnonymous) = GalleryCoreApi::isAnonymousUser($userId);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if ($isAnonymous) {
+		$sessionId = $session->getId();
+		$remoteId = $session->getRemoteIdentifier();
+		$searchParams['sessionId'] = $sessionId;
+		$searchParams['remoteIdentifier'] = implode(':', $remoteId);
+	    }
+
+	    list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('RatingMap',
+		array('itemId', 'rating'), $searchParams);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    while ($result = $searchResults->nextResult()) {
+		if (isset($data[$result[0]])) {
+		    $data[(int)$result[0]]['userRating'] = (int)$result[1];
+		    $data[(int)$result[0]]['userStars'] = round((int)$result[1] * 2);
+		} else {
+		    $data[(int)$result[0]]['userRating'] = 'N/A';
+		    $data[(int)$result[0]]['userStars'] = 0;
+		}
+	    }
+	}
+
+	return array(null, $data);
+    }
+
+    /**
+     * Sets rating in database, returns new ratings.
+     *
+     * @param int $itemId GalleryItem id
+     * @param int $rating Rating score
+     * @param int $userId
+     * @return array GalleryStatus a status code
+     *               array  double  new avg rating for itemId
+     *                      int     total votes for itemId
+     */
+    function rateItem($itemId, $rating, $userId) {
+	global $gallery;
+
+	/* Make sure the user isn't a search engine crawler */
+	$botId = GalleryUtilities::identifySearchEngine();
+	if (isset($botId)) {
+	    return array(null, null);
+	}
+
+	/* Make sure the item really exists */
+	list ($ret, $entity) = GalleryCoreApi::loadEntitiesById($itemId, 'GalleryItem');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Use this to get new IDs and check affected rows for updates */
+	$storage = $gallery->getStorage();
+
+	$session =& $gallery->getSession();
+	if (!$session->isPersistent()) {
+	    /*
+	     * To show what this user has rated we need a persistent session
+	     * Add some session data to force the creation of a persistent session (sends a cookie)
+	     */
+	    $session->put('rating', 1);
+	    $ret = $session->start();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	$sessionId = $session->getId();
+	$remoteId = $session->getRemoteIdentifier();
+
+	/* Handle extra checks for anonymous users */
+	list ($ret, $isAnonymous) = GalleryCoreApi::isAnonymousUser($userId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Update existing user vote for this item */
+	$matchParams = array(	'itemId' => (int)$itemId,
+				'userId' => (int)$userId);
+	if ($isAnonymous) {
+	    $matchParams['sessionId'] = $sessionId;
+	    $matchParams['remoteIdentifier'] = implode(':', $remoteId);
+	}
+
+	$ret = GalleryCoreApi::removeMapEntry('RatingMap', $matchParams);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Insert record */
+	list ($ret, $ratingId) = $storage->getUniqueId();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$ret = GalleryCoreApi::addMapEntry('RatingMap',
+	    array(  'ratingId' => $ratingId,
+		    'itemId' => $itemId,
+		    'userId' => $userId,
+		    'rating' => $rating,
+		    'sessionId' => $sessionId,
+		    'remoteIdentifier' => implode(':', $remoteId) ));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Compute average and update cache table */
+	list ($ret, $avg) = $storage->getFunctionSql('AVG', array('[RatingMap::rating]'));
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$query = '
+	    SELECT
+	    ' . $avg . ',
+	    COUNT([RatingMap::rating])
+		FROM
+		[RatingMap]
+		WHERE
+		[RatingMap::itemId] = ?
+	';
+	list ($ret, $searchResults) = $gallery->search($query, array((int)$itemId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$data = array();
+	if ($searchResults->resultCount() > 0) {
+	    /* Update cache */
+	    $result = $searchResults->nextResult();
+	    $averageRating = round($result[0], 3)*1000;
+	    $voteCount = $result[1];
+
+	    $ret = GalleryCoreApi::removeMapEntry('RatingCacheMap', array('itemId' => $itemId));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $ret = GalleryCoreApi::addMapEntry('RatingCacheMap',
+			array(  'itemId' => $itemId,
+				'averageRating' => $averageRating,
+				'voteCount' => $voteCount));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $data['itemId'] = (int)$itemId;
+	    $data['rating'] = $averageRating / 1000;
+	    $data['votes'] = (int)$voteCount;
+	    $data['userRating'] = (int)$rating;
+	}
+
+	return array(null, $data);
+    }
+}
+?>

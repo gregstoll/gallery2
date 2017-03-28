@@ -1,0 +1,28 @@
+    <h1><?php print _("Welcome") ?></h1>
+    <p>
+      <?php printf(_("Upgrading Gallery 2 requires %d steps. This upgrade tool will guide you through these steps and provide assistance along the way if additional steps are required. Please read the %sHelp File%s before proceeding."),
+	$templateData['totalSteps'],
+	'<a href="' . generateUrl('../README.html', false) . '" target="_blank">', '</a>') ?>
+    </p>
+    <?php if ($templateData['mode.maintenance'] === false): /* Available, but off */ ?>
+    <p>
+      <?php print _("If you have a busy site, consider putting your Gallery in maintenance mode. This gives visitors a message that the site is temporarily offline, rather than showing everybody this upgrade page. Edit your config.php file to activate maintenance mode.") ?>
+    </p>
+    <?php endif; ?>
+    <?php global $translator; if (isset($translator)): ?>
+    <form method="post" action="<?php generateUrl('index.php') ?>"><p>
+      <?php print _("Select Language:") ?>
+      <input type="hidden" name="step" value="<?php print $stepNumber ?>"/>
+      <select name="language" onchange="this.form.submit()" style="direction:ltr">
+	<?php
+	  /* Don't use $language here as it conflicts with $_SESSION if register_globals is on */
+	  foreach ($templateData['languages'] as $code => $description) {
+	    print '<option value="' . $code . '"';
+	    if ($code == $_SESSION['language']) print ' selected="selected"';
+	    print '>' . $description . "</option>\n";
+	  }
+	?>
+      </select>
+      <noscript><input type="submit" value="<?php print _("Go") ?>"/></noscript>
+    </p></form>
+    <?php endif; ?>

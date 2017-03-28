@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!ELEMENT export (plugin-status-list , plugin+)>
+<!ATTLIST export
+	schema-version CDATA #REQUIRED
+	tables CDATA #REQUIRED
+	core-version CDATA #REQUIRED
+	gallery-version CDATA #REQUIRED>
+<!ELEMENT plugin (table | sequence)+ >
+<!ATTLIST plugin
+	id CDATA #REQUIRED
+	type (module|theme) #REQUIRED >
+<!ELEMENT sequence EMPTY>
+<!ATTLIST sequence
+	name CDATA #REQUIRED
+	start-value CDATA #REQUIRED>
+<!ELEMENT table (definition, data*)>
+<!ATTLIST table
+	name CDATA #REQUIRED>
+<!ELEMENT definition (create-sql, table-info*)>
+<!ATTLIST definition
+	module-id CDATA #REQUIRED>
+<!ELEMENT create-sql (#PCDATA)>
+<!ELEMENT table-info (#PCDATA)>
+<!ATTLIST table-info
+	type (map|entity) #REQUIRED>
+<!ELEMENT data (field*, row*)>
+<!ELEMENT row (f+)>
+<!ELEMENT f (#PCDATA)>
+<!ATTLIST f
+	null (0|1) #IMPLIED>
+<!ELEMENT field EMPTY>
+<!ATTLIST field
+	name CDATA #REQUIRED
+	type CDATA #REQUIRED
+	size CDATA #IMPLIED
+	not-null (0|1) #IMPLIED
+	not-null-empty-allowed (0|1) #IMPLIED>
+<!ELEMENT plugin-status-list (plugin-status+)>
+<!ELEMENT plugin-status EMPTY>
+<!ATTLIST plugin-status
+	id CDATA #REQUIRED
+	version CDATA #REQUIRED
+	required-core-api CDATA #REQUIRED
+	required-api CDATA #REQUIRED
+	active (0|1) #REQUIRED
+	type (module|theme) #REQUIRED>
+

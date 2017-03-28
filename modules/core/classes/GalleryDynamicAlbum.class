@@ -1,0 +1,128 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryItem.class');
+
+/**
+ * A container like GalleryAlbumItem but for a dynamic set of child items.
+ * Instances of this class are not stored in the database.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryDynamicAlbum extends GalleryItem {
+
+    /**
+     * Type name info for this dynamic album
+     * @var array
+     * @access private
+     */
+    var $_itemTypeName;
+
+
+    /**
+     * Initialize dynamic album
+     *
+     * @param string $title localized title
+     * @param array $itemTypeNameData itemTypeName data, eg. array(Photo, photo), array(Foto, foto)
+     */
+    function create($title, $itemTypeNameData=null) {
+	global $gallery;
+
+	$this->setId(null);
+	$this->setParentId(null);
+	$this->setPathComponent(null);
+	$this->setEntityType($this->getClassName());
+	$this->setIsLinkable(false);
+	$this->setLinkId(null);
+	$this->setLinkedEntity(null);
+	$this->setOnLoadHandlers(null);
+
+	$this->setTitle($title);
+	$this->setSummary(null);
+	$this->setDescription(null);
+	$this->setKeywords(null);
+	$this->setCreationTimestamp(time());
+	$this->setOriginationTimestamp(time());
+	$this->setModificationTimestamp(time());
+	$this->setViewedSinceTimestamp(time());
+	$this->setCanContainChildren(true);
+	$this->setOwnerId($gallery->getActiveUserId());
+
+	if (!empty($itemTypeNameData)) {
+	    $this->_itemTypeName = $itemTypeNameData;
+	} else {
+	    $this->_itemTypeName = array(array('Dynamic Album', 'dynamic album'));
+	    list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+	    if ($ret) {
+		$this->_itemTypeName[] = $this->_itemTypeName[0];
+	    } else {
+		$this->_itemTypeName[] =
+		    array($module->translate('Dynamic Album'), $module->translate('dynamic album'));
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::itemTypeName
+     */
+    function itemTypeName($localized = true) {
+	return $this->_itemTypeName[$localized ? 1 : 0];
+    }
+
+    /**
+     * @see GalleryEntity::itemTypeName
+     */
+    function getClassName() {
+	return 'GalleryDynamicAlbum';
+    }
+
+    /**
+     * @see GalleryEntity::delete
+     */
+    function delete() {
+	return GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION);
+    }
+
+    /**
+     * @see GalleryItem::move
+     */
+    function move($newParentId) {
+	return GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION);
+    }
+
+    /**
+     * @see GalleryEntity::save
+     */
+    function save($postEvent=true) {
+	return GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION);
+    }
+
+    /**
+     * @see GalleryEntity::refresh
+     */
+    function refresh() {
+	return array(null, $this);
+    }
+}
+?>

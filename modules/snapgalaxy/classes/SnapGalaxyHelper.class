@@ -1,0 +1,238 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is a helper class for interacting with SnapGalaxy.com
+ * @package SnapGalaxy
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class SnapGalaxyHelper {
+
+    /**
+     * Print the items on snapgalaxy.com and provide them with the given return url
+     *
+     * @return array GalleryStatus a status code
+     *               string the url to the snapgalaxy.com cart
+     */
+    function printPhotos($cartItemIds, $returnUrl) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$session =& $gallery->getSession();
+	$itemIds = array_keys($cartItemIds);
+
+	/* Load the necessary item data */
+	list ($ret, $items) = GalleryCoreApi::loadEntitiesById($itemIds, 'GalleryPhotoItem');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $permissions) = GalleryCoreApi::fetchPermissionsForItems($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	foreach ($itemIds as $id) {
+	    if (empty($permissions[$id]['core.view'])) {
+		/* Avoid information disclosure, act as if the item didn't exist. */
+		return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	    }
+	}
+
+	list ($ret, $thumbnails) = GalleryCoreApi::fetchThumbnailsByItemIds($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $resizes) = GalleryCoreApi::fetchResizesByItemIds($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $preferreds) = GalleryCoreApi::fetchPreferredsByItemIds($itemIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* We want to know which are viewable to guests */
+	list ($ret, $anonymousUserId) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	list ($ret, $publicPermissions) =
+	    GalleryCoreApi::fetchPermissionsForItems($itemIds, $anonymousUserId, false);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$cartUrlFragment = $session->get('snapgalaxy.cartUrlFragment');
+
+	/* If we don't have a cart url that means we don't have a snapgalaxy session yet */
+	$snapgalaxyServer = 'www.snapgalaxy.com';
+	if (empty($cartUrlFragment)) {
+	    $cartUrlFragment = '/pt/ptcartpost';
+	}
+
+	/* Assemble all our data */
+	$entries = $protectedIds = array();
+	foreach ($items as $item) {
+	    $itemId = $item->getId();
+	    $entry = array();
+
+	    if (!isset($permissions[$itemId]['snapgalaxy.print'])) {
+		/* Skip any cart items for which we don't have print permission */
+		continue;
+	    }
+
+	    $source = isset($preferreds[$itemId]) ? $preferreds[$itemId] : $item;
+	    $needSession = !isset($publicPermissions[$itemId]['core.viewSource']);
+
+	    if ($needSession && !isset($pwSession)) {
+		/*
+		 * Get G2 session for snapgalaxy to access non-public images.
+		 * We can't use this session because hijack protection will prevent access
+		 * plus the current user could logout before snapgalaxy retrieves the images.
+		 * Create a new session with the rights of current user for snapgalaxy to use.
+		 */
+		$pwSession = new GallerySession();
+		$ret = $pwSession->initEmpty(true, $gallery->getActiveUserId());
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	    if ($needSession) {
+		$sessionParam = array($pwSession->getKey() => $pwSession->getId());
+		$protectedIds[] = $source->getId();
+	    } else {
+		$sessionParam = array();
+	    }
+
+	    $entry['id'] = $source->getId();
+	    $entry['imageUrl'] = $urlGenerator->generateUrl(
+		array_merge(array('view' => 'core.DownloadItem', 'itemId' => $source->getId()),
+		    $sessionParam),
+		array('forceSessionId' => false, 'forceFullUrl' => true));
+	    $entry['imageWidth'] = $source->getWidth();
+	    $entry['imageHeight'] = $source->getHeight();
+
+	    if (!isset($thumbnails[$itemId]) || $thumbnails[$itemId]->getPostFilterOperations()) {
+		/* Use the source if the thumbnail has a postfilter (like a watermark) */
+		$thumbSource = $source;
+	    } else {
+		$thumbSource = $thumbnails[$itemId];
+		if ($needSession) {
+		    $protectedIds[] = $thumbSource->getId();
+		}
+	    }
+
+	    $entry['thumbUrl'] = $urlGenerator->generateUrl(
+		array_merge(array('view' => 'core.DownloadItem', 'itemId' => $thumbSource->getId()),
+		    $sessionParam),
+		array('forceSessionId' => false, 'forceFullUrl' => true));
+	    $entry['thumbWidth'] = $thumbSource->getWidth();
+	    $entry['thumbHeight'] = $thumbSource->getHeight();
+	    $entry['quantity'] = $cartItemIds[$itemId];
+	    $entries[] = $entry;
+	}
+
+	if (isset($pwSession)) {
+	    /* Mark this session so that it can be treated specially */
+	    $pwSession->put('core.isPrintService', $protectedIds);
+
+	    /**
+	     * @todo Would like to enforce a particular session timeout to ensure this session
+	     * lasts long enough for snapgalaxy to retrieve the images.  Maybe also store the
+	     * sessionid in this session so we can reuse it for multiple print requests (and
+	     * just bump timeout each time).
+	     */
+	    $ret = $pwSession->save();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	list ($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'snapgalaxy');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$postData = array();
+	$postData['version'] = 100;
+	$postData['partnerid'] = $params['snapgalaxyPartnerId'];
+	$postData['referid'] = "GALL";
+	$postData['cmd'] = "addimg";
+	$postData['addmoreurl'] = $returnUrl;
+	$postData['returnurl'] = $returnUrl;
+	$postData['imagecount'] = count($entries);
+
+	for ($i = 0; $i < sizeof($entries); $i++) {
+	    $j = $i + 1;
+	    $postData['image_' . $j] = $entries[$i]['imageUrl'];
+	    $postData['imagewidth_' . $j] = $entries[$i]['imageWidth'];
+	    $postData['imageheight_' . $j] = $entries[$i]['imageHeight'];
+	    $postData['thumb_' . $j] = $entries[$i]['thumbUrl'];
+	    $postData['thumbwidth_' . $j] = $entries[$i]['thumbWidth'];
+	    $postData['thumbheight_' . $j] = $entries[$i]['thumbHeight'];
+	    $postData['quantity_' . $j] = $entries[$i]['quantity'];
+	}
+
+	$gallery->guaranteeTimeLimit(30);
+	$cartUrl = 'http://' . $snapgalaxyServer . $cartUrlFragment;
+	if ($gallery->getDebug()) {
+	    $gallery->debug('Post data:');
+	    $gallery->debug_r($postData, true);
+	}
+	list ($body, $response, $headers) = 
+	    GalleryCoreApi::postToWebPage($cartUrl, $postData);
+
+	/* 
+	 * Expect a response of the form:
+	 *
+	 * requesturl="/pt/ptcartpost/XXXXXXXX"
+	 * redirecturl="/pt/ptcart/XXXXXXXX"
+	 */
+	if ($gallery->getDebug()) {
+	    $gallery->debug('Response Data');
+	    $gallery->debug_r($body, true);
+	}
+
+	if (preg_match('/requesturl="(\S+)" redirecturl="(\S+)"/', 
+	    $body, $matches)) {
+	    $cartUrlFragment = $matches[1];
+	    /*
+	     * Store requesturl in session variable.
+	     * The user can come back to Gallery (by selecting "Add more print" on 
+	     * SnapGalaxy),add more print requests and then go to SnapGalaxy printing module.
+	     * We want to restore the session at SnapGalaxy's end so that previous 
+	     * photos are available in the cart. 
+	     * So we are storing requesturl in session variable.
+	     */
+	    $session->put('snapgalaxy.cartUrlFragment', $cartUrlFragment);
+	    $redirectUrl = 'http://' . $snapgalaxyServer . $matches[2];
+	} else {
+	    $redirectUrl =
+		$urlGenerator->generateUrl(array('view' => 'snapgalaxy.FulfillmentError'));
+	}
+
+	return array(null, $redirectUrl);
+    }
+}
+?>

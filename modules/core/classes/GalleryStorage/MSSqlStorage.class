@@ -1,0 +1,209 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryStorage.class');
+
+/**
+ * MSSQL extension of the GalleryStorage class.
+ * This object implements the hooks for saving and restoring objects in a MSSQL database.
+ *
+ * @package GalleryCore
+ * @subpackage Storage
+ * @author vicente
+ * @author Larry Menard <larry.menard@rogers.com>
+ * @version $Revision: 17997 $
+ */
+class MSSqlStorage extends GalleryStorage {
+
+    /**
+     * Version info of database server
+     * @var string
+     * @access protected
+     */
+    var $_serverInfo;
+
+    function MSSqlStorage($config) {
+	$this->GalleryStorage($config);
+	$this->_isTransactional = true;
+	$this->_isEmptyAllowedForNotNullColumn = true;
+
+	/* ADO_MSSql driver has different connection parameters.. set values it expects */
+	$this->_hostname = 'PROVIDER=MSDASQL;DRIVER={SQL Server};SERVER=' . $this->_hostname
+			 . ';DATABASE=' . $this->_database;
+	$this->_database = 'MSDASQL';
+    }
+
+    /**
+     * Return the type of this database
+     * @return string
+     */
+    function getType() {
+	return 'mssql';
+    }
+
+    /**
+     * @see GalleryStorage::_getSqlReplacements
+     */
+    function _getSqlReplacements() {
+	/* For SQL Server versions pre-2005, use type NTEXT.  For 2005+, use NVARCHAR(MAX). */
+	if (!$this->_serverInfo) {
+	    if (preg_match("/(\d+(\.\d+)+)/", $this->getVersion(), $matches)) {
+		$this->_serverInfo = $matches[0];
+	    } else {
+		return array();
+	    }
+	}
+
+	if (version_compare($this->_serverInfo, '9.0', '<')) {
+	    return array('NVARCHAR(MAX)' => 'NTEXT');
+	} else {
+	    return array();
+	}
+    }
+
+    /**
+     * @see GalleryStorage::getFunctionsSql
+     */
+    function getFunctionSql($functionName, $args) {
+	switch($functionName) {
+	case 'CONCAT':
+	    foreach ($args as $key => $value) {
+		$args[$key] = 'CAST(' . $value . ' AS NVARCHAR)';
+	    }
+	    $sql = implode(' + ', $args);
+	    break;
+
+	case 'BITAND':
+	    /* Cast any input values as the 'bit' type */
+	    $sql = $args[0] . ' & ' . $args[1];
+	    break;
+
+	case 'BIT_OR':
+	    return array(GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION), null);
+
+	case 'UNIX_TIMESTAMP':
+	    $sql = 'DATEDIFF(s,1970-01-01 00:00:00, ' . $args[0] . ')';
+	    break;
+
+	case 'AS':
+	    $sql = 'AS';
+	    break;
+
+	case 'SUBSTRING':
+	    if (count($args) == 2) {
+		$args[2] = 'LEN(' . $args[0] . ') - ' . $args[1] . ' + 1';
+	    }
+	    $sql = sprintf('SUBSTRING(%s)', implode(', ', $args));
+	    break;
+
+	case 'RAND':
+	    $sql = 'NEWID()';
+	    break;
+
+	case 'RANDOM_INTEGER':
+	    $sql = 'ABS(CHECKSUM(NEWID()))';
+	    break;
+
+	case 'LIMIT':
+	    $sql = preg_replace('/^(\s*SELECT)(\s)/i', '$1 TOP ' . $args[0] . '$2', $args[1]);
+	    break;
+
+	case 'CASE':
+	    $sql = array();
+	    while (count($args) > 1) {
+		$sql[] = 'WHEN ' . array_shift($args) . ' THEN ' . array_shift($args);
+	    }
+	    $sql = 'CASE ' . implode(' ', $sql) . ' ELSE ' . $args[0] . ' END';
+	    break;
+
+	case 'LIKE':
+	    $sql = $args[0] . ' LIKE ' . $args[1];
+	    break;
+
+	case 'MULTI_INSERT':
+	    /*
+	     * 0 - table name
+	     * 1 - array of column names
+	     * 2 - number of rows
+	     */
+	    $markers = GalleryUtilities::makeMarkers(sizeof($args[1]));
+	    $rowList = array_fill(0, $args[2], 'SELECT ' . $markers);
+	    $sql = 'INSERT INTO ' . $args[0] . ' (';
+	    $sql .= implode(', ', $args[1]);
+	    $sql .= ') ' . implode(' UNION ALL ', $rowList);
+	    break;
+
+	case 'AVG':
+	    $sql = sprintf('AVG(CAST(%s AS FLOAT))', $args[0]);
+	    break;
+
+	default:
+	    return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED, __FILE__, __LINE__,
+					       $functionName . ' ' . implode(' ', $args)), null);
+	}
+
+	return array(null, $sql);
+    }
+
+    /**
+     * Get database version.
+     * @return string version
+     */
+    function getVersion() {
+	list ($ret, $tmpDb) = $this->_getConnection(true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$sql = 'SELECT @@VERSION';
+	$this->_traceStart();
+	$arr =& $tmpDb->GetArray($sql);
+	$this->_traceStop();
+
+	$tmpDb->Close();
+	if (!empty($arr[0][0])) {
+	    return rtrim($arr[0][0]);
+	} else {
+	    return '';
+	}
+    }
+
+    /**
+     * @see GalleryStorage::_getOptimizeStatements
+     */
+    function _getOptimizeStatements() {
+	return array('UPDATE STATISTICS %s');
+    }
+
+    /**
+     * @see GalleryStorage::encodeBlob
+     */
+    function encodeBlob($blob) {
+	return addcslashes($blob, "\000..\037\047\134\177..\377");
+    }
+
+    /**
+     * @see GalleryStorage::decodeBlob
+     */
+    function decodeBlob($blob) {
+	return stripcslashes($blob);
+    }
+}
+?>

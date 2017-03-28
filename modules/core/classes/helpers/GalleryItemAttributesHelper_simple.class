@@ -1,0 +1,168 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper functions for ItemAttributes map.
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryItemAttributesHelper_simple {
+
+    /**
+     * @see GalleryCoreApi::incrementItemViewCount
+     */
+    function incrementViewCount($itemId, $step=1) {
+	global $gallery;
+	$session =& $gallery->getSession();
+
+	$elapsed = time() - $session->getCreationTime();
+	if (!$session->exists('core.lastViewed')) {
+	    if (!$session->isPersistent()) {
+		/*
+		 * For guests, we don't create a session.  So the lastViewed data is not available
+		 * for guests.  Thus, rely on HTTP If-Modified-Since for guests which is admittedly
+		 * quite unreliable.  Alternatively we could store this data on the client with a
+		 * non-session cookie but sending lastViewed data on each request could take a lot
+		 * of bandwidth.
+		 */
+		$phpVm = $gallery->getPhpVm();
+		if (GalleryUtilities::getServerVar('HTTP_IF_MODIFIED_SINCE')
+			|| ($phpVm->function_exists('getallheaders')
+			    && ($headers = $phpVm->getallheaders())
+			    && (isset($headers['If-Modified-Since'])
+				|| isset($headers['If-modified-since'])))) {
+		    return null;
+		}
+
+		/* Known search engines don't affect view counts */
+		if ($session->isSearchEngineSession()) {
+		    return null;
+		}
+
+		if (!$phpVm->headers_sent()) {
+		    GalleryUtilities::setResponseHeader('Last-Modified: '
+			. GalleryUtilities::getHttpDate($phpVm->time()));
+		    GalleryUtilities::setResponseHeader('Expires: '
+			. GalleryUtilities::getHttpDate(time() - 3600 * 24 * 7));
+		}
+	    }
+
+	    $lastViewed = array($itemId => $elapsed);
+	    $session->put('core.lastViewed', $lastViewed);
+	} else {
+	    $lastViewed =& $session->get('core.lastViewed');
+	    if (isset($lastViewed[$itemId])) {
+		if ($elapsed - $lastViewed[$itemId] < 86400) {
+		    /* They viewed it within the last day, so this doesn't count */
+		    return null;
+		}
+	    }
+	    $lastViewed[$itemId] = $elapsed;
+	}
+
+	/* Ensure GallerySqlFragment class is loaded by initializing storage */
+	$gallery->getStorage();
+	$func = '= [GalleryItemAttributesMap::viewCount] + ?';
+	$ret = GalleryCoreApi::updateMapEntry(
+	    'GalleryItemAttributesMap',
+	    array('itemId' => $itemId),
+	    array('viewCount' => new GallerySqlFragment($func, $step)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchItemViewCount
+     */
+    function fetchViewCount($itemId) {
+	list ($ret, $viewCounts) =
+	    GalleryItemAttributesHelper_simple::fetchViewCounts(array($itemId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $viewCounts[$itemId]);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchItemViewCounts
+     */
+    function fetchViewCounts($itemIds) {
+	foreach ($itemIds as $idx => $id) {
+	    $itemIds[$idx] = (int)$id;
+	}
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryItemAttributesMap',
+	    array('itemId', 'viewCount'), array('itemId' => $itemIds));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($searchResults->resultCount() != sizeof($itemIds)) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+	}
+
+	$data = array();
+	while ($result = $searchResults->nextResult()) {
+	    $data[$result[0]] = (int)$result[1];
+	}
+
+	return array(null, $data);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchParentSequence
+     */
+    function fetchParentSequence($itemId, $filterBreadcrumb=false) {
+	global $gallery;
+	if ($filterBreadcrumb && ($filter = $gallery->getConfig('breadcrumbRootId'))
+		&& $itemId == $filter) {
+	    return array(null, array());
+	}
+
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryItemAttributesMap',
+	    array('parentSequence'), array('itemId' => (int)$itemId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($searchResults->resultCount() != 1) {
+	    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT, __FILE__, __LINE__,
+					      "ParentSequence for $itemId"), null);
+	}
+
+	$result = $searchResults->nextResult();
+	/* DB2 doesn't trim when storing data in a varchar column */
+	$parentSequence = preg_split('/\//', trim($result[0]), -1, PREG_SPLIT_NO_EMPTY);
+	$result = is_array($parentSequence) ? $parentSequence : array();
+
+	if ($filterBreadcrumb && $filter && ($i = array_search($filter, $result))) {
+	    array_splice($result, 0, $i);
+	}
+
+	return array(null, $result);
+    }
+}
+?>

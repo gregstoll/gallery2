@@ -1,0 +1,55 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is an interface for the custom field module.  Modules that wish to create
+ * custom fields or set field values can utilize an implementation of this interface.
+ * @package CustomField
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class CustomFieldInterface_1_0 {
+
+    /**
+     * Create new custom fields
+     *
+     * @param array $fieldNames of string field names
+     * @param int $containerId id of container; for album-specific settings
+     * @return array GalleryStatus a status code,
+     *               array(string duplicate field names)
+     */
+    function createCustomFields($fieldNames, $containerId=0) {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+    }
+
+    /**
+     * Set custom field values for an item; overwrites all existing field values.
+     *
+     * @param int $itemId
+     * @param array $data field values
+     * @return GalleryStatus a status code
+     */
+    function setCustomFieldValues($itemId, $data) {
+	return GalleryCoreApi::error(ERROR_UNIMPLEMENTED);
+    }
+}
+?>

@@ -1,0 +1,59 @@
+    <h1><?php print _("Version Check") ?></h1>
+
+    <?php if ($templateData['configFileWritten']): ?>
+    <div class="success">
+      <h2>
+      <?php print _("Config file created successfully.") ?>
+      </h2>
+    </div>
+    <?php endif; ?>
+    <div class="error">
+      <h2>
+      <?php print _("This is not a fresh install and the installed version does not match the new version.") ?>
+      </h2>
+    </div>
+
+    <?php if (!$templateData['recommendUpgrade']): ?>
+    <p class="error">
+      <?php print _("The installed version cannot be upgraded to the new version!") ?>
+    </p>
+    <?php else: ?>
+    <p>
+      <?php print _("The installed version is older than the new version. You should run the upgrader and not the installer!") ?>
+    </p>
+    <?php endif; ?>
+
+    <table>
+      <tr>
+	<td width="175">
+	  <?php print _("Currently installed") ?>
+	</td>
+	<td>
+	  <b>
+	    <?php if (isset($templateData['versions']['installed'])) print $templateData['versions']['installed'] ?>
+	  </b>
+	</td>
+      </tr>
+      <tr>
+	<td>
+	  <?php print _("New version") ?>
+	</td>
+	<td>
+	  <b>
+	    <?php if (isset($templateData['versions']['codebase'])) print $templateData['versions']['codebase'] ?>
+	  </b>
+	</td>
+      </tr>
+    </table>
+
+    <?php if ($templateData['recommendUpgrade']): ?>
+    <?php if (!$templateData['isMultisite']): ?>
+    <div class="go">
+	  <a href="../upgrade/index.php" class="btn continue"><i></i><span><span></span><i></i><?php print _('Go to the Upgrader!') ?></span></a>
+    </div>
+    <?php else: ?>
+    <p>
+      <?php printf(_("You should go now to the upgrader.  Enter the URL in your browser for %s/upgrade/index.php%s in your %s directory."), '<tt>', '</tt>', '<tt>' . $templateData['galleryDir'] . '</tt>') ?>
+    </p>
+    <?php endif; ?>
+    <?php endif; ?>

@@ -1,0 +1,1287 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A framework for doing platform specific tasks.  This is an abstract class that implements many
+ * basic tasks that are different from platform to platform.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 20954 $
+ * @abstract
+ */
+class GalleryPlatform {
+
+    /**
+     * List of file extensions that are disallowed for server and/or client security reasons.
+     * @var array
+     * @deprecated This list will be made configurable by merging it into the mime-map data.
+     */
+    var $_blacklistedFileExtensions = array(
+	'php', 'php2', 'php3', 'php4', 'php5', 'php6', 'cgi', 'inc', 'phps', 'pwml', 'phtml',
+	'html', 'js', 'htm', 'shtml', 'vbs', 'dll', 'jsp' , 'cfm', 'reg', 'shtm', 'phtm', 'exe',
+	'bat', 'sh', 'cmd', 'install', 'pl', 'tcl', 'py', 'com', 'rb', 'asp', 'aspx', 'ascx');
+
+    /**
+     * Copy a file.
+     * @param string $source the source file
+     * @param string $dest the destination file
+     * @return boolean true if the copy succeeded, false otherwise
+     */
+    function copy($source, $dest) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("copy($source, $dest)");
+	}
+
+	if (is_uploaded_file($source)) {
+	    $results = move_uploaded_file($source, $dest);
+	    if (!$results) {
+		return $results;
+	    }
+	    $results = $this->chmod($dest);
+	} else {
+	    if (!isset($this->_umask)) {
+		$this->_loadPermissionPreferences();
+	    }
+	    $umask = umask($this->_umask);
+	    $results = copy($source, $dest);
+	    umask($umask);
+	}
+
+	return $results;
+    }
+
+    /**
+     * Symlink a file.
+     * @param string $source the source file
+     * @param string $dest the destination file
+     * @return boolean true if the copy succeeded, false otherwise
+     */
+    function symlink($source, $dest) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("symlink($source, $dest)");
+	}
+
+	if (!isset($this->_umask)) {
+	    $this->_loadPermissionPreferences();
+	}
+	$umask = umask($this->_umask);
+	$results = symlink($source, $dest);
+	umask($umask);
+
+	return $results;
+    }
+
+    /**
+     * Move an uploaded file to a new location and return the new location.  If the second filename
+     * is not provided, a new file is created in the Gallery temporary directory.
+     * @return string the new file name, if the move was successful
+     */
+    function move_uploaded_file($filename, $newFilename=null) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("move_uploaded_file($filename, $newFilename)");
+	}
+
+	if (empty($newFilename)) {
+	    $tmpDir = $gallery->getConfig('data.gallery.tmp');
+	    $newFilename = tempnam($tmpDir, 'MUF_');
+	    if ($newFilename == null) {
+		return null;
+	    }
+	    if ($gallery->getDebug()) {
+		$gallery->debug("chose new file name: $newFilename");
+	    }
+	}
+
+	if (move_uploaded_file($filename, $newFilename)) {
+	    return $newFilename;
+	} else {
+	    return null;
+	}
+    }
+
+    /**
+     * Create a file with a unique file name.
+     * @param string $dir target dir
+     * @param string $prefix file prefix
+     */
+    function tempnam($dir, $prefix) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("tempnam($dir, $prefix)");
+	}
+
+	$slash = $this->getDirectorySeparator();
+	$dir = $dir{strlen($dir) - 1} == $slash ? substr($dir, 0, strlen($dir) - 1) : $dir;
+
+	$tempfile = tempnam($dir, $prefix);
+	if ($tempfile !== false) {
+	    $dirname = dirname($tempfile);
+	    if ($dirname !== $dir) {
+		$tempfile = $dir . $slash . basename($tempfile);
+	    }
+	}
+
+	return $tempfile;
+    }
+
+    /**
+     * Does the given file exist?
+     * @param string $filename full filesystem path to a file
+     * @return boolean true if the file exists, false otherwise
+     */
+    function file_exists($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("file_exists($filename)");
+	}
+
+	return is_uploaded_file($filename) || file_exists($filename);
+    }
+
+    /**
+     * Is the given path a symbolic link?
+     * @param string $filename a filesystem path
+     * @return boolean true if the file is a link, false otherwise
+     */
+    function is_link($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("is_link($filename)");
+	}
+
+	return is_link($filename);
+    }
+
+    /**
+     * Is the given path a directory?
+     * @param string $filename a filesystem path
+     * @return boolean true if the path is a directory, false otherwise
+     */
+    function is_dir($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("is_dir($filename)");
+	}
+
+	return is_dir($filename);
+    }
+
+    /**
+     * Is the given path a normal file?
+     * @param string $filename a filesystem path
+     * @return boolean true if the path is a file, false otherwise
+     */
+    function is_file($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("is_file($filename)");
+	}
+
+	return is_file($filename);
+    }
+
+    /**
+     * Is the given path a writeable file?
+     * @param string $filename a filesystem path
+     * @return boolean true if the path is writeable, false otherwise
+     */
+    function is_writeable($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("is_writeable($filename)");
+	}
+
+	return is_writeable($filename);
+    }
+
+    /**
+     * Is the given path a readable file?
+     * @param string $filename a filesystem path
+     * @return boolean true if the path is readable, false otherwise
+     */
+    function is_readable($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("is_readable($filename)");
+	}
+
+	return is_readable($filename);
+    }
+
+    /**
+     * Is the given path an uploaded file?
+     * @param string $filename a filesystem path
+     * @return boolean true if the path is an uploaded file, false otherwise
+     */
+    function is_uploaded_file($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("is_uploaded_file($filename)");
+	}
+
+	return is_uploaded_file($filename);
+    }
+
+    /**
+     * Is the given path an executable file?
+     * @param string $filename a filesystem path
+     * @return boolean true if the path is an executable file, false otherwise
+     */
+    function is_executable($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("is_executable($filename)");
+	}
+
+	return is_executable($filename);
+    }
+
+    /**
+     * How large is the given file?
+     * @param string $filename full filesystem path to a file
+     * @return int the size in bytes
+     */
+    function filesize($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("filesize($filename)");
+	}
+
+	return filesize($filename);
+    }
+
+    /**
+     * Clear the stat cache.
+     */
+    function clearstatcache() {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug('clearstatcache()');
+	}
+
+	return clearstatcache();
+    }
+
+    /**
+     * Return a file as an array.
+     * @param string $filename a file path or URL
+     * @param int $use_include_path if this is set to 1, search the include path also
+     * @return array of lines
+     */
+    function file($filename, $use_include_path=false) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("file($filename, $use_include_path)");
+	}
+
+	return file($filename, $use_include_path);
+    }
+
+    /**
+     * Output a file.
+     * @param string $filename a file path or URL
+     * @param int $use_include_path if this is set to 1, search the include path also
+     * @return int the number of bytes read from the file
+     */
+    function readfile($filename, $use_include_path=false) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("readfile($filename, $use_include_path)");
+	}
+	return readfile($filename, $use_include_path);
+    }
+
+    /**
+     * Reads the entire contents of the specified file into a string.
+     * @param string $path file path
+     * @return string file contents or boolean false on failure
+     */
+    function file_get_contents($path) {
+	return file_get_contents($path);
+    }
+
+    /**
+     * Open a file or URL.
+     * @param string $filename a file path or URL
+     * @param string $mode a file mode
+     * @param int $use_include_path if this is set to 1, search the include path also
+     * @return resource a file descriptor
+     */
+    function fopen($filename, $mode, $use_include_path=0) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("fopen($filename, $mode, $use_include_path)");
+	}
+
+	return fopen($filename, $mode, $use_include_path);
+    }
+
+    /**
+     * flock -- Portable advisory file locking.
+     * @param resource $handle a file handle
+     * @param int $operation (LOCK_SH, LOCK_EX, LOCK_UN) [ | LOCK_NB]
+     * @param boolean $wouldblock set to true if the operation would have blocked
+     * @return true or false
+     */
+    function flock($handle, $operation, &$wouldblock) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("flock($handle, $operation, $wouldblock)");
+	}
+
+	return flock($handle, $operation, $wouldblock);
+    }
+
+    /**
+     * Perform an atomic write to a file.  This guarantees that the data written is not corrupted
+     * (but it does not prevent another process from immediately replacing the file with its own
+     * version).
+     * @param string $filename
+     * @param string $data data to be written
+     * @return boolean success or failure
+     */
+    function atomicWrite($filename, $data) {
+	list ($success, $ignored) = GalleryUtilities::guaranteeDirExists(dirname($filename));
+	if (!$success) {
+	    global $gallery;
+	    $gallery->debug("atomicWrite($filename): parent directory could not be created");
+	    return false;
+	}
+
+	$tempFile = tempnam(dirname($filename), basename($filename));
+	$fd = fopen($tempFile, 'wb');
+	$success = false;
+	if ($fd) {
+	    if (!isset($this->_filePerms)) {
+		$this->_loadPermissionPreferences();
+	    }
+	    chmod($tempFile, $this->_filePerms);
+	    $bytesWritten = fwrite($fd, $data);
+	    if ($bytesWritten == strlen($data)) {
+		$success = true;
+	    }
+	    fclose($fd);
+	}
+
+	if ($success) {
+	    return $this->rename($tempFile, $filename);
+	} else {
+	    @unlink($tempFile);
+	    return false;
+	}
+    }
+
+    /**
+     * Open a file or URL.
+     * @param string $path a file path
+     * @return resource a directory descriptor
+     */
+    function opendir($path) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("opendir($path)");
+	}
+
+	return opendir($path);
+    }
+
+    /**
+     * Return the next file resource from a directory.
+     * @param resource $resource a directory resource
+     */
+    function readdir($resource) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("readdir($resource)");
+	}
+
+	return readdir($resource);
+    }
+
+    /**
+     * Close a directory resource.
+     * @param resource $resource a directory resource
+     */
+    function closedir($resource) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("closedir($resource)");
+	}
+
+	return closedir($resource);
+    }
+
+    /**
+     * Rename a file/dir.
+     *
+     * As a side bonus, create a backup of the original file.
+     *
+     * @param string $oldname original file/dir name
+     * @param string $newname new file/dir name
+     * @return boolean true on success, false on failure
+     */
+    function rename($oldname, $newname) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("rename($oldname, $newname)");
+	}
+
+	return rename($oldname, $newname);
+    }
+
+    /**
+     * Get information about a file.
+     * @param string $filename file/dir name
+     * @return array the statistics of the file
+     */
+    function stat($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("stat($filename)");
+	}
+
+	return stat($filename);
+    }
+
+    /**
+     * Get size information about an image.
+     * @param string $filename the image file name
+     * @return array with 4 elements.  Index 0 contains the width of the image in pixels.  Index 1
+     *         contains the height.  Index 2 is a flag indicating the type of the image: 1 = GIF, 2
+     *         = JPG, 3 = PNG, 4 = SWF, 5 = PSD, 6 = BMP, 7 = TIFF(intel byte order), 8 =
+     *         TIFF(motorola byte order), 9 = JPC, 10 = JP2, 11 = JPX, 12 = JB2, 13 = SWC, 14 = IFF.
+     *         These values correspond to the IMAGETYPE constants that were added in PHP 4.3.  Index
+     *         3 is a text string with the correct height="yyy" width="xxx" string that can be used
+     *         directly in an IMG tag.
+     */
+    function getimagesize($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("getimagesize($filename)");
+	}
+
+	/*
+	 * getimagesize() returns an E_WARNING if the file is unreadable or not an image.  We'd
+	 * rather that it just returned false without the warning.
+	 */
+	return @getimagesize($filename);
+    }
+
+    /**
+     * Delete a file.
+     * @param string $filename
+     * @return boolean true on success, false on failure
+     */
+    function unlink($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("unlink($filename)");
+	}
+
+	return unlink($filename);
+    }
+
+    /**
+     * Delete a directory.
+     * @param string $filename directory name
+     * @return boolean true on success, false on failure
+     */
+    function rmdir($filename) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("rmdir($filename)");
+	}
+
+	return rmdir($filename);
+    }
+
+    /**
+     * Delete a directory, and all its contents.
+     * @param string $dirname directory name
+     * @return boolean true on success, false on failure
+     */
+    function recursiveRmdir($dirname) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("recursiveRmdir($dirname)");
+	}
+
+	if ($dirname{strlen($dirname)-1} != $this->getDirectorySeparator()) {
+	    $dirname .= $this->getDirectorySeparator();
+	}
+
+	if (!($fd = $this->opendir($dirname))) {
+	    return false;
+	}
+
+	while (($filename = $this->readdir($fd)) !== false) {
+	    if (!strcmp($filename, '.') || !strcmp($filename, '..')) {
+		continue;
+	    }
+	    $path = $dirname . $filename;
+
+	    if ($this->is_dir($path)) {
+		$ret = $this->recursiveRmdir($path);
+	    } else {
+		$ret = $this->unlink($path);
+	    }
+
+	    if ($ret == false) {
+		return false;
+	    }
+	}
+	closedir($fd);
+
+	return $this->rmdir($dirname);
+    }
+
+    /**
+     * Create a new directory.
+     * @param string $path a filesystem path
+     * @param string $stringPerms permissions of the newly created directory
+     * @return boolean true on success, false on failure
+     */
+    function mkdir($path, $stringPerms=null) {
+	global $gallery;
+
+	if (empty($stringPerms)) {
+	    if (!isset($this->_filePerms) || !isset($this->_dirPerms)) {
+		$this->_loadPermissionPreferences();
+	    }
+	    $octalPerms = $this->_dirPerms;
+	} else {
+	    /* Convert string permission representation to octal */
+	    $octalPerms = octdec($stringPerms);
+	}
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf("mkdir(%s, %o)", $path, $octalPerms));
+	}
+
+	$umask = umask(0);
+	$results = mkdir($path, $octalPerms);
+	umask($umask);
+	return $results;
+    }
+
+    /**
+     * Return true if the path component specified is composed of legal characters.
+     * @param string $component the path component (must not contain path separators)
+     * @param boolean $forDirectory (optional) Whether the path component is for a directory.
+     *        Defaults to false. Periods are allowed anywhere in directories.
+     * @return true if yes
+     */
+    function isLegalPathComponent($component, $forDirectory=false) {
+	return !strcmp($this->legalizePathComponent($component, $forDirectory), $component);
+    }
+
+    /**
+     * Legal characters on all systems: A-Z a-z 0-9 # _ . -
+     *
+     * Specific platform implementations can override this.
+     *
+     * @return string a string composed of all legal path characters
+     */
+    function getLegalPathCharacters() {
+	/*
+	 * Keep the hyphen at the end of this string, else preg functions will complain if you use
+	 * this in a bracket expression.
+	 */
+	return 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789# _.-';
+    }
+
+    /**
+     * Remove any illegal characters from the path component.
+     * @param string $component the path component (must not contain path separators)
+     * @param boolean $forDirectory (optional) Whether the path component is for a directory.
+     *        Defaults to false. Periods are allowed anywhere in directories.
+     * @return string the legalized path component
+     */
+    function legalizePathComponent($component, $forDirectory=false) {
+	global $gallery;
+	$legalChars = $this->getLegalPathCharacters();
+
+	/* Scrub out all the illegal characters */
+	$component = preg_replace("/[^$legalChars]/", '_', $component);
+
+	if (!$forDirectory) {
+	    /* Break it into filebase and extension */
+	    list ($fileBase, $extension) = GalleryUtilities::getFileNameComponents($component);
+
+	    /*
+	     * Convert all dots to underscores in the fileBase.  This prevents malicious users from
+	     * uploading files like 'foo.php.jpg' which will be treated like a JPEG by Gallery, but
+	     * could be treated like a .php file by Apache opening a security hole.
+	     */
+	    $fileBase = str_replace('.', '_', $fileBase);
+
+	    $blacklistKey = 'GalleryPlatform::blacklistedFileExtensions';
+	    if (GalleryDataCache::containsKey($blacklistKey)) {
+		$blacklistedExtensions = GalleryDataCache::get($blacklistKey);
+	    } else {
+		$blacklistedExtensions = array_flip($this->_blacklistedFileExtensions);
+		GalleryDataCache::put($blacklistKey, $blacklistedExtensions);
+	    }
+
+	    /*
+	     * If we don't know exactly what type this file is, we have to assume that it's
+	     * something malicious.  In that case, it might be a server side script of some kind and
+	     * we don't want that to wind up in the albums directory in a pure state because it may
+	     * open up a security hole on systems that have placed the gallery data directory inside
+	     * the document root.  So mangle the extension to make sure that the webserver doesn't
+	     * execute it.
+	     */
+	    list ($ret, $tmp) = GalleryCoreApi::convertExtensionToMime($extension);
+	    if ($ret && $gallery->getDebug()) {
+		$gallery->debug('Error: convertExtensionToMime in ' .
+				'GalleryPlatform::legalizePathComponent');
+	    }
+	    if (!empty($extension) && ($ret || $tmp == 'application/unknown'
+		    || isset($blacklistedExtensions[GalleryUtilities::strToLower($extension)]))) {
+		$fileBase = $fileBase . '_' . $extension;
+		$extension = null;
+	    }
+
+	    /* Rebuild the baseName according to our transforms above */
+	    if (!empty($extension)) {
+		$fileBase .= '.' . $extension;
+	    }
+	    $component = $fileBase;
+	}
+
+	return $component;
+    }
+
+    /**
+     * Execute a command and record the results and status.
+     * @param array $cmdArray array(array('cmd', 'arg'), ...)
+     * @return array(boolean true if the command succeeded, false otherwise,
+     *               array standard output from the command
+     *               array error output from the command)
+     */
+    function exec($cmdArray) {
+	/* This must be implemented in a platform specific way */
+	assert(false);
+    }
+
+    /**
+     * Return the filesystem specific directory separator.
+     * @return string directory separator
+     */
+    function getDirectorySeparator() {
+	return DIRECTORY_SEPARATOR;
+    }
+
+    /**
+     * Return true if the path provided is not allowed by the current open_basedir configuration.
+     * @return true if the path is restricted
+     */
+    function isRestrictedByOpenBaseDir($path) {
+	/*
+	 * This must be implemented in a platform specific way due to the fact that different PHP
+	 * platforms use different separators in the basedir path, and since case sensitivity of
+	 * path elements is not relevant on all platforms.
+	 */
+	assert(false);
+    }
+
+    /**
+     * Check if path is allowed by open_basedir, given platform path separator & case sensitivity.
+     * @access protected
+     */
+    function _isRestrictedByOpenBaseDir($path, $separator, $caseSensitive) {
+	global $gallery;
+	$slash = $this->getDirectorySeparator();
+	$phpVm = $gallery->getPhpVm();
+	$openBasedir = $phpVm->ini_get('open_basedir');
+	if (empty($openBasedir)) {
+	    return false;
+	}
+
+	if (($realpath = @$this->realpath($path)) === false) {
+	    /*
+	     * PHP's open_basedir will actually take an invalid path, resolve relative paths, parse
+	     * out .. and . and then check against the dir list.  Here we do an ok job of doing the
+	     * same, though it isn't perfect.
+	     */
+	    $s = '\\\/';  /* Do this by hand because preg_quote() isn't reliable */
+	    if (!preg_match("{^([a-zA-Z]+:)?[$s]}", $path)) {
+		$path = $this->getcwd() . $slash . $path;
+	    }
+	    for ($realpath = $path, $lastpath = ''; $realpath != $lastpath;) {
+		$realpath = preg_replace("#[$s]\.([$s]|\$)#", $slash, $lastpath = $realpath);
+	    }
+
+	    for ($lastpath = ''; $realpath != $lastpath;) {
+		$realpath = preg_replace("#[$s][^$s]+[$s]\.\.([$s]|\$)#",
+					 $slash, $lastpath = $realpath);
+	    }
+	}
+
+	$function = $caseSensitive ? 'strncmp' : 'strncasecmp';
+	foreach (explode($separator, $openBasedir) as $baseDir) {
+	    if (($baseDirMatch = $this->realpath($baseDir)) === false) {
+		$baseDirMatch = $baseDir;
+	    } else if (substr($baseDir, -1) == $slash && substr($baseDirMatch, -1) != $slash) {
+		/* Realpath will remove a trailing slash, add it back to avoid prefix match */
+		$baseDirMatch .= $slash;
+	    }
+	    /* Add slash on path so /dir is accepted if /dir/ is a valid basedir */
+	    if (!$function($baseDirMatch, $realpath . $slash, strlen($baseDirMatch))) {
+		return false;
+	    }
+	}
+
+	return true;
+    }
+
+    /**
+     * Initiates a socket connection to the resource specified by target.
+     * @param string $target the hostname
+     * @param int $port the port
+     * @param int $errno the error number (out)
+     * @param string $errstr the error string (out)
+     * @param int $timeout the timeout
+     * @return resource a file descriptor
+     * @see http://php.net/fsockopen
+     */
+    function fsockopen($target, $port, &$errno, &$errstr, $timeout) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("fsockopen($target, $port, $errno, $errstr, $timeout)");
+	}
+
+	return fsockopen($target, $port, $errno, $errstr, $timeout);
+    }
+
+    /**
+     * Write the contents of string to the file stream pointed to by handle.
+     * @param resource $handle the handle
+     * @param string $string the buffer
+     * @param int $length how many bytes to write (optional)
+     * @return int the number of bytes written
+     */
+    function fwrite($handle, $string, $length=null) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("fwrite($handle, ..., $length)");
+	}
+
+	if (isset($length)) {
+	    return fwrite($handle, $string, $length);
+	} else {
+	    return fwrite($handle, $string);
+	}
+    }
+
+    /**
+     * Writes specified data to file.  Uses PHP's file_put_contents() function if it is available.
+     * @param string $path output file path
+     * @param string $data data to write
+     * @return boolean true on success, false on failure
+     */
+    function file_put_contents($path, $data) {
+	if (function_exists('file_put_contents')) {
+	    return file_put_contents($path, $data);
+	}
+
+	if (false === ($file = fopen($path, 'w')) || false === fwrite($file, $data)) {
+	    return false;
+	}
+	fclose($file);
+	return true;
+    }
+
+    /**
+     * Closes an open file pointer.
+     * @param resource $handle
+     * @return boolean true on success, false on failure
+     */
+    function fclose($handle) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("fclose($handle)");
+	}
+
+	return fclose($handle);
+    }
+
+    /**
+     * Flush an open file pointer.
+     * @param resource $handle
+     * @return boolean true on success, false on failure
+     */
+    function fflush($handle) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("fflush($handle)");
+	}
+
+	return fflush($handle);
+    }
+
+    /**
+     * Tests for end-of-file on a file pointer.
+     * @param resource $handle
+     * @return boolean true if the file pointer is at EOF
+     */
+    function feof($handle) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("feof($handle)");
+	}
+
+	return feof($handle);
+    }
+
+    /**
+     * Reads data from an open file handle.
+     * @param resource $handle
+     * @param int $length
+     * @return string the bytes read
+     */
+    function fread($handle, $length) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("fread($handle, $length)");
+	}
+
+	return fread($handle, $length);
+    }
+
+    /**
+     * Seeks on a file pointer.
+     * @param resource $handle
+     * @param int $offset
+     * @param int $whence
+     * @return int 0 upon success, otherwise -1
+     */
+    function fseek($handle, $offset, $whence = SEEK_SET) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("fseek($handle, $offset, $whence)");
+	}
+
+	return fseek($handle, $offset, $whence);
+    }
+
+    /**
+     * Truncates a file to a given length.
+     * @param resource $handle
+     * @param int $size
+     * @return boolean success?
+     */
+    function ftruncate($handle, $size) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("ftruncate($handle, $size)");
+	}
+
+	$ret = ftruncate($handle, $size);
+	if ($ret === 1) {
+	    /*
+	     * Prior to PHP 4.3.3, ftruncate() returns an integer value of 1 on success, instead of
+	     * boolean true. We correct this here.
+	     */
+	    return true;
+	}
+	return $ret;
+    }
+
+    /**
+     * Gets line from file pointer.
+     * @param resource $handle
+     * @param int $length the optional max line length
+     * @return the string or false on eof
+     */
+    function fgets($handle, $length=0) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("fgets($handle, $length)");
+	}
+
+	return fgets($handle, $length);
+    }
+
+    /**
+     * Expand all symbolic links and resolve references to '/./', '/../' and extra '/' characters in
+     * the input path and return the canonicalized absolute pathname.  The resulting path will have
+     * no symbolic link, '/./' or '/../' components.  [cribbed from http://php.net/realpath]
+     * @return false on failure, eg. if the file does not exists
+     */
+    function realpath($file) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("realpath($file)");
+	}
+
+	return realpath($file);
+    }
+
+    /**
+     * touch -- Sets access and modification time of file.
+     *
+     * Attempts to set the access and modification time of the file named by filename to the value
+     * given by time. If the option time is not given, uses the present time. This is equivalent to
+     * what utime (sometimes referred to as utimes) does. If the third option atime is present, the
+     * access time of the given filename is set to the value of atime. Note that the access time is
+     * always modified, regardless of the number of parameters.
+     *
+     * @param string $file the file path
+     * @param int $time (optional) the modification time
+     * @param int $atime (optional) the access time
+     */
+    function touch($file, $time=null, $atime=null) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("touch($file, $time, $atime)");
+	}
+
+	$exists = $this->file_exists($file);
+	if (isset($atime)) {
+	    touch($file, $time, $atime);
+	} else if (isset($time)) {
+	    touch($file, $time);
+	} else {
+	    touch($file);
+	}
+	
+	if (empty($exists)) {
+	    $this->chmod($file);
+	}
+    }
+
+    /**
+     * mail -- Send an email.  Lines in the headers and body should be terminated with \r\n in
+     * accordance with RFC2821.
+     * @param string $to to address(es) (comma separated)
+     * @param string $subject
+     * @param string $body
+     * @param string $headers (optional) additional headers (\r\n separated)
+     * @return boolean true on success
+     */
+    function mail($to, $subject, $body, $headers=null) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("mail($to, $subject, $body, $headers)");
+	}
+
+	$config = array();
+	list ($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'core');
+	if (!$ret) {
+	    foreach ($params as $key => $value) {
+		if (strncmp($key, 'smtp.', 5) == 0) {
+		    $config[$key] = $value;
+		}
+	    }
+	}
+
+	if (!empty($config['smtp.host'])) {
+	    GalleryCoreApi::requireOnce('lib/smtp/smtp.php');
+	    $ret = smtpmail($config, $to, $subject, $body, $headers);
+	    if ($ret && $gallery->getDebug()) {
+		$gallery->debug("smtpmail error: " . $ret->getAsText());
+	    }
+	    return !$ret;
+	} else {
+	    $phpVm = $gallery->getPhpVm();
+	    /* Convert \r\n to the appropriate line ending style */
+	    if ($this->getLineEnding() == "\n") {
+		if (isset($headers)) {
+		    $headers = preg_replace("#\r\n#s", "\n", $headers);
+		}
+		$body = preg_replace("#\r\n#s", "\n", $body);
+	    }
+
+	    if (isset($headers)) {
+		return $phpVm->mail($to, $subject, $body, $headers);
+	    } else {
+		return $phpVm->mail($to, $subject, $body);
+	    }
+	}
+    }
+
+    /**
+     * Split path into component elements.  Include root path for absolute paths.
+     * eg. /tmp -> array('/', 'tmp')
+     *     rela/tive/path -> array('rela', 'tive', 'path')
+     *     C:\Test\File.txt -> array('C:\', 'Test', 'File.txt')
+     *
+     * @param string $path
+     * @return array (path elements) first item is "root" if path is absolute
+     */
+    function splitPath($path) {
+	/* This must be implemented in a platform specific way */
+	assert(false);
+    }
+
+
+    /**
+     * Return a boolean specifying whether or not this platform can perform a symbolic link
+     * (symlink) command.
+     * @return boolean true if the platform supports symlinks
+     */
+    function isSymlinkSupported() {
+	/* This must be implemented in a platform specific way */
+	assert(false);
+    }
+
+    /**
+     * Return the string of characters which represent the line ending on this platform.
+     * @return string Line ending
+     */
+    function getLineEnding() {
+	/* This must be implemented in a platform specific way */
+	assert(false);
+    }
+
+    /**
+     * chdir -- change working directory.
+     * @param string $path directory
+     * @return boolean true on success
+     */
+    function chdir($path) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("chdir($path)");
+	}
+	return chdir($path);
+    }
+
+    /**
+     * getcwd -- gets the current working directory.
+     * @return the current working directory, or false on failure.
+     */
+    function getcwd() {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("getcwd()");
+	}
+	return getcwd();
+    }
+
+    /**
+     * Load preferences for file/dir permissions and calculate umask.
+     * @access private
+     */
+    function _loadPermissionPreferences() {
+	static $cacheKey = 'GalleryPlatform::_loadPermissionPreferences';
+	$this->_filePerms = 0644;
+	$this->_dirPerms = 0755;
+
+	if (GalleryDataCache::containsKey($cacheKey)) {
+	    list ($this->_filePerms, $this->_dirPerms) = GalleryDataCache::get($cacheKey);
+	} else {
+	    /* To avoid looping if getPluginParameter calls platform functions */
+	    GalleryDataCache::put($cacheKey, array($this->_filePerms, $this->_dirPerms));
+
+	    list ($ret, $filePerms) =
+		GalleryCoreApi::getPluginParameter('module', 'core', 'permissions.file');
+	    if (!$ret && !empty($filePerms)) {
+		$this->_filePerms = octdec($filePerms);
+	    }
+	    list ($ret, $dirPerms) =
+		GalleryCoreApi::getPluginParameter('module', 'core', 'permissions.directory');
+	    if (!$ret && !empty($dirPerms)) {
+		$this->_dirPerms = octdec($dirPerms);
+	    }
+	    GalleryDataCache::put($cacheKey, array($this->_filePerms, $this->_dirPerms));
+	}
+	$this->_umask = 0777 - $this->_filePerms;
+    }
+
+    /**
+     * Set filesystem permissions; mode defaults to system preference for file/dir permissions.
+     * @param string $path path to file or directory
+     * @param int $mode (optional) mode; defaults to system preference
+     * @return boolean true on success
+     */
+    function chmod($path, $mode=null) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("chmod($path, $mode)");
+	}
+
+	if (!isset($mode)) {
+	    if (!isset($this->_filePerms) || !isset($this->_dirPerms)) {
+		$this->_loadPermissionPreferences();
+	    }
+	    $mode = $this->is_dir($path) ? $this->_dirPerms : $this->_filePerms;
+	}
+	return chmod($path, $mode);
+    }
+
+    /**
+     * Recursively set filesystem permissions.  Modes default to system preferences for file/dir
+     * permissions.
+     * @param string $path path to directory
+     * @param int $dirMode (optional) mode for dirs or -1 to skip chmod of dirs
+     * @param int $fileMode (optional) mode for files or -1 to skip chmod of files
+     * @return boolean true on success
+     */
+    function recursiveChmod($path, $dirMode=null, $fileMode=null) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("recursiveChmod($path, $dirMode, $fileMode)");
+	}
+
+	if (!isset($this->_filePerms) || !isset($this->_dirPerms)) {
+	    $this->_loadPermissionPreferences();
+	}
+	if (!isset($dirMode)) {
+	    $dirMode = $this->_dirPerms;
+	}
+	if (!isset($fileMode)) {
+	    $fileMode = $this->_filePerms;
+	}
+	return $this->_recursiveChmod($path, $dirMode, $fileMode);
+    }
+
+    /**
+     * Helper for recursiveChmod.
+     * @access private
+     */
+    function _recursiveChmod($path, $dirMode, $fileMode) {
+	if ($this->is_dir($path)) {
+	    if ($dirMode >= 0 && !$this->chmod($path, $dirMode)) {
+		return false;
+	    }
+	    if (!($dir = $this->opendir($path))) {
+		return false;
+	    }
+	    $slash = $this->getDirectorySeparator();
+	    $list = array();
+	    while ($file = $this->readdir($dir)) {
+		if ($file != '.' && $file != '..') {
+		    $list[] = $path . $slash . $file;
+		}
+	    }
+	    $this->closedir($dir);
+	    foreach ($list as $path) {
+		if (!$this->_recursiveChmod($path, $dirMode, $fileMode)) {
+		    return false;
+		}
+	    }
+	} else if ($fileMode >= 0 && !$this->chmod($path, $fileMode)) {
+	    return false;
+	}
+	return true;
+    }
+
+    /**
+     * Fixes the directory permissions (as eg. unzip creates them with file permissions because of
+     * the umask).
+     * @param string $path $path the directory which should be fixed
+     * @return boolean true if all went well, false if there was an error.
+     * @deprecated -- TODO: remove at the next major version bump of core API
+     */
+    function recursiveFixDirPermissions($path) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("recursiveFixDirPermissions($path)");
+	}
+
+	if (!$this->is_dir($path)) {
+	    return true;
+	} else if (!$this->chmod($path)) {
+	    return false;
+	}
+	$dir = $this->opendir($path);
+	if (!$dir) {
+	    return false;
+	}
+	$slash = $this->getDirectorySeparator();
+	while ($file = $this->readdir($dir)) {
+	    if ($file != '.' && $file != '..' &&
+		    !$this->recursiveFixDirPermissions($path . $slash . $file)) {
+		return false;
+	    }
+	}
+	$this->closedir($dir);
+	return true;
+    }
+
+    /**
+     * Format a local time/date according to locale settings.  Converts any text output from
+     * strftime tokens to UTF-8.
+     * @param string $format
+     * @param int $timestamp (optional)
+     * @return string
+     */
+    function strftime($format, $timestamp=null) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("strftime($format, $timestamp)");
+	}
+
+	$i = 0;
+	$newFormat = '';
+	$textPieces = array();
+	/* Separate text and tokens so we can convert only token output to UTF-8 */
+	foreach (preg_split('{(%.)}', $format, -1, PREG_SPLIT_DELIM_CAPTURE) as $piece) {
+	    if (++$i % 2) {
+		$textPieces[] = $piece;
+		$newFormat .= '&%%&s';
+	    } else {
+		$newFormat .= $piece;
+	    }
+	}
+	/* Call strftime and convert to UTF-8; escape % characters before sprintf */
+	$newFormat = str_replace(array('%', '&%%&'), array('%%', '%'),
+	    GalleryCoreApi::convertToUtf8(
+		isset($timestamp) ? strftime($newFormat, $timestamp) : strftime($newFormat)));
+	return vsprintf($newFormat, $textPieces);
+    }
+
+    /**
+     * The glob() function searches for all the pathnames matching pattern according to the rules
+     * used by the libc glob() function, which is similar to the rules used by common shells.  No
+     * tilde expansion or parameter substitution is done.
+     * @param string pattern
+     * @param int flags (optional)
+     * @return array containing the matched files/directories or FALSE on error.
+     */
+    function glob($pattern, $flags=null) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("glob($pattern, $flags)");
+	}
+
+	if (isset($flags)) {
+	    return glob($pattern, $flags);
+	} else {
+	    return glob($pattern);
+	}
+    }
+
+    /**
+     * Clear any cached saved state in this platform.
+     */
+    function resetPlatform() {
+	unset($this->_umask);
+	unset($this->_filePerms);
+	unset($this->_dirPerms);
+	GalleryDataCache::remove('GalleryPlatform::_loadPermissionPreferences');
+    }
+}
+?>

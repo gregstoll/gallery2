@@ -1,0 +1,215 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce(
+    'modules/core/classes/helpers/GalleryFactoryHelper_simple.class');
+
+/**
+ * A factory for creating all different kinds of objects
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryFactoryHelper_medium {
+
+    /**
+     * @see GalleryCoreApi::getAllFactoryImplementationIdsWithHint
+     */
+    function getAllImplementationIdsWithHint($classType, $hint) {
+	list ($ret, $registry) = GalleryFactoryHelper_simple::_getFactoryData();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$hint = GalleryUtilities::strToLower($hint);
+	if (isset($registry['hints'][$classType][$hint])) {
+	    $result = $registry['hints'][$classType][$hint];
+	} else {
+	    $result = array();
+	}
+	return array(null, $result);
+    }
+
+    /**
+     * @see GalleryCoreApi::getFactoryDefinitionHints
+     */
+    function getFactoryDefinitionHints($classType, $implId) {
+	list ($ret, $registry) = GalleryFactoryHelper_simple::_getFactoryData();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$hints = array();
+	foreach ($registry['hints'][$classType] as $hint => $hintEntry) {
+	    if (!empty($hintEntry[$implId])) {
+		$hints[] = $hint;
+	    }
+	}
+
+	return array(null, $hints);
+    }
+
+    /**
+     * @see GalleryCoreApi::updateFactoryDefinitionHints
+     */
+    function updateFactoryDefinitionHints($classType, $implId, $hints) {
+	foreach ($hints as $i => $hint) {
+	    $hints[$i] = GalleryUtilities::strToLower($hint);
+	}
+	
+	$data = empty($hints) ? serialize(null) : serialize($hints);
+	$ret = GalleryCoreApi::updateMapEntry('GalleryFactoryMap',
+					      array('classType' => $classType, 'implId' => $implId),
+					      array('hints' => $data));
+	if ($ret) {
+	    return $ret;
+	}
+
+	GalleryFactoryHelper_simple::deleteCache();
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::unregisterFactoryImplementationsByModuleId
+     */
+    function unregisterImplementationsByModuleId($moduleId) {
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'GalleryFactoryMap', array('implModuleId' => $moduleId));
+	if ($ret) {
+	    return $ret;
+	}
+
+	GalleryFactoryHelper_simple::deleteCache();
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::unregisterFactoryImplementation
+     */
+    function unregisterImplementation($classType, $implId) {
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'GalleryFactoryMap',
+	    array('classType' => $classType, 'implId' => $implId));
+	if ($ret) {
+	    return $ret;
+	}
+
+	GalleryFactoryHelper_simple::deleteCache();
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::registerFactoryImplementation
+     */
+    function registerImplementation($classType, $className, $implId, $implPath,
+				    $implModuleId, $hints, $orderWeight) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$baseDir = GalleryCoreApi::getCodeBasePath();
+	if (!$platform->file_exists($baseDir . $implPath)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PATH, __FILE__, __LINE__,
+					"Bad implementation path: $baseDir$implPath");
+	}
+
+	if (empty($hints)) {
+	    $hints = null;
+	} else {
+	    /* Lowercase hints for easier lookups */
+	    foreach ($hints as $i => $hint) {
+		$hints[$i] = GalleryUtilities::strToLower($hint);
+	    }
+	}
+
+	$ret = GalleryCoreApi::addMapEntry(
+	    'GalleryFactoryMap',
+	    array('classType' => $classType,
+		  'className' => $className,
+		  'implId' => $implId,
+		  'implPath' => $implPath,
+		  'implModuleId' => $implModuleId,
+		  'orderWeight' => (string)$orderWeight,
+		  'hints' => serialize($hints)));
+	if ($ret) {
+	    return $ret;
+	}
+
+	GalleryFactoryHelper_simple::deleteCache();
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::registerFactoryImplementation
+     */
+    function registerFactoryImplementationForRequest($classType, $className, $implId, $implPath,
+						     $implModuleId, $hints) {
+	$registryData =& GalleryFactoryHelper_simple::_getFactoryData();
+	if ($registryData[0]) {
+	    return $registryData[0];
+	}
+	$registry =& $registryData[1];
+
+	foreach (array('implementations', 'ids', 'pluginIds', 'keys') as $key) {
+	    if (!isset($registry[$key][$classType]) || !is_array($registry[$key][$classType])) {
+		$registry[$key][$classType] = array();
+	    }
+	}
+
+	GalleryFactoryHelper_medium::_array_unshift_key_value(
+		$registry['implementations'][$classType], $className, $implPath);
+	GalleryFactoryHelper_medium::_array_unshift_key_value($registry['ids'][$classType],
+					$implId, $className);
+	GalleryFactoryHelper_medium::_array_unshift_key_value($registry['pluginIds'][$classType],
+					$className, $implModuleId);
+
+	if (isset($hints)) {
+	    foreach ($hints as $hint) {
+		$hint = GalleryUtilities::strToLower($hint);
+		if (!isset($registry['hints'][$classType][$hint])
+			|| !is_array($registry['hints'][$classType][$hint])) {
+		    $registry['hints'][$classType][$hint] = array();
+		}
+		GalleryFactoryHelper_medium::_array_unshift_key_value(
+			$registry['hints'][$classType][$hint], $implId, $className);
+	    }
+	}
+	
+	return null;
+    }
+
+    /**
+     * Utility method to array_unshift a single key => value pair.
+     * @param array $array the array to alter
+     * @param string $key the key of the new entry
+     * @param string $value the value of the new entry
+     * @access private
+     */
+    function _array_unshift_key_value(&$array, $key, $value) {
+	unset($array[$key]);
+	$array = array_merge(array($key => $value), $array);
+    }
+}
+?>

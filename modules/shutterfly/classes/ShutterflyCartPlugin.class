@@ -1,0 +1,70 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is an implementation of the cart module's CartPluginInterface_1_1
+ * @package Shutterfly
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class ShutterflyCartPlugin /* implements CartPluginInterface_1_0 and CartPluginInterface_1_1 */ {
+    /**
+     * @see CartPluginInterface_1_0::getSupportedItemTypes
+     */
+    function getSupportedItemTypes() {
+	return array('GalleryPhotoItem');
+    }
+
+    /**
+     * @see CartPluginInterface_1_1::getRequiredPermissions
+     */
+    function getRequiredPermissions() {
+	return array('shutterfly.print');
+    }
+
+    /**
+     * @see CartPluginInterface_1_0::getActionDisplayName
+     */
+    function getActionDisplayName() {
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'shutterfly');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	return array(null, $module->translate('Print with Shutterfly'));
+    }
+
+    /**
+     * @see CartPluginInterface_1_0::fulfillCart
+     */
+    function fulfillCart($cartItemIds) {
+	global $gallery;
+	$session =& $gallery->getSession();
+	$session->put('shutterfly.cart', $cartItemIds);
+
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$returnUrl = $urlGenerator->generateUrl(
+		array('view' => 'cart.ViewCart'), array('forceFullUrl' => true));
+
+	return array(null, array('view' => 'shutterfly.PrintPhotos', 'returnUrl' => $returnUrl,
+				 'authToken' => $session->getAuthToken()));
+    }
+}
+?>

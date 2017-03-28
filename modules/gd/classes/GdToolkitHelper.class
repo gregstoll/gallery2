@@ -1,0 +1,393 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A helper class for GdToolkit
+ * @package Gd
+ * @subpackage Classes
+ * @author Ernesto Baschny <ernst@baschny.de>
+ * @version $Revision: 20954 $
+ * @static
+ */
+class GdToolkitHelper {
+
+    /**
+     * Figure out what operations and properties are supported by the
+     * image* functions in the PHP installation and return them.
+     *
+     * @param object a $gd GdFunctionality-object to work with
+     * @return GalleryStatus a status code
+     *	 array('operations' => ...
+     *	       'properties' => ...)
+     */
+    function getOperationsAndProperties($gd=null) {
+	global $gallery;
+
+	if (!isset($gd)) {
+	    $gd =& GdToolkitHelper::getGdFunctionality();
+	}
+
+	list ($ret, $isSupported) = GdToolkitHelper::isGdVersionSupported(null, $gd);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (! $isSupported) {
+	    return array(null, array('operations' => array(), 'properties' => array()));
+	}
+
+	list ($ret, $mimeTypes) = GdToolkitHelper::discoverMimeTypes($gd);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* -------------------- Operations -------------------- */
+
+	if (GdToolkitHelper::isOperationSupported('convert-to-image/jpeg', $gd)) {
+	    $convertToJpegMimeTypes = array_intersect(
+		array('image/gif', 'image/vnd.wap.wbmp',
+		      'image/x-xbitmap', 'image/x-xpixmap'), $mimeTypes);
+	    if (!empty($convertToJpegMimeTypes)) {
+		$operations['convert-to-image/jpeg']['params'] = array();
+		$operations['convert-to-image/jpeg']['description'] =
+		    $gallery->i18n('Convert to a JPEG');
+		$operations['convert-to-image/jpeg']['mimeTypes'] = $mimeTypes;
+		$operations['convert-to-image/jpeg']['outputMimeType'] = 'image/jpeg';
+	    }
+	}
+
+	if (GdToolkitHelper::isOperationSupported('scale', $gd)) {
+	    /* Scale */
+	    $operations['scale']['params'][] = array('type' => 'int', 'description' =>
+		    $gallery->i18n(array('text' => 'target width (# pixels or #% of full size)',
+					 'cFormat' => false)));
+	    $operations['scale']['params'][] = array('type' => 'int', 'description' =>
+		    $gallery->i18n('(optional) target height, defaults to same as width'));
+	    $operations['scale']['description'] =
+		$gallery->i18n('Scale the image to the target size, maintain aspect ratio');
+	    $operations['scale']['mimeTypes'] = $mimeTypes;
+	}
+
+	if (GdToolkitHelper::isOperationSupported('thumbnail', $gd)
+		&& isset($operations['scale'])) {
+	    /* Thumbnail is an alias for scale */
+	    $operations['thumbnail'] = $operations['scale'];
+	}
+
+	if (GdToolkitHelper::isOperationSupported('resize', $gd)) {
+	    /* Resize */
+	    $operations['resize']['params'][] = array('type' => 'int', 'description' =>
+		    $gallery->i18n(array('text' => 'target width (# pixels or #% of full size)',
+					 'cFormat' => false)));
+	    $operations['resize']['params'][] = array('type' => 'int', 'description' =>
+		    $gallery->i18n(array('text' => 'target height (# pixels or #% of full size)',
+					 'cFormat' => false)));
+	    $operations['resize']['description'] =
+		$gallery->i18n('Resize the image to the target dimensions');
+	    $operations['resize']['mimeTypes'] = $mimeTypes;
+	}
+
+	if (GdToolkitHelper::isOperationSupported('rotate', $gd)) {
+	    /* Rotate */
+	    $operations['rotate']['params'][] =
+		array('type' => 'int',
+		      'description' => $gallery->i18n('rotation degrees'));
+	    $operations['rotate']['description'] = $gallery->i18n('Rotate the image');
+	    $operations['rotate']['mimeTypes'] = $mimeTypes;
+	}
+
+	if (GdToolkitHelper::isOperationSupported('crop', $gd)) {
+	    /* Crop */
+	    $operations['crop']['params'][] = array('type' => 'float',
+						    'description' => $gallery->i18n('left edge %'));
+	    $operations['crop']['params'][] = array('type' => 'float',
+						    'description' => $gallery->i18n('top edge %'));
+	    $operations['crop']['params'][] = array('type' => 'float',
+						    'description' => $gallery->i18n('width %'));
+	    $operations['crop']['params'][] = array('type' => 'float',
+						    'description' => $gallery->i18n('height %'));
+	    $operations['crop']['description'] = $gallery->i18n('Crop the image');
+	    $operations['crop']['mimeTypes'] = $mimeTypes;
+	}
+
+	if (GdToolkitHelper::isOperationSupported('composite', $gd)) {
+	    /* Composite */
+	    $operations['composite']['params'][] =
+		array('type' => 'string',
+		      'description' => $gallery->i18n('overlay path'));
+	    $operations['composite']['params'][] =
+		array('type' => 'string',
+		      'description' => $gallery->i18n('overlay mime type'));
+	    $operations['composite']['params'][] =
+		array('type' => 'int',
+		      'description' => $gallery->i18n('overlay width'));
+	    $operations['composite']['params'][] =
+		array('type' => 'int',
+		      'description' => $gallery->i18n('overlay height'));
+	    $operations['composite']['params'][] =
+		array('type' => 'string',
+		      'description' => $gallery->i18n('alignment type'));
+	    $operations['composite']['params'][] =
+		array('type' => 'int',
+		      'description' => $gallery->i18n('alignment x %'));
+	    $operations['composite']['params'][] =
+		array('type' => 'int',
+		      'description' => $gallery->i18n('alignment y %'));
+	    $operations['composite']['description'] =
+		$gallery->i18n('Overlay source image with a second one');
+	    $operations['composite']['mimeTypes'] = $mimeTypes;
+	}
+
+	/* Compress */
+	$qualityMimeTypes = array_intersect(array('image/jpeg'), $mimeTypes);
+	if (!empty($qualityMimeTypes)) {
+	    $operations['compress'] = array(
+		'params' => array(array('type' => 'int',
+					 'description' => $gallery->i18n('target size in kb'))),
+		'description' => $gallery->i18n('Reduce image quality to reach target file size'),
+		'mimeTypes' => $qualityMimeTypes);
+	}
+
+	/* -------------------- Properties -------------------- */
+
+	/* Dimensions */
+	$properties['dimensions']['type'] = 'int,int';
+	$properties['dimensions']['description'] =
+	    $gallery->i18n('Get the width and height of the image');
+	$mimeTypes[] = 'application/x-shockwave-flash'; /* Supported by php getimagesize */
+	$properties['dimensions']['mimeTypes'] = $mimeTypes;
+
+	return array(null, array('operations' => $operations,
+						     'properties' => $properties));
+    }
+
+    /**
+     * Checks if a certain operation is supported by this GD library
+     * @return boolean
+     */
+    function isOperationSupported($operation, $gd=null) {
+	if (!isset($gd)) {
+	    $gd =& GdToolkitHelper::getGdFunctionality();
+	}
+	switch ($operation) {
+	case 'scale':
+	case 'thumbnail':
+	case 'resize':
+	case 'crop':
+	case 'composite':
+	    /* We can always do these */
+	    return true;
+	    break;
+	case 'convert-to-image/jpeg':
+	case 'compress':
+	    return $gd->functionExists('imageJpeg');
+	    break;
+	case 'rotate':
+	    return $gd->functionExists('imageRotate');
+	    break;
+	default:
+	    return false;
+	    break;
+	}
+    }
+
+    /**
+     * The minimal version of GD that this module supports
+     * @return string A version string
+     */
+    function minGdVersion() {
+	return '2.0';
+    }
+
+    /**
+     * Find out which version of GD is compiled in this PHP-environment
+     *
+     * This is ugly, but the only way that works on any PHP version. The
+     * idea is from Justin Greer's manual comments for imageCreateTruecolor
+     * at php.net. This really doesn't get the correct GD version if it is
+     * an external library, since they are defined in the PHP code and
+     * just refer to the functionality that is supported. So if one sees
+     * "1.6.2 or higher", it can be as high as 1.8.2, depending on the PHP
+     * version and which functionality they test for.
+     *
+     * @return array GalleryStatus
+     *         string the GD version number or '0' if there is no GD support
+     *                Prefixed with '>' if PHP says "or higher"
+     */
+    function discoverGdVersion($gd=null) {
+	/*
+	 * Caching this result breaks our unit tests, which checks against a variety of
+	 * dummy GdFunctionality instances.
+	 */
+	if (!isset($gd)) {
+	    $gd =& GdToolkitHelper::getGdFunctionality();
+	}
+
+	if ($gd->functionExists('gd_info')) {
+	    list ($ret, $gdInfo) = $gd->gd_info();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $matchString = $gdInfo['GD Version'];
+	    $matcher = '/([\d\.]+)(\s+or\s+higher)?/i';
+	} else {
+	    list ($ret, $matchString) = $gd->phpinfo(8);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $matcher = '/\bgd\s+version\b[^\d\n\r]+?([\d\.]+)(\s+or\s+higher)?/i';
+	}
+	if (preg_match($matcher, $matchString, $matches)) {
+	    $gdVersion = $matches[1];
+	} else {
+	    $gdVersion = 0;
+	}
+	if (isset($matches[2])) {
+	    $gdVersion = sprintf('>%s', $gdVersion);
+	}
+
+	return array(null, $gdVersion);
+    }
+
+    /**
+     * See if this GD version is supported by this module.  Currently GD >= 2.0 is supported.
+     *
+     * @param string $gdVersion A gd version string or empty to check the current version
+     * @return array GalleryStatus
+     *	       boolean true if supported, false otherwise
+     */
+    function isGdVersionSupported($gdVersion=null, $gd=null) {
+	if (!isset($gdVersion)) {
+	    /* Find out current GD version */
+	    if (!isset($gd)) {
+		$gd =& GdToolkitHelper::getGdFunctionality();
+	    }
+	    list ($ret, $gdVersion) = GdToolkitHelper::discoverGdVersion($gd);
+	    if ($ret) {
+		return array($ret, false);
+	    }
+	}
+	if (preg_match('/^>?2\.0/', $gdVersion)) {
+	    return array(null, true);
+	}
+	/* 1.6, 1.8, ... is too old */
+	return array(null, false);
+    }
+
+    /**
+     * Find out if this GD library is the one bundled with the PHP source.
+     * The bundled library provides some functionality that is currently
+     * not available on the standard GD library. Those are tested here.
+     *
+     * @return array GalleryStatus
+     *	       boolean true if it is the bundled library, false otherwise
+     */
+    function isBundled($gd=null) {
+	if (!isset($gd)) {
+	    $gd =& GdToolkitHelper::getGdFunctionality();
+	}
+	if ($gd->functionExists('imageLayerEffect')
+	    && $gd->functionExists('imageRotate')) {
+	    return array(null, true);
+	}
+	return array(null, false);
+    }
+
+    /**
+     * Find out which mime types are supported on this GD.
+     *
+     * @return array GalleryStatus
+     *	       array supported mime-types
+     */
+    function discoverMimeTypes($gd=null) {
+	if (!isset($gd)) {
+	    $gd =& GdToolkitHelper::getGdFunctionality();
+	}
+	if (!$gd->functionExists('imageTypes')) {
+	    return array(null, array());
+	}
+
+	$mimeTypes = array();
+	if (defined('IMG_GIF') && $gd->imageTypes() & IMG_GIF) {
+	    $mimeTypes[] = 'image/gif';
+	}
+	if (defined('IMG_JPG') && $gd->imageTypes() & IMG_JPG) {
+	    $mimeTypes[] = 'image/jpeg';
+	}
+	if (defined('IMG_PNG') && $gd->imageTypes() & IMG_PNG) {
+	    $mimeTypes[] = 'image/png';
+	}
+	if (defined('IMG_WBMP') && $gd->imageTypes() & IMG_WBMP) {
+	    $mimeTypes[] = 'image/vnd.wap.wbmp';
+	}
+	if ($gd->functionExists('imageXpm')
+	    && $gd->functionExists('imageCreateFromXpm')) {
+	    $mimeTypes[] = 'image/x-xpixmap';
+	}
+	if ($gd->functionExists('imageXbm')
+	    && $gd->functionExists('imageCreateFromXbm')) {
+	    $mimeTypes[] = 'image/x-xbitmap';
+	}
+
+	if (count($mimeTypes) == 0) {
+	    return array(GalleryCoreApi::error(ERROR_TOOLKIT_FAILURE), null);
+	}
+	return array(null, $mimeTypes);
+    }
+
+    /**
+     * Tries to find out if we can imageCreateTrueColor()
+     *
+     * This function is always defined, but will fail with a Fatal PHP error
+     * on GD < 2.0.1. There are a lot of PHP installations compiled with
+     * external GD libraries where phpinfo informs "2.0 or higher", so we
+     * can't really know which version we have. Currently we will just consider
+     * any "2.0" to be "< 2.0.1", since I have never seen a 2.0 release that
+     * doesn't support the imageCreateTrueColor().
+     *
+     * @return boolean
+     */
+    function hasImageCreateTrueColor($gd=null) {
+	if (!isset($gd)) {
+	    $gd =& GdToolkitHelper::getGdFunctionality();
+	}
+	list ($ret, $gdVersion) = GdToolkitHelper::discoverGdVersion($gd);
+	if ($ret) {
+	    return array($ret, false);
+	}
+	if (preg_match('/^>?2\.0/', $gdVersion)) {
+	    return array(null, true);
+	}
+	return array(null, false);
+    }
+
+    /**
+     * Factory to get a new GdFunctionality object.
+     * @return GdFunctionality
+     */
+    function &getGdFunctionality() {
+	static $gdFunctionality;
+	if (!isset($gdFunctionality)) {
+	    GalleryCoreApi::requireOnce('modules/gd/classes/GdFunctionality.class');
+	    $gdFunctionality = new GdFunctionality();
+	}
+	return $gdFunctionality;
+    }
+}
+?>

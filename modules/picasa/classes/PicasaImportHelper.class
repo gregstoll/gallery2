@@ -1,0 +1,83 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This class provides some functions used by the Picasa module
+ * @package Picasa
+ * @subpackage PicasaImportHelper
+ * @author Waldemar Schlackow <gallery@schlackow.de>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class PicasaImportHelper {
+    /**
+     * Convert html according to given markup type
+     * @param string $markupType markup type (none, bbcode, html)
+     * @param string $item input string
+     * @param string $sourceEncoding (optional; default='UTF-8')
+     * @return string
+     */
+    function convertHtml($markupType, $item, $sourceEncoding='UTF-8') {
+	$item = GalleryCoreApi::convertToUtf8($item, $sourceEncoding);
+	switch ($markupType) {
+	    case 'bbcode':
+		$item = PicasaImportHelper::convertHtmlToBbcode($item);
+		break;
+
+	    case 'html':
+		break;
+
+	    case 'none':
+	    default:
+		$item = strip_tags($item);
+	}
+	GalleryUtilities::sanitizeInputValues($item, false);
+	return $item;
+    }
+
+    /**
+     * Converts HTML to BBCode
+     *
+     * @param string $item item to convert
+     * @return string
+     */
+    function convertHtmlToBbcode($item) {
+	static $patterns, $match, $replace;
+	if (!isset($patterns)) {
+	    $patterns = array(
+		'#<br\s*(/?)>#i' => '\n',
+		'#<(/?)(b|strong)>#i' => '[$1b]',
+		'#<(/?)(i|em)>#i' => '[$1i]',
+		'#<(/?)ul>#i' => '[$1list]',
+		'#<li>#i' => '[*]',
+		'#</li>#i' => '',
+		'#<img[^>]*\s+src\s*=\s*["\']{0,1}([^\s"\'>]+)["\']{0,1}[^>]*>#is' =>
+		    '[img]$1[/img]',
+		'#<a[^>]*\s+href\s*=\s*["\']{0,1}([^\s"\'>]+)["\']{0,1}[^>]*>\s*(.*?)\s*</a>#is' =>
+		    '[url=$1]$2[/url]',
+	    );
+	    $match = array_keys($patterns);
+	    $replace = array_values($patterns);
+	}
+	$item = preg_replace($match, $replace, $item);
+	return strip_tags($item);
+    }
+}
+?>

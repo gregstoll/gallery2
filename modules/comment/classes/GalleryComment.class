@@ -1,0 +1,243 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/comment/module.inc');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryChildEntity.class');
+
+/**
+ * A GalleryEntity for comments.
+ * GalleryComments are basically just structured text objects.
+ *
+ * @g2 <class-name>GalleryComment</class-name>
+ * @g2 <parent-class-name>GalleryChildEntity</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>3</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package Comment
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryComment extends GalleryChildEntity {
+
+    /**
+     * Id of the commenter
+     *
+     * @g2 <member>
+     * @g2   <member-name>commenterId</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <member-size>LARGE</member-size>
+     * @g2   <required/>
+     * @g2 </member>
+     *
+     * @var int $commenterId
+     * @access public
+     */
+    var $commenterId;
+
+    /**
+     * Commenter's host name or address
+     *
+     * @g2 <member>
+     * @g2   <member-name>host</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <required/>
+     * @g2 </member>
+     *
+     * @var string $host
+     * @access public
+     */
+    var $host;
+
+    /**
+     * Subject of the comment
+     *
+     * @g2 <member>
+     * @g2   <member-name>subject</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $subject
+     * @access public
+     */
+    var $subject;
+
+    /**
+     * Text of the comment
+     *
+     * @g2 <member>
+     * @g2   <member-name>comment</member-name>
+     * @g2   <member-type>TEXT</member-type>
+     * @g2   <member-size>SMALL</member-size>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $comment
+     * @access public
+     */
+    var $comment;
+
+    /**
+     * Date of the comment
+     *
+     * @g2 <member>
+     * @g2   <member-name>date</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <indexed/>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     *
+     * @var int $date
+     * @access public
+     */
+    var $date;
+
+    /**
+     * Author of the comment. Only used for guest comments.
+     *
+     * @g2 <member>
+     * @g2   <member-name>author</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $author
+     * @access public
+     */
+    var $author;
+
+    /**
+     * Publication status of this comment.
+     * @see modules/comment/module.inc for possible status values.
+     *
+     * @g2 <member>
+     * @g2   <member-name>publishStatus</member-name>
+     * @g2   <member-type>INTEGER</member-type>
+     * @g2   <indexed/>
+     * @g2   <required/>
+     * @g2   <default>0</default>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     *
+     * @var string $publishStatus
+     * @access public
+     */
+    var $publishStatus;
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryComment';
+    }
+
+    /**
+     * @see GalleryEntity::create
+     */
+    function create($parentId) {
+	$ret = parent::create($parentId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$this->setCommenterId(null);
+	$this->setHost(null);
+	$this->setSubject(null);
+	$this->setComment(null);
+	$this->setDate(time());
+	$this->setAuthor(null);
+
+	list ($ret, $moderate) =
+	    GalleryCoreApi::getPluginParameter ('module', 'comment', 'comments.moderate');
+	if ($ret) {
+	    return $ret;
+	}
+	if ($moderate) {
+	    $this->setPublishStatus(COMMENT_PUBLISH_STATUS_UNPUBLISHED);
+        } else {
+	    $this->setPublishStatus(COMMENT_PUBLISH_STATUS_PUBLISHED);
+	}
+    }
+
+    function getCommenterId() {
+	return $this->commenterId;
+    }
+
+    function setCommenterId($commenterId) {
+	$this->commenterId = $commenterId;
+    }
+
+    function getHost() {
+	return $this->host;
+    }
+
+    function setHost($host) {
+	$this->host = $host;
+    }
+
+    function getSubject() {
+	return $this->subject;
+    }
+
+    function setSubject($subject) {
+	$this->subject = $subject;
+    }
+
+    function getComment() {
+	return $this->comment;
+    }
+
+    function setComment($comment) {
+	$this->comment = $comment;
+    }
+
+    function getDate() {
+	return $this->date;
+    }
+
+    function setDate($date) {
+	$this->date = $date;
+    }
+
+    function setAuthor($author) {
+	$this->author = $author;
+    }
+
+    function getAuthor() {
+	return $this->author;
+    }
+
+    function setPublishStatus($publishStatus) {
+	$this->publishStatus = $publishStatus;
+    }
+
+    function getPublishStatus() {
+	return $this->publishStatus;
+    }
+}
+?>

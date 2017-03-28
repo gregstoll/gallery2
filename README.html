@@ -1,0 +1,2518 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <title>README: Gallery 2.3.2</title>
+    <style type="text/css">
+      html {
+	font-family: "Lucida Grande", Verdana, Arial, sans-serif;
+	font-size: 62.5%;
+      }
+      body {
+	font-size: 1.2em;
+	margin: 16px 16px 0 16px;
+	background: white;
+      }
+      a {
+	text-decoration: none;
+      }
+      p {
+	line-height: 1.5em;
+      }
+      h2 {
+	/*font-family: Georgia, Palatino, "Times New Roman", serif;*/
+	font-family: "Gill Sans", Verdana, Arial, sans-serif;
+	font-size: 1.5em;
+	color: #333;
+	border-bottom: 1px solid #ddd;
+	margin: 0;
+	padding: 1.0em 0 0.15em 0;
+      }
+      tt {
+	font-family: monospace, serif;
+	font-size: 1.2em;
+	line-height: 1.2em;
+      }
+      ul, ol {
+	margin: 1.2em 0 1.2em 2.5em;
+	padding: 0;
+      }
+      li {
+	padding: 0.2em 0;
+	line-height: 1.5em;
+      }
+      ol ul, ul ul {
+	margin-top: 0.4em;
+	margin-bottom: 0.4em;
+      }
+      a:link {
+	font-weight: 700;
+	color: #5D728E;
+	background-color: transparent;
+      }
+      a:visited {
+	font-weight: 700;
+	color: #5D728E;
+	background-color: transparent;
+      }
+      a:hover {
+	font-weight: 700;
+	color: #B30400;
+	text-decoration: underline;
+      }
+      div.instructions {
+	background: #ddd;
+	border: 1px solid #777;
+	width: 480px;
+	margin: 8px;
+	padding: 0;
+      }
+      div.instructions h3 {
+	background: #ccc;
+	border-bottom: 1px solid #777;
+	font-size: 1.1em;
+	margin: 0 0 4px 0;
+	padding: 4px;
+      }
+      div.instructions p {
+	margin: 0 0 0 4px;
+      }
+      .important {
+	background: #FACA61;
+	border: 2px;
+	width: 600px;
+	margin: 0.6em 0 0.6em 0;
+	padding: 0.6em;
+	color: #C00;
+      }
+      .important .email {
+	font-size: 1.3em;
+	color: black;
+	font-weight: 700;
+	margin: 0.6em 0 0 0;
+      }
+      .important h3 {
+	color: #eee;
+	background: #f00;
+	font-size: 1.3em;
+	margin: -0.2em -0.2em 0.2em -0.2em;
+	padding: 0.2em 0.2em;
+      }
+      .important a:link {
+	color: #b36;
+      }
+      .fineprint {
+	font-size: .8em;
+	color: #ccc;
+      }
+      .toggle {
+	padding-left: .333em;
+	padding-right: 0.3em;
+	border: solid #a6caf0 1px;
+	background: #eee;
+      }
+      div.toc {
+	float: right;
+	border: 1px solid #F15D22;
+	background: #e9eff3;
+	padding: 2px 4px 2px 4px;
+	margin: 15px auto auto 15px;
+      }
+      div.toc h2 {
+	font-size: 1.1em;
+	margin-top: -8px;
+      }
+      p.toc-link {
+	margin: 0;
+      }
+      ul.toc-level-1 {
+	margin: 0 16px 0 16px;
+	list-style-type: none;
+      }
+      ul.toc-level-1 li {
+	margin: auto;
+	font-weight: bold;
+      }
+      ul.toc-level-2 {
+	margin: auto 0 auto 15px;
+	list-style-type: none;
+      }
+      ul.toc-level-2 li {
+	margin: auto;
+      }
+      .relurl  {
+	color: #666 !important;
+	text-decoration: none !important;
+      }
+      .relurl:hover {
+	border-bottom: #666 dotted;
+      }
+      </style>
+      <script type="text/javascript">
+	// <![CDATA[
+	function toggle(objId, togId) {
+	  var o = document.getElementById(objId), t = document.getElementById(togId);
+	  if (o.style.display == 'none') {
+	    o.style.display = 'block';
+	    t.innerHTML = '-';
+	  } else {
+	    o.style.display = 'none';
+	    t.innerHTML = '+';
+	  }
+	}
+
+	/*
+	 * if the URL doesn't contain http or is on sourceforge, replace relative urls
+	 * with an alert instead of a link that probably won't work
+	 */
+	function fixURLs() {
+	  if ((document.location.toString().indexOf('http') != 0) ||
+	      (document.location.toString().match(/(\bsourceforge\b|\bsf.net\b|\bmenalto\b)/))) {
+	    var as = document.getElementsByTagName("a");
+	    for (var i = 0; i < as.length; i++) {
+	      href = as[i].getAttribute('href');
+	      if (href) {
+		/* links to replace don't begin with # or http or irc */
+		if ((href.search('http') != 0) && (href.search('irc') != 0) &&
+		    (href.toString().charAt(0) != '#')) {
+		  /* Don't use setAttribute for onclick (workaround for IE) */
+		  as[i].onclick = function() {
+		    alert('It looks like you are not accessing this README through your ' +
+				    'webserver so this link will not work!');
+		    return false;
+		  };
+		  as[i].setAttribute('title',"This link only works when you access the README " +
+			"through your web server!");
+		  as[i].className = "relurl";
+		}
+	      }
+	    }
+	  }
+	}
+	// ]]>
+      </script>
+  </head>
+
+  <body onload="fixURLs();">
+    <div class="toc">
+      <h2> <a name="toc">Contents</a> </h2>
+      <ul class="toc-level-1">
+	<li> Introduction
+	  <ul class="toc-level-2">
+	    <li> <a href="#quick_start">Quick Start</a> </li>
+	    <li> <a href="#what_is_gallery">What is Gallery?</a> </li>
+	  </ul>
+	</li>
+	<li> About Gallery 2
+	  <ul class="toc-level-2">
+	    <li> <a href="#system_requirements">System Requirements</a> </li>
+	    <li> <a href="#security">Security</a> </li>
+	    <li> <a href="#whats_new">What&rsquo;s new in this release?</a> </li>
+	  </ul>
+	</li>
+	<li> Installation
+	  <ul class="toc-level-2">
+	    <li> <a href="#packages">Choosing a package</a> </li>
+	    <li> <a href="#prerequisites">Preparing to install</a> </li>
+	    <li> <a href="#installing">Installing</a> </li>
+	    <li> <a href="#getting_started">Using your new Gallery</a> </li>
+	    <li> <a href="#updating">Updating your installation</a> </li>
+	  </ul>
+	</li>
+	<li> Help!
+	  <ul class="toc-level-2">
+	    <li> <a href="#getting_help">Getting Help</a> </li>
+	    <li> <a href="#known_issues">Known Issues / Bugs</a> </li>
+	    <li> <a href="#advanced_topics">Advanced Topics</a> </li>
+	  </ul>
+	</li>
+      </ul>
+    </div>
+
+    <div>
+      <img src="images/g2Logo.gif" alt="Gallery 2" />
+    </div>
+
+    <p>
+      Welcome to Gallery 2.  This is the official release of Gallery 2.3.2,
+      code named &ldquo;<b>Skidoo</b>&rdquo;.  Please
+      read through this document carefully before installing Gallery 2 and
+      before asking for help.  We have taken care to try to answer as
+      many of your questions here as possible.  If you don't read this
+      and have problems, we may refer you back to this document as a
+      first resource.
+    </p>
+
+    <h2><a name="quick_start">Quick Start</a></h2>
+    <p>
+      If you&rsquo;re impatient like us, you just want to get going.
+      The odds are that your system is all set to handle Gallery 2 so just skip
+      right to the <a href="install/index.php" target="_guided">installer</a>
+      and start clicking.  It should walk you through everything you need to
+      get going.  If you hit a snag, please come back here and read more before
+      asking questions!  Enjoy.
+    </p>
+
+    <h2><a name="what_is_gallery">What is Gallery?</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+    <p>
+      Gallery is a web based software product that lets you manage
+      your photos on your own website.  You must have your own website
+      with PHP and database support in order to install and use it.  With Gallery
+      you can easily create and maintain albums of photos via an
+      intuitive interface.  Photo management includes automatic
+      thumbnail creation, image resizing, rotation, ordering,
+      captioning, searching and more.  Albums and photos can have
+      view, edit, delete and other permissions per individual
+      authenticated user for an additional level of privacy.  It's
+      great for communities - give accounts to your friends and family
+      and let them upload and manage their own photos on your website!
+    </p>
+
+    <h2><a name="system_requirements">System requirements</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+    <ul>
+      <li>
+	Web server that can run <a href="http://php.net/" target="_blank">PHP</a>
+	(<a href="http://httpd.apache.org/docs/" target="_blank">Apache 1</a>,
+	<a href="http://httpd.apache.org/docs-2.0/" target="_blank">Apache 2</a>,
+	<a href="http://www.microsoft.com/WindowsServer2003/iis/default.mspx"
+	target="_blank">IIS</a>, <a href="http://www.zeus.com/" target="_blank">Zeus</a>, etc)
+      </li>
+      <li>
+	PHP version 4.x (4.3.0 or more recent) or 5.x (5.0.4 or more recent)
+	<br/>
+	<b>Note:</b> <a href="http://us2.php.net/manual/en/features.safe-mode.php#ini.safe-mode"
+	target="_blank">PHP's safe_mode</a> must be disabled!  Read
+	<a href="http://gallery.menalto.com/node/3017">this forum thread</a>
+	for a safe_mode discussion.
+      </li>
+      <li>
+	One of the following databases: <a href="http://mysql.com/" target="_blank">MySQL</a>
+	3.x, 4.x or 5.x, <a href="http://www.postgresql.org/" target="_blank">PostgreSQL</a>
+	7.x or 8.x, <a href="http://www.oracle.com/" target="_blank">Oracle</a> 9i or 10g,
+	<a href="http://www.ibm.com/software/data/db2/" target="_blank">IBM DB2</a> 9.x,
+	<a href="http://www.microsoft.com/sql/" target="_blank">Microsoft SQL Server</a> 2005
+        or 2008, <a href="http://www.sqlite.org/" target="_blank">SQLite (Experimental)</a> 3.x
+      </li>
+      <li>
+	One of the following graphics toolkits: <a href="http://netpbm.sourceforge.net/"
+	target="_blank">NetPBM</a> 9.x or newer, <a href="http://www.imagemagick.org/"
+	target="_blank">ImageMagick</a> 5.x or newer, <a href="http://php.net/gd"
+	target="_blank">GD</a> 2.x or newer, <a href="http://www.graphicsmagick.org/"
+	target="_blank">GraphicsMagick</a> 1.x or newer (or else you get no thumbnails!)
+      </li>
+    </ul>
+
+    <h2><a name="security">Security</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+
+    <div style="float:right; margin:10px;">
+      <img src="http://www.gdssecurity.com//images/gds_logo_2.png" alt="" width="196" height="52"/>
+    </div>
+    <p>
+      In preparation of the Gallery 2.3 release, we retained <b>
+      <a href="http://www.gdssecurity.com/">Gotham Digital Science</a></b>
+      (GDS) to a perform security audit on Gallery 2. They are experts in application security, as
+      this is the primary focus of their business.
+    </p>
+
+    <p>
+      We recognize that hiring external consultants to perform security audits does not guarantee
+      that our code is bug-free and by no means un-hackable, but it clearly indicates our
+      willingness to perform due diligence to make sure our code is reasonably secure.
+      The combination of an <b>external perspective</b> of security experts and the insight of
+      internal experts both performing detailed audits is yielding much better results than only
+      one of the two perspectives alone.
+    </p>
+
+    <p>
+      Audits of previous releases were done by the following origanzations:
+      <dl>
+      <dt>Gallery 2.2 Release Candidate</dt>
+      <dd>
+      <a href="http://www.gulftech.org/">James Bercegay</a> of <a
+      href="http://www.gulftech.org/">Gulftech Research and
+      Development</a>.
+      </dd>
+      <dt>Gallery 2.1 Release Candidate</dt>
+      <dd>
+      <a href="http://www.jibble.org/">Paul Mutton</a> of
+      <a href="http://www.intershot.com/security/">Intershot Limited</a>.
+      </dd>
+      </dl>
+    </p>
+
+    <div class="important">
+      <h3>Note</h3>
+      <p>
+	The Gallery project treats security issues very seriously.  If
+	you find a security flaw, do not hesitate to email us at:
+      </p>
+      <div class="email" style="text-align: center">security AT gallery.menalto.com</div>
+    </div>
+
+    <h2><a name="whats_new">What&rsquo;s new in this release?</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+
+    <p>
+      Over four years of design and development have gone into making
+      Gallery 2 the best online photo management product available.
+      We have made it easy to add new features while keeping them in
+      separate modules so that you can customize it to only have the
+      ones that you want.  For those of you who like standards, we
+      have strict XHTML compliance but give plenty of power to our
+      themes so that you can make it look the way that you want.  It's
+      a powerful application and you're in the driver's seat.
+    </p>
+
+    <h3>
+      Highlight of changes since Gallery 2.3
+      <span id="toggle-2-next" class="toggle"
+       onclick="toggle('list-2-next', 'toggle-2-next')"> - </span>
+    </h3>
+    <ol id="list-2-next">
+      <li>
+	Updates to improve compatibility with PHP 5.3
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2.3 (Skidoo)
+      <span id="toggle-2-3" class="toggle"
+       onclick="toggle('list-2-3', 'toggle-2-3')"> + </span>
+    </h3>
+    <ol id="list-2-3" style="display:none">
+      <li>
+	New version of the slideshow module now uses <a href="http://www.piclens.com/">PicLens</a>
+	to provide a rich, full screen slideshow.
+      </li>
+      <li>
+	Comment module now offers moderation and <a href="http://akismet.com"
+	target="_blank">Akismet</a>
+	support to help weed out spam comments.
+      </li>
+      <li>
+	New email <a href="http://codex.gallery2.org/Gallery2:Modules:notification"
+	target="_blank">notification</a> module allowing users to configure events they wish to get
+	notified for. You can watch albums for changes, items for new comments, etc.
+      </li>
+      <li>
+	New Jpegtran module to support rotation and cropping of jpeg images
+	with no loss in image quality.
+      </li>
+      <li>
+	New SnapGalaxy module for prints from
+	<a href="http://www.snapgalaxy.com/" target="_blank">snapgalaxy.com</a>.
+      </li>
+      <li>
+	Registration module can now send a welcome email to new users upon account activation.
+      </li>
+      <li>
+	EXIF block now uses AJAX to switch between summary and detail display.
+      </li>
+      <li>
+	External image block now has a "rawImage" mode to return a single binary image
+	instead of HTML output.
+      </li>
+      <li>
+	Support in RSS module for Media RSS format and random RSS streams.
+      </li>
+      <li>
+	Remote module now bundles the Gallery Remote client and makes it available via
+	<a href="http://java.sun.com/products/javawebstart/index.jsp"
+	target="_blank">Java Web Start</a>.  Users with a Java enabled browser can then
+	launch Gallery Remote with a single click instead of manually downloading and installing.
+      </li>
+      <li>
+	Hybrid theme now uses automatic navigation between pages in its image viewer and
+	slideshow.  This means the slideshow will show all images in the album, moving
+	between album pages as needed.  Requesting the next/previous image in the image
+	viewer will also load a new album page as needed.
+      </li>
+      <li>
+	Webcam module now accepts file:// URLs to retrieve image from local filesystem.
+      </li>
+      <li>
+	Dcraw module now supports Adobe Digital Negative (dng) files, when used with
+	dcraw v7.0 or newer.
+      </li>
+      <li>
+	Added support for Windows Vista in PublishXP module.
+      </li>
+      <li>
+	New database backup feature.  Backup at start of upgrade, or anytime from Site Admin /
+	Maintenance.  Restore a backup from lib/support interface.
+      </li>
+      <li>
+	Can now put Gallery into maintenance mode from Site Admin / Maintenance.
+	Setting in config.php file is still available too.
+      </li>
+      <li>
+	New event logging system records Gallery errors, viewable in the Site Admin interface.
+      </li>
+      <li>
+	Themes can now override module template files, allowing a themed look to
+	more aspects of the application.
+      </li>
+      <li>
+	New Language Manager that allows the addition or removal of translations.
+      </li>
+      <li>
+	User interface changes.
+	<ul><li>
+	  Use AJAX to speed up deleting comments(spam) on items/albums.
+	</li><li>
+	  Use quick DHTML confirm dialog for deleting single items.  Dialog offers link to
+	  bulk delete several items from an album.
+	</li><li>
+	  Use YUI ItemTree instead of plain select box to select target album when
+	  moving items, creating replicas or link items.
+	</li></ul>
+      </li>
+      <li>
+	Performance and stability improvements.
+	<ul><li>
+	  Smarty templates now permanently cached by default.  Turn this off in
+	  Site Admin / Performance when working on tpl files, so changes take effect
+	  immediately during development.
+	</li><li>
+	  Avoid reading EXIF data multiple times in Carbon theme.
+	</li><li>
+	  Some added caching in GalleryUrlGenerator.
+	</li><li>
+	  Use progress bar when adding items to avoid server or browser timeouts.
+	  Particularly helpful when adding many items from local server.
+	</li><li>
+	  Restructuring to greatly reduce the number of directories for language files.
+	</li><li>
+	  Refactor of translator hints to avoid some processing when translations
+	  are not used (en_US).
+	</li><li>
+	  Faster plugin and language package downloads.
+	</li><li>
+	  Refactor of event system working towards a performance improvement in the next release.
+	</li></ul>
+      </li>
+      <li>
+	New database options.
+	<ul><li>
+	  Support for <a href="http://www.sqlite.org/" target="_blank">SQLite</a> 3.x
+	</li><li>
+	  Support for <a href="http://www.postgresql.org/docs/current/static/ddl-schemas.html"
+	  target="_blank">PostgreSQL schemas</a>
+	</li></ul>
+      </li>
+      <li>
+	New install package options.
+	<ul><li>
+	  English only variants of installation downloads.  The <b>minimal</b> is English only.  In
+	  addition, <b>Typical</b> and <b>Full</b> are available in English language only
+	  variants.
+	</li><li>
+	  Greatly reduced the number of directories for language files.
+	</li></ul>
+      </li>
+      <li>
+	Upgraded to newer versions of several bundled software packages: YUI! 2.3.1, ADOdb 4.98,
+	Smarty 2.6.20, GetID3 1.7.7, BBCode 0.3.3.
+      </li>
+      <li>
+	Many bugs fixed.
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2.2 (Double Double)
+      <span id="toggle-2-2" class="toggle"
+       onclick="toggle('list-2-2', 'toggle-2-2')"> + </span>
+    </h3>
+    <ol id="list-2-2" style="display:none">
+      <li>
+	Downloadable Plugins.  This feature allows you to download and
+	install Modules and Themes directly via the Site Admin
+	interface.  You can select from different sets of plugins
+	(officially released plugins, experimental plugins under
+	development and plugins provided by the Gallery community).
+	This makes it very easy to stay up to date with the latest
+	changes.
+      </li>
+      <li>
+	Added support for themes to display dynamic albums.
+	<ul><li>
+	  New Keyword Album module makes use of this feature to show albums based
+	  on a search of item keywords.
+	</li><li>
+	  New Dynamic Albums module shows albums of newest, most viewed or even random items.
+	</li><li>
+	  Ratings module has a new view to display highly rated items from across the Gallery.
+	</li></ul>
+      </li>
+      <li>
+	Security fixes and improvements
+	<p>
+	  There are no known exploits for these issues.  All of them were discovered during a
+	  private, internal security audit.  However, we highly recommend that you upgrade to
+	  Gallery 2.2 to secure your Gallery installation.
+	</p>
+	<ul><li>
+	  Added protection from <a href="http://en.wikipedia.org/wiki/Brute_force_attack"
+	  target="_blank">brute force attacks</a> on setup and account passwords.
+	</li><li>
+	  Added protection from <a href="http://en.wikipedia.org/wiki/Cross-site_request_forgery"
+	  target="_blank">"Cross Site Request Forgery"</a> attacks.
+	</li><li>
+	  Added protection from <a href="http://en.wikipedia.org/wiki/Cross_site_scripting"
+	  target="_blank">"Cross Site Scripting"</a> through item titles, summaries and description
+	  (only applies to the non-default HTML markup).  This has been fixed for comments in
+	  Gallery 2.1 already.
+	</li><li>
+	  Added protection from <a href="http://en.wikipedia.org/wiki/HTTP_response_splitting"
+	  target="_blank">"HTTP Response Splitting"</a> attacks.
+	</li><li>
+	  Fixed information disclosure through application errors.
+	</li><li>
+	  Hardened Session Handling in upgrade, install and support area.
+	</li></ul>
+      </li>
+      <li>
+	Watermarking changes
+	<ul><li>
+	  Edit Album now has a Watermark tab where watermarks may be added or
+	  removed from an entire album, optionally including subalbums too.
+	</li><li>
+	  Edit Watermark now has an option to replace a watermark image and
+	  apply the new image everywhere the old was one used.
+	</li><li>
+	  New option to always use a single watermark and give users no
+	  watermarking options.  Only Site Admins can change/remove existing watermarks.
+	</li><li>
+	  New option to turn off the ability for users to upload their own watermark images.
+	</li></ul>
+      </li>
+      <li>
+	New themes: <ul>
+	<li> Carbon </li>
+	<li> Ajaxian </li>
+	</ul>
+      </li>
+      <li>
+	New <a href="http://codex.gallery2.org/Gallery2:Modules:webdav"
+	       target="_blank">WebDAV module</a> to mount Gallery as network device on your
+	computer.  This allows you to easily manage your Gallery with any WebDAV client like Windows
+	Explorer.
+      </li>
+      <li>
+	New module to send Ecards.
+      </li>
+      <li>
+	New Digibug module for prints from
+	<a href="http://digibug.com/" target="_blank">digibug.com</a>.
+      </li>
+      <li>
+	Added support for Flash Video and Windows ASF video.
+      </li>
+      <li>
+	Added support for mp3 audio using a Flash based player.
+      </li>
+      <li>
+	Added support for HTTP authentication through the new
+	<a href="http://codex.gallery2.org/Gallery2:Modules:httpauth"
+	   target="_blank">httpauth module</a>.
+      </li>
+      <li>
+	Photo auto-rotation based on camera sensors or on settings from other applications.
+      </li>
+      <li>
+	Automatically detect dimensions of Flash animations and video.
+      </li>
+      <li>
+	Option in MIME module to restrict file types that may be uploaded.
+      </li>
+      <li>
+	Image Block changes
+	<ul><li>
+	  Now displays any item with a thumbnail (movie, flash, etc) in addition to photos.
+	</li><li>
+	  A new block setting allows showing multiple images or albums.
+	</li></ul>
+      </li>
+      <li>
+	Added some user contributed image frames and icon packs including
+      the <a href="http://www.famfamfam.com/lab/icons/silk/">Silk Icon
+	set</a> by Mark James.
+      </li>
+      <li>
+	You can now add color to item title, description, comments, etc. Click on the "color"
+	button and choose from a handy popup; or just use [color=red] bbcode syntax.
+      </li>
+      <li>
+	Comment module improvements: <ul>
+	<li> New block for adding comments directly from an item page. </li>
+	<li> Guests can now leave their name. </li>
+	</ul>
+      </li>
+      <li>
+	Added support in Link Items module to make thumbnails for URL links
+	using webpage snapshots generated by an external program like
+	<a href="http://khtml2png.sourceforge.net/" target="_blank">khtml2png</a>.
+	Also, the arrow watermark on thumbnails is now optional.
+      </li>
+      <li>
+	Added RSS functionality: Comments for this album and its subalbums.
+      </li>
+      <li>
+	Added Quotas Block: This allows the site administrator to display a block in
+	the theme that displays the current and total usage of any user that has a
+	quota assigned.
+      </li>
+      <li>
+	Added an option to lock a user account to the current account settings.  Useful
+	if one wants to use a single user account for a group of users.
+      </li>
+      <li>
+	Newly created albums from User Albums module now properly inherit permissions from
+	the parent album, for settings like comments, ratings, etc.
+      </li>
+      <li>
+	Moved some functionality out of core and into optional modules:
+	Add items module for adding from local server or other web pages, and
+	Replica module for creating item copies sharing the same original data file.
+      </li>
+      <li>
+	Option in EXIF/IPTC module to set title for new items from IPTC/ObjectName.
+      </li>
+      <li>
+	Improved usability in administration interface for installing modules and themes.
+      </li>
+      <li>
+	New Multiroot module assists in creating alternate guest views of a single Gallery.
+      </li>
+      <li>
+	Added exactSize and link parameters for image block.
+      </li>
+      <li>
+	Resize dimensions now accept percentages of full size in addition to pixel size.
+      </li>
+      <li>
+	Added support for PHP mysqli extension (newer version of mysql interface).
+      </li>
+      <li>
+	Support for
+	<a href="http://www.microsoft.com/sql/" target="_blank">MSSQL</a> database.
+      </li>
+      <li>
+	Minimum PHP version now 4.3.0.
+      </li>
+      <li>
+	Microsoft IIS doesn't work with PHP-CGI due to a PHP/IIS bug. Microsoft recommends
+	<a href="http://www.iis.net/default.aspx?tabid=1000051" target="_blank">FastCGI</a> instead
+	and doesn't support PHP-CGI. Please use ISAPI PHP or FastCGI with IIS instead.  Users of
+	Apache on Windows can still use PHP-CGI (and mod_php or FastCGI).
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2.1 (Blackjack)
+      <span id="toggle-2-1" class="toggle"
+       onclick="toggle('list-2-1', 'toggle-2-1')"> + </span>
+    </h3>
+    <ol id="list-2-1" style="display:none">
+      <li>
+	New Ratings module allows users to vote for their favorite photos.
+      </li>
+      <li>
+	New RSS module provides syndication of your Gallery's content to the world,
+	so users can track content updates.
+      </li>
+      <li>
+	New Floatrix theme based on our Matrix theme, with a collapsible sidebar
+	and tableless design.
+      </li>
+      <li>
+	New module to support hidden items and albums.  Hidden items are restricted
+	from guest users until accessed by the direct URL.  Migrate module now imports
+	hidden items from G1 as hidden in G2 if this module is active.
+      </li>
+      <li>
+	New module to support password protected items and albums.  Passwords are
+	complementary to the G2 permission management. Passwords are impersonal while
+	the G2 permission system handles access and rights for specific users and user groups.
+      </li>
+      <li>
+	New Reupload module allows replacing an image file while keeping the title,
+	description, comments, etc.
+      </li>
+      <li>
+	New Permalinks module works with the URL Rewrite module to create short URLs
+	using just the album name, as in Gallery 1.x.
+      </li>
+      <li>
+	New Linkitem module creates links to other albums or external URLs.
+      </li>
+      <li>
+	New module to import albums from <a href="http://www.picasa.com/"
+	target="_blank">Picasa</a>.
+      </li>
+      <li>
+	New module to support <a href="http://www.google.com/webmasters/sitemaps/login"
+	target="_blank">Google Sitemaps</a>.
+      </li>
+      <li>
+	New module for retrieving id3 tag information.
+      </li>
+      <li>
+	New link in comments module to view all recent comments.  Also an option to
+	require captcha for posting anonymous comments.
+      </li>
+      <li>
+	New option to apply album and theme settings recursively to all subalbums.
+      </li>
+      <li>
+	URL Rewrite module now supports IIS (isapi rewrite) and pathinfo.
+      </li>
+      <li>
+	Captcha module has an improved "medium" security level and now unifies
+	configuration in captcha site admin for all modules making use of validation.
+      </li>
+      <li>
+	Print modules
+	<ul>
+	  <li>
+	    Permissions support to control which users can print and which photos
+	    may be printed.
+	  </li>
+	  <li>
+	    Support for printing non-public photos.
+	  </li>
+	  <li>
+	    New Fotokasten module for prints from
+	    <a href="http://fotokasten.de/" target="_blank">fotokasten.de</a>.
+	  </li>
+	  <li>
+	    Renamed PhotoAccess to PhotoWorks.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	Permission support in cart module to control which users and which items
+	may be used with the cart.
+      </li>
+      <li>
+	PublishXP module now supports add-options such as watermarks and
+	applying size limits or quotas.
+      </li>
+      <li>
+	Upgraded bundled EXIF library to Exifixer 1.5 which fixes reading
+	of EXIF data from many cameras and image processing tools.
+	Also updated the module to make GPS fields available and to read
+	EXIF data from raw image files.
+      </li>
+      <li>
+	New option in ffmpeg module to watermark thumbnails for movie items with
+	a film reel image on each side, to better distingish movies from photos.
+	Support for recent versions of ffmpeg binary.
+      </li>
+      <li>
+	Support for recent versions of dcraw binary.
+      </li>
+      <li>
+	Added WMF and TGA image format support in ImageMagick module.
+      </li>
+      <li>
+	Improved cross-browser support in ImageFrame module.
+      </li>
+      <li>
+	Several updates and new options for Hybrid theme.
+      </li>
+      <li>
+	New settings and improved admin interface for Siriux theme.
+      </li>
+      <li>
+	Localization updates
+	<ul>
+	  <li>
+	    Added support for hints in translatable strings to aid translators,
+	    or to distinguish identical English strings that may need different
+	    translations in another language.
+	  </li>
+	  <li>
+	    Localizations now generally specify only a language rather than
+	    language+country for better sharing of translations.
+	    Country specific translations can still override the base translation.
+	  </li>
+	  <li>
+	    New option to specify whether Gallery checks the browser language
+	    preference to select the language for new sessions.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	User Interface updates in installer/upgrader based on a review
+	by <a href="http://openusability.org/" target="_blank">OpenUsability.org</a>.
+      </li>
+      <li>
+	New performance section in site admin for configuring optional page caching.
+      </li>
+      <li>
+	New maintenance mode to redirect visitors while upgrading or configuring the site.
+      </li>
+      <li>
+	Multisite installs can now use the tools in lib/support.
+      </li>
+      <li>
+	Sessions are now stored in the database and no longer in files. And guest users don't
+	get a session anymore unless they add items to the cart, choose a non-default language
+	or do something else that requires a session.
+      </li>
+      <li>
+	New development tool: sample module creator in lib/tools/creator.
+      </li>
+      <li>
+	New option to run external programs at lower priority to reduce load
+	on shared webhosting servers.
+      </li>
+      <li>
+	Support for
+	<a href="http://www.ibm.com/software/data/db2/" target="_blank">DB2</a> database.
+      </li>
+      <li>
+	Minor updates to support PHP 5.1.
+      </li>
+      <li>
+	Embed API is now versioned (for compatibility checks) and
+	initialization parameters have been simplified.
+      </li>
+      <li>
+	Many code updates, restructuring and API changes with the goals of
+	improving performance and making smaller/simpler/cleaner code.
+      </li>
+      <li>
+	Lots of bugs fixed.
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2.0 (Unpossible!)
+      <span id="toggle-2-0" class="toggle"
+       onclick="toggle('list-2-0', 'toggle-2-0')"> + </span>
+    </h3>
+    <ol id="list-2-0" style="display:none">
+      <li>
+	Updated version of the Siriux theme.
+      </li>
+      <li>
+	Several bug fixes.
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2 RC 2 (kthxbye)
+      <span id="rc2-toggle" class="toggle"
+       onclick="toggle('rc2-list', 'rc2-toggle')"> + </span>
+    </h3>
+    <ol id="rc2-list" style="display:none">
+      <li>
+	<b> Gallery 1 migration </b>
+	<ul>
+	  <li>
+	    Custom fields from G1 can now be imported if the Gallery 2 custom
+	    fields module is active.
+	  </li>
+	  <li>
+	    Restricted permissions are now set for imported photos and
+	    albums from G1 that are hidden.  Gallery 2 does not yet
+	    have a hidden feature so for now these items are
+	    restricted by permissions.
+	  </li>
+	  <li>
+	    Migration process now generates a report of any captions
+	    that were trunctated to fit the field size of title or
+	    summary in Gallery 2.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	<b> Localization </b> - Some translation fixes including several updates
+	to better support right-to-left languages.  Gallery 2 now has 29 available
+	locales; over 90% translated in 6 languages, over 50% in 7 and partially
+	translated in 16 more!  We still bundle all language data with the modules..
+	eventually we will have separate downloadable translations.
+      </li>
+      <li>
+	<b> Date formats </b> - Customizable date/time formats defined in Site Admin.
+      </li>
+      <li>
+	<b> Security </b> - Fixed minor cross site scripting flaw
+	where uploaded images could contain &lt;script&gt; tags in their
+	EXIF and IPTC keywords.
+      </li>
+      <li>
+	Many, many bugs fixed.
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2 RC 1 (+5 Insightful)
+      <span id="rc1-toggle" class="toggle"
+       onclick="toggle('rc1-list', 'rc1-toggle')"> + </span>
+    </h3>
+    <ol id="rc1-list" style="display:none">
+      <li>
+	<b> New Packages  </b> - You can now choose from <a href="#packages">four
+	different packages</a>: minimal, typical, full, and developer.
+      </li>
+      <li>
+	<b> Siriux is Back </b> - The Siriux theme was ported to the new theme system.
+      </li>
+      <li>
+	<b> User Contributed Themes </b> - There are now more and more user contributed themes
+	to choose from.
+      </li>
+      <li>
+	<b> New Installer Log </b> - Gallery 2 now generates a log of
+	the core module installation process which will make it much
+	easier for you to provide the necessary information and for us
+	to help you.
+      </li>
+      <li>
+	Many, many bugs fixed.
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2 Beta 4 (Flippin' Sweet!)
+      <span id="beta4-toggle" class="toggle"
+       onclick="toggle('beta4-list', 'beta4-toggle')"> + </span>
+    </h3>
+    <ol id="beta4-list" style="display:none">
+      <li>
+	<b> New Theme System </b> - You spoke -- we listened.  The old
+	layout and theme system was far too complicated so we've
+	completely overhauled it leaving control firmly in the hands
+	of the theme designer while keeping it simple and easy to work with.
+      </li>
+      <li>
+	<b> Square Thumbnails </b> - This module now offers a mode to fit thumbnails
+	inside a square with a specified background color instead of cropping the image
+	into a square.
+      </li>
+      <li>
+	<b> CMYK Jpegs </b> - ImageMagick module can now detect jpegs using CMYK
+	colorspace and convert to RGB for display in the Gallery, still keeping the
+	original file available for download.
+      </li>
+      <li>
+	<b> Multisite Support </b> - The multisite system has been
+	completely redesigned and is now compatible with both URL
+	Rewrite module and embedded Gallery 2.  Multisite Gallery 2
+	refers to multiple independent sites using a single codebase.
+      </li>
+      <li>
+	<b> Localization </b> - The installer and upgrader can now be localized.
+      </li>
+      <li>
+	<b> Improved Installer </b> - The installer offers now a clean install option,
+	catches version mismatches between database/g2data/code, detects the proper
+	locking system to use, and has a more detailed admin user setup.
+      </li>
+      <li>
+	<b> Improved Upgrader </b> - There&rsquo;s now a progress bar in the module upgrade
+	step to combat server timeouts.
+      </li>
+      <li>
+	<b> Guest Preview Mode </b> - Click this to see almost exactly
+	what a guest will see when browsing your albums.  Useful if
+	you want to test permissions and other settings.
+      </li>
+      <li>
+	<b> Improved Cookie Management </b> - New optional
+	configuration parameters enable cookie support in embedded
+	Gallery 2 while maintaining maximum security by default and
+	the flexibility to support embedded Gallery 2 installs on
+	separate subdomains.
+      </li>
+      <li>
+	<b> Colorpacks </b> - Now that layouts are gone and there are
+	only themes, colorpacks let you change the color scheme of a
+	theme.
+      </li>
+      <li>
+	Many, many bugs fixed.
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2 Beta 3 (Bingo!)
+      <span id="beta3-toggle" class="toggle"
+       onclick="toggle('beta3-list', 'beta3-toggle')"> + </span>
+    </h3>
+    <ol id="beta3-list" style="display:none">
+      <li>
+	<b> New Modules </b>
+	<ul>
+	  <li>
+	    New Quotas module allows limiting disk usage for users and groups.
+	  </li>
+	  <li>
+	    New Iconpack module adds icons for various links.
+	  </li>
+	  <li>
+	    New dcraw module adds support for the raw image format of many cameras.
+	  </li>
+	  <li>
+	    New Publish XP modules allows adding items directly from Windows XP.
+	  </li>
+	  <li>
+	    New Slideshow applet module shows images in a fullscreen slideshow using Java.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	<b> Layouts </b>
+	<ul>
+	  <li>
+	    Simplified the PHP code required for a layout.  This makes
+	    it easier to create a new layout that mostly involves
+	    building the tpl files, but still allows use of additional
+	    PHP code for more advanced layouts.
+	  </li>
+	  <li>
+	    Standard $user template variable now available in all views, which makes
+	    it easier to customize content for guests, registered users or administrators.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	<b> Hotlinked image protection </b>
+	<ul>
+	  <li>
+	    URL Rewrite module now offers the ability to restrict item downloads from
+	    external referers not on an approved list.  This prevents other websites
+	    from directly linking to images on your server.
+	  </li>
+	  <li>
+	    Watermark module offers an alternate rule in Rewrite module which can apply
+	    a watermark on the fly to images for external referers.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	<b> Tree view </b> - Album Select module now offers a dynamic tree view
+	in addition to the simple select box for navigating to any album.
+      </li>
+      <li>
+	<b> Thumbnails </b> - Expanded ability to override the album default thumbnail
+	size to any item or album, not just for photo thumbnails.
+      </li>
+      <li>
+	<b> IPTC </b> - Support for reading IPTC data added to EXIF/IPTC module.
+      </li>
+      <li>
+	<b> Forgot Password </b> - New system to reset the password for any Gallery 2 user with
+	an email address.
+      </li>
+      <li>
+	<b> Short URLs </b> - More control in Site Admin over how short URLs are constructed.
+      </li>
+      <li>
+	<b> Owner Permissions </b> - Permissions are now transferred to the new owner
+	when changing the owner of an album or item.
+      </li>
+      <li>
+	<b> Updated Albums </b> - Modification date of albums now updated for item add,
+	move, delete in that album (so New Items module will show "Updated").
+      </li>
+      <li>
+	<b> Add From Web </b> - Improved support for URLs where extension doesn't
+	match the actual mime type (like Gallery 2 URLs!).
+      </li>
+      <li>
+	<b> Email Test </b> - Added ability to send a test email from Site Admin to
+	verify email settings are correct.
+      </li>
+      <li>
+	<b> System Maintenance </b> - New maintenance tasks:
+	<ul>
+	  <li> Reset view counts for all albums and photos. </li>
+	  <li> Build all thumbnails and resizes at once. </li>
+	  <li> Display system information, useful for copy/paste to support forum. </li>
+	  <li> Rewrite module task to check for conflicts between short URLs
+	       and actual Gallery files. </li>
+	</ul>
+      </li>
+      <li>
+	<b> Integrations </b> - Improved support for integration with
+	external applications.
+      </li>
+      <li>
+	<b> Installer </b> - Verify that the database user has the
+	correct permissions before installing.
+      </li>
+      <li>
+	Many, many bugs fixed including several localization fixes.
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2 Beta 2 (Holy Hand Grenade)
+      <span id="beta2-toggle" class="toggle"
+       onclick="toggle('beta2-list', 'beta2-toggle')"> + </span>
+    </h3>
+    <ol id="beta2-list" style="display:none">
+      <li>
+	<b> Performance Improvements </b>
+	<ul>
+	  <li>
+	    Automatic fast download code for publicly visible images.
+	    We bypass most of the framework and render thumbnails and
+	    resizes quickly on demand, while still preserving the
+	    complete image firewall.  This radically reduces server
+	    load.
+	  </li>
+	  <li>
+	    Replaced the permissions table with access control lists.
+	    This change isn't visible to the end user, but results in
+	    a significant performance increase for large galleries.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	<b> Themes/CSS </b>
+	<ul>
+	  <li>
+	    We updated the CSS across the entire app to clean it up and
+	    make building new themes a bit easier.
+	  </li>
+	  <li>
+	    Added new mblue theme.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	<b> Layouts </b>
+	<ul>
+	  <li>
+	    The main content no longer wraps below the sidebar in Matrix layout
+	    when viewed with IE.
+	  </li>
+	  <li>
+	    Hybrid, slider and tile layouts are now themeable and have
+	    improved cross browser compatibility.
+	  </li>
+	  <li>
+	    Added Nico Kaiser's siriux layout.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	<b> New Modules </b>
+	<ul>
+	  <li>
+	    New captcha module allows you to require that users have
+	    to prove that they're human in order to log in or register
+	    a new account.
+	  </li>
+	  <li>
+	    New mime management module allows you to control which
+	    mime types Gallery understands.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	<b> Localization </b>
+	<ul>
+	  <li>
+	    Localized into Chinese (Simplified)
+	  </li>
+	  <li>
+	    6 localizations support 75% or more of Gallery.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	<b> Embedding </b>
+	<ul>
+	  <li>
+	    Considerable progress in the API and documentation.
+	  </li>
+	  <li>
+	    Xaraya, PHP-Nuke, Tikipro, Drupal and Mambo integrations
+	    <a href="http://svn.sourceforge.net/viewvc/gallery/trunk/integration/gallery2/"
+	    target="_blank">available in SVN</a>.
+	  </li>
+	</ul>
+      </li>
+      <li>
+	Many, many bugs fixed.
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2 Beta 1 (Dark Fibre)
+      <span id="beta1-toggle" class="toggle"
+       onclick="toggle('beta1-list', 'beta1-toggle')"> + </span>
+    </h3>
+    <ol id="beta1-list" style="display:none">
+      <li>
+	<b> Rewrite </b> - New module for creating compact, search
+	engine friendly URLs.
+      </li>
+
+      <li>
+	<b> Recursively Add Directories </b> - You can now add an
+	entire hierarchy of images in directories at once.  Gallery
+	will turn each sub-directory into an appropriate sub-album.
+      </li>
+
+      <li>
+	<b> Locking </b> - New database locking system that allows
+	Gallery to run properly on NFS filesystems.
+      </li>
+
+      <li>
+	<b> Shutterfly </b> - New module for printing photos with Shutterfly.com.
+      </li>
+
+      <li>
+	<b> Classic Layout </b> - New layout similar to the Gallery 1
+	top level album.  Shows thumbnails, item details and a tree of
+	links to subalbums.
+      </li>
+
+      <li>
+	<b> Origination Timestamp </b> - New field to store the date normally
+	shown with items.  The field is automatically set from EXIF data if
+	available but can also be changed manually.
+      </li>
+
+      <li>
+	<b> Resizes </b> - Added support for both width and height bounds for
+	photo resizes and scaling the original image.
+      </li>
+
+      <li>
+	<b> Archive Upload </b> - New module extracts files from uploaded
+	zip archives and adds each to the album.  Implemented to allow
+	support for other archive formats to be added later.
+      </li>
+
+      <li>
+	<b> Size Limit </b> - New module to define maximum dimensions or
+	file size of uploaded images.
+      </li>
+
+      <li>
+	<b> Custom Thumbnails </b> - Thumbnail module now allows uploading a
+	custom jpeg thumbnail for any album or item.
+      </li>
+
+      <li>
+	<b> Rearrange </b> - New module allows rearranging the order
+	of all items in an album at once.
+      </li>
+
+      <li>
+	<b> Album Select </b> - New module adds a select box for jumping
+	directly to any album.
+      </li>
+
+      <li>
+	<b> EXIF </b> - Added ability to set item summary/description from
+	EXIF description when new photos are uploaded.
+      </li>
+
+      <li>
+	<b> Symlink </b> - Option to add items using symbolic links to
+	existing files on a unix server.
+      </li>
+
+      <li>
+	<b> Sort Order </b>
+	<ul>
+	  <li>
+	    Two levels of sorting now supported.
+	  </li>
+	  <li>
+	    New sort to always show albums first.
+	  </li>
+	</ul>
+      </li>
+
+      <li>
+	<b> Image Block Enhancements </b>
+	<ul>
+	  <li>
+	    Picture/Album of the Day/Week/Month.
+	  </li>
+	  <li>
+	    Option to omit certain albums from image blocks.
+	  </li>
+	  <li>
+	    External image blocks using full size images.
+	  </li>
+	  <li>
+	    Scale external image blocks to a specified maximum size.
+	  </li>
+	  <li>
+	    Support for image frames around image blocks.
+	  </li>
+	</ul>
+      </li>
+
+      <li>
+	<b> User Album Options </b>
+	<ul>
+	  <li>
+	    Create user albums when first accessed instead of
+	    right when the user account is created.
+	  </li>
+	  <li>
+	    Show link to user album.
+	  </li>
+	  <li>
+	    Jump to user album after login.
+	  </li>
+	</ul>
+      </li>
+
+      <li>
+	<b> Embedding </b>
+	<ul>
+	  <li>
+	    Further improvements in the API and documentation.
+	  </li>
+	  <li>
+	    Added support for search and image block.
+	  </li>
+	  <li>
+	    Xaraya, PHP-Nuke, Tikipro and Drupal integrations
+	    <a href="http://svn.sourceforge.net/viewvc/gallery/trunk/integration/gallery2/"
+	    target="_blank">available in SVN</a>.
+	  </li>
+	</ul>
+      </li>
+
+      <li>
+	<b> Multisite Support </b> - The installer can now configure multiple
+	independent sites using a single codebase.
+      </li>
+
+      <li>
+	<b> Internationalization </b>
+	<ul>
+	  <li>
+	    Added basic support for right-to-left languages.
+	  </li>
+	  <li>
+	    New <b>MultiLanguage</b> module adds ability to write captions
+	    in multiple languages and display them based on the selected
+	    language of each user.
+	  </li>
+	</ul>
+      </li>
+
+      <li>
+	<b> Error Handling </b> - Improved handling and display of error messages.
+      </li>
+
+      <li>
+	<b> Bugs </b> - Many, many bugs fixed.
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2 Alpha 4 (Nice Commits)
+      <span id="alpha4-toggle" class="toggle"
+       onclick="toggle('alpha4-list', 'alpha4-toggle')"> + </span>
+    </h3>
+    <ol id="alpha4-list" style="display:none">
+      <li>
+	<b> Upgradeable Core and Modules </b> - At long last we
+	support upgrading from one version of Gallery 2 to the next.
+	Unfortunately, this may not work reliably for all version
+	before Alpha 4, so we recommend that you reinstall Alpha 4
+	from scratch just to be sure.
+      </li>
+
+      <li>
+	<b> Module Uninstall </b> - You can now completely uninstall a
+	module and then delete it from your Gallery 2 installation.
+      </li>
+
+      <li>
+	<b> Installer Improvements </b>
+	<ul>
+	  <li>
+	    The interface for installing modules is now much easier to
+	    use.  It shows you all the modules and lets you select the
+	    ones you want to install, and lets you repeat the process
+	    as often as you like.
+	  </li>
+	  <li>
+	    Added better instructions and examples for several steps
+	    that were confusing (your user feedback at work!)
+	  </li>
+	  <li>
+	    The installer now works on browsers that don't allow
+	    cookies.
+	  </li>
+	</ul>
+      </li>
+
+      <li>
+	<b> User Interface enhancements </b> - Some changes in our
+	main layout place the most important system links on top of
+	every page (Site Admin, Login, Logout, ...). This gives you
+	easy access to these commands. The sidebar has some improved
+	functionality, like a direct login form and some more details
+	on your cart and members (if those modules are active). This
+	is another step towards a "block" system where modules can
+	provide any amount of blocks of information to be placed in
+	the sidebar.
+      </li>
+
+      <li>
+	<b> Navigation </b> - It's now easier to navigate around Gallery.
+	Meaningful "back" links will bring you back to the last
+	visited pages, e.g. it's now possible to visit the Site Admin
+	while editing an album and have an easy way to return.
+      </li>
+
+      <li>
+	<b> Random Highlight </b> - New module allows albums to
+	periodically change highlight, selecting randomly from
+	the album's items.
+      </li>
+
+      <li>
+	<b> WebCam </b> - New module creates items that
+	periodically refresh the image from an external URL.
+      </li>
+
+      <li>
+	<b> Thumbnail Page </b> - New module gives more control
+	over thumbnails for movies and documents.  For multipage
+	documents (like PDF/Postscript) or images (like multiscene
+	TIFF) you can pick the page number for the thumbnail (Note:
+	PDF/Postscript require both ImageMagick and Ghostscript).
+	When used in conjunction with the Ffmpeg module you can
+	pick a time offset for generating thumbnails for movies.
+      </li>
+
+      <li>
+	<b> Graphics Toolkits </b> -
+	<ul>
+	  <li>
+	    The ImageMagick and NetPBM toolkits have been optimized
+	    to make fewer calls to external binaries when used for
+	    multiple operations.  For example, cropping and resizing
+	    to make a thumbnail now requires only a single call to
+	    "convert" with ImageMagick.
+	  </li>
+	  <li>
+	    We now preserve extra operations (like crop settings) on
+	    thumbnails when moving an item between albums or
+	    rebuilding thumbnails.
+	  </li>
+	  <li>
+	    Added ability to set toolkit priority.  This means you
+	    can activate multiple toolkits to support more mime types
+	    but still select which toolkit is used in cases where
+	    multiple toolkits support the same type.
+	  </li>
+	  <li>
+	    Added support for ImageMagick 6.1.x
+	  </li>
+	</ul>
+      </li>
+
+      <li>
+	<b> Sort Order </b> - "Default sort order" and "Manual sort
+	order" are now separate choices, allowing albums to properly
+	inherit the site default for sort order; Ascending/descending
+	is disabled for these choices.
+      </li>
+
+      <li>
+	<b> New Items </b> - New module shows "new" and "updated"
+	images next to appropriate images and albums, and adds a new
+	sort where new items are shown first followed by other items
+	sorted by view count.
+      </li>
+
+      <li>
+	<b> SMTP Authentication </b> - We now support sending email
+	via a SMTP server that requires user authentication.  Any
+	module that sends email (like the registration module) can
+	take advantage of this support.
+      </li>
+
+      <li>
+	<b> Embedding Gallery 2 </b> - We've made great improvements in
+	embedding Gallery 2 into other applications.  We've
+	successfully (though not completely) embedded it into Xaraya
+	and have begun working on other platforms.  See
+	<a href="http://codex.gallery2.org/Gallery2:Embedding"
+	target="_blank">Gallery 2 Embedding</a>.
+      </li>
+
+      <li>
+	<b> Thumbnail Creation </b> - We now let you create thumbnails
+	at upload time, which greatly improves performance the first
+	time you view an album.  It's optional, but on by default.
+      </li>
+
+      <li>
+	<b> Improved Error Pages </b> - We now show you a nice error
+	page when two simultaneous and conflicting changes happen.
+	This new page explains how to resolve the problem.
+      </li>
+
+      <li>
+	<b> Members </b> - We now show a list of the recent
+	changes that a user has made, and let you page through the
+	entire list of changes.
+      </li>
+
+      <li>
+	<b> Removed IE7 </b> - We were experimenting with
+	<a href="http://dean.edwards.name/IE7/" target="_blank">IE7</a>,
+	a compatibility layer in JavaScript reduces some of the
+	incompatibilities between IE6 and other browsers.  However we
+	were not able to get the performance and reliability that we
+	needed so we've decided to abandon using it (at least for now).
+      </li>
+
+      <li>
+	<b> Localization </b> - Gallery 2 is now translated into 18 languages, though only
+	German, Danish and Swedish are over 50% translated.  We can
+	use your help!
+      </li>
+
+      <li>
+	<b> Bug fixes </b> - Many bugs closed!
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2 Alpha 3 (Farva)
+      <span id="alpha3-toggle" class="toggle"
+       onclick="toggle('alpha3-list', 'alpha3-toggle')"> + </span>
+    </h3>
+    <ol id="alpha3-list" style="display:none">
+      <li>
+	<b> Watermark Support </b> - We now support image
+	watermarking.  You can add a watermark to the thumbnail,
+	resize or full sized version of an image using a DHTML
+	drag-and-drop interface.
+      </li>
+
+      <li>
+	<b> Oracle Database Support </b> - The installer now offers
+	Oracle (version 9i and higher) among the supported database types.
+      </li>
+
+      <li>
+	<b> Module Manifests </b> - All modules now come with a
+	manifest file, and the installer checks to make sure that
+	you&rsquo;ve got a complete set of files on the server.
+      </li>
+
+      <li>
+	<b> Auto Completion </b> - the Site Admin user and groups
+	pages, and the permissions pages now perform appropriate
+	completion for you.  Just type a few characters of the
+	username you&rsquo;re searching for and it&rsquo;ll give you up to 10
+	possible matches.  Tested on Firefox, but not extensively
+	tested on IE yet.
+      </li>
+
+      <li>
+	<b> New version of IE7 </b> - We&rsquo;re experimenting with
+	<a href="http://dean.edwards.name/IE7/" target="_blank">IE7</a>,
+	a compatibility layer in JavaScript reduces some of the
+	incompatibilities between IE6 and other browsers.  The older
+	version caused weird problems with images getting overlaid
+	with a red X, or IE6 crashing.
+      </li>
+
+      <li>
+	<b> Migration improvements </b> -
+	<ul>
+	  <li>
+	    We now properly migrate item owners
+	  </li>
+	  <li>
+	    We now preserve the order of imported subalbums
+	  </li>
+	  <li>
+	    Gallery 1 summary and description fields are now
+	    transposed on import so that the Gallery 1 "summary"
+	    (which was shown inside the album itself) is now the
+	    Gallery 2 "description" and vice versa.
+	  </li>
+	</ul>
+      </li>
+
+      <li>
+	<b> CMS Integration </b> - Although this is not yet readily visible, a
+	great deal of work has been done on getting Gallery 2 ready to integrate into
+	external content management systems.  We&rsquo;ve successfully done partial
+	integrations with <a href="http://www.xaraya.com/" target="_blank">Xaraya</a> and
+	<a href="http://www.drupal.org/" target="_blank">Drupal</a>, with more on the way.
+      </li>
+
+      <li>
+	<b> Square Thumbnails </b> - We fixed a noticeable bug where
+	the first time you viewed a square thumbnail it might appear
+	distorted (this was mentioned in the "known bugs" list of the
+	alpha-2 release).
+      </li>
+
+      <li>
+	<b> Zip Cart Plugin </b> - You can now download the contents
+	of your cart as a zip file.
+      </li>
+
+      <li>
+	<b> User Albums </b> - You can use the new User Albums module
+	to automatically create a new album for a user whenever you
+	create a new user.
+      </li>
+
+      <li>
+	<b> Installer </b> - Many minor tweaks including adding more
+	install checks to make sure that your system is OK.
+      </li>
+
+      <li>
+	<b> Members </b> - The members module now has privacy settings
+	so that you can prevent the unauthorized from seeing your list
+	of members, and/or their email addresses.
+      </li>
+
+      <li>
+	<b> Bug fixes </b> - Many bugs closed!
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2 Alpha 2 (Grand Theft Photo)
+      <span id="alpha2-toggle" class="toggle"
+       onclick="toggle('alpha2-list', 'alpha2-toggle')"> + </span>
+    </h3>
+    <ol id="alpha2-list" style="display:none">
+      <li>
+	<b> User Interface </b> - Many small and large user interface
+	improvements.  Made the XHTML more standards compliant and
+	used less divs in favor of more sensible tags (like h1, h2,
+	etc).
+      </li>
+      <li>
+	<b> Performance </b> - Significant performance increases in
+	general, and especially for image views.  This also reduces
+	the overall load on your system when (for example)
+	viewing a page with 9 thumbnails on it.
+      </li>
+      <li>
+	<b> Installer </b> - The installer now installs the core
+	module for you, as well as allows you to optionally install
+	other modules right away instead of having to do it later via
+	the Site Admin.
+      </li>
+      <li>
+	<b> Custom Fields </b> - New custom field module allows you to
+	define global and per-album custom fields for your item meta
+	data.
+      </li>
+      <li>
+	<b> Java Upload Applet </b> - New upload option where you can
+	drag and drop files onto an applet and Gallery 2 will upload them for you.
+      </li>
+      <li>
+	<b> GD Graphics toolkit </b> - Implemented <a href="http://php.net/gd"
+	target="_blank">GD</a> based graphics toolkit.  This enables
+	use of PHP&rsquo;s built-in imaging functions for thumbnails, resizes,
+	cropping and rotating.  Requires GD 2.0 or newer.  No external binaries
+	needed.
+      </li>
+      <li>
+	<b> Square Thumbnails </b> - New module that allows you to
+	specify that all gallery thumbnails have a 1:1 aspect ratio
+      </li>
+      <li>
+	<b> Imageframe module </b> - This module allows you to apply
+	frames to your photos and albums in the Matrix and Hybrid layouts.
+      </li>
+      <li>
+	<b> Self Registration module </b> - Allows guests to register
+	for their own account in your Gallery 2.
+      </li>
+      <li>
+	<b> Language selection </b> - There&rsquo;s a new box in the sidebar
+	where guests can choose their preferred language
+      </li>
+      <li>
+	<b> Nokia Mobile Phone Uploader Module </b> - Upload images to
+	your Gallery 2 from your mobile phone!
+      </li>
+      <li>
+	<b> Migration module </b> - We now import Gallery 1
+	permissions, and allow you to choose the source encoding
+	(character set) of your Gallery 1 so that we can convert it to
+	UTF-8 as part of the migration.  We now also track where your
+	Gallery 1 albums wound up in Gallery 2 so that you can create
+	an .htaccess file in your Gallery 1 to redirect Gallery 1 URLs
+	to Gallery 2, for ease of migration.
+      </li>
+      <li>
+	<b> Gallery Remote </b> - GR now supports creating new Gallery 2 albums.
+      </li>
+      <li>
+	<b> PHP5 Support </b> Gallery 2 has been tested on PHP 5.0.1 on
+	FreeBSD and Linux.
+      </li>
+      <li>
+	<b> Bugs </b> - More than 31 bugs closed since Alpha 1.
+      </li>
+    </ol>
+
+    <h3>
+      Highlight of changes in Gallery 2 Alpha 1 (Cowbell)
+      <span id="alpha1-toggle" class="toggle"
+       onclick="toggle('alpha1-list', 'alpha1-toggle')"> + </span>
+    </h3>
+    <ul id="alpha1-list" style="display:none">
+      <li>
+	<b> First Release of Gallery 2! </b>
+      </li>
+    </ul>
+
+ <h2><a name="packages">Choosing a package</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+    <p>
+      You can choose from four different packages:
+    </p>
+    <ul>
+      <li>
+	<b>Minimal</b> - The base application, 2 themes and 3 graphics toolkits and only English
+	installed. Everything you need to publish photos, and nothing more.
+      </li>
+      <li>
+	<b>Typical</b> - The base application, 8 themes and a selection of popular
+	modules.  Enough to satisfy the demands of most Gallery users.
+      </li>
+      <li>
+	<b>Typical-en</b> - Same as <b>Typical</b> except the only language included is English.
+      </li>
+      <li>
+	<b>Full</b> - The base application, 9 themes and 68 modules.  Every cool
+	feature we've got.
+      </li>
+      <li>
+	<b>Full-en</b> - Same as <b>Full</b> except the only language installed is english.
+      </li>
+      <li>
+	<b>Developer</b> - Same as the full package, except it includes all the
+	developer tools so that you can work on improving the code.
+      </li>
+    </ul>
+    <p>
+      You get to pick and choose which modules you activate, so even if you download
+      a package that has more modules than you need you can always choose not to
+      activate the ones you don't want.  You can also activate a module and test it
+      out for a while, then later deactivate and uninstall it.  You can also delete
+      any modules/themes that you're not using if you want to save space.
+    </p>
+    <p>
+      All of our modules and themes are available separately so if you install a
+      smaller package you can still add more functionality later on, either by
+      downloading yourself or using the Downloadable Plugins feature in the Site Admin section.
+    </p>
+    <p>
+      Download Gallery packages, modules and themes from the
+      <a href="http://codex.gallery2.org/Gallery2:Download"
+      target="_guided">Gallery Download Page</a>.
+    </p>
+
+    <h2><a name="prerequisites">Preparing to install</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+    <ol>
+      <li>
+	<b><a name="get_latest_code">Latest Version</a></b> -
+	There are four ways to get the code.
+	<ul>
+	  <li>
+	    <b>Tarball</b> - You can download a prepackaged file as a
+	    tarball or a zip file from <a href="http://sourceforge.net/projects/gallery/"
+	      target="_blank">SourceForge</a>.
+	  </li>
+	  <li>
+	    <b>Pre-Installer</b> - If you only have FTP access to your webserver and don't
+	    have the option to extract zip or tar files directly on the server, you should
+	    give the <a href="http://codex.gallery2.org/Gallery2:Preinstaller"
+	    target="_blank">Gallery 2 Pre-Installer</a> a try. It transfers the archive
+	    directly to your webserver and extracts it for you.
+	  </li>
+	  <li>
+	    <b>Nightly Snapshot</b> - You can download a tarball or zip file with
+	    a snapshot of the most recent code.  Find links to these on the
+	    <a href="http://gallery.menalto.com/downloads"
+	       target="_blank">Gallery Download Page</a>.
+	  </li>
+	  <li>
+	    <b>Subversion</b> - This is a better way to get the latest code,
+	    but it&rsquo;s for <i>advanced</i> users.  Follow the
+	    <a href="http://codex.gallery2.org/Gallery:Using_Subversion"
+	      target="_blank">Subversion instructions</a> to obtain the latest Gallery 2
+	    code.  It&rsquo;s easier to stay up to date with this method since
+	    you can run one command and get the latest code at any time.
+	  </li>
+	</ul>
+      </li>
+
+      <li>
+	<b>Storage</b> - Create a directory for gallery to store
+	photos.  This must be writeable by the web server, but for
+	security reasons we suggest that you do not put it in the web
+	root.  If you put it in the web root, then anybody can get
+	directly to your images with their web browser which
+	circumvents Gallery 2&rsquo;s security.
+	<div class="instructions">
+	  <h3>Unix Example</h3>
+	  <p>
+	    $ cd $HOME <br/>
+	    $ mkdir g2data <br/>
+	    $ chmod 777 g2data
+	  </p>
+	</div>
+
+	<div class="instructions">
+	  <h3>Windows Example</h3>
+	  <p>
+	    C:\&gt; mkdir g2data
+	  </p>
+	</div>
+
+	In the Unix example, you may note that modes of 777 on your
+	<strong>g2data</strong> directory are not all that secure.
+	However, making it more secure depends on how your system is
+	configured.  Talk with your system administrator about ways to
+	change the permissions on that directory to make it so that
+	Gallery can still write to the files but that others
+	can&rsquo;t.  Refer to the <a
+	href="http://codex.gallery2.org/Gallery2:Security">Gallery
+	2 Security Guide</a> for more information.
+      </li>
+
+      <li>
+	<b>Database</b> - Right now we support
+	<a href="http://dev.mysql.com/downloads/" target="_blank">MySQL</a>,
+	<a href="http://www.postgresql.org/mirrors-ftp.html" target="_blank">PostgreSQL</a>,
+	<a href="http://www.oracle.com/technology/software/index.html"
+	target="_blank">Oracle</a>,
+	<a href="http://www.ibm.com/software/data/db2/" target="_blank">IBM DB2</a>,
+	<a href="http://www.microsoft.com/sql/" target="_blank">Microsoft SQL Server</a> and
+	<a href="http://www.sqlite.org/" target="_blank">SQLite</a>.
+	The databases most commonly used with Gallery 2 are MySQL and PostgreSQL.
+	MySQL is generally faster than PostgreSQL.
+	We require you to create the database yourself.
+	In our examples below, we&rsquo;ll be creating a database called
+	<b>gallery2</b>.  You can use any database name that you
+	choose. <br />
+	Grant all required <strong>privileges</strong> to your database user. This includes but
+	is not confined to: CREATE TABLE, ALTER TABLE, DROP TABLE in the gallery2 database;
+	SELECT, INSERT, UPDATE, DELETE on all (gallery2) tables in the gallery2 database;
+	CREATE INDEX and some other privileges that are specific to the different database
+	management systems.  CREATE/DROP DATABASE and the ability to GRANT privileges to other
+	database users are not required.
+
+	<div class="instructions">
+	  <h3>MySQL</h3>
+	  <p>
+	    $ mysqladmin -uroot create gallery2  <br />
+	    $ mysql gallery2 -uroot -e"GRANT ALL ON gallery2.* TO<br/> &nbsp;&nbsp;<strong>username</strong>@localhost IDENTIFIED BY <strong>'password'</strong>"<br/>
+	  </p>
+	</div>
+
+	<ul class="note">
+	  <li> Choose your own <strong>username</strong> and <strong>password</strong>
+	  </li>
+	  <li>
+	    If MySQL denies you access, try adding "-p" right after "-uroot" in each command
+	  </li>
+	</ul>
+
+	<div class="instructions">
+	  <h3>PostgreSQL</h3>
+	  <p>
+	    $ createdb gallery2 -E UNICODE <br/>
+	    <br/>
+	    <i>If it complains that UNICODE is not a valid encoding name, then try:</i> <br/>
+	    $ createdb gallery2 -E SQL_ASCII <br/>
+	    <br/>
+	    <i>If it complains about that, too then try:</i> <br/>
+	    $ createdb gallery2 <br/>
+	  </p>
+	</div>
+
+	<div class="instructions">
+	  <h3>Oracle</h3>
+	  <p>
+	    $ create database gallery2 {additional parameters};
+	  </p>
+	</div>
+	<ul class="note">
+	  <li> Also see our <a href="http://codex.gallery2.org/Gallery2:Oracle"
+	    target="_blank">Oracle documentation page</a>
+	  </li>
+	</ul>
+
+	<div class="instructions">
+	  <h3>IBM DB2</h3>
+	  <p>
+	    $ db2 "create database gallery2 using codeset utf-8 territory us pagesize 32 k"
+	  </p>
+	</div>
+	<ul class="note">
+	  <li> Also see our <a href="http://codex.gallery2.org/Gallery2:DB2"
+	    target="_blank">IBM DB2 documentation page</a>
+	  </li>
+	</ul>
+
+	<div class="instructions">
+	  <h3>Microsoft SQL Server</h3>
+	  <p>
+	    C:\>sqlcmd -S myhostname\SQLEXPRESS -e
+	  </p>
+	  <p>
+	    1>create database gallery2
+	  </p>
+	  <p>
+	    2>go
+	  </p>
+	  <p>
+	    1>use gallery2
+	  </p>
+	  <p>
+	    2>go
+	  </p>
+	  <p>
+	    1>create schema g2user
+	  </p>
+	  <p>
+	    2>go
+	  </p>
+	  <p>
+	    1>create login g2user with password = "g2pwd"
+	  </p>
+	  <p>
+	    2>go
+	  </p>
+	  <p>
+	    1>create user g2user for login g2user with default_schema = g2user
+	  </p>
+	  <p>
+	    2>go
+	  </p>
+	  <p>
+	    1>use master
+	  </p>
+	  <p>
+	    2>go
+	  </p>
+	  <p>
+	    1>grant CONTROL SERVER to g2user
+	  </p>
+	  <p>
+	    2>go
+	  </p>
+	  <p>
+	    1>quit
+	  </p>
+	</div>
+	<ul class="note">
+	  <li> Also see our <a href="http://codex.gallery2.org/Gallery2:MSSQL"
+	    target="_blank">Microsoft SQL Server documentation page</a>
+	  </li>
+	</ul>
+
+	<div class="instructions">
+	  <h3>SQLite</h3>
+	  <p>
+	    Your PHP must include <a href="http://php.net/pdo" target="_blank">PHP
+	    Data Objects</a> support, but no other setup is required.
+	  </p>
+	</div>
+      </li>
+
+      <li>
+	<b>Graphics Toolkits</b> - Gallery 2 works with many different
+	toolkits (<a href="http://netpbm.sourceforge.net"
+	target="_blank">NetPBM</a>, <a
+	href="http://www.imagemagick.org/"
+	target="_blank">ImageMagick</a>, <a href="http://php.net/gd"
+	target="_blank">GD</a> or <a
+	href="http://www.graphicsmagick.org/"
+	target="_blank">GraphicsMagick</a>).  You need to activate at
+	least one or you won't get any thumbnails, but there's no
+	limit on how many you can have.  In fact, more is better
+	because they can work together.  Here are some interesting
+	points about the main supported toolkits (mostly reported by
+	users, your mileage may vary).
+
+	<ul>
+	  <li>
+	    <b>Fastest</b> - ImageMagick and GraphicsMagick
+	  </li>
+	  <li>
+	    <b>Highest Quality</b> - NetPBM (ImageMagick is a close second though)
+	  </li>
+	</ul>
+
+	Limitations:
+	<ul>
+	  <li>
+	    <b>GD</b> - cannot do image rotation, may hit server
+	    memory limits and crash PHP.
+	  </li>
+	  <li>
+	    <b>NetPBM, ImageMagick, GraphicsMagick</b> - require server to support exec() system
+	    call (not usually a problem)
+	  </li>
+	</ul>
+      </li>
+    </ol>
+
+    <h2><a name="installing">Installing</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+    <p>
+      Gallery 2 is a web application and must be installed on your web
+      server in order for you to use it.  If you've unpacked it on
+      your desktop, you will have to upload it to your server as part
+      of the install process.  Then you can configure it using your web browser.<br/>
+      As an alternative to the lengthy upload via FTP, take a look at the
+      <a href="http://codex.gallery2.org/Gallery2:Preinstaller"
+      target="_blank">Gallery 2 Pre-Installer</a>.
+    </p>
+    <ol style="margin-top: 0.2em">
+      <li>
+	<b> Upload </b> - Copy the Gallery 2 files to a directory on your webserver. There are
+	several alternatives for this step:
+	<ul style="margin-top: 0.4em; margin-bottom: 0">
+	  <li>
+	    <b>Fastest way</b>: Upload the gallery package to your web
+	    server archive via FTP or another method, then unpack it
+	    using an interactive shell session (e.g. ssh or telnet).
+	    Example unpacking commands (choose the appropriate one):
+	    <div class="instructions">
+	      <h3> For .tar.gz archives </h3>
+	      <p>
+		$ tar xzf gallery2.tar.gz
+	      </p>
+	    </div>
+
+	    <div class="instructions">
+	      <h3> For zip archives </h3>
+	      <p>
+		$ unzip gallery2.zip
+	      </p>
+	    </div>
+
+	    If you do not have shell access, you can ask your provider
+	    to do it for you, or you can make a miniature PHP script
+	    containing one of the above commands.  Some webhosting
+	    companies offer a control panel with a web file-browser
+	    which is capable of extracting / unarchiving archive
+	    files. It&rsquo;s worth a try to check if this option is
+	    available.
+	  </li>
+
+	  <li>
+	    <b>Easiest (but slowest) way:</b> If you don't have shell
+	    access, you can upload the complete contents of the
+	    Gallery 2 archive to the webserver with an FTP
+	    program. This may take a lot of time and be
+	    error-prone. In this case, pay special attention to the
+	    &rsquo;System Checks&rsquo; step of the installer and make
+	    sure that there are no missing or modified files.
+	    Consider using a smart FTP program like
+	    <a href="http://filezilla.sourceforge.net/" target="_blank">FileZilla</a> to
+	    make sure that your transfer goes smoothly.
+	  </li>
+
+	  <li>
+	    <b>Advanced way</b>: The best way to install Gallery
+	    <b>and</b> stay up to date if you have shell access to
+	    your webserver is to use
+	    <a href="http://codex.gallery2.org/Gallery:Using_Subversion"
+	      target="_blank">Subversion</a>.
+	  </li>
+	</ul>
+	<b> Note: </b> After uploading, you should close this version
+	of the README and browse to the version that you just
+	uploaded.  That way all the links in this document will point
+	to the right places in your Gallery 2 install.
+      </li>
+      <li>
+	<b> Begin Installing </b> - Open up your web browser and browse to the
+	<a href="install/index.php" target="_guided">install directory</a>.
+	Gallery 2 will walk you through the process of validating that your system
+	is properly configured and will set everything up for you.
+      </li>
+      <li>
+	<b> Authenticate </b> - You will be asked to create and save a
+	small text file in order to authenticate.  You may not proceed
+	until you do this.  That&rsquo;s how Gallery 2 knows that you&rsquo;re authorized
+	to use the installer.
+      </li>
+      <li>
+	<b> System Checks </b> - The installer checks your system to
+	make sure that it will support Gallery 2. Make sure that all
+	checks are successful!
+      </li>
+      <li>
+	<b> Installation Type </b> - Gallery can support multiple independent sites with
+	a single installation of the code.  Here you will select a standard single install
+	or the location of a new multisite install. There is more information about multisite
+	in the <a href="http://codex.gallery2.org/Gallery2:Multisite"
+	target="_blank">Gallery Codex</a>.
+      </li>
+      <li>
+	<b> Storage Setup </b> - Read the instructions on the
+	installer to set up a storage location for Gallery 2.  This is
+	where Gallery 2 will store all of your images, as well as other cache
+	information.
+      </li>
+      <li>
+	<b> Database Setup </b> - Select your database type and enter
+	your database authentication information. If this is not your first Gallery 2 installation
+	and there are still some remains of the old installation, it will check the state of the
+	installed version and offer a clean install option which will delete all your data in the
+	storage directory and in the database. If the installed version  seems to be fine, it will
+	also offer to reuse the existing database tables. Select this option if you did not start
+	the installer with the intent to start from scratch.
+      </li>
+      <li>
+	<b> Admin User Setup </b> - You are prompted for an
+	administrator username and password. Type in a password and
+	type it again to validate it. The full name and the email address are optional.
+	But entering an email address is highly recommended. Once you&rsquo;re finished,
+	 click &rsquo;Create&rsquo; to create the admin user for this installation of Gallery 2.
+      </li>
+      <li>
+	<b> Create Config File </b> - Gallery 2 will create the
+	<b>config.php</b> file in your Gallery 2 directory.  This contains
+	all the answers you&rsquo;ve provided in the installer and is
+	necessary for Gallery 2 to function properly. At this point, there&rsquo;s also a sanity
+	check to prevent you from damaging your Gallery install by running the installer when you
+	should rather have started the upgrader.
+      </li>
+      <li>
+	<b> Install the Core module </b> - Here&rsquo;s where we create all
+	the database tables and initial users and albums to get you
+	started.  Unless something goes wrong, there&rsquo;s nothing for you
+	to do here.
+      </li>
+      <li>
+	<b> Install other modules </b> - Gallery 2 has lots of different
+	modules that provide useful functionality.  Choose which ones
+	you want to use.  You can always go to the <a href="main.php?g2_view=core.SiteAdmin"
+	target="_guided">Site Admin</a> page later on to install, activate, deactivate or
+	uninstall modules, so it&rsquo;s ok to experiment here.
+      </li>
+      <li>
+	<b> Check Security </b> - Gallery 2 walks you through the process of
+	locking down your new <b>config.php</b>.
+      </li>
+      <li>
+	<b> Finished! </b> - Congratulations! You have successfully
+	installed Gallery 2!
+      </li>
+    </ol>
+
+    <h2><a name="getting_started">Using your new Gallery</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+    <p>
+	Once you&rsquo;ve successfully got Gallery 2 installed, you should take a look at the
+	<a href="http://codex.gallery2.org/Gallery2:Quick_Start_Guide"
+	 target="_new">Gallery 2 Quick Start Guide</a>.  It will help you get started with
+	Gallery and will walk you through the steps from zero to managing your first photo album
+	in your freshly installed Gallery.  Below are some links to your gallery that will make it
+	easier for you to follow the Quick Start Guide. Note: You may need to activate certain
+	modules to be able to use some of these links.
+    </p>
+    <ul>
+      <li>
+	<a href="main.php" target="_guided">Your Gallery 2</a>
+	<ul>
+	  <li>
+	    <a href="main.php?g2_view=core.UserAdmin&amp;g2_subView=core.UserLogin&amp;g2_form[formName]=UserLogin&amp;g2_form[username]=admin"
+		target="_guided">Log In</a>
+	  </li>
+	  <li>
+	    <a href="main.php?g2_view=core.ItemAdmin&amp;g2_subView=core.ItemAdd"
+	    target="_guided">Add Items</a>
+	  </li>
+	  <li>
+	    <a href="main.php?g2_view=core.ItemAdmin&amp;g2_subView=core.ItemAddAlbum"
+	    target="_guided">Add Album</a>
+	  </li>
+	  <li>
+	    <a href="main.php?g2_view=search.SearchScan&amp;g2_form[useDefaultSettings]=1"
+	    target="_guided">Search</a>
+	  </li>
+	  <li>
+	    <a href="main.php?g2_view=core.SiteAdmin" target="_guided">Site Admin</a>
+	    <ul>
+	      <li>
+		<a href="main.php?g2_view=core.SiteAdmin&amp;g2_subView=core.AdminPlugins"
+		target="_guided">Plugins</a>
+	      </li>
+	      <li>
+		<a href="main.php?g2_view=core.SiteAdmin&amp;g2_subView=core.AdminThemes"
+		target="_guided">Themes</a>
+	      </li>
+	      <li>
+		<a href="main.php?g2_view=core.SiteAdmin&amp;g2_subView=core.AdminGroups"
+		target="_guided">Create Groups</a>
+	      </li>
+	      <li>
+		<a href="main.php?g2_view=core.SiteAdmin&amp;g2_subView=core.AdminUsers"
+		target="_guided">Create Users</a>
+	      </li>
+	      <li>
+		<a href="main.php?g2_view=core.SiteAdmin&amp;g2_subView=migrate.SelectGallery"
+		target="_guided">Gallery 1 Migration Page</a>
+	      </li>
+	      <li>
+		<a href="main.php?g2_view=core.SiteAdmin&amp;g2_subView=thumbnail.ThumbnailSiteAdmin"
+		target="_guided">Thumbnail Manager</a>
+	      </li>
+	    </ul>
+	  </li>
+	</ul>
+      </li>
+    </ul>
+    <p>
+	Take a look at the list of
+	<a href="http://codex.gallery2.org/Gallery2:User_Contributions"
+	target="_blank">User Contributions</a> to find even more modules, themes,
+	utilities, mods and more.
+    </p>
+
+    <h2><a name="updating">Updating your Gallery 2 Installation</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+    <p>
+      Updating is quick and easy and should not lose any of your data.
+    </p>
+
+    <div class="important">
+      <h3> Warning When Upgrading from Gallery 2.0! </h3>
+      <p>
+	Third party modules and themes designed for Gallery 2.0 will
+	not work with Gallery 2.3.  During the upgrade process, these
+	modules and themes will be automatically deactivated for you.
+	You can find updated versions for most of these modules and
+	themes here: <a
+	href="http://codex.gallery2.org/Gallery2:User_Contributions">http://codex.gallery2.org/Gallery2:User_Contributions</a>
+      </p>
+    </div>
+
+    <ol>
+      <li>
+	If you have a busy site, consider putting your Gallery in
+	maintenance mode before updating the code and performing the
+	upgrade. This gives visitors a message that the site is
+	temporarily offline, rather than showing everybody the upgrade
+	page. Edit your config.php file to activate maintenance mode.
+	This feature is new starting in 2.1, so it is not available in
+	an upgrade from 2.0.x.
+      </li>
+
+      <li>
+	Download the latest code for any active third party modules
+	that you're using, or deactivate them.  If in doubt,
+	deactivating is safe.
+      </li>
+
+      <li>
+	<a href="#get_latest_code">Get the latest code</a> and unpack
+	it over your existing copy of Gallery 2. Keep your existing
+	config.php in place, and don't touch your (g2data) data folder
+	or the database.  If you're using Subversion, you can just do
+	"svn update" at any time. Alternatively, you can also use the
+	<a href="http://codex.gallery2.org/Gallery2:Preinstaller"
+	target="_blank">Gallery 2 Pre-Installer</a> to get the latest code
+	onto the webserver.
+      </li>
+
+      <li>
+	If you use a PHP accelerator / cache (e.g. Turk mmCache,
+	Ioncube PHPA, eaccelerator, Zend Studio, etc.), flush (clear)
+	the cache of the accelerator.  Omitting this step can
+	<i>sometimes</i> lead to errors during and after the upgrade process.
+      </li>
+
+      <li>
+	Browse to <a href="upgrade/index.php" target="_guided">the
+	upgrader</a> and follow the instructions there.  <b>Make a
+	backup of your data</b> (g2data folder and especially the
+	database) when it tells you to!  Should you lose your data due
+	to a bug in the upgrader, the first thing we're going to tell
+	you to do is to restore from your backups!  (Then we'll
+	probably ask you to help us reproduce the bug.)
+      </li>
+
+      <li>
+	Enjoy your new version of Gallery 2.
+      </li>
+    </ol>
+
+    <h2><a name="getting_help">Getting Help</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+    <p>
+      There are many resources available to you if you're having problems with Gallery:
+    </p>
+      <ul>
+	<li>
+	  Look at the <a
+	    href="http://codex.gallery2.org/Gallery2:How_do_I_Install_Gallery2"
+	    target="_blank">&quot;How do I Install Gallery2&quot;
+	    article</a> on the <a href="http://codex.gallery2.org/"
+	    target="_blank">Gallery Documentation Website</a>
+	</li>
+	<li>
+	  Read the <a href="http://codex.gallery2.org/Gallery2:FAQ"
+	    target="_blank" >Gallery 2 FAQ</a>
+	</li>
+	<li>
+	  Use the <a href="http://gallery.menalto.com/forum/11"
+	    target="_blank">Gallery 2 Support Forums</a> on the <a
+	    href="http://gallery.sourceforge.net"
+	    target="_blank">Gallery Website</a>.
+	</li>
+	<li>
+	  Search the forum to see if somebody else has
+	  posted a similar problem and maybe there&rsquo;s an answer
+	  there, otherwise start a new topic to get help.
+	</li>
+	<li>
+	  If the problem seems like a bug in the Gallery 2 software
+	  you can <a
+	    href="http://sourceforge.net/tracker/?group_id=7130&amp;atid=107130"
+	    target="_blank">file a bug</a> in our bug tracker on
+	  SourceForge.  Please read our <a
+	    href="http://gallery.menalto.com/wiki/Feature_Requests_and_Bug_Reports"
+	    target="_blank">tracker guidelines</a> before filing a bug
+	  so that we can cut down on the number of spurious reports.
+	</li>
+	<li>
+	  If you're unsure whether to file a bug you can always post
+	  in the forums first and we'll ask you to file a bug if
+	  needed.  If you want to chat in real time, you can talk on
+	  our user-to-user irc support channel, <a
+	  href="irc://chat.freenode.net/#gallery-support"
+	  target="_blank">#gallery-support on chat.freenode.net
+	  (irc client)</a> or <a
+	  href="http://jtty.com/GallerySupport">#gallery-support (web
+	  based irc)</a>
+	</li>
+      </ul>
+
+    <p>
+      Remember &ndash; reporting bugs is <b>good</b>.  Even if you think
+      it&rsquo;s silly, go ahead and report it.  We can always close the bug
+      or refile it (please don&rsquo;t be offended in this case) but it&rsquo;s
+      harder to find bugs than it is to fix them so we&rsquo;re counting on
+      you to help us with the finding part.
+    </p>
+
+    <h2><a name="known_issues">Known Issues / Bugs</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+
+    <p>
+      Check our <a href="http://codex.gallery2.org/Gallery2:Known_Issues"
+      target="_blank">Known Issues</a> list and
+      <a href="http://sourceforge.net/tracker/?group_id=7130&amp;atid=107130"
+      target="_blank">Bug Tracker</a> for information and some workarounds for
+      known problems.
+    </p>
+
+    <h2><a name="advanced_topics">Advanced Topics</a></h2>
+    <p class="toc-link"> <a href="#toc">[table of contents]</a> </p>
+    <p style="margin: 10px 0 0 0">
+      <b> Unit Tests </b> - Gallery 2 was designed using <a
+      href="http://www.google.com/search?q=extreme+programming"
+      target="_blank">Extreme Programming</a> methodologies.  This
+      means that we have over 2,000 unit tests that ensure code
+      quality.  If you want to help us out, you can <a
+      href="lib/tools/phpunit/index.php" target="_guided">try running
+      the unit tests</a> and report back to us if any of them fail.
+      <br/>
+    </p>
+    <p style="margin: 0 0 0 10px">
+      <b> Note </b> - these tests shouldn&rsquo;t change your Gallery
+      2 settings at all, but if they fail, they may leave things in a
+      weird state.  Be warned that there's a slim chance that you
+      might have to ditch your Gallery 2 data and start over if
+      something catastrophic happens.
+    </p>
+
+    <p>
+      <b> For Themers </b> - There is now some
+      <a href="http://codex.gallery2.org/Gallery2:Themes" target="_guided">theme documentation</a>
+      that you should read if you want to change the look of your Gallery 2 by customizing
+      an existing theme and its templates or by creating your own theme.
+    </p>
+
+    <p>
+      <b> Localization </b> - If you&rsquo;re interested in localizing
+      Gallery 2 into another language, you can
+      <a href="lib/tools/reports/localization.php"
+      target="_guided">review the current state of localization</a>
+      and then <a href="http://codex.gallery2.org/Gallery2:Localization"
+      target="_guided">read the localization how-to</a> and get started.
+      <a href="http://sourceforge.net/tracker/?atid=582564&amp;group_id=7130&amp;func=browse"
+      target="_guided">Submit your localizations</a> early and often -
+      no need to wait until you&rsquo;re entirely done.
+    </p>
+
+    <p>
+      <b> For Developers </b> - We've gotten started on some
+      <a href="http://gallery.menalto.com/dev"
+      target="_guided">developer documentation</a> that you should read if you want to
+      start hacking on Gallery 2.  Some of the information is a little bit out of date
+      or in early drafts, but it's a start.
+    </p>
+
+    <p>
+      <b> Embedding </b> - To learn more about embedding Gallery 2 into your website and
+      about existing integrations in content management systems, portals, blogs etc.
+      please see <a href="http://codex.gallery2.org/Gallery2:Embedding"
+      target="_blank">Gallery 2 Embedding</a>.
+    </p>
+
+    <p>
+      <a href="http://validator.w3.org/check?uri=referer&amp;ss=1"><img
+	  src="images/xhtml10.png"
+	  alt="This page is valid XHTML 1.0"
+	  style="border: none" width="80" height="15"/></a>
+
+      <a href="http://gallery.sourceforge.net"><img
+	  src="images/gallery.gif"
+	  alt="Gallery 2" title="Gallery 2"
+	  style="border: none" width="80" height="15"/></a>
+
+    </p>
+
+    <hr />
+
+    <p class="fineprint">
+      Copyright (C) 2000-2008 Bharat Mediratta
+      &nbsp; &nbsp; &nbsp;
+      $Id: README.html 20996 2012-04-01 21:48:35Z bharat $
+    </p>
+  </body>
+</html>

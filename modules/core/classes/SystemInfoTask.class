@@ -1,0 +1,163 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/AdminMaintenance.inc');
+
+/**
+ * This is a MaintenanceTask that will return system details useful for posting in support forum.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17770 $
+ */
+class SystemInfoTask extends MaintenanceTask {
+    /**
+     * @see MaintenanceTask::getInfo
+     */
+    function getInfo() {
+	global $gallery;
+
+	$info['l10Domain'] = 'modules_core';
+	$info['title'] = $gallery->i18n('System information');
+	$info['description'] =
+	    $gallery->i18n('Get system details; useful for copy/paste into G2 support forum.');
+	return $info;
+    }
+
+    /**
+     * @see MaintenanceTask::run
+     */
+    function run() {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	list ($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$version = $core->getInstalledVersions();
+	$version = !empty($version)
+	    ? $version['gallery'] . ' ' . $core->translate('core') . ' ' . $version['core']
+	    : $core->translate('unknown');
+
+	if ($platform->is_dir(GalleryCoreApi::getCodeBasePath('.svn'))) {
+	    /* Try to determine svn revision; ignore any error */
+	    list ($success, $output) =
+		$platform->exec(array(array('svn', 'info', GalleryCoreApi::getCodeBasePath())));
+	    if ($success && is_array($output)) {
+		foreach ($output as $line) {
+		    if (!strncmp($line, 'Revision: ', 10)) {
+			$version .= ' r' . substr($line, 10);
+			break;
+		    }
+		}
+	    }
+	}
+
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$baseUrl = $urlGenerator->generateUrl(
+			array(),
+			array(
+			    'forceDirect' => true,
+			    'forceFullUrl' => true,
+			    'forceSessionId' => false,
+			    'useAuthToken' => false
+			));
+
+	GalleryCoreApi::requireOnce('modules/core/classes/GalleryTheme.class');
+	GalleryCoreApi::requireOnce('modules/core/classes/GalleryEmbed.class');
+	$api = $core->translate(array('text' => 'API = Core %s, Module %s, Theme %s, Embed %s',
+		    'arg1' => implode('.', GalleryCoreApi::getApiVersion()),
+		    'arg2' => implode('.', GalleryModule::getApiVersion()),
+		    'arg3' => implode('.', GalleryTheme::getApiVersion()),
+		    'arg4' => implode('.', GalleryEmbed::getApiVersion())));
+
+	list ($ret, $list) = GalleryCoreApi::getAllFactoryImplementationIds('GalleryToolkit');
+	if (!$ret) {
+	    $toolkitList = implode(', ', array_keys($list));
+	} else {
+	    $toolkitList = $core->translate('unknown');
+	}
+
+	if ($params['acceleration']) {
+	    $acceleration = unserialize($params['acceleration']);
+	    $acceleration = $acceleration['guest']['type']
+		. (isset($acceleration['guest']['expiration'])
+			? '/' . $acceleration['guest']['expiration'] : '') . ', '
+		. $acceleration['user']['type']
+		. (isset($acceleration['user']['expiration'])
+			? '/' . $acceleration['user']['expiration'] : '');
+	} else {
+	    $acceleration = $core->translate('unknown');
+	}
+
+	list ($ret, $locale) = $gallery->getActiveLanguageCode();
+	if ($ret) {
+	    $locale = $core->translate('unknown');
+	}
+
+	$counts = array();
+	foreach (array('GalleryAccessMap', 'GalleryAccessSubscriberMap',
+		       'GalleryUser', 'GalleryItem', 'GalleryAlbumItem',
+		       'GalleryCacheMap') as $table) {
+	    list ($ret, $results) = $gallery->search('SELECT COUNT(*) FROM [' . $table . ']');
+	    if ($ret) {
+		$counts[$table] = 'error';
+	    }
+	    $result = $results->nextResult();
+	    $counts[$table] = $result[0];
+	}
+
+	$info = array(
+	    $core->translate('Gallery URL') . ' = ' . $baseUrl,
+	    $core->translate('Gallery version') . ' = ' . $version,
+	    $api,
+	    $core->translate('PHP version') . ' = ' . phpversion() . ' ' . php_sapi_name(),
+	    $core->translate('Webserver') . ' = ' .
+		GalleryUtilities::getServerVar('SERVER_SOFTWARE'),
+	    $core->translate('Database') . ' = ' .
+		$storage->getAdoDbType() . ' ' . @$storage->getVersion() .
+		', lock.system=' . $params['lock.system'],
+	    $core->translate('Toolkits') . ' = ' . $toolkitList,
+	    $core->translate('Acceleration') . ' = ' . $acceleration,
+	    $core->translate('Operating system') . ' = ' . php_uname(),
+	    $core->translate('Default theme') . ' = ' . $params['default.theme'],
+	    $core->translate('gettext') . ' = ' .
+		( GalleryTranslator::canTranslate() ? $core->translate('enabled')
+						    : $core->translate('disabled')),
+	    $core->translate('Locale') . ' = ' . $locale,
+	    $core->translate('Browser') . ' = ' . GalleryUtilities::getServerVar('HTTP_USER_AGENT')
+	);
+
+	foreach ($counts as $table => $count) {
+	    $info[] = $core->translate(
+		array('text' => 'Rows in %s table = %d', 'arg1' => $table, 'arg2' => $count));
+	}
+
+	return array(null, true, $info);
+    }
+}
+?>

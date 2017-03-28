@@ -1,0 +1,176 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A helper class for the MultiLang module.
+ * @package MultiLang
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class MultiLangHelper {
+
+    /**
+     * Get language data for an item
+     *
+     * @param int $itemId
+     * @return array GalleryStatus a status code
+     *               array (language => array data, ..)
+     */
+    function getItemData($itemId) {
+	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('MultiLangItemMap',
+	    array('language', 'title', 'summary', 'description'),
+	    array('itemId' => (int)$itemId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$data = array();
+	while ($result = $searchResults->nextResult()) {
+	    $data[$result[0]] = array('title' => $result[1], 'summary' => $result[2],
+				      'description' => $result[3]);
+	}
+	return array(null, $data);
+    }
+
+    /**
+     * Set language data for an item, or remove data if all text parameters are empty
+     *
+     * @param GalleryItem $item
+     * @param string $language
+     * @param string $title (optional)
+     * @param string $summary (optional)
+     * @param string $description (optional)
+     * @return GalleryStatus a status code
+     */
+    function setItemData($item, $language, $title=null, $summary=null, $description=null) {
+	$itemId = $item->getId();
+	list ($ret, $data) = MultiLangHelper::getItemData($itemId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (empty($title) && empty($summary) && empty($description)) {
+	    /* Remove data for this item/language (if there is any to remove) */
+	    if (isset($data[$language])) {
+		$ret = GalleryCoreApi::removeMapEntry(
+		    'MultiLangItemMap',
+		    array('itemId' => $itemId, 'language' => $language));
+		if ($ret) {
+		    return $ret;
+		}
+		if (count($data) == 1) {
+		    /* Last multilang data deleted; remove onLoadHandler */
+		    list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($itemId);
+		    if ($ret) {
+			return $ret;
+		    }
+		    $item->removeOnLoadHandler('MultiLang');
+		    $item->save();
+		    if ($ret) {
+			GalleryCoreApi::releaseLocks($lockId);
+			return $ret;
+		    }
+		    $ret = GalleryCoreApi::releaseLocks($lockId);
+		    if ($ret) {
+			return $ret;
+		    }
+		}
+	    }
+	} else {
+	    /* Update or insert new data */
+	    if (isset($data[$language])) {
+		$ret = GalleryCoreApi::updateMapEntry(
+		    'MultiLangItemMap',
+		    array('itemId' => $itemId, 'language' => $language),
+		    array('title' => $title, 'summary' => $summary, 'description' => $description));
+		if ($ret) {
+		    return $ret;
+		}
+	    } else {
+		$ret = GalleryCoreApi::addMapEntry(
+		    'MultiLangItemMap',
+		    array('itemId' => $itemId, 'language' => $language,
+			  'title' => $title, 'summary' => $summary, 'description' => $description));
+		if ($ret) {
+		    return $ret;
+		}
+		if (!$item->hasOnLoadHandler('MultiLang')) {
+		    /* First multilang data for this item; add onLoadHandler */
+		    list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($itemId);
+		    if ($ret) {
+			return $ret;
+		    }
+		    $item->addOnLoadHandler('MultiLang');
+		    $item->save();
+		    if ($ret) {
+			GalleryCoreApi::releaseLocks($lockId);
+			return $ret;
+		    }
+		    $ret = GalleryCoreApi::releaseLocks($lockId);
+		    if ($ret) {
+			return $ret;
+		    }
+		}
+	    }
+	}
+
+	if ($item->getParentId()) {
+	    global $gallery;
+	    $event = GalleryCoreApi::newEvent('Gallery::ViewableTreeChange');
+	    $event->setData(array('userId' => null, 'itemId' => $item->getParentId()));
+	    list ($ret) = GalleryCoreApi::postEvent($event);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Update item with data for the current language, if available
+     *
+     * @param GalleryItem $item
+     * @return GalleryStatus a status code
+     */
+    function onLoad(&$item) {
+	global $gallery;
+	list ($ret, $language) = $gallery->getActiveLanguageCode();
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $data) = MultiLangHelper::getItemData($item->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (isset($data[$language])) {
+	    $item->setTitle($data[$language]['title']);
+	    $item->setSummary($data[$language]['summary']);
+	    $item->setDescription($data[$language]['description']);
+	}
+
+	return null;
+    }
+}
+?>

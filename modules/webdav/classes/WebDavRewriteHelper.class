@@ -1,0 +1,78 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A WebDAV helper class for generating short URLs without query strings.
+ * @package WebDav
+ * @subpackage Classes
+ * @author Jack Bates <ms419@freezone.co.uk>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class WebDavRewriteHelper {
+
+    /**
+     * Hacked version of RewriteSimpleHelper::parserPath to support either 'path' or 'itemId' and
+     * empty path or '/' for short URL to the root album.  Uses rawurlencode instead of urlencode to
+     * encode ' ' as '%20', instead of '+'.
+     * @see RewriteSimpleHelper::parsePath
+     */
+    function parsePath(&$url, &$params, &$entity) {
+	global $gallery;
+
+	if (isset($params['itemId'])) {
+	    if (!isset($entity)) {
+		$urlGenerator =& $gallery->getUrlGenerator();
+		$entity = $urlGenerator->loadEntity($params['itemId']);
+	    }
+
+	    if (!GalleryUtilities::isA($entity, 'GalleryFileSystemEntity')) {
+		return;
+	    }
+
+	    list ($ret, $params['path']) = $entity->fetchLogicalPath();
+	    if ($ret) {
+		return;
+	    }
+
+	    unset($params['itemId']);
+	}
+
+	if (empty($params['path'])) {
+	    $params['path'] = '';
+	} else {
+	    $params['path'] = ltrim($params['path'], '/');
+
+	    /* rawurlencode except for path separators */
+	    $params['path'] = str_replace('%2F', '/', rawurlencode($params['path']));
+	}
+
+	/*
+	 * We add in a leading slash to the path because the rule is designed not to have
+	 * one, so that it can trigger on gallery2/w/ and gallery2/w (Windows XP will
+	 * PROPFIND the path without the trailing slash
+	 */
+	$url = str_replace('%path%', '/' . $params['path'], $url);
+	unset($params['path']);
+
+	return true;
+    }
+}
+?>

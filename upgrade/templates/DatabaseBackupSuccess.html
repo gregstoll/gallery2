@@ -1,0 +1,24 @@
+<div class="success">
+    <h1><?php print _("Gallery Database Backup successful.") ?></h1>
+
+    <p>
+      <?php print _("We've successfully backed up the data in your Gallery database.") ?>
+    </p>
+    <?php if (!empty($templateData['backupWarnings'])): ?>
+	<p>
+	    <?php print _("The following warnings were produced during the backup process:") ?>
+	</p>
+	<?php foreach ($templateData['backupWarnings'] as $warning): ?>
+	    <?php print $warning ?> <br/>
+	<?php endforeach; ?>	    
+    <?php endif; ?>
+
+    <p>
+      <?php printf(_('Database backup completed and the backup file is located at: %s.'), $templateData['backupFileName']) ?>
+    </p>
+</div>
+<div class="warning">
+  <p>
+    <?php print _('Please note that your backup contains sensitive data (like passwords) and should not be stored online! We recommend that you download it from your server and keep it safely offline.') ?>
+  </p>
+</div>

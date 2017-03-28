@@ -1,0 +1,449 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+define('G2_SUPPORT_MAX_LOGIN_ATTEMPTS', 7);
+define('G2_SUPPORT_MAX_SESSION_LIFETIME', 2 * 60 * 60);
+define('G2_SETUP_SESSION_NAME', 'G2SETUPSID');
+
+require_once(dirname(dirname(dirname(__FILE__))) . '/modules/core/classes/GalleryUtilities.class');
+require_once(dirname(dirname(dirname(__FILE__))) . '/modules/core/classes/GalleryDataCache.class');
+require_once(dirname(dirname(dirname(__FILE__))) . '/modules/core/classes/GallerySession.class');
+
+/**
+ * Stub equivalent of Gallery.class that we use to extract data from config.php
+ */
+class GallerySetupUtilitiesStub {
+    var $config;
+    function setConfig($key, $value) {
+	$this->config[$key] = $value;
+    }
+
+    function getConfig($key) {
+	if (isset($this->config[$key])) {
+	    return $this->config[$key];
+	}
+	return null;
+    }
+
+    function setDebug() { }
+    function setDebugLogFile() { }
+    function setProfile() { }
+}
+
+class GallerySetupUtilities {
+
+    /**
+     * Regenerate the session id to prevent session fixation attacks
+     * Must be called before starting to output any data since it tries to send a cookie
+     *
+     * @static
+     */
+    function regenerateSession() {
+	/* 1. Generate a new session id */
+	$newSessionId = md5(uniqid(substr(rand() . serialize($_REQUEST), 0, 114)));
+	$sessionData = array();
+	if (!empty($_SESSION) && is_array($_SESSION)) {
+	    foreach ($_SESSION as $key => $value) {
+		$sessionData[$key] = $value;
+	    }
+	}
+	/* 2. Delete the old session */
+	session_unset();
+	session_destroy();
+	/* Create the new session with the old data, send cookie */
+	session_id($newSessionId);
+	$sessionName = session_name();
+	/* Make sure we don't use invalid data at a later point */
+	foreach (array($_GET, $_POST, $_REQUEST, $_COOKIE) as $superGlobal) {
+	    unset($superGlobal[$sessionName]);
+	}
+	session_start();
+	foreach ($sessionData as $key => $value) {
+	    $_SESSION[$key] = $value;
+	}
+    }
+
+    /**
+     * Are cookies supported by the current user-agent?
+     *
+     * @static
+     */
+    function areCookiesSupported() {
+	static $areCookiesSupported;
+
+	/* Remember the state since we might unset $_COOKIE */
+	if (!isset($areCookiesSupported)) {
+	    $areCookiesSupported = !empty($_COOKIE[session_name()]);
+	}
+
+	return $areCookiesSupported;
+    }
+
+    /**
+     * Return the number of failed attempts to log in to any of the support pages
+     *
+     * @return int the number of attempts or false if there was an error
+     * @static
+     */
+    function getLoginAttempts() {
+	/* Init if needed (like from lib/support; upgrader already init'ed) */
+	global $gallery;
+	if (!isset($gallery)) {
+	    /*
+	     * Don't include embed.php in the global scope because it will initiate actions before
+	     * we are ready for them (eg: redirect us to the installer if we have no config.php)
+	     */
+	    require_once(dirname(__FILE__) . '/../../embed.php');
+	    $ret = GalleryEmbed::init(array('fullInit' => false));
+	    if ($ret) {
+		return false;
+	    }
+	}
+
+	list ($ret, $attempts) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'setup.login.attempts');
+	if ($ret) {
+	    return false;
+	}
+
+	if (!isset($gallery)) {
+	    $ret = GalleryEmbed::done();
+	    if ($ret) {
+		return false;
+	    }
+	}
+
+	return $attempts;
+    }
+
+    /**
+     * Set the number of failed attempts to log in to any of the support pages.
+     *
+     * @param int $attempts the number of attempts
+     * @return true on success, false on error
+     * @static
+     */
+    function setLoginAttempts($attempts) {
+	/* Init if needed (like from lib/support; upgrader already init'ed) */
+	global $gallery;
+	if (!isset($gallery)) {
+	    /*
+	     * Don't include embed.php in the global scope because it will initiate actions before
+	     * we are ready for them (eg: redirect us to the installer if we have no config.php)
+	     */
+	    require_once(dirname(__FILE__) . '/../../embed.php');
+	    $ret = GalleryEmbed::init(array('fullInit' => false));
+	    if ($ret) {
+		return false;
+	    }
+	}
+
+	$ret = GalleryCoreApi::setPluginParameter(
+	    'module', 'core', 'setup.login.attempts', $attempts);
+	if ($ret) {
+	    return false;
+	}
+
+	if (!isset($gallery)) {
+	    $ret = GalleryEmbed::done();
+	    if ($ret) {
+		return false;
+	    }
+	} else {
+	    $storage =& $gallery->getStorage();
+	    $ret = $storage->checkPoint();
+	    if ($ret) {
+		return false;
+	    }
+	}
+
+	return true;
+    }
+
+    /**
+     * Mark this session as authenticated.
+     *
+     * @param bool $updateDatabase true if you want to also reset the login attempts (default: true)
+     * @static
+     */
+    function authenticateThisSession($resetLoginAttempts=true) {
+	$_SESSION['authenticated'] = true;
+	if ($resetLoginAttempts) {
+	    GallerySetupUtilities::setLoginAttempts(0);
+	}
+	GallerySetupUtilities::regenerateSession();
+    }
+
+    /**
+     * Is this session authenticated?
+     *
+     * @return true if this session is authenticated
+     * @static
+     */
+    function isSessionAuthenticated() {
+	return !empty($_SESSION['authenticated']);
+    }
+
+    /**
+     * Emit a Location header to redirect the user back to the current page.
+     *
+     * @static
+     */
+    function redirectBackToSelf() {
+	require_once(dirname(__FILE__) . '/../../modules/core/classes/GalleryUrlGenerator.class');
+	$urlGenerator = new GalleryUrlGenerator();
+	$url = $urlGenerator->getCurrentUrl();
+	if (GallerySetupUtilities::isSessionAuthenticated()
+		&& !GallerySetupUtilities::areCookiesSupported()) {
+	    $url = GalleryUrlGenerator::appendParamsToUrl(
+		    $url, array(session_name() => session_id()), false);
+	}
+	header('Location: ' . $url);
+    }
+
+    /**
+     * Return the path to the config dir for this install.  This will return the correct value for
+     * multisite installs vs. the orginal.
+     *
+     * @return string the path to the config dir
+     * @static
+     */
+    function getConfigDir() {
+	if (defined('GALLERY_CONFIG_DIR')) {
+	    return GALLERY_CONFIG_DIR;
+	}
+	return dirname(dirname(dirname(__FILE__)));
+    }
+
+    /**
+     * Return the config object from the Gallery class, read out of config.php.
+     *
+     * @return array the config values from config.php
+     * @static
+     */
+    function getGalleryConfig() {
+	$gallery = new GallerySetupUtilitiesStub();
+
+	/* Load config.php */
+	$dir = GallerySetupUtilities::getConfigDir();
+	if (file_exists($dir . '/config.php')) {
+	    include($dir . '/config.php');
+	} else {
+	    return null;
+	}
+
+	return $gallery->config;
+    }
+
+    /**
+     * Get the authentication key from the session
+     * @return string the authentication key
+     * @static
+     */
+    function getAuthenticationKey() {
+	return isset($_SESSION['authKey']) ? $_SESSION['authKey'] : null;
+    }
+
+    /**
+     * Store the authentication key in the session
+     * @param string $key the authentication key
+     * @static
+     */
+    function setAuthenticationKey($key) {
+	$_SESSION['authKey'] = $key;
+    }
+
+    /**
+     * Return a 32 character random value.
+     * @param string a random value
+     * @static
+     */
+    function generateAuthenticationKey() {
+	for ($len = 64, $rand='';
+	     strlen($rand) < $len;
+	     $rand .= chr(!mt_rand(0,2) ? mt_rand(48,57) :
+			  (!mt_rand(0,1) ? mt_rand(65,90) :
+			   mt_rand(97,122)))) ;
+	return md5($rand);
+    }
+
+    /**
+     * Create a downloadable text file of a specified name and contents.
+     * Sets headers appropriately.
+     *
+     * @param string $name the file's name
+     * @param string $contents the file's contents
+     */
+    function generateTextFileForDownload($name, $contents) {
+	header('Content-Type: text/plain');
+	header('Content-Length: ' . strlen($contents));
+	header("Content-Description: Download $name to your computer.");
+	header("Content-Disposition: attachment; filename=$name");
+	print $contents;
+    }
+
+    /**
+     * Cleanly start up our session.
+     *
+     * - Specify a session name (which translates into the id in the cookie, or in query params)
+     * - Use an appropriate session handler
+     * - Sanitize the session id to make sure we're not getting tricked with some malicious value
+     * - Detect and thwart session fixation attacks
+     *
+     * @static
+     */
+    function startSession() {
+	/* Set our own session name */
+	if (@ini_get('session.auto_start')) {
+	    session_unset();
+	    session_destroy();
+	}
+	session_name(G2_SETUP_SESSION_NAME);
+
+	$sessionName = session_name();
+	$sessionId = GalleryUtilities::getRequestVariablesNoPrefix($sessionName);
+	if (empty($sessionId) || is_array($sessionId)) {
+	    $sessionId = !empty($_COOKIE[$sessionName]) ? $_COOKIE[$sessionName] : '';
+	}
+
+	/* Remember whether cookies are supported */
+	GallerySetupUtilities::areCookiesSupported();
+
+	/* Sanitize the sessionId */
+	if (!empty($sessionId)) {
+	    if (function_exists('preg_replace')) {
+		$sessionId = preg_replace('/[^a-zA-Z0-9]/', '', $sessionId);
+	    } else {
+		$sessionId = ereg_replace('/[^a-zA-Z0-9]/', '', $sessionId);
+	    }
+	    /* Make sure we don't use invalid data at a later point */
+	    foreach (array($_GET, $_POST, $_REQUEST, $_COOKIE) as $superGlobal) {
+		unset($superGlobal[$sessionName]);
+	    }
+	    /*
+	     * md5 has a 128 bit (32 * 4bit) string, but we want to allow for other possible
+	     * hash functions too which possibly have hash strings of only 10 characters
+	     */
+	    if (strlen($sessionId) >= 10) {
+		session_id($sessionId);
+	    }
+	}
+
+	if (@ini_get('session.save_handler') == 'user') {
+	    /*
+	     * Escape hatch to avoid conflicting with an application specific session handler,
+	     * which can happen in the case where Gallery2 is installed in a subdir of some other
+	     * app.
+	     */
+	    @ini_set('session.save_handler', 'files');
+	}
+
+	session_start();
+
+	/*
+	 * Detect the case where we have a session id, but the data that it's associated with is
+	 * not a session that we've created.  This can happen in the case of a session fixation
+	 * attack.  Either create a clean session, or if we detect that this session is clean,
+	 * sign it in a way that we'll recognize.
+	 */
+	$remoteId = GallerySession::getRemoteIdentifier();
+	$cutoff = time() - G2_SUPPORT_MAX_SESSION_LIFETIME;
+	$configDir = GallerySetupUtilities::getConfigDir();
+	if (!empty($sessionId) && (
+		    !isset($_SESSION['_remoteId'])
+		    || GallerySession::compareIdentifiers($_SESSION['_remoteId'], $remoteId) == 0
+		    || !isset($_SESSION['_startTime']) || $_SESSION['_startTime'] < $cutoff
+		    || !isset($_SESSION['_path']) || $_SESSION['_path'] != $configDir)) {
+	    /*
+	     * Empty or invalid session (possibly a session fixation attack).  Get a new session
+	     * id, delete all data from this session and bless the new session.
+	     */
+	    GallerySetupUtilities::regenerateSession();
+	    session_unset();
+	    $sessionId = null;
+	}
+	if (empty($sessionId)) {
+	    /* Add session details for brand new or just-regenerated session */
+	    $_SESSION['_path'] = $configDir;
+	    $_SESSION['_remoteId'] = $remoteId;
+	    $_SESSION['_startTime'] = time();
+	}
+    }
+
+    /**
+     * Notify the site administrator by email that there have been too many failed attempts
+     * to log in with a password.
+     *
+     * @return GalleryStatus a status code
+     */
+    function notifySiteAdministrator() {
+	global $gallery;
+
+	/*
+	 * Don't include embed.php in the global scope because it will initiate actions before we
+	 * are ready for them (eg: it will redirect us to the installer if we have no config.php)
+	 */
+	require_once(dirname(__FILE__) . '/../../embed.php');
+
+	$ret = GalleryEmbed::init(array('fullInit' => false));
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $adminGroupId) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $adminUserIds) = GalleryCoreApi::fetchUsersForGroup($adminGroupId);
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $adminUsers) = GalleryCoreApi::loadEntitiesById(array_keys($adminUserIds));
+	if ($ret) {
+	    return $ret;
+	}
+	$toList = array();
+	foreach ($adminUsers as $admin) {
+	    $email = $admin->getEmail();
+	    if (!empty($email)) {
+		$toList[] = $email;
+	    }
+	}
+
+	/* Note: we don't have localization for lib support yet, so this is not internationalized */
+	if (!empty($toList)) {
+	    $ret = GalleryCoreApi::sendTemplatedEmail(
+		    'lib/support/templates/FailedPasswordEmail.tpl',
+		    array(), '', implode(',', $toList),
+		    'Too many failed login attempts');
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	$ret = GalleryEmbed::done();
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+}
+?>

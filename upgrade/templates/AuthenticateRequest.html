@@ -1,0 +1,63 @@
+    <?php if (!empty($templateData['error']['password'])): ?>
+      <div class="error">
+        <h2><?php print $templateData['error']['password']; ?></h2>
+      </div>
+    <?php endif; ?>
+    <?php if (!empty($templateData['authFileErrors'])): ?>
+      <div class="error">
+	<?php if (!empty($templateData['authFileErrors']['missing'])): ?>
+	  <?php printf(_('<b>Error:</b> could not locate %s.  Please place it in your %s directory.'),
+                      '<b>login.txt</b>', '<tt>' . dirname($templateData['authFile']) . '</tt>') ?>
+	<?php elseif (!empty($templateData['authFileErrors']['unreadable'])): ?>
+	  <?php printf(_('<b>Error:</b> your %s file is not readable.  Please give Gallery read permissions on the file.'),
+                      '<b>login.txt</b>') ?>
+	<?php elseif (!empty($templateData['authFileErrors']['mismatch'])): ?>
+	  <?php printf(_('<b>Error:</b> your %s key does not match correctly.  Please use the new authentication string from below and try again.'),
+                      '<b>login.txt</b>') ?>
+	<?php endif; ?>
+      </div>
+      <?php endif; ?>
+
+    <h1><?php print _('Authenticate') ?></h1>
+
+    <form method="post" action="">
+    <?php if ($templateData['renderType'] == 'password'): ?>
+      <p>
+	<?php print _("In order to proceed with the upgrade process, we have to verify that you are who you claim.  When you performed the install, you entered a password which went into your config.php.  Type that in now.  Refer to your config.php if you've forgotten what you entered."); ?>
+      </p>
+      <table>
+	<tr>
+	  <td style="text-align: left;">
+	    <?php print _('Password:') ?>
+	  </td>
+	  <td style="text-align: left;">
+	    <input name="password" type="password" />
+	    <input name="password_sent" type="hidden" value="1" />
+	    <script type="text/javascript">document.forms[0]['password'].focus();</script>
+	  </td>
+	</tr>
+      </table>
+      <?php else: ?>
+      <p>
+	<span class="error"><?php print _('You have exceeded the maximum attempts to login by entering a password.') ?></span>
+      </p>
+      <p>
+        <?php print _('To prevent somebody from hacking your website, we now require you to complete a stricter authentication process.') ?>
+      </p>
+      <p>
+        <?php printf(_('In order to proceed with the upgrade process, we have to verify that you are who you claim.  The best way to be sure is to ask you to make a tiny change in the Gallery directory which will prove that you have the right permissions.  So, we\'re going to ask that you create a new text file called %s in the %s directory on your webserver (that\'s the same directory where %s is located). It must contain the following randomly generated characters:'),
+                     '<strong>login.txt</strong>',
+                     '<tt>' . dirname($templateData['authFile']) . '</tt>',
+                     'main.php') ?>
+      </p>
+      <p class="bold"><?php print $templateData['authKey']; ?></p>
+
+      <p>
+        <?php print _("Once you've uploaded the file, click below to continue."); ?>
+      </p>
+      <?php endif; ?>
+    </form>
+
+    <div class="go">
+	  <a href="javascript:document.forms[0].submit()" class="btn continue"><i></i><span><span></span><i></i><?php print _('Authenticate Me') ?></span></a>
+    </div>

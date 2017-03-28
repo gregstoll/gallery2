@@ -1,0 +1,49 @@
+    <div <?php if ($templateData['secure']) print ' class="success"' ?>>
+    <h1>
+      <?php print _("Check Security") ?>
+    </h1>
+    </div>
+
+    <?php if ($templateData['showFileSystemPermissionWarnings']): ?>
+    <?php if (!$templateData['secure']): ?>
+    <?php if (!$templateData['file']['secure']): ?>
+    <p>
+      <?php printf(_("We want to make sure that your Gallery is secure.  The config.php file that this installer has edited has permissions that allow other people to write to it.  This is required because the installer qualifies as an \"other person\" when it comes to Unix file permissions.  So before you finish, you should change the permissions on this file such that other users can't write to it.  Right now your config.php has modes of %s.  We suggest that you do this:"), $templateData['file']['mode']) ?>
+    </p>
+
+    <div class="example">
+      <pre> <?php printf("chmod 644 %s", $templateData['configFilePath']) ?></pre>
+    </div>
+    <?php endif; ?>
+    <?php if (!$templateData['dir']['secure']): ?>
+    <p>
+      <?php print _("We want to make sure that your Gallery is secure.  The directory containing your config.php file that this installer has edited has permissions that allow other people to write or delete files.  So before you finish, you should change the permissions on this directory such that other users can't write to it.  We suggest that you do this:") ?>
+    </p>
+
+    <div class="example">
+      <pre> <?php printf("chmod 755 %s", dirname($templateData['configFilePath'])) ?></pre>
+    </div>
+    <?php endif; ?>
+
+    <p>
+      <?php print _("If you really want to continue, you can.  But we recommend that you take an extra moment to make sure that you're safe.") ?>
+    </p>
+    <?php endif; ?>
+
+    <?php if ($templateData['secure']): ?>
+    <p>
+      <?php print _("We've verified that your config.php is secure.") ?>
+    </p>
+    <?php endif; ?>
+    <?php endif; ?>
+
+    <div class="warning">
+      <?php printf(_('Please read the %1$sGallery Security Guide%3$s. For a brief overview, take a look at the %2$sshort check list%3$s within the security guide.'), '<a href="http://codex.gallery2.org/index.php/Gallery2:Security" target="_blank">', '<a href="http://codex.gallery2.org/index.php/Gallery2:Security#Short_Check_List" target="_blank">', '</a>') ?>
+    </div>
+
+    <?php if ($templateData['showFileSystemPermissionWarnings'] && !$templateData['secure']): ?>
+    <div class="go">
+	  <a href="<?php generateUrl(sprintf('%s?step=%s', INDEX_PHP, $currentStep->getStepNumber())) ?>" class="btn redo"><i></i><span><span></span><i></i>
+	  <?php echo _('Check Again') ?></span></a>
+    </div>
+    <?php endif; ?>

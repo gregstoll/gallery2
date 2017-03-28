@@ -1,0 +1,698 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Apache mod_rewrite helper.
+ * @package Rewrite
+ * @subpackage Parsers
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class ModRewriteHelper {
+
+    /**
+     * @see RewriteParser::saveActiveRules
+     */
+    function saveActiveRules($parser, $activeRules=null, $upgradeModule=null) {
+	list ($ret, $code) = ModRewriteHelper::checkFile();
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	if ($code != REWRITE_STATUS_OK) {
+	    return array(null, $code, null);
+	}
+
+	if (GalleryUtilities::isEmbedded()) {
+	    list ($ret, $code) = ModRewriteHelper::checkFile(true);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    if ($code != REWRITE_STATUS_OK) {
+		return array(null, $code, null);
+	    }
+	}
+
+	/* By default we use the rules we've already got */
+	if (is_null($activeRules)) {
+	    list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module', 'rewrite', 'activeRules');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    $activeRules = unserialize($activeRules);
+	}
+
+	$regexRules = array();
+	$shortUrls = array();
+	$flags = array('default' => array('QSA', 'L'), 'mandatory' => array());
+	if (!empty($activeRules)) {
+	    list ($ret, $code, $regexRules, $shortUrls, $errorId) =
+		RewriteHelper::parseActiveRules($activeRules, $parser, $upgradeModule, $flags);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    if ($code != REWRITE_STATUS_OK) {
+		return array(null, $code, $errorId);
+	    }
+	}
+
+	/* Write the standalone .htaccess */
+	list ($ret, $code) = ModRewriteHelper::writeFile($regexRules);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	if ($code != REWRITE_STATUS_OK) {
+	    return array(null, $code, null);
+	}
+
+	/* Write the embedded .htaccess */
+	if (GalleryUtilities::isEmbedded()) {
+	    list ($ret, $code) = ModRewriteHelper::writeFile($regexRules, true);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    if ($code != REWRITE_STATUS_OK) {
+		return array(null, $code, null);
+	    }
+	}
+
+	/* Finally, save the new rules */
+	$ret = GalleryCoreApi::setPluginParameter(
+	    'module', 'rewrite', 'shortUrls', serialize($shortUrls));
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$ret = GalleryCoreApi::setPluginParameter(
+	    'module', 'rewrite', 'activeRules', serialize($activeRules));
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	return array(null, REWRITE_STATUS_OK, null);
+    }
+
+    /**
+     * @see RewriteParser::saveAccessList
+     */
+    function saveAccessList($accessList, $allowEmptyReferer) {
+	list ($ret, $code) = ModRewriteHelper::checkFile();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if ($code != REWRITE_STATUS_OK) {
+	    return array(null, $code);
+	}
+
+	if (GalleryUtilities::isEmbedded()) {
+	    list ($ret, $code) = ModRewriteHelper::checkFile(true);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if ($code != REWRITE_STATUS_OK) {
+		return array(null, $code);
+	    }
+	}
+
+	$ret = GalleryCoreApi::setPluginParameter(
+	    'module', 'rewrite', 'accessList', serialize($accessList));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$ret = GalleryCoreApi::setPluginParameter(
+	    'module', 'rewrite', 'allowEmptyReferer', $allowEmptyReferer ? '1' : '0');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Save the new .htaccess */
+	list ($ret, $code) = $this->saveActiveRules();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	return array(null, $code);
+    }
+
+    /**
+     * @see RewriteParser::needsConfiguration
+     */
+    function needsConfiguration() {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	if (strpos($urlGenerator->getCurrentUrlDir(true), 'install/index.php') !== false &&
+		$gallery->getConfig('galleryBaseUrl')) {
+	    /*
+	     * We can't autoconfigure from installer in a multisite install because the current URL
+	     * is for the primary site, not the site being installed.
+	     */
+	    return array(null, true);
+	}
+
+	$baseUrlComponents = parse_url(preg_replace('{(install|upgrade)/index\.php.*}', '',
+						    $urlGenerator->getCurrentUrlDir(true)));
+	$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite',
+	    'modrewrite.galleryLocation', $baseUrlComponents['path']);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $code) = ModRewriteHelper::checkModRewrite();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if ($code != REWRITE_STATUS_OK) {
+	    return array(null, true);
+	}
+
+	list ($ret, $code) = ModRewriteHelper::checkFile();
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if ($code != REWRITE_STATUS_OK) {
+	    return array(null, true);
+	}
+
+	if (GalleryUtilities::isEmbedded()) {
+	    list ($ret, $code) = ModRewriteHelper::checkFile(true);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    if ($code != REWRITE_STATUS_OK) {
+		return array(null, true);
+	    }
+	}
+
+	return array(null, false);
+    }
+
+    /**
+     * Return the .htaccess content given a set or rewrite rules.
+     * @param array $regexRules regular expression rules with settings
+     * @param boolean $embedded (optional) true if the embedded .htaccess is wanted
+     * @return array GalleryStatus a status code
+     *               string the Gallery .htaccess section
+     */
+    function getHtaccessContent($regexRules, $embedded=false) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	$Htaccess = array();
+
+	list ($ret, $Htaccess['galleryDirectory']) = GalleryCoreApi::getPluginParameter(
+	    'module', 'rewrite', 'modrewrite.galleryLocation');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $status) = GalleryCoreApi::getPluginParameter(
+	    'module', 'rewrite', 'modrewrite.status');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$status = unserialize($status);
+	$Htaccess['needOptions'] = $status['needOptions'];
+
+	$Htaccess['directory'] = $Htaccess['galleryDirectory'];
+	$Htaccess['rewriteBase'] = $Htaccess['galleryDirectory'];
+	$Htaccess['baseFile'] = GALLERY_MAIN_PHP;
+	if ($embedded) {
+	    $Htaccess['baseFile'] = $urlGenerator->_file[false];
+	    list ($ret, $Htaccess['directory']) = GalleryCoreApi::getPluginParameter(
+		'module', 'rewrite', 'modrewrite.embeddedLocation');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $Htaccess['rewriteBase'] = $Htaccess['directory'];
+	    $components = parse_url($Htaccess['baseFile']);
+	    if (isset($components['host'])) {
+		$Htaccess['directory'] = '';
+	    }
+	}
+
+	$Htaccess['matchBaseFile'] = $Htaccess['directory']
+	    . preg_quote(preg_replace('/\?.*/', '', $Htaccess['baseFile']));
+
+	/* Substitute with what the Gallery URL generator would generate */
+	$galleryUrlGenerator = new GalleryUrlGenerator();
+	$galleryUrlGenerator->init($Htaccess['directory'] . $Htaccess['baseFile'],
+				   $Htaccess['galleryDirectory'] . GALLERY_MAIN_PHP);
+
+	foreach ($regexRules as $ruleId => $regexRule) {
+	    /* Conditions */
+	    if (!empty($regexRule['conditions'])) {
+		foreach ($regexRule['conditions'] as $conditionId => $condition) {
+		    /*
+		     * Apache mod_rewrite supports only certain flags:
+		     * http://httpd.apache.org/docs/2.2/mod/mod_rewrite.html#rewritecond
+		     */
+		    if (!empty($condition['flags'])) {
+			$condition['flags'] = array_intersect($condition['flags'],
+			    array('NC', 'OR'));
+		    }
+
+		    $regexRule['conditions'][$conditionId] = $condition;
+		}
+	    }
+
+	    /* Pattern */
+	    if (!empty($regexRule['pattern'])) {
+		$regexRule['conditions'][] = array(
+		    'test' => 'THE_REQUEST',
+		    'pattern' => $Htaccess['rewriteBase'] . $regexRule['pattern'] . '(\\?.|\\ .)');
+		$regexRule['conditions'][] = array(
+		    'test' => 'REQUEST_URI',
+		    'pattern' => '!' . $Htaccess['matchBaseFile'] . '$');
+	    }
+
+	    /* Substitution */
+	    $params = $regexRule['queryString'];
+	    foreach ($regexRule['keywords'] as $reference => $name) {
+		if (empty($name)) {
+		    continue;
+		}
+
+		/* $N are RewriteRule backreferences, %N are RewriteCond backreferences */
+		$params[$name] = '%' . $reference;
+	    }
+
+	    $regexRule['substitution'] = $galleryUrlGenerator->generateUrl(
+		$params, $regexRule['options']);
+
+	    $regexRules[$ruleId] = $regexRule;
+	}
+	$Htaccess['rules'] = $regexRules;
+
+	/* Render template */
+	GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+	$template = new GalleryTemplate(dirname(__FILE__) . '/../../../templates', true, false);
+	$template->setVariable('Htaccess', $Htaccess);
+	$template->setVariable('l10Domain', 'modules_rewrite');
+	list ($ret, $content) = $template->fetch('Htaccess.tpl');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $content);
+    }
+
+    /**
+     * Return the absolute path to the .htaccess file.
+     * @param boolean $embedded (optional) true if embedded .htaccess is wanted
+     * @return array GalleryStatus a status code
+     *               string .htaccess file path
+     */
+    function getHtaccessPath($embedded=false) {
+	if ($embedded) {
+	    list ($ret, $path) = GalleryCoreApi::getPluginParameter(
+		'module', 'rewrite', 'modrewrite.embeddedHtaccess');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    return array(null, $path . '/.htaccess');
+	}
+
+	return array(null, GALLERY_CONFIG_DIR . '/.htaccess');
+    }
+
+    /**
+     * Check if the .htaccess file is writeable.
+     * @param boolean $embedded (optional) if true then the embedded .htaccess is checked
+     * @return array GalleryStatus a status code
+     *               int rewrite status code (REWRITE_STATUS_OK on success)
+     */
+    function checkFile($embedded=false) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $file) = ModRewriteHelper::getHtaccessPath($embedded);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($platform->file_exists($file)) {
+	    /* Can't read the .htaccess file */
+	    if (!$platform->is_readable($file)) {
+		return array(null,
+		    $embedded ? REWRITE_STATUS_EMBED_HTACCESS_CANT_READ
+			      : REWRITE_STATUS_HTACCESS_CANT_READ);
+	    }
+
+	    /* Can't write the .htaccess file */
+	    if (!$platform->is_writeable($file)) {
+		return array(null,
+		    $embedded ? REWRITE_STATUS_EMBED_HTACCESS_CANT_WRITE
+			      : REWRITE_STATUS_HTACCESS_CANT_WRITE);
+	    }
+	} else {
+	    /* If we have write access to the directory we can create the file */
+	    if (!$platform->is_writeable(dirname($file))) {
+		return array(null,
+		    $embedded ? REWRITE_STATUS_EMBED_HTACCESS_MISSING
+			      : REWRITE_STATUS_HTACCESS_MISSING);
+	    }
+	}
+
+	return array(null, REWRITE_STATUS_OK);
+    }
+
+    /**
+     * Write Gallery data to the .htaccess file.
+     * @param array $regexRules regular expression rules with settings
+     * @param boolean $embedded (optional) if true then the embedded .htaccess is written
+     * @return array GalleryStatus a status code
+     *               int rewrite status code
+     */
+    function writeFile($regexRules, $embedded=false) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	list ($ret, $file) = ModRewriteHelper::getHtaccessPath($embedded);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$htaccess = '#{gallerySection}';
+	if (!empty($regexRules)) {
+	    list ($ret, $htaccess) = ModRewriteHelper::getHtaccessContent($regexRules, $embedded);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	if ($platform->file_exists($file)) {
+	    if (!$platform->is_readable($file)) {
+		return array(null, $embedded ? REWRITE_STATUS_EMBED_HTACCESS_CANT_READ
+					     : REWRITE_STATUS_HTACCESS_CANT_READ);
+	    }
+
+	    $oldHtaccess = implode('', $platform->file($file));
+	    $newHtaccess = preg_replace(
+		'/\# BEGIN Url Rewrite section(.+)\# END Url Rewrite section(\r\n|\n|\r)/s',
+		'#{gallerySection}', $oldHtaccess);
+
+	    if (strpos($newHtaccess, '#{gallerySection}') !== false) {
+		$newHtaccess = str_replace('#{gallerySection}', $htaccess, $newHtaccess);
+	    } else {
+		$newHtaccess = $htaccess . "\n" . $oldHtaccess;
+	    }
+	} else {
+	    $newHtaccess = $htaccess;
+	}
+
+	/* Write the new file */
+	if ($fd = @$platform->fopen($file, 'w')) {
+	    $platform->fwrite($fd, $newHtaccess);
+	    $platform->fclose($fd);
+	} else {
+	    return array(null, $embedded ? REWRITE_STATUS_EMBED_HTACCESS_CANT_WRITE
+					 : REWRITE_STATUS_HTACCESS_CANT_WRITE);
+	}
+
+	return array(null, REWRITE_STATUS_OK);
+    }
+
+    /**
+     * Returns one of the following codes:
+     *     REWRITE_STATUS_OK                       everything is fine
+     *     REWRITE_STATUS_APACHE_NO_MOD_REWRITE    no mod rewrite support
+     *     REWRITE_STATUS_APACHE_UNABLE_TO_TEST    unable to properly test mod_rewrite
+     *     REWRITE_STATUS_MULTISITE                can't test mod_rewrite in multisite
+     *
+     * @return array GalleryStatus a status code
+     *               int rewrite status code
+     *               int rewrite true status code
+     */
+    function checkModRewrite() {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	list ($ret, $status) = GalleryCoreApi::getPluginParameter('module', 'rewrite',
+	    'modrewrite.status');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$status = unserialize($status);
+
+	/* We can't test with multisite, there are no test files */
+	if ($gallery->getConfig('galleryBaseUrl')) {
+	    return array(null, isset($status['forced']) ? REWRITE_STATUS_OK
+							: REWRITE_STATUS_MULTISITE,
+			 REWRITE_STATUS_MULTISITE);
+	}
+	$baseUrl = preg_replace(
+	    '{(install|upgrade)/index\.php.*}', '', $urlGenerator->getCurrentUrlDir(true));
+	$components = parse_url($baseUrl);
+	$path = $components['path'];
+	$baseUrl .= 'modules/rewrite/data/';
+
+	/*
+	 * Testing mod_rewrite functionality.  For mod_rewrite to work properly, it needs a
+	 * .htaccess file containing a RewriteBase directive matching the URL of its containing
+	 * directory.
+	 */
+	if ($path == '/gallery2/') {
+	    $target = 'gallery2';
+	} else if ($path == '/gallery/') {
+	    $target = 'gallery';
+	} else {
+	    $target = 'custom';
+	}
+
+	$fetch = $baseUrl . "mod_rewrite_no_options/$target/Rewrite.txt";
+	list ($success, $body) = GalleryCoreAPI::fetchWebPage($fetch);
+
+	if ($success && !strncmp('PASS_REWRITE', $body, 12)) {
+	    $ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', 'modrewrite.status',
+		serialize(array('needOptions' => false)));
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+	    return array(null, REWRITE_STATUS_OK, REWRITE_STATUS_OK);
+	}
+
+	/*
+	 * mod_rewrite needs Options +FollowSymlinks and we might need to explicitly require it in
+	 * the .htaccess file.
+	 */
+	$fetch = $baseUrl . "mod_rewrite/$target/Rewrite.txt";
+	list ($success, $body) = GalleryCoreAPI::fetchWebPage($fetch);
+
+	if ($success && !strncmp('PASS_REWRITE', $body, 12)) {
+	    $ret = GalleryCoreApi::setPluginParameter(
+		'module', 'rewrite', 'modrewrite.status', serialize(array('needOptions' => true)));
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+	    return array(null, REWRITE_STATUS_OK, REWRITE_STATUS_OK);
+	}
+
+	/*
+	 * If we fail testing with the custom setup don't whine too much.  Instead give the user
+	 * directions to edit the custom .htaccess file and then test again.
+	 */
+	if ($target == 'custom') {
+	    return array(null, isset($status['forced']) ? REWRITE_STATUS_OK
+							: REWRITE_STATUS_APACHE_UNABLE_TO_TEST,
+			 REWRITE_STATUS_APACHE_UNABLE_TO_TEST);
+	}
+
+	return array(null, isset($status['forced']) ? REWRITE_STATUS_OK
+						    : REWRITE_STATUS_APACHE_NO_MOD_REWRITE,
+		     REWRITE_STATUS_APACHE_NO_MOD_REWRITE);
+    }
+
+    /**
+     * @see RewriteParser::loadTestResultsTemplate
+     */
+    function loadTestResultsTemplate(&$template, &$form) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$baseUrlComponents = parse_url($urlGenerator->getCurrentUrlDir(true));
+	$TestResults = array();
+
+	/* Check Gallery .htaccess */
+	list ($ret, $TestResults['gallery']['htaccess']) = ModRewriteHelper::checkFile();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Check mod_rewrite */
+	list ($ret, $TestResults['gallery']['modRewrite'],
+	    $TestResults['gallery']['trueModRewrite']) = ModRewriteHelper::checkModRewrite();
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Check embedded .htaccess */
+	if (GalleryUtilities::isEmbedded()) {
+	    $TestResults['embedded'] = array();
+	    list ($ret, $TestResults['embedded']['htaccess']) = ModRewriteHelper::checkFile(true);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	/* Get extra information if the .htaccess test fails */
+	if ($TestResults['gallery']['htaccess'] != REWRITE_STATUS_OK) {
+	    list ($ret, $TestResults['gallery']['htaccessPath']) =
+		ModRewriteHelper::getHtaccessPath();
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	if (isset($TestResults['embedded']['htaccess'])
+		&& $TestResults['embedded']['htaccess'] != REWRITE_STATUS_OK) {
+	    list ($ret, $TestResults['embedded']['htaccessPath']) =
+		ModRewriteHelper::getHtaccessPath(true);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	/* Create test URLs for manually testing mod_rewrite */
+	if ($TestResults['gallery']['modRewrite'] != REWRITE_STATUS_OK
+		&& $TestResults['gallery']['modRewrite'] != REWRITE_STATUS_MULTISITE) {
+	    if ($baseUrlComponents['path'] == '/gallery2') {
+		$target = 'gallery2';
+	    } else if ($baseUrlComponents['path'] == '/gallery') {
+		$target = 'gallery';
+	    } else {
+		$target = 'custom';
+	    }
+
+	    $TestResults['href']['test1'] = $urlGenerator->generateUrl(
+		array('href' => 'modules/rewrite/data/mod_rewrite/' . $target . '/Rewrite.txt'));
+	    $TestResults['href']['test2'] = $urlGenerator->generateUrl(
+		array('href' => 'modules/rewrite/data/mod_rewrite_no_options/' .
+		      $target . '/Rewrite.txt'));
+	}
+
+	/* Get the custom line and file instructions */
+	if ($TestResults['gallery']['modRewrite'] == REWRITE_STATUS_APACHE_UNABLE_TO_TEST) {
+	    $TestResults['gallery']['customFile1'] = dirname(dirname(dirname(dirname(__FILE__)))) .
+		'/data/mod_rewrite/custom/.htaccess';
+	    $TestResults['gallery']['customLine1'] = 'RewriteBase ' .
+		$baseUrlComponents['path'] . 'modules/rewrite/data/mod_rewrite/custom/';
+	    $TestResults['gallery']['customFile2'] = dirname(dirname(dirname(dirname(__FILE__)))) .
+		'/data/mod_rewrite_no_options/custom/.htaccess';
+	    $TestResults['gallery']['customLine2'] = 'RewriteBase ' .
+		$baseUrlComponents['path'] . 'modules/rewrite/data/mod_rewrite_no_options/custom/';
+	}
+
+	if ($TestResults['gallery']['modRewrite'] != REWRITE_STATUS_OK) {
+	    $TestResults['action'] = 1;
+	    $TestResults['refresh'] = 1;
+	} else if ($TestResults['gallery']['htaccess'] != REWRITE_STATUS_OK ||
+		(isset($TestResults['embedded']) &&
+		$TestResults['embedded']['htaccess'] != REWRITE_STATUS_OK)) {
+	    $TestResults['refresh'] = 1;
+	}
+
+	$TestResults['template'] = 'modules/rewrite/templates/ModRewriteTestResults.tpl';
+	$template->setVariable('TestResults', $TestResults);
+	return null;
+    }
+
+    /**
+     * @see RewriteParser::loadAdminParserTemplate
+     */
+    function loadAdminRewriteTemplate(&$template, &$form) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+	$AdminParser = array();
+
+	if (GalleryUtilities::isEmbedded()) {
+	    if (empty($form['formName'])) {
+		list ($ret, $form['embeddedLocation']) = GalleryCoreApi::getPluginParameter(
+		    'module', 'rewrite', 'modrewrite.embeddedLocation');
+		if ($ret) {
+		    return $ret;
+		}
+
+		list ($ret, $form['embeddedHtaccess']) = GalleryCoreApi::getPluginParameter(
+		    'module', 'rewrite', 'modrewrite.embeddedHtaccess');
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+
+	    $AdminParser['host'] = substr($urlGenerator->makeUrl('/'), 0, -1);
+	    $AdminParser['action'] = 1;
+	    $AdminParser['template'] = 'modules/rewrite/templates/ModRewriteAdminParser.tpl';
+	}
+
+	$template->setVariable('AdminParser', $AdminParser);
+	return null;
+    }
+
+    /**
+     * @see RewriteParser::fetchEmbedConfig
+     * @param array $param config values
+     * @param ModRewriteParser $parser
+     * @param boolean $saveActiveRules true if we want to write the .htaccess
+     */
+    function saveEmbedConfig($param, $parser, $saveActiveRules) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	if (empty($param['embeddedLocation']) || empty($param['embeddedHtaccess'])) {
+	    return array(null, REWRITE_STATUS_EMPTY_VALUE);
+	}
+
+	$embeddedLocation = '/' . trim($param['embeddedLocation'], '/');
+	if ($embeddedLocation{strlen($embeddedLocation)-1} != '/') {
+	    $embeddedLocation .= '/';
+	}
+	$embeddedHtaccess = rtrim($param['embeddedHtaccess'], '/');
+
+	if (!$platform->is_dir($embeddedHtaccess) ||
+		!$platform->is_writeable($embeddedHtaccess . '/.htaccess')) {
+	    return array(null, REWRITE_STATUS_HTACCESS_CANT_WRITE);
+	}
+
+	$ret = GalleryCoreApi::setPluginParameter(
+	    'module', 'rewrite', 'modrewrite.embeddedHtaccess', $embeddedHtaccess);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$ret = GalleryCoreApi::setPluginParameter(
+	    'module', 'rewrite', 'modrewrite.embeddedLocation', $embeddedLocation);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($saveActiveRules) {
+	    list($ret, $code) = $parser->saveActiveRules();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, $code);
+    }
+}
+?>

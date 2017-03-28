@@ -1,0 +1,1013 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper class for GalleryItems
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryItemHelper_medium /* extends GalleryEventListener */ {
+
+    /**
+     * @see GalleryCoreApi::fetchAllItemIds
+     */
+    function fetchAllItemIds($itemType, $permission='core.view') {
+	global $gallery;
+
+	if (empty($itemType)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	list ($ret, $aclIds) =
+	    GalleryCoreApi::fetchAccessListIds($permission, $gallery->getActiveUserId());
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (empty($aclIds)) {
+	    return array(null, array());
+	}
+	$aclMarkers  = GalleryUtilities::makeMarkers(count($aclIds));
+
+	$query = sprintf('
+	SELECT
+	  [GalleryItem::id]
+	FROM
+	  [GalleryEntity], [GalleryItem], [GalleryAccessSubscriberMap]
+	WHERE
+	  [GalleryEntity::entityType] = ?
+	  AND
+	  [GalleryItem::id] = [GalleryEntity::id]
+	  AND
+	  [GalleryAccessSubscriberMap::itemId] = [GalleryEntity::id]
+	  AND
+	  [GalleryAccessSubscriberMap::accessListId] IN (%s)
+	ORDER BY [GalleryItem::title]
+	', $aclMarkers);
+
+	$data = array();
+	$data[] = $itemType;
+	$data = array_merge($data, $aclIds);
+
+	list ($ret, $searchResults) = $gallery->search($query, $data);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$data = array();
+	while ($result = $searchResults->nextResult()) {
+	    $data[] = $result[0];
+	}
+
+	return array(null, $data);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchAllItemIdsByOwnerId
+     */
+    function fetchAllItemIdsByOwnerId($ownerId) {
+	global $gallery;
+
+	if (empty($ownerId)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+	}
+
+	$storage =& $gallery->getStorage();
+
+	/* Search the item table for all items with owner = $ownerId */
+	$query = '
+	SELECT
+	  [GalleryItem::id]
+	FROM
+	  [GalleryItem]
+	WHERE
+	  [GalleryItem::ownerId] = ?
+	';
+	list ($ret, $queryResults) = $gallery->search($query, array((int)$ownerId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$itemIds = array();
+	while ($result = $queryResults->nextResult()) {
+	    $itemIds[] = $result[0];
+	}
+
+	return array(null, $itemIds);
+    }
+
+    /**
+     * @see GalleryCoreApi::newItemByMimeType
+     */
+    function newItemByMimeType($mimeType) {
+
+	/* Try the whole mime type first, fallback to major type only */
+	list ($ret, $instance) = GalleryCoreApi::newFactoryInstanceByHint('GalleryItem',
+	    array($mimeType, substr($mimeType, 0, strpos($mimeType, '/')) . '/*'));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $instance);
+    }
+
+    /**
+     * @see GalleryCoreApi::addItemToAlbum
+     */
+    function addItemToAlbum($fileName, $itemName, $title, $summary,
+			    $description, $mimeType, $albumId, $symlink=false) {
+	global $gallery;
+
+	/*
+	 * Assume that we've got a working mime type, go ahead and
+	 * get an appropriate GalleryDataItem from the GalleryFactory.
+	 */
+	list ($ret, $newItem) = GalleryCoreApi::newItemByMimeType($mimeType);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$ret = $newItem->create($albumId, $fileName, $mimeType, $itemName, $symlink);
+	if ($ret) {
+	    if ($ret->getErrorCode() & ERROR_BAD_DATA_TYPE) {
+		/* Well, it wasn't what we thought it was.  Make it an unknown */
+		$gallery->debug(sprintf('Failed to create item type %s, falling back on unknown',
+					get_class($newItem)));
+		list ($ret, $newItem) =
+		    GalleryCoreApi::newFactoryInstanceById('GalleryEntity', 'GalleryUnknownItem');
+		if (!isset($newItem)) {
+		    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT, __FILE__, __LINE__,
+			'Unable to get a GalleryUnknownItem instance'), null);
+		}
+
+		$ret = $newItem->create($albumId, $fileName, $mimeType, $itemName, $symlink);
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    } else {
+		return array($ret, null);
+	    }
+	}
+
+	$newItem->setTitle($title);
+	$newItem->setSummary($summary);
+	$newItem->setDescription($description);
+
+	/* Try to get an originationTimestamp for the just added item */
+	list ($ret, $originationTimestamp) = GalleryCoreApi::fetchOriginationTimestamp($newItem);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (!empty($originationTimestamp)) {
+	    $newItem->setOriginationTimestamp($originationTimestamp);
+	}
+
+	$ret = $newItem->save();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$ret = GalleryItemHelper_medium::addExistingItemToAlbum($newItem, $albumId, true);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	return array(null, $newItem);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchOriginationTimestamp
+     */
+    function fetchOriginationTimestamp($item) {
+	if (! GalleryUtilities::isA($item, 'GalleryDataItem')) {
+	    return array(null, null);
+	}
+	list ($ret, $toolkits) =
+	    GalleryCoreApi::getToolkitsByProperty($item->getMimeType(), 'originationTimestamp');
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if ($toolkits) {
+	    list ($ret, $path) = $item->fetchPath();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    foreach ($toolkits as $toolkit) {
+		if (isset($toolkit)) {
+		    list ($ret, $originationTimestamp) =
+			$toolkit->getProperty($item->getMimeType(), 'originationTimestamp', $path);
+		    if ($ret) {
+			return array($ret, null);
+		    }
+		    if (is_array($originationTimestamp) && !empty($originationTimestamp[0])) {
+			return array(null, $originationTimestamp[0]);
+		    }
+		}
+	    }
+	}
+	return array(null, null);
+    }
+
+    /**
+     * @see GalleryCoreApi::addExistingItemToAlbum
+     */
+    function addExistingItemToAlbum($item, $albumId, $isNew=false) {
+
+	/* Set the order weight */
+	list ($ret, $maxWeight) = GalleryCoreApi::fetchExtremeChildWeight($albumId, HIGHER_WEIGHT);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$ret = GalleryCoreApi::setItemOrderWeight($item->getId(), $maxWeight + 1000);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Now create thumbnails and resizes according to the wishes of the parent album */
+	$ret = GalleryItemHelper_medium::applyDerivativePreferences($item, $albumId, $isNew);
+	if ($ret) {
+	    return $ret;
+	}
+    }
+
+    /**
+     * @see GalleryCoreApi::applyDerivativePreferences
+     */
+    function applyDerivativePreferences($item, $albumId, $isNew=false) {
+	list ($ret, $preferences) = GalleryCoreApi::fetchDerivativePreferencesForItem($albumId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $source) = GalleryCoreApi::fetchPreferredSource($item);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$mimeType = $source->getMimeType();
+
+	/* Make the file type viewable, if we need to */
+	list ($ret, $isViewable) = GalleryCoreApi::isViewableMimeType($mimeType);
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (GalleryUtilities::isA($source, 'GalleryDerivative')) {
+	    $operations = $source->getDerivativeOperations();
+	} else if (GalleryUtilities::isA($source, 'GalleryPhotoItem')
+		|| GalleryUtilities::isA($source, 'GalleryUnknownItem')) {
+	    $operations = '';
+	}
+	if (!$isViewable && isset($operations)) {
+	    list ($ret, $newOperations, $outputMimeType) =
+		GalleryCoreApi::makeSupportedViewableOperationSequence(
+		    $mimeType, $operations, false);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if ($newOperations != $operations) {
+		/*
+		 * We now have operations to make it viewable.  If we don't have a preferred, then
+		 * create one with those operations.  If we already have a preferred then just
+		 * update it to use these operations.
+		 */
+		if (GalleryUtilities::isA($source, 'GalleryItem')) {
+		    /* No preferred.  Create one */
+		    list ($ret, $preferred) = GalleryCoreApi::newFactoryInstanceByHint(
+			'GalleryDerivative', $item->getEntityType());
+		    if ($ret) {
+			return $ret;
+		    }
+		    if (!isset($preferred)) {
+			return GalleryCoreApi::error(ERROR_MISSING_OBJECT);
+		    }
+
+		    $ret = $preferred->create($source->getId(), DERIVATIVE_TYPE_IMAGE_PREFERRED);
+		    if ($ret) {
+			return $ret;
+		    }
+
+		    $preferred->setDerivativeSourceId($source->getId());
+		    $preferred->setMimeType($outputMimeType);
+
+		    if (GalleryUtilities::isA($source, 'GalleryPhotoItem')) {
+			$preferred->setWidth($source->getWidth());
+			$preferred->setHeight($source->getHeight());
+		    }
+
+		    $ret = GalleryCoreApi::remapSourceIds($source->getId(), $preferred->getId());
+		    if ($ret) {
+			return $ret;
+		    }
+		    $source = $preferred;
+		} else {
+		    /* Lock the preferred so that we can modify it */
+		    list ($ret, $lockIds[]) = GalleryCoreApi::acquireWriteLock($source->getId());
+		    if ($ret) {
+			return $ret;
+		    }
+
+		    $ret = $source->expireCache();
+		    if ($ret) {
+			return $ret;
+		    }
+		}
+
+		/* Either way, now $source is a preferred */
+		$source->setDerivativeOperations($newOperations);
+
+		/* Let our change ripple down the derivative tree, if necessary */
+		$ret = GalleryCoreApi::adjustDependentDerivatives($source->getId(), $newOperations);
+		if ($ret) {
+		    return $ret;
+		}
+
+		$ret = $source->save();
+		if ($ret) {
+		    return $ret;
+		}
+
+		if (!empty($lockIds)) {
+		    $ret = GalleryCoreApi::releaseLocks($lockIds);
+		    if ($ret) {
+			return $ret;
+		    }
+		}
+
+		/* Mime type must have changed so that it can be viewable */
+		$mimeType = $outputMimeType;
+	    }
+	}
+
+	/* Get existing derivatives */
+	$derivs = array(DERIVATIVE_TYPE_IMAGE_THUMBNAIL => array(),
+			DERIVATIVE_TYPE_IMAGE_RESIZE => array());
+	if (!$isNew) {
+	    list ($ret, $tmp) = GalleryCoreApi::fetchThumbnailsByItemIds(array($item->getId()));
+	    if ($ret) {
+		return $ret;
+	    }
+	    if (!empty($tmp)) {
+		$derivs[DERIVATIVE_TYPE_IMAGE_THUMBNAIL][] = array_shift($tmp);
+	    }
+	    list ($ret, $tmp) = GalleryCoreApi::fetchResizesByItemIds(array($item->getId()));
+	    if ($ret) {
+		return $ret;
+	    }
+	    if (!empty($tmp)) {
+		foreach (array_shift($tmp) as $resize) {
+		    $derivs[DERIVATIVE_TYPE_IMAGE_RESIZE][] = $resize;
+		}
+	    }
+	}
+	$itemHasThumbnail = !empty($derivs[DERIVATIVE_TYPE_IMAGE_THUMBNAIL]);
+
+	$thumbnailCount = 0;
+	foreach ($preferences as $preference) {
+	    $operations = $preference['derivativeOperations'];
+	    $type = $preference['derivativeType'];
+
+	    /* Guard against corrupted preferences with too many thumbnails */
+	    if ($type == DERIVATIVE_TYPE_IMAGE_THUMBNAIL) {
+		if ($thumbnailCount++ > 0) {
+		    continue;
+		}
+	    }
+
+	    /* Special case to make sure that we don't upsample photos */
+	    if (GalleryUtilities::isA($item, 'GalleryPhotoItem')) {
+		if (preg_match('/(^|;)scale\|(\d+)(,(\d+))?/', $operations, $matches)) {
+		    if (empty($matches[4])) {
+			$matches[4] = $matches[2];
+		    }
+		    if ($source->getWidth() <= $matches[2] && $source->getHeight() <= $matches[4]) {
+			continue;
+		    }
+		}
+	    }
+
+	    if (!empty($derivs[$type])) {
+		/*
+		 * Check if we already have a derivative with matching operations.
+		 * If so, keep it.
+		 */
+		foreach ($derivs[$type] as $i => $derivative) {
+		    if (preg_match('/(^|;)' . preg_quote($operations) . '(;|$)/',
+				   $derivative->getDerivativeOperations())) {
+			unset($derivs[$type][$i]);
+			continue 2;
+		    }
+		}
+
+		/*
+		 * We still have a derivative of the right type we can reuse.
+		 * Save operation below will clear the derivative cache.
+		 */
+		$derivative = array_shift($derivs[$type]);
+		list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($derivative->getId());
+		if ($ret) {
+		    return $ret;
+		}
+
+		/* Preserve any existing derivative operations on a thumbnail */
+		if ($type == DERIVATIVE_TYPE_IMAGE_THUMBNAIL) {
+		    $list = explode('|', $operations);
+		    if (count($list) == 2) {
+			$tmpOperations = preg_replace('/((^|;)' . $list[0] . ')\|.*?(;|$)/',
+						      '$1|' . $list[1] . '$3',
+						      $derivative->getDerivativeOperations());
+			if ($tmpOperations != $derivative->getDerivativeOperations()) {
+			    $operations = $tmpOperations;
+			}
+		    }
+		}
+	    } else {
+		/* Create a new derivative */
+		list ($ret, $derivative) = GalleryCoreApi::newFactoryInstanceByHint(
+		    'GalleryDerivative', $source->getEntityType());
+		if ($ret) {
+		    return $ret;
+		}
+
+		if (!isset($derivative)) {
+		    return GalleryCoreApi::error(ERROR_MISSING_OBJECT);
+		}
+
+		$ret = $derivative->create($item->getId(), $type);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+
+	    /*
+	     * Validate/update the operations to make sure that they're supported
+	     * by an active toolkit and produce a viewable mime type.
+	     */
+	    list ($ret, $operations, $outputMimeType) =
+		GalleryCoreApi::makeSupportedViewableOperationSequence(
+		    $mimeType, $operations, $type == DERIVATIVE_TYPE_IMAGE_THUMBNAIL);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if (empty($operations)) {
+		/* Oh well -- try the next preference */
+		if (isset($lockId)) {
+		    GalleryCoreApi::releaseLocks(array($lockId));
+		    unset($lockId);
+		}
+		continue;
+	    }
+
+	    $derivative->setMimeType($outputMimeType);
+	    $derivative->setDerivativeSourceId($source->getId());
+	    $derivative->setDerivativeOperations($operations);
+
+	    $derivative->setWidth(0);
+	    $derivative->setHeight(0);
+	    $ret = GalleryCoreApi::estimateDerivativeDimensions($derivative, $source);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $ret = $derivative->save();
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if (isset($lockId)) {
+		$ret = GalleryCoreApi::releaseLocks(array($lockId));
+		if ($ret) {
+		    return $ret;
+		}
+		unset($lockId);
+	    }
+
+	    if ($type == DERIVATIVE_TYPE_IMAGE_THUMBNAIL) {
+		$itemHasThumbnail = true;
+	    }
+	}
+
+	/* Delete any old derivatives that have not been reused */
+	foreach ($derivs as $tmp) {
+	    foreach ($tmp as $derivative) {
+		$ret = GalleryCoreApi::deleteEntityById($derivative->getId(), 'GalleryDerivative');
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	if ($itemHasThumbnail) {
+	    /* See if the album has a thumbnail.  If not, try to use this item as the thumbnail. */
+	    list ($ret, $thumbnailTable) =
+		GalleryCoreApi::fetchThumbnailsByItemIds(array($albumId));
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    if (empty($thumbnailTable)) {
+		list ($ret, $success) =
+		    GalleryCoreApi::setThumbnailFromItem($albumId, $item->getId());
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::setThumbnailFromItem
+     */
+    function setThumbnailFromItem($itemId, $fromItemId) {
+	global $gallery;
+
+	/* Load the current album thumbnail. */
+	list ($ret, $thumbnailTable) =
+	    GalleryCoreApi::fetchThumbnailsByItemIds(array($itemId, $fromItemId));
+	if ($ret) {
+	    return array($ret, false);
+	}
+
+	/*
+	 * Find the right source id to create our thumbnail from.  Search for
+	 * it in this order:
+	 * 1. The fromItem's preferred derivative's source id
+	 * 2. The fromItem's thumbnail's source id
+	 * 3. The fromItem data itself
+	 * 4. no thumbnail
+	 */
+	$source = null;
+	$sourceMimeType = null;
+	$parentId = null;
+	$createdNewParentThumbnail = false;
+	$success = false;
+
+	/* 1. The fromItem's preferred derivative's source id */
+	list ($ret, $derivatives) = GalleryCoreApi::fetchPreferredsByItemIds(array($fromItemId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+	if (!empty($derivatives[$fromItemId])) {
+	    $source = $derivatives[$fromItemId];
+	    $sourceMimeType = $source->getMimeType();
+	}
+
+	/* 2. The item's thumbnail's source id */
+	if (!$sourceMimeType) {
+	    if (!empty($thumbnailTable[$fromItemId])) {
+		$source = $thumbnailTable[$fromItemId];
+		$sourceMimeType = $source->getMimeType();
+	    }
+	}
+
+	/* 3. The item data itself */
+	if (!$sourceMimeType) {
+	    list ($ret, $fromItem) = GalleryCoreApi::loadEntitiesById($fromItemId, 'GalleryItem');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    if (GalleryUtilities::isA($fromItem, 'GalleryDataItem')) {
+		$source = $fromItem;
+		$sourceMimeType = $fromItem->getMimeType();
+	    }
+	}
+
+	/*
+	 * If at this point $source is undefined then we have no source
+	 * thumbnail and that means that we're done.
+	 */
+	$lockIds = array();
+	if (isset($source)) {
+	    list ($ret, $lockIds[]) = GalleryCoreApi::acquireReadLock($source->getId());
+	    if ($ret) {
+		if (!empty($lockIds)) {
+		    /* Ignore errors -- we're already in an error handler */
+		    GalleryCoreApi::releaseLocks($lockIds);
+		}
+		return array($ret, null);
+	    }
+
+	    /* Reuse the existing derivative, if one exists */
+	    if (isset($thumbnailTable[$itemId])) {
+		$derivative = $thumbnailTable[$itemId];
+
+		/* Modify existing thumbnail */
+		list ($ret, $lockIds[]) = GalleryCoreApi::acquireWriteLock($derivative->getId());
+		if ($ret) {
+		    if (!empty($lockIds)) {
+			/* Ignore errors -- we're already in an error handler */
+			GalleryCoreApi::releaseLocks($lockIds);
+		    }
+		    return array($ret, null);
+		}
+
+		list ($ret, $derivative) = $derivative->refresh();
+		if ($ret) {
+		    if (!empty($lockIds)) {
+			/* Ignore errors -- we're already in an error handler */
+			GalleryCoreApi::releaseLocks($lockIds);
+		    }
+		    return array($ret, null);
+		}
+
+		$derivativeOperations = $derivative->getDerivativeOperations();
+	    } else {
+		/* Create a new one */
+		list ($ret, $derivative) = GalleryCoreApi::newFactoryInstanceByHint(
+		    'GalleryDerivative', $source->getEntityType());
+		if ($ret) {
+		    if (!empty($lockIds)) {
+			/* Ignore errors -- we're already in an error handler */
+			GalleryCoreApi::releaseLocks($lockIds);
+		    }
+		    return array($ret, null);
+		}
+
+		if (!isset($derivative)) {
+		    if (!empty($lockIds)) {
+			/* Ignore errors -- we're already in an error handler */
+			GalleryCoreApi::releaseLocks($lockIds);
+		    }
+		    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT),
+				 null);
+		}
+
+		$ret = $derivative->create($itemId, DERIVATIVE_TYPE_IMAGE_THUMBNAIL);
+		if ($ret) {
+		    if (!empty($lockIds)) {
+			/* Ignore errors -- we're already in an error handler */
+			GalleryCoreApi::releaseLocks($lockIds);
+		    }
+		    return array($ret, null);
+		}
+
+		$createdNewParentThumbnail = true;
+
+		/*
+		 * The dimensions of the album's thumbnail are governed by the
+		 * album's parent, so load the album, get its parent's id, get
+		 * that album's preferences and use those for the thumbnail.
+		 */
+		list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId, 'GalleryItem');
+		if ($ret) {
+		    if (!empty($lockIds)) {
+			/* Ignore errors -- we're already in an error handler */
+			GalleryCoreApi::releaseLocks($lockIds);
+		    }
+		    return array($ret, null);
+		}
+
+		$parentId = $item->getParentId();
+		/* Use derivative preferences of self for root album highlight */
+		if (empty($parentId)) {
+		    $parentId = $item->getId();
+		}
+		list ($ret, $preferences) =
+		    GalleryCoreApi::fetchDerivativePreferencesForItem($parentId);
+		if ($ret) {
+		    if (!empty($lockIds)) {
+			/* Ignore errors -- we're already in an error handler */
+			GalleryCoreApi::releaseLocks($lockIds);
+		    }
+		    return array($ret, null);
+		}
+
+		foreach ($preferences as $preference) {
+		    if ($preference['derivativeType'] == DERIVATIVE_TYPE_IMAGE_THUMBNAIL) {
+			$derivativeOperations = $preference['derivativeOperations'];
+			break;
+		    }
+		}
+
+		if (empty($derivativeOperations)) {
+		    if (!empty($lockIds)) {
+			GalleryCoreApi::releaseLocks($lockIds);
+		    }
+		    return array(GalleryCoreApi::error(ERROR_MISSING_VALUE),
+				 null);
+		}
+	    }
+
+	    if (isset($derivativeOperations)) {
+		/*
+		 * Validate the stored preferences to make sure that
+		 * they're supported by an active toolkit.
+		 */
+		list ($ret, $isSupported, $outputMimeType) =
+		    GalleryCoreApi::isSupportedOperationSequence(
+			$sourceMimeType, $derivativeOperations);
+		if ($ret) {
+		    if (!empty($lockIds)) {
+			/* Ignore errors -- we're already in an error handler */
+			GalleryCoreApi::releaseLocks($lockIds);
+		    }
+		    return array($ret, null);
+		}
+
+		if ($isSupported) {
+		    $success = true;
+		    $derivative->setDerivativeOperations($derivativeOperations);
+		    $derivative->setMimeType($outputMimeType);
+		}
+	    }
+
+	    if ($success && isset($derivative)) {
+		$derivative->setDerivativeSourceId($source->getId());
+
+		/* After changing sources, the derivative dimensions are no longer valid. */
+		$derivative->setWidth(0);
+		$derivative->setHeight(0);
+		$ret = GalleryCoreApi::estimateDerivativeDimensions($derivative, $source);
+		if ($ret) {
+		    if (!empty($lockIds)) {
+			/* Ignore errors -- we're already in an error handler */
+			GalleryCoreApi::releaseLocks($lockIds);
+		    }
+		    return array($ret, null);
+		}
+
+		$ret = $derivative->save();
+		if ($ret) {
+		    if (!empty($lockIds)) {
+			/* Ignore errors -- we're already in an error handler */
+			GalleryCoreApi::releaseLocks($lockIds);
+		    }
+		    return array($ret, null);
+		}
+	    }
+
+	    if (!empty($lockIds)) {
+		$ret = GalleryCoreApi::releaseLocks($lockIds);
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	}
+
+	/*
+	 * If we created a new thumbnail for the album, we should seek to
+	 * propagate the thumbnail up to the parent album if it does not have a
+	 * thumbnail.
+	 */
+	if ($success && !empty($parentId) && $createdNewParentThumbnail) {
+	    list ($ret, $thumbTable) = GalleryCoreApi::fetchThumbnailsByItemIds(array($parentId));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    if (empty($thumbTable)) {
+		list ($ret, $success) =
+		    GalleryItemHelper_medium::setThumbnailFromItem($parentId, $itemId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	}
+
+	return array(null, $success);
+    }
+
+    /**
+     * Invalidate our descendent count cache, any time we make a change that
+     * would possibly affect any of our counts:
+     * <ul>
+     * <li> adding a new item
+     * <li> deleting an item
+     * <li> moving an item
+     * <li> changing view permissions on an item
+     * <li> adding a user to a group
+     * <li> removing a user from a group
+     * </ul>
+     *
+     * If you provide just a user id, it will invalidate all cached values for
+     * that user.  If you provide just an item id, it'll invalidate that id and
+     * all of its parents for all users.  If you provide both, it will only
+     * invalidate for the intersection of the user and the item ids.
+     *
+     * @param mixed $userId user id or array of ids or null
+     * @param mixed $itemId item id or array of ids or null
+     * @return GalleryStatus a status code
+     */
+    function invalidateDescendentCountCaches($userId, $itemId) {
+	if (!empty($userId) && empty($itemId)) {
+	    $ret = GalleryCoreApi::removeMapEntry(
+		'GalleryDescendentCountsMap', array('userId' => $userId));
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	if (!empty($itemId)) {
+	    if (!is_array($itemId)) {
+		$itemId = array($itemId);
+	    }
+	    /* Gather up all ancestors of all specified ids */
+	    $ids = array();
+	    foreach ($itemId as $id) {
+		list ($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($id);
+		if ($ret) {
+		    if ($ret->getErrorCode() & ERROR_MISSING_OBJECT) {
+			/*
+			 * It's legal to invalidate for objects that are in the
+			 * process of being created
+			 */
+			continue;
+		    }
+		    return $ret;
+		}
+		foreach ($parentSequence as $parentId) {
+		    $ids[$parentId] = true;
+		}
+		$ids[$id] = true;
+	    }
+
+	    if (!empty($ids)) {
+		$data = array('itemId' => array_keys($ids));
+		if (!empty($userId)) {
+		    $data['userId'] = $userId;
+		}
+		$ret = GalleryCoreApi::removeMapEntry('GalleryDescendentCountsMap', $data);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Handler for Gallery::ViewableTreeChange event.
+     * Event sends array('userId'=>id or array of ids or null, 'itemId'=>id or array of ids or null)
+     *
+     * @see GalleryEventListener::handleEvent
+     */
+    function handleEvent($event) {
+	$param = $event->getData();
+	if ($event->getEventName() == 'Gallery::ViewableTreeChange') {
+	    $ret = GalleryItemHelper_medium::invalidateDescendentCountCaches(
+		    $param['userId'], $param['itemId']);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	} else if ($event->getEventName() == 'Gallery::RemovePermission') {
+	    /*
+	     * RemovePermission event definition:
+	     * @param 'userId' a user id or 0 for all users or null to specify no user at all
+	     * @param 'groupId' a group id or 0 for all groups or null to specify no group at all
+	     * @param 'itemIdsAndBits' array of itemId => permissionBits pairs
+	     * @param 'format' either removeBits or newBits, defaults to removeBits
+	     *
+	     * With a single RemovePermission event one can handle an unlimited number of items.
+	     * Sample usage:
+	     *     $event = GalleryCoreApi::newEvent('Gallery::RemovePermission');
+	     *     $event->setData(array('userId' => null, 'groupId' => $groupId,
+	     *                           'itemIdsAndBits' => array($itemId1 => $removeBits1,
+	     *                                                     $itemId2 => $removeBits2)));
+	     *     list ($ret) = GalleryCoreApi::postEvent($event);
+	     *
+	     * If the RemovePermission event affects multiple groupIds or multiple userIds, e.g.
+	     * for GalleryCoreApi::removeItemPermission($itemId), the removedBits would be
+	     * different for each userId / groupId. Thus, the event is simplified in such a case
+	     * and you only specify the newBits of the item, because the newBits are the same for
+	     * all userIds / groupIds. Use the 'format' => 'newBits' in this case.
+	     *     $event = GalleryCoreApi::newEvent('Gallery::RemovePermission');
+	     *     $event->setData(array('userId' => 0, 'groupId' => 0, 'format' => 'newBits',
+	     *                           'itemIdsAndBits' => array($itemId1 => $newBits1,
+	     *                                                     $itemId2 => $newBits2)));
+	     */
+
+	    /* Here, we just check if the FastDownload files have to be removed */
+	    foreach (array('core.view', 'core.viewResizes', 'core.viewSource') as $permissionId) {
+		list ($ret, $bits[]) = GalleryCoreApi::convertPermissionIdsToBits($permissionId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+
+	    /* At the moment, we only have FastDownload files for the guest/anonymous user */
+	    list ($ret, $anonymousUserId) =
+		GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    list ($ret, $groupIds) = GalleryCoreApi::fetchGroupsForUser($anonymousUserId);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	    $groupIds = array_keys($groupIds);
+	    $groupIntersect = array_intersect(array($param['groupId']), $groupIds);
+
+	    if (isset($param['userId']) && ($param['userId'] == 0 ||
+					    $param['userId'] == $anonymousUserId) ||
+		isset($param['groupId']) && ($param['groupId'] == 0 || !empty($groupIntersect))) {
+
+		$thumbnailIds = array();
+		$resizeIds = array();
+		$preferredIds = array();
+		$itemIds = array();
+		$targetDerivatives = array();
+
+		/* Convert from newBits format to removeBits, if necessary */
+		if (isset($param['format']) && $param['format'] == 'newBits') {
+		    foreach ($param['itemIdsAndBits'] as $itemId => $newBits) {
+			/*
+			 * Potentially, all but $newBits were removed,
+			 * thus removeBits := not newBits
+			 */
+			$param['itemIdsAndBits'][$itemId] = ~$newBits;
+		    }
+		}
+
+		foreach ($param['itemIdsAndBits'] as $itemId => $removeBits) {
+		    /* If core.view was removed then delete the thumbnail fast download */
+		    if (($removeBits & $bits[0]) == $bits[0]) {
+			$thumbnailIds[] = $itemId;
+		    }
+		    /* If core.viewResizes was removed then delete the resize fast downloads */
+		    if (($removeBits & $bits[1]) == $bits[1]) {
+			$resizeIds[] = $itemId;
+		    }
+		    /*
+		     * If core.viewSource was removed then delete the fast download for preferred
+		     * and the source
+		     */
+		    if (($removeBits & $bits[2]) == $bits[2]) {
+			$preferredIds[] = $itemId;
+			$itemIds[] = $itemId;
+		    }
+		}
+
+		/* Load the thumbnails, resizes, and preferreds */
+		list ($ret, $thumbnails) =
+		    GalleryCoreApi::fetchThumbnailsByItemIds($thumbnailIds);
+		if ($ret) {
+		    return array($ret, null);
+		}
+		$targetDerivatives = $thumbnails;
+
+		list ($ret, $resizes) = GalleryCoreApi::fetchResizesByItemIds($resizeIds);
+		if ($ret) {
+		    return array($ret, null);
+		}
+		foreach ($resizes as $resize) {
+		    $targetDerivatives = array_merge($targetDerivatives, $resize);
+		}
+
+		list ($ret, $preferreds) = GalleryCoreApi::fetchPreferredsByItemIds($preferredIds);
+		if ($ret) {
+		    return array($ret, null);
+		}
+		$targetDerivatives = array_merge($targetDerivatives, $preferreds);
+
+		foreach ($targetDerivatives as $derivative) {
+		    GalleryCoreApi::deleteFastDownloadFileById($derivative->getId());
+		}
+		foreach ($itemIds as $id) {
+		    GalleryCoreApi::deleteFastDownloadFileById($id);
+		}
+	    }
+	} else if ($event->getEventName() == 'GalleryEntity::save' ||
+		$event->getEventName() == 'GalleryEntity::delete') {
+	    $entity = $event->getEntity();
+
+	    $expireItemIds = array($entity->getId());
+	    if (GalleryUtilities::isA($entity, 'GalleryChildEntity') && $entity->getParentId()) {
+		$expireItemIds[] = $entity->getParentId();
+	    }
+
+	    $ret = GalleryDataCache::removePageData($expireItemIds);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+	}
+
+	return array(null, null);
+    }
+}
+?>

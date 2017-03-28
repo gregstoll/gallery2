@@ -1,0 +1,88 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Authentication
+ * @package Upgrade
+ */
+class AuthenticateStep extends UpgradeStep {
+
+    function stepName() {
+	return _('Authenticate');
+    }
+
+    function loadTemplateData(&$templateData) {
+	global $gallery;
+
+	if (!$this->isComplete()) {
+	    $authFile = GALLERY_CONFIG_DIR . '/login.txt';
+	    $templateData['authKey'] = GallerySetupUtilities::getAuthenticationKey();
+	    if (empty($templateData['authKey'])) {
+		$templateData['authKey'] = GallerySetupUtilities::generateAuthenticationKey();
+		GallerySetupUtilities::setAuthenticationKey($templateData['authKey']);
+	    }
+	    $templateData['authFile'] = sprintf(
+		'%s%s%s', basename(GALLERY_CONFIG_DIR), DIRECTORY_SEPARATOR, basename($authFile));
+
+	    $attempts = GallerySetupUtilities::getLoginAttempts();
+	    if ($attempts === false || $attempts >= G2_SUPPORT_MAX_LOGIN_ATTEMPTS) {
+		if (!file_exists($authFile)) {
+		    $templateData['authFileErrors']['missing'] = 1;
+		} else if (!is_readable($authFile)) {
+		    $templateData['authFileErrors']['unreadable'] = 1;
+		} else {
+		    $authKeyFromFile = trim(join('', file($authFile)));
+		    if ($authKeyFromFile == $templateData['authKey']) {
+			GallerySetupUtilities::authenticateThisSession();
+		    } else {
+			$templateData['authFileErrors']['mismatch'] = 1;
+		    }
+		}
+		$templateData['renderType'] = 'loginTxtForm';
+	    } else {
+		if (isset($_POST['password_sent'])) {
+		    if (empty($_POST['password'])) {
+			$templateData['error']['password'] = _('<b>Error:</b> missing password.');
+		    } else if ($_POST['password'] != $gallery->getConfig('setup.password')) {
+			$templateData['error']['password'] = _('<b>Error:</b> invalid password.');
+			GallerySetupUtilities::setLoginAttempts(++$attempts);
+			if ($attempts > G2_SUPPORT_MAX_LOGIN_ATTEMPTS) {
+			    GallerySetupUtilities::notifySiteAdministrator();
+			}
+		    } else {
+			GallerySetupUtilities::authenticateThisSession();
+		    }
+		}
+		$templateData['renderType'] = 'password';
+	    }
+
+	    if (GallerySetupUtilities::isSessionAuthenticated()) {
+		$this->setComplete(true);
+	    }
+	}
+
+	if ($this->isComplete()) {
+	    $templateData['bodyFile'] = 'AuthenticateSuccessful.html';
+	} else {
+	    $templateData['bodyFile'] = 'AuthenticateRequest.html';
+	}
+    }
+}
+?>

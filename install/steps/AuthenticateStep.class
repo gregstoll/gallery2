@@ -1,0 +1,97 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+require_once(dirname(__FILE__) . '/../../lib/support/GallerySetupUtilities.class');
+
+/**
+ * Authentication
+ * @package Install
+ */
+class AuthenticateStep extends InstallStep {
+    var $_uniqueKey;
+    var $_firstTime;
+
+    function AuthenticateStep() {
+	$this->_uniqueKey = GallerySetupUtilities::generateAuthenticationKey();
+	$this->_firstTime = true;
+    }
+
+    function stepName() {
+	return _('Authenticate');
+    }
+
+    function processRequest() {
+	if (!empty($_GET['downloadLogin'])) {
+	    GallerySetupUtilities::generateTextFileForDownload('login.txt', $this->_uniqueKey);
+	    return false;
+	}
+
+	return true;
+    }
+
+    function loadTemplateData(&$templateData) {
+	$authenticationDir = dirname(dirname(dirname(__FILE__)));
+
+	if (!$this->isComplete()) {
+	    /* Authenticate */
+	    $authenticated = false;
+	    $authFile = dirname(__FILE__) . '/../../login.txt';
+	    if (!file_exists($authFile)) {
+		if (!$this->_firstTime) {
+		    $templateData['errors'][] =
+			sprintf(_('<b>Error:</b> could not locate <b>login.txt</b>. ' .
+				  'Please place it in your <tt>%s/</tt> directory.'),
+				basename($authenticationDir));
+		}
+	    } else if (!is_readable($authFile)) {
+		$templateData['errors'][] =
+		    _('<b>Error:</b> your <b>login.txt</b> file is not readable. ' .
+		      'Please give Gallery read permissions on the file.');
+	    } else {
+
+		$fileAuth = trim(join('', file($authFile)));
+		if ($fileAuth == $this->_uniqueKey) {
+		    /* Authenticate, but don'treset the login attempts because we have no db */
+		    GallerySetupUtilities::authenticateThisSession(false);
+		    $this->setComplete(true);
+		} else {
+		    $templateData['errors'][] =
+			_('<b>Error:</b> your <b>login.txt</b> key does not match correctly. ' .
+			  'Please download a new authentication string from below and try again.');
+		}
+	    }
+	}
+
+	$this->_firstTime = false;
+
+	$templateData['authenticationDir'] = basename($authenticationDir);
+
+	if ($this->isComplete()) {
+	    $templateData['bodyFile'] = 'AuthenticateSuccessful.html';
+	} else {
+	    $templateData['bodyFile'] = 'AuthenticateRequest.html';
+	}
+    }
+
+    function getUniqueKey() {
+	return $this->_uniqueKey;
+    }
+}
+?>

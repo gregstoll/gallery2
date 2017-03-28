@@ -1,0 +1,151 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper class for GalleryFileSystemEntities
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryFileSystemEntityHelper_medium {
+
+    /**
+     * @see GalleryCoreApi::checkPathCollision
+     */
+    function checkPathCollision($pathComponent, $parentId, $selfId=null) {
+	global $gallery;
+
+	$pathComponent =
+		GalleryFileSystemEntityHelper_medium::_truncatePathComponent($pathComponent);
+
+	$query = '
+	  SELECT
+	    COUNT([GalleryChildEntity::id])
+	  FROM
+	    [GalleryChildEntity], [GalleryFileSystemEntity]
+	  WHERE
+	    [GalleryChildEntity::parentId] = ?
+	  AND
+	    UPPER([GalleryFileSystemEntity::pathComponent]) = ?
+	  AND
+	    [GalleryChildEntity::id] = [GalleryFileSystemEntity::id]
+	';
+	/* The check is case-insensitive since it should be DBMS / FS independent. */
+	$data = array((int)$parentId, GalleryUtilities::strToUpper($pathComponent));
+	if (isset($selfId)) {
+	    $query .= '
+	      AND [GalleryChildEntity::id] <> ?
+	    ';
+	    $data[] = (int)$selfId;
+	}
+
+	list ($ret, $searchResults) = $gallery->search($query, $data);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$result = $searchResults->nextResult();
+	$isCollision = ($result[0] > 0);
+
+	return array(null, $isCollision);
+    }
+
+    /**
+     * @see GalleryCoreApi::getLegalPathComponent
+     */
+    function getLegalPathComponent($pathComponent, $parentId, $selfId=null, $forDirectory=false) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	/* Make sure our path component uses legal characters */
+	$pathComponent = $platform->legalizePathComponent(trim($pathComponent), $forDirectory);
+
+	/* Get the parent, just to verify id is valid */
+	list ($ret, $parent) = GalleryCoreApi::loadEntitiesById($parentId, 'GalleryEntity');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Extract the file base and extension */
+	list ($fileBase, $extension) = GalleryUtilities::getFileNameComponents($pathComponent);
+	if (!empty($extension)) {
+	    $extension = '.' . $extension;
+	}
+
+	/*
+	 * If given string was extended characters that were all converted to "_" then
+	 * autogenerate a new filename.. we'll use today's date.
+	 */
+	if (rtrim($fileBase, '_') == '') {
+	    $fileBase = $platform->strftime('%Y%m%d');
+	}
+
+	/*
+	 * Try <fileBase>.<extension>
+	 *     <fileBase>_001.<extension>
+	 *     <fileBase>_002.<extension>
+	 *     etc.
+	 * Don't be intimidated by the first 100 collisions
+	 */
+	$retry = 0;
+	while (true) {
+	    $newPathComponent = GalleryFileSystemEntityHelper_medium::_truncatePathComponent(
+			$fileBase, $retry > 0 ? sprintf('_%03d', $retry) : '', $extension);
+
+	    /* Make sure that we don't have a collision in the db. */
+	    list ($ret, $isCollision) = GalleryFileSystemEntityHelper_medium::checkPathCollision(
+					$newPathComponent, $parentId, $selfId);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    if (!$isCollision) {
+		break;
+	    }
+
+	    if (++$retry > 100) {
+		return array(GalleryCoreApi::error(ERROR_COLLISION), null);
+	    }
+	}
+
+	return array(null, $newPathComponent);
+    }
+
+    /**
+     * Truncate the given path component to the maximum allowed length.
+     * If an extension is given, it truncates the base and then appends the extension.
+     *
+     * @param string basename of path component
+     * @param string variable part (optional), e.g. '_001'
+     * @param string extension (optional), e.g. '.jpg'
+     * @return string truncated path component
+     * @access private
+     */
+    function _truncatePathComponent($baseName, $variablePart='', $extension='') {
+
+	$length = 128 - strlen($variablePart) - strlen($extension);
+	$baseName = GalleryCoreApi::utf8Substring($baseName, 0, $length);
+
+	return $baseName . $variablePart . $extension;
+    }
+}
+?>

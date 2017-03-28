@@ -1,0 +1,87 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/FlushDatabaseCacheTask.class');
+
+/**
+ * This is a MaintenanceTask that will reset the view counts for all albums/items.
+ * Flushes database cache too to ensure all cached counts/dates are cleared.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class ResetViewCountsTask extends FlushDatabaseCacheTask {
+    /**
+     * @see MaintenanceTask::getInfo
+     */
+    function getInfo() {
+	global $gallery;
+
+	$info['l10Domain'] = 'modules_core';
+	$info['title'] = $gallery->i18n('Reset view counts');
+	$info['description'] = $gallery->i18n(
+	    'Reset number of views to zero for all albums and items.  This task flushes the ' .
+	    'database cache as well.');
+	$info['confirmRun'] = true;
+	return $info;
+    }
+
+    /**
+     * @see MaintenanceTask::run
+     */
+    function run() {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+
+	$resetCount = '
+	UPDATE [GalleryItemAttributesMap] SET [::viewCount] = 0
+	';
+	$resetDate = '
+	UPDATE [GalleryItem] SET [::viewedSinceTimestamp] = ?
+	';
+
+	$ret = $storage->execute($resetCount);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$ret = $storage->execute($resetDate, array(time()));
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$details = array($module->translate('View counts reset successfully'));
+
+	/* Call parent::run() to flush cache */
+	list ($ret, $success, $subDetails) = parent::run();
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	return array(null, $success, array_merge($details, $subDetails));
+    }
+}
+?>

@@ -1,0 +1,137 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/notification/classes/NotificationHelper.class');
+
+/**
+ * Class to route events to the appropriate notification handlers.
+ * @package Notification
+ * @subpackage Classes
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17580 $
+ */
+class NotificationRouter /* extends GalleryEventListener */ {
+    /**
+     * Generic event handler for notifications.
+     * Determine if there are any notification handlers registered for the input event and if there
+     * are any subscribers.
+     *
+     * @see GalleryEventListener::handleEvent
+     */
+    function handleEvent($event) {
+	global $gallery;
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug('<hr/>NotificationRouter::handleEvent');
+	    $gallery->debug_r($event);
+	}
+
+	$eventName = $event->getEventName();
+
+	list ($ret, $implementations) = GalleryCoreApi::getAllFactoryImplementationIdsWithHint(
+							    'NotificationEvent_1_0', $eventName);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	list ($ret, $active) =
+	    NotificationHelper::getActiveNotificationsHandlers(array_keys($implementations));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if (count($active) == 0) {
+	    return array(null, null);
+	}
+
+	list ($ret, $notifications) = NotificationHelper::getEnabledNotifications();
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	foreach ($active as $notificationName => $handlers) {
+	    list ($ret, $notification) = GalleryCoreApi::newFactoryInstanceById(
+						     'NotificationEvent_1_0', $notificationName);
+	    if ($ret) {
+		return array($ret, null);;
+	    }
+
+	    $specs = $notification->getEventSpecs();
+	    $entity = $event->getEntity();
+
+	    if (!empty($entity) && !empty($specs['entityType'])) {
+		if (!GalleryUtilities::isA($entity, $specs['entityType'])) {
+		    continue;
+		}
+
+		if (!empty($specs['persistentFlag'])
+			&& !$entity->testPersistentFlag($specs['persistentFlag'])) {
+		    continue;
+		}
+	    }
+
+	    $notification->setEvent($event);
+
+	    foreach ($handlers as $handlerId) {
+		if (empty($notifications[$notificationName][$handlerId])
+			|| empty($notifications[$notificationName][$handlerId]['enabled'])) {
+		    continue;
+		}
+
+		$ret = $this->_fireNotification($notificationName, $notification, $handlerId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+	    }
+	}
+
+	return array(null, null);
+    }
+
+    /**
+     * Fire the actual notification
+     * @param string $name Notification name
+     * @param Notificationevent $$notification
+     * @param string $handler Notification handler name
+     * @return GalleryStatus
+     */
+    function _fireNotification($name, $notification, $handler) {
+	list ($ret, $handlerInstance) =
+	    GalleryCoreApi::newFactoryInstanceById('NotificationHandler_1_0', $handler);
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $subscribers) = NotificationHelper::getSubscribers($name, $notification);
+	if ($ret) {
+	    return $ret;
+	}
+	if (count($subscribers) > 0) {
+	    $ret = $handlerInstance->handleNotification($subscribers, $notification);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	return null;
+    }
+}
+
+?>

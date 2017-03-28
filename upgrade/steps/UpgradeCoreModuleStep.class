@@ -1,0 +1,170 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Upgrade core module
+ * @package Upgrade
+ */
+class UpgradeCoreModuleStep extends UpgradeStep {
+    function stepName() {
+	return _('Upgrade Core');
+    }
+
+    function processRequest() {
+	global $gallery;
+	$gallery->startRecordingDebugSnippet();
+
+	/*
+	 * We'll need a translator to load up the core module for the
+	 * GalleryPlugin::setGroup() method to work.
+	 */
+	$translator =& $gallery->getTranslator();
+	if (empty($translator)) {
+	    $ret = $gallery->initTranslator(true /* dontUseDatabase */ );
+	    if ($ret) {
+		return true;
+	    }
+	}
+
+	require_once(dirname(__FILE__) . '/../../modules/core/module.inc');
+	require_once(dirname(__FILE__) . '/../../modules/core/CoreModuleExtras.inc');
+	$core = new CoreModule();
+	$versions = $core->getInstalledVersions();
+
+	/* We didn't have these values before 2.0-alpha-3 when the core version was 0.8 */
+	if (!isset($versions['core'])) {
+	    $versions['core'] = '0.8';
+	}
+	if (!isset($versions['gallery'])) {
+	    $versions['gallery'] = '2.0-alpha-3';
+	}
+
+	$templateData['installed'] = $versions;
+	$templateData['coreVersion'] = $core->getVersion();
+	$templateData['galleryVersion'] = $core->getGalleryVersion();
+	$templateData['storeConfig'] = $gallery->getConfig('storage.config');
+
+	$templateData['isConfigUpgradeRequired'] =
+	    CoreModuleExtras::isConfigUpgradeRequired($versions['core']);
+	$platform =& $gallery->getPlatform();
+	$configFilePath = GALLERY_CONFIG_DIR . '/config.php';
+	$templateData['isConfigWriteable'] = $platform->is_writeable($configFilePath);
+	$templateData['canChmod'] = strncasecmp(PHP_OS, 'win', 3);
+
+	$template = new StatusTemplate();
+
+	if (isset($_POST['confirm'])) {
+	    /* We want to log all debug output in our upgrade log */
+	    $this->_startDebugLog('Upgrade Core Module');
+	    $this->_addSystemInformationToDebugLog($versions);
+
+	    $template->renderHeader(true);
+	    $ret = selectAdminUser(true);
+	    if (!$ret) {
+		/*
+		 * Do the upgrade in bootstrap mode so that we avoid going to the
+		 * database for anything that's not vital.
+		 */
+		$ret = $core->installOrUpgrade(true, $template);
+		if (!$ret) {
+		    list ($ret,  $ignored) = $core->activate();
+		    if (!$ret) {
+			$storage =& $gallery->getStorage();
+			$ret = $storage->commitTransaction();
+
+			if (!$ret && $templateData['isConfigUpgradeRequired']) {
+			    $ret = CoreModuleExtras::performConfigUpgrade($versions['core']);
+			}
+		    }
+		}
+	    } else {
+		$gallery->debug('Unable to selectAdminUser for core upgrade: ' . $ret->getAsText());
+	    }
+
+	    $this->resetL10Domain();
+	    if ($ret) {
+		$templateData['stackTrace'] = $ret->getAsHtml();
+		$templateData['debug'] = $gallery->stopRecordingDebugSnippet();
+		$templateData['bodyFile'] = 'UpgradeCoreModuleError.html';
+	    } else {
+		$templateData['bodyFile'] = 'UpgradeCoreModuleSuccess.html';
+		$this->setComplete(true);
+		$this->_performedUpgrade = true;
+	    }
+	    $template->hideStatusBlock();
+	} else {
+	    $template->renderHeader();
+	    if (($cmp = version_compare($versions['core'], $core->getVersion())) == 0) {
+		$templateData['bodyFile'] = isset($this->_performedUpgrade)
+		    ? 'UpgradeCoreModuleSuccess.html' : 'UpgradeCoreModuleUpToDate.html';
+		$this->setComplete(true);
+	    } else {
+		/* The core module requires an upgrade */
+		$templateData['bodyFile'] = 'UpgradeCoreModuleRequest.html';
+		$this->setComplete(false);
+
+		if ($cmp != -1) {
+		    /*
+		     * The new version is older than the installed version, don't
+		     * let the user continue this silly attempt to break his G2
+		     */
+		    $templateData['isTryingToDowngrade'] = 1;
+		}
+	    }
+	}
+
+	if ($templateData['canChmod']
+		&& $templateData['bodyFile'] == 'UpgradeCoreModuleSuccess.html') {
+	    $stat = $platform->stat($configFilePath);
+	    $templateData['isConfigSecure'] = !($stat['mode'] & 022);
+	    $templateData['configFileMode'] = substr(sprintf('%o', $stat['mode']), -3);
+	    $templateData['configFilePath'] = $configFilePath;
+	}
+
+	$template->renderBodyAndFooter($templateData);
+	return false;
+    }
+
+    function _addSystemInformationToDebugLog($versions) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+	$isSvnInstall = file_exists(dirname(dirname(dirname(__FILE__))) . '/.svn');
+	$fileIntegrity = isset($_SESSION['fileintegrity']) ? $_SESSION['fileintegrity'] : 'Unknown';
+
+	$gallery->debug("\n
+--------------------------------------------------------
+System and Gallery information:
+--------------------------------------------------------
+    Gallery version:\t" . $versions['gallery'] . "
+    File integrity:\t" . $fileIntegrity . "
+    SVN install:\t" . ($isSvnInstall ? 'Yes' : 'No') . "
+    PHP version:\t" . phpversion() . " " . php_sapi_name() . "
+    PHP memory limit:\t" . ini_get('memory_limit') . "
+    PHP disable_functions:\t" . ini_get('disable_functions') . "
+    PHP zend.ze1_compatibility_mode:\t" . ini_get('zend.ze1_compatibility_mode') . "
+    Webserver:\t" . GalleryUtilities::getServerVar('SERVER_SOFTWARE') . "
+    Database:\t" . $storage->getAdoDbType() . " " . @$storage->getVersion() . "
+    Operating system:\t" . php_uname() . "
+    Browser:\t " . GalleryUtilities::getServerVar('HTTP_USER_AGENT') . "
+--------------------------------------------------------\n\n
+");
+    }
+}
+?>

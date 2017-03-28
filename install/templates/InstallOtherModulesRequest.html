@@ -1,0 +1,110 @@
+  <?php if (!empty($templateData['stackTrace'])): ?>
+  <div class="stack_trace">
+    <?php print implode('<br/>', $templateData['stackTrace']) ?>
+  </div><br/>
+  <?php endif; ?>
+
+  <h1><?php print _('Install Plugins') ?></h1>
+
+  <script type="text/javascript">
+    // <![CDATA[
+    function checkAll(newValue) {
+	for (var i = 0; i < document.forms[0].length; i++) {
+	    var element = document.forms[0].elements[i];
+	    if (element.type == 'checkbox' &&
+		element.name.substr(0,6) == 'module' && !element.disabled) {
+		element.checked = newValue;
+	    }
+	}
+    }
+    // ]]>
+  </script>
+
+  <p>
+    <?php print _("The following modules can be automatically installed and activated for you.  You should install at least one of the graphics toolkits otherwise Gallery can't make thumbnails out of your images.  On most systems, the automatic install will work properly for you.  However, in some cases it may fail.  You can always activate new modules or deactivate any of the ones you choose here on the Site Administration page, so any decision you make here is not permanent.") ?>
+  </p>
+  <p>
+    <?php print _("Some modules may fail to install automatically.  That's ok.  It typically means that they require some configuration, which you can do on the Site Adminstration page"); ?>
+  </p>
+
+  <?php if (!empty($templateData['groupedModules'])): ?>
+    <form method="post" action="<?php generateUrl(sprintf('%s?step=%s', INDEX_PHP, $stepNumber)) ?>">
+      <table class="modules">
+	<tr style="background-color: #ccc">
+	  <th>
+	    &nbsp;
+	  </th>
+	  <th>
+	    <?php print _("Name") ?>
+	  </th>
+	  <th>
+	    <?php print _("Version") ?>
+	  </th>
+	  <th>
+	    <?php print _("Description") ?>
+	  </th>
+	</tr>
+	<?php $installableCount = 0;
+          foreach ($templateData['groupedModules'] as $group => $modules): ?>
+	  <tr style="background-color: #fff">
+	    <td colspan="4"><h3><?php print $templateData['groupLabel'][$group] ?></h3></td>
+	  </tr>
+	  <?php $counter = 0; ?>
+	  <?php foreach ($modules as $id => $module): ?>
+	  <?php $isInstalled = $templateData['moduleInstalled'][$id]; ?>
+	  <?php $isInvalid = $templateData['moduleInvalid'][$id]; ?>
+	  <tr<?php if ($counter % 2 == 0) print ' style="background-color: #eee"' ?>>
+	    <td>
+	      <input type="checkbox" checked="checked"
+		id="module_<?php print $id ?>" name="module[<?php print $id ?>]"
+		<?php if ($isInstalled || $isInvalid): ?>
+		  disabled="disabled"
+		<?php else: $installableCount++; endif; ?>
+	      />
+	    </td>
+	    <td>
+	      <?php if ($isInstalled || $isInvalid): ?> <span class="disabled"> <?php endif; ?>
+	      <label for="module_<?php print $id ?>">
+		<?php print $module->getName() ?>
+	      </label>
+	      <?php if ($isInstalled || $isInvalid): ?> </span> <?php endif; ?>
+	    </td>
+	    <td>
+	      <?php if ($isInstalled || $isInvalid): ?> <span class="disabled"> <?php endif; ?>
+	      <?php print $module->getVersion() ?>
+	      <?php if ($isInstalled || $isInvalid): ?> </span> <?php endif; ?>
+	    </td>
+	    <td>
+	      <?php if ($isInstalled || $isInvalid): ?> <span class="disabled"> <?php endif; ?>
+	      <?php print $module->getDescription() ?>
+	      <?php if ($isInvalid) print '<br/>' . _('(Incompatible with this Gallery version)') ?>
+	      <?php if ($isInstalled || $isInvalid): ?> </span> <?php endif; ?>
+	    </td>
+	  </tr>
+	  <?php $counter++; ?>
+	  <?php endforeach; ?>
+	<?php endforeach; ?>
+	<?php if ($templateData['anyInstallable']): ?>
+	<tr style="background-color: #ccc">
+	  <td>
+	    <input type="checkbox" onclick="checkAll(this.checked);" checked="checked"/>
+	  </td>
+	  <td colspan="3">
+	    <?php print _("(un)check all") ?>
+	    <input type="hidden" name="step" value="<?php print $currentStep->getStepNumber() ?>"/>
+	    <input type="hidden" name="install" value="<?php print $installableCount ?>"/>
+	    <input type="hidden" name="activate" value="1"/>
+	  </td>
+	</tr>
+	<?php endif; ?>
+      </table>
+    </form>
+
+    <?php if ($templateData['anyInstallable']): ?>
+    <div class="go">
+      <?php $nextStep = $stepNumber + 1 ?>
+	  <a href="<?php generateUrl(sprintf('%s?step=%s', INDEX_PHP, $nextStep)) ?>" class="btn continue"><i></i><span><span></span><i></i><?php printf(_('Continue to Step %d Without Activating&raquo;'), $nextStep); ?></span></a>
+	  <a href="javascript:document.forms[0].submit();" class="btn continue"><i></i><span><span></span><i></i><?php print _('Activate Selected Modules') ?></span></a>
+    </div>
+    <?php endif; ?>
+  <?php endif; ?>

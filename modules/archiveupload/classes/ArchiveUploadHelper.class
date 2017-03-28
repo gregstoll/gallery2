@@ -1,0 +1,131 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A helper class for the ArchiveUpload module
+ * @package ArchiveUpload
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17771 $
+ * @static
+ */
+class ArchiveUploadHelper {
+
+    /**
+     * Test if the given path has a working unzip binary.
+     *
+     * This is done by calling the binary with the -v flag and
+     * making sure it runs properly.
+     *
+     * @param string $unzipPath path to the unzip we are testing
+     * @return array boolean test successful?
+     *               string error type or null
+     *               string unzip output
+     */
+    function testBinary($unzipPath) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	/*
+	 * If the path is not restricted by open_basedir, then verify that it's legal.
+	 * Else just hope that it's valid and use it.
+	 */
+	if (!$platform->isRestrictedByOpenBaseDir($unzipPath)) {
+	    if (!$platform->file_exists($unzipPath) || !$platform->is_file($unzipPath)) {
+		return array(false, 'badPath', null);
+	    }
+	    if (!$platform->is_executable($unzipPath)) {
+		return array(false, 'notExecutable', null);
+	    }
+	} else {
+	    return array(false, 'badPath', null);
+	}
+
+	list ($success, $results, $error) = $platform->exec(array(
+	    array($unzipPath, '-v', dirname(dirname(__FILE__)) . '/data/test.zip')));
+	$valid = false;
+	foreach ($results as $resultLine) {
+	    if (strpos($resultLine, 'test.txt') !== false) {
+		$valid = true;
+		break;
+	    }
+	}
+
+	return array($valid, ($valid ? null : 'exec'),
+		     implode("\n", $error) . (empty($error) ? '' : "\n") . implode("\n", $results));
+    }
+
+    /**
+     * Try to find a valid unzip binary.
+     * @return string valid path or null
+     */
+    function findUnzipBinary() {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$slash = $platform->getDirectorySeparator();
+	$validPath = null;
+
+	/*
+	 * Try some likely seeming paths to see if any of them work.  Start with system paths.
+	 * Tack on a trailing slash if necessary, then tack on other likely paths, based on our OS.
+	 */
+	$paths = array();
+	if (GalleryUtilities::isA($platform, 'WinNtPlatform')) {
+	    foreach (explode(';', getenv('PATH')) as $path) {
+		$path = trim($path);
+		if (empty($path)) {
+		    continue;
+		}
+		if ($path{strlen($path)-1} != $slash) {
+		    $path .= $slash;
+		}
+		$paths[] = $path . 'unzip.exe';
+	    }
+	    $paths[] = 'C:\unzip\unzip.exe';
+	    $paths[] = 'C:\\cygwin\\bin\\zip.exe';
+	} else if (GalleryUtilities::isA($platform, 'UnixPlatform')) {
+	    foreach (explode(':', getenv('PATH')) as $path) {
+		$path = trim($path);
+		if (empty($path)) {
+		    continue;
+		}
+		if ($path{strlen($path)-1} != $slash) {
+		    $path .= $slash;
+		}
+		$paths[] = $path . 'unzip';
+	    }
+	    $paths[] = '/usr/bin/unzip';
+	    $paths[] = '/usr/local/bin/unzip';
+	    $paths[] = '/bin/unzip';
+	}
+
+	/* Now try each path in turn to see which ones work */
+	foreach ($paths as $path) {
+	    list ($valid) = ArchiveUploadHelper::testBinary($path);
+	    if ($valid) {
+		$validPath = $path;
+		break;
+	    }
+	}
+
+	return $validPath;
+    }
+}
+?>

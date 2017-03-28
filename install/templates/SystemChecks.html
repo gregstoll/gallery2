@@ -1,0 +1,39 @@
+    <h1><?php print _('System Checks') ?></h1>
+
+    <div class="systemChecks">
+    <table>
+    <?php foreach ($templateData['check'] as $check): ?>
+      <tr>
+	<td>
+	  <?php print $check['title'] ?>
+	</td>
+
+	<td style="float: right">
+	  <?php if (isset($check['success'])): ?>
+	    <h2 class="success"> <?php print _('Success') ?> </h2>
+	  <?php elseif (isset($check['warning'])): ?>
+	    <h2 class="warning"> <?php print _('Warning') ?> </h2>
+	  <?php else: ?>
+	    <h2 class="error"> <?php print _('Failed') ?> </h2>
+	  <?php endif; ?>
+	</td>
+      </tr>
+
+      <?php if (isset($check['notice'])): ?>
+      <tr>
+	<td colspan="2" class="notice">
+	  <?php print $check['notice']; ?>
+	</td>
+      </tr>
+      <?php endif; ?>
+      <?php endforeach; ?>
+    </table>
+
+    <?php if (! empty($templateData['suggestedHtaccess'])): ?>
+    <p> <?php print _('If you are using Apache, create a file named .htaccess in the main Gallery directory with the following content:'); ?> </p>
+    <div class="example">
+      <pre><?php print $templateData['suggestedHtaccess'] ?></pre>
+    </div>
+    <?php endif; ?>
+
+    </div>

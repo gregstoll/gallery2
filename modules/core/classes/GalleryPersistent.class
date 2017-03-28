@@ -1,0 +1,151 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Base class that contains information about the state of its members
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class GalleryPersistent {
+
+    /**
+     * Keep track of which internal values are persistant and which ones aren't
+     * so that we'll know when and what to save to the database.
+     * @var array
+     * @access private
+     */
+    var $_persistentStatus;
+
+
+    function GalleryPersistent() {
+	/* Initialize our persistent info tracker */
+	$this->_persistentStatus['flags'] = 0;
+	$this->_persistentStatus['originalValue'] = array();
+    }
+
+    /**
+     * Have we modified any data in this class?
+     * @param string $member (optional) check just this field
+     * @return boolean true if modified, false if not.
+     */
+    function isModified($member=null) {
+	if ($member) {
+	    return $this->_persistentStatus['originalValue'][$member] !== $this->$member;
+	} else {
+	    $target = $this->entityType;
+	    foreach (array_keys($this->_persistentStatus['originalValue']) as $key) {
+		if ($this->_persistentStatus['originalValue'][$key] != $this->$key) {
+		    return true;
+		}
+	    }
+	    return false;
+	}
+    }
+
+    /**
+     * Return the original value of the given member.
+     * @return mixed the value, or null if it was not defined.
+     */
+    function getOriginalValue($member) {
+	if (!isset($this->_persistentStatus['originalValue'][$member])) {
+	    return null;
+	}
+	return $this->_persistentStatus['originalValue'][$member];
+    }
+
+    /**
+     * Reset all original values to the current values in the entity (or null if so specified).
+     *
+     * @param boolean $resetToNull (optional) reset all original values to null if true
+     * @return GalleryStatus a status code
+     */
+    function resetOriginalValues($resetToNull=false) {
+	list ($ret, $data) = GalleryCoreApi::describeEntity($this->entityType);
+	if ($ret) {
+	    return null;
+	}
+
+	$this->_persistentStatus['originalValue'] = array();
+	$target = $this->entityType;
+	while ($target) {
+	    foreach (array_keys($data[$target]['members']) as $member) {
+		if ($resetToNull) {
+		    $this->_persistentStatus['originalValue'][$member] = null;
+		} else {
+		    $this->_persistentStatus['originalValue'][$member] =
+			isset($this->$member) ? $this->$member : null;
+		}
+	    }
+	    $target = $data[$target]['parent'];
+	}
+
+	return null;
+    }
+
+    /**
+     * Set a flag.
+     * The GalleryStorage strategy uses this to flag objects for its own internal purposes.
+     *
+     * @param int $flag a bit flag to set
+     */
+    function setPersistentFlag($flag) {
+	$this->_persistentStatus['flags'] |= $flag;
+    }
+
+    /**
+     * Clear a flag.
+     * The GalleryStorage strategy uses this to flag objects for its own internal purposes.
+     *
+     * @param int $flag a bit flag to clear
+     */
+    function clearPersistentFlag($flag) {
+	$this->_persistentStatus['flags'] &= ~$flag;
+    }
+
+    /**
+     * Test a flag.
+     * The GalleryStorage strategy uses this to flag objects for its own internal purposes.
+     *
+     * @param int $flag a bit flag to test
+     * @return bool true if the bit is on, false otherwise
+     */
+    function testPersistentFlag($flag) {
+	return $this->_persistentStatus['flags'] & $flag;
+    }
+
+    /**
+     * Return the relative path to the class for this entity
+     *
+     * @return array GalleryStatus a status code
+     *               string a path like modules/core/classes/GalleryUser.class
+     */
+    function getClassFile() {
+	list ($ret, $data) = GalleryCoreApi::describeEntity($this->entityType);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	return array(
+	    null, "modules/{$data[$this->entityType]['module']}/classes/{$this->entityType}.class");
+    }
+}
+?>

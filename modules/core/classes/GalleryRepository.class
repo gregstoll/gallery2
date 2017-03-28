@@ -1,0 +1,1099 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryRepositoryIndex.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryRepositoryUtilities.class');
+
+/**
+ * Provides all repository-related functionality.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Jozef Selesi <selesi at gmail dot com>
+ * @version $Revision: 17582 $
+ */
+class GalleryRepository {
+
+    /**
+     * Repository utilities.
+     * @var GalleryRepositoryUtilities
+     * @access private
+     */
+    var $_utilities;
+
+    /**
+     * Local repository index.
+     * @var RepositoryIndex
+     * @access private
+     */
+    var $_index;
+
+    /**
+     * The source of this index (released, experimental, community)
+     * @var string
+     * @access private
+     */
+    var $_source;
+
+    /**
+     * Return a set of all the repositories that are currently active.  The error count indicates
+     * the number of repositories that failed to initialize for some reason (perhaps from a
+     * malformed local copy of the index).  The fix for this is to download a new version of the
+     * repository.
+     *
+     * @param array $sources (optional) an array of source names, eg 'official', 'community'
+     *                       If this is left empty, use the value stored in core.repositories.
+     * @param string $repositoryClassName (optional) the name of the repository class to use.
+     *               should be GalleryRepository, except for test code.
+     * @return array GalleryStatus a status code
+     *               array repository name => GalleryRepository the repository
+     *               int error count (repositories that failed to load for some reason)
+     * @static
+     */
+    function getRepositories($sources=array(), $repositoryClassName='GalleryRepository') {
+	$cacheKey = 'GalleryRepository::getRepositories(' . join('|', $sources) .
+	    ",$repositoryClassName)";
+	if (!GalleryDataCache::containsKey($cacheKey)) {
+	    if (empty($sources)) {
+		list ($ret, $sources) =
+		    GalleryCoreApi::getPluginParameter('module', 'core', 'core.repositories');
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+		$sources = array_keys(unserialize($sources));
+	    }
+
+	    $repositories = array();
+	    $errorCount = 0;
+	    foreach ($sources as $source) {
+		$repositories[$source] = new $repositoryClassName;
+		$ret = $repositories[$source]->init($source);
+		if ($ret) {
+		    if ($ret->getErrorCode() & ERROR_BAD_PARAMETER) {
+			unset($repositories[$source]);
+			$errorCount++;
+		    } else {
+			return array($ret, null, null);
+		    }
+		}
+	    }
+	    GalleryDataCache::put($cacheKey, array($repositories, $errorCount));
+	} else {
+	    list ($repositories, $errorCount) = GalleryDataCache::get($cacheKey);
+	}
+
+	return array(null, $repositories, $errorCount);
+    }
+
+    /**
+     * Clear the cached version of the repositories saved by a call to getRepositories()
+     *
+     * @static
+     */
+    function clearRepositoryCache($sources=array(), $repositoryClassName='GalleryRepository') {
+	$cacheKey = 'GalleryRepository::getRepositories(' . join('|', $sources) .
+	    ",$repositoryClassName)";
+	GalleryDataCache::remove($cacheKey);
+    }
+
+    /**
+     * Initializes the repository index and utilities.
+     *
+     * @return GalleryStatus a status code
+     */
+    function init($source) {
+	$this->_source = $source;
+	$this->_index = new GalleryRepositoryIndex($source);
+	$this->_utilities = new GalleryRepositoryUtilities();
+
+	if ($this->_index->existsInCache()) {
+	    $ret = $this->_index->load();
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+	return null;
+    }
+
+    /**
+     * Determines whether a core module upgrade is available.
+     *
+     * @return array GalleryStatus a status code
+     *		     boolean availability
+     *		     array repository core and plugin api versions
+     */
+    function isCoreUpgradeAvailable() {
+	list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	list ($ret, $header) = $this->_index->getPluginHeader('module', 'core');
+	if ($ret) {
+	    if ($ret->getErrorCode() & ERROR_BAD_PARAMETER) {
+		/*
+		 * No header for the core module.  Maybe the core package isn't available in any
+		 * this repository.
+		 */
+		return array(null, false, array());
+	    }
+	    return array($ret, null, null);
+	}
+	$repositoryVersion = $header['version'];
+
+	/*
+	 * We only compare versions, not builds, because upgrading the core module isn't something
+	 * that's done very often, at least until it's done manually.
+	 */
+	list ($ret, $relation) =
+	    $this->_utilities->compareVersions($repositoryVersion, $core->getVersion());
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$apiVersions = array();
+	if ($relation == 'newer') {
+	    $apiVersions['core'] = implode('.', $header['coreApiVersion']);
+	    $apiVersions['module'] = implode('.', $header['moduleApiVersion']);
+	    $apiVersions['theme'] = implode('.', $header['themeApiVersion']);
+	    $isAvailable = true;
+	} else {
+	    $apiVersions = array();
+	    $isAvailable = false;
+	}
+
+	return array(null, $isAvailable, $apiVersions);
+    }
+
+    /**
+     * Determines which packages of the specified plugin are newer in the repository.
+     *
+     * @param string $pluginType A plugin type (module|theme)
+     * @param string $pluginId A plugin id
+     * @param bool $forBasePackageUpgrade (optional) Include all packages that are upgradeable once
+     *                                     the base package has been upgraded. Default true.
+     * @return array GalleryStatus a status code
+     *		     array package list
+     */
+    function getPluginUpgradeInfo($pluginType, $pluginId, $forBasePackageUpgrade=true) {
+	global $gallery;
+	$upgradeInfo = array('upgradeable' => false);
+
+	/* Get installed packages meta data. */
+	list ($ret, $installedPackages) =
+	    $this->_utilities->getPluginPackages($pluginType, $pluginId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Get version info from repository index for base files. */
+	list ($ret, $header) = $this->_index->getPluginHeader($pluginType, $pluginId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	$repositoryDataVersion = $header['version'];
+	$repositoryDataBuild = $header['buildTimestamp'];
+	$upgradeInfo['base']['newVersion'] = $repositoryDataVersion;
+	$upgradeInfo['base']['newBuild'] = $repositoryDataBuild;
+	$upgradeInfo['base']['isCompatible'] = $this->_utilities->isPluginCompatible(
+	    $pluginType, $header['requiredCoreApi'], $header['requiredPluginApi']);
+
+	/* Check if this plugin's base files are installed. */
+	if (isset($installedPackages['base'])) {
+	    $dataVersion = $installedPackages['base']['version'];
+	    $dataBuild = $installedPackages['base']['build'];
+	    $locked = $installedPackages['base']['locked'];
+	} else {
+	    $dataVersion = null;
+	    $dataBuild = null;
+	    $locked = 0;
+	}
+
+	/* Compare local base version with the one in the repository. */
+	list ($ret, $upgradeInfo['base']['relation']) = $this->_utilities->compareVersions(
+	    $dataVersion, $repositoryDataVersion, $dataBuild, $repositoryDataBuild);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	if ($upgradeInfo['base']['relation'] == 'older') {
+	    $upgradeInfo['upgradeable'] = $upgradeInfo['base']['isCompatible'];
+	}
+	$upgradeInfo['base']['currentVersion'] = $dataVersion;
+	$upgradeInfo['base']['currentBuild'] = $dataBuild;
+	$upgradeInfo['base']['locked'] = $locked;
+
+	/* Check if any languages have been updated. */
+	list ($ret, $languages) =
+	    $this->_index->getAvailableLanguagesInPlugin($pluginType, $pluginId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$upgradeInfo['languages'] = array();
+	$upgradeInfo['complete'] = isset($upgradeInfo['base']['currentVersion']);
+
+	if ($forBasePackageUpgrade || $upgradeInfo['base']['relation'] == 'equal') {
+	    foreach ($languages as $language => $revision) {
+		list ($ret, $languageDescription) =
+		    GalleryCoreApi::getLanguageDescription($language);
+		if ($ret) {
+		    if ($ret->getErrorCode() & ERROR_BAD_PARAMETER) {
+			/* Unsupported language .. ignore it. */
+			continue;
+		    }
+		    return array($ret, null);
+		}
+
+		$languagePackageName = 'lang-' . $language;
+		if (isset($installedPackages[$languagePackageName])) {
+		    $currentBuild = $installedPackages[$languagePackageName]['build'];
+		    $locked = $installedPackages[$languagePackageName]['locked'];
+		} else {
+		    $currentBuild = null;
+		    $locked = 0;
+		}
+
+		$relation = $this->_utilities->compareRevisions($currentBuild, $revision);
+		$upgradeInfo['languages'][$language] = array(
+		    'name' => $languageDescription,
+		    'currentBuild' => $currentBuild,
+		    'newBuild' => $revision,
+		    'relation' => $relation,
+		    'locked' => $locked);
+
+		if ($relation == 'older' && $currentBuild) {
+		    $upgradeInfo['upgradeable'] = $upgradeInfo['base']['isCompatible'];
+		}
+
+		$upgradeInfo['complete'] &= !empty($currentBuild);
+	    }
+	}
+
+	return array(null, $upgradeInfo);
+    }
+
+    /**
+     * Returns a list of plugins of the specified type.
+     *
+     * It can return a list of compatible plugins with specific core APIs. By default, compatibility
+     * is determined by comparing the repository plugin requirements with the currently installed
+     * APIs, but API versions can be specified, so it is possible to, for example, get a
+     * compatibility list based on future API versions.
+     *
+     * @param string $pluginType
+     * @param boolean $showAllPlugins show incompatible plugins
+     * @param array $coreApis core APIs to base compatibility check on
+     *		    'core'/'module'/'theme' => array(versionMajor, versionMinor)
+     * @return array GalleryStatus a status code
+     *		     array plugin list
+     */
+    function getRepositoryPluginList($pluginType, $showAllPlugins=false, $coreApis=null) {
+	global $gallery;
+
+	list ($ret, $repositoryPluginList) =
+	    $this->_index->getPlugins($pluginType, $showAllPlugins, $coreApis);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$pluginList = array();
+	foreach ($repositoryPluginList[$pluginType] as $pluginId => $plugin) {
+	    $localVersion = '';
+
+	    /* Get active language. */
+	    list ($ret, $language) = $gallery->getActiveLanguageCode();
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    /* Load the core module for translation */
+	    list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    /* Fall back to en_US if there are no descriptions in the active language. */
+	    if (!isset($plugin['descriptions'][$language])) {
+		$language = 'en_US';
+	    }
+
+	    $isAvailable = isset($plugin['localVersion']);
+	    $locked = 0;
+	    if ($isAvailable) {
+		/*
+		 * For locally available plugins we check if they can be upgraded and present
+		 * an 'upgrade' action. Maybe we can show some additional info, such as
+		 * '3 languages updated' or 'base data upgrade available'.
+		 */
+		list ($ret, $upgradeInfo) =
+		    $this->getPluginUpgradeInfo($pluginType, $pluginId, false);
+		if ($ret) {
+		    return array($ret, null);
+		}
+
+		$localVersion = $plugin['localVersion'];
+		$locked = $upgradeInfo['base']['locked'];
+		$isUpgradeable = $upgradeInfo['upgradeable'];
+	    } else {
+		$isUpgradeable = false;
+	    }
+
+	    if (isset($plugin['descriptions'][$language]['groupLabel'])) {
+		$groupLabel = $plugin['descriptions'][$language]['groupLabel'];
+	    } else if ($pluginType == 'theme') {
+		$groupLabel = $core->translate('Themes');
+	    } else {
+		$groupLabel = $core->translate('General');
+	    }
+
+	    $isDowngraded =  version_compare($localVersion, $plugin['header']['version'], '>');
+
+	    list ($providedCoreApiVersion, $providedPluginApiVersion) =
+		$this->_utilities->getProvidedApis($pluginType, $coreApis);
+	    $pluginList[$pluginId] = array(
+		'type' => $pluginType,
+		'name' => $plugin['descriptions'][$language]['name'],
+		'description' => $plugin['descriptions'][$language]['description'],
+		'groupLabel' => $groupLabel,
+		'repositoryVersion' => $plugin['header']['version'],
+		'localVersion' => $localVersion,
+		'isCompatible' => $plugin['isCompatible'],
+		'api' => array(
+		    'required' => array(
+			'core' => implode('.', $plugin['header']['requiredCoreApi']),
+			'plugin' => implode('.', $plugin['header']['requiredPluginApi'])),
+		    'provided' => array(
+			'core' => implode('.', $providedCoreApiVersion),
+			'plugin' => implode('.', $providedPluginApiVersion))),
+		'locked' => $locked,
+		'isDowngraded' => $isDowngraded,
+		'isUpgradeable' => $isUpgradeable);
+	}
+
+	/* Sort plugins by name. */
+	if (!uasort($pluginList, array('GalleryRepository', 'comparePluginListEntries'))) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					      'Error sorting plugin list.'),
+			 null);
+	}
+
+	return array(null, $pluginList);
+    }
+
+    /**
+     * Compares two plugin list entries.
+     *
+     * A plugin list entry is an element of the array returned by getRepositoryPluginList. This
+     * is a callback for sorting the plugin list by (group label, plugin name).
+     *
+     * @param array $plugin1 first plugin list entry
+     * @param array $plugin2 second plugin list entry
+     * @return boolean see strcmp()
+     */
+    function comparePluginListEntries($plugin1, $plugin2) {
+	global $gallery;
+
+	if (isset($plugin1['groupLabel'])) {
+	    $group1 = $plugin1['groupLabel'];
+	    $group2 = $plugin2['groupLabel'];
+	    if ($group1 != $group2) {
+		return strcmp($group1, $group2);
+	    }
+	}
+
+	$name1 = $plugin1['name'];
+	$name2 = $plugin2['name'];
+	return strcmp($name1, $name2);
+    }
+
+    /**
+     * Creates a list of all upgradeable packages.
+     *
+     * It goes through all installed plugins and checks if an update is available to any of their
+     * packages and adds it to a list if it is.
+     *
+     * @return array GalleryStatus a status code
+     *		     array package list
+     */
+    function getAllUpgradeablePackages() {
+	$packages = array();
+	foreach (array('module', 'theme') as $pluginType) {
+	    list ($ret, $plugins) = GalleryCoreApi::getAllPluginIds($pluginType);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    foreach ($plugins as $pluginId) {
+		if ($pluginId == 'core' && $pluginType == 'module') {
+		    continue;
+		}
+
+		list ($ret, $upgradeInfo) = $this->getPluginUpgradeInfo($pluginType, $pluginId);
+		if ($ret) {
+		    if ($ret->getErrorCode() & ERROR_BAD_PARAMETER) {
+			continue;
+		    }
+		    return array($ret, null);
+		}
+
+		if ($upgradeInfo['base']['locked'] || !$upgradeInfo['base']['isCompatible']) {
+		    continue;
+		}
+
+		if ($upgradeInfo['base']['relation'] == 'older' &&
+		    $upgradeInfo['base']['currentVersion']) {
+		    $packages[$pluginType][$pluginId]['base'] = 1;
+		}
+
+		if (isset($upgradeInfo['languages'])) {
+		    foreach ($upgradeInfo['languages'] as $code => $pack) {
+			if ($pack['relation'] == 'older' && $pack['currentBuild']) {
+			    $packages[$pluginType][$pluginId]['lang-' . $code] = 1;
+			}
+		    }
+		}
+	    }
+	}
+
+	return array(null, $packages);
+    }
+
+    /**
+     * @see GalleryRepositoryUtilities::updatePackageMetaData
+     * @deprecated Only called from this class so remove on next major api bump.
+     */
+    function updatePackageMetaData(
+	$pluginType, $pluginId, $packageName, $packageVersion, $packageBuild, $locked) {
+
+	return $this->_utilities->updatePackageMetaData($pluginType, $pluginId, $packageName,
+	    $packageVersion, $packageBuild, $locked);
+    }
+
+    /**
+     * Checks if the plugins directory exists and creates a subdirectory for each plugin type.
+     *
+     * @return boolean indicates whether the plugins directory is correctly set up
+     *	       string user-friendly error message
+     * @todo Delete on the next major API bump as it is not referenced.
+     */
+    function createPluginsDirectory() {
+	global $gallery;
+
+	/* Create repository cache directory if it doesn't exist. */
+	$repositoryCachePath = $gallery->getConfig('repository.cache');
+	$platform =& $gallery->getPlatform();
+
+	list ($success, $created) = GalleryUtilities::guaranteeDirExists($repositoryCachePath);
+	if (!$success) {
+	    return array(false, $gallery->i18n('Couldn\'t create repository cache path.'));
+	}
+
+	/* Create repository cache subdirectories. */
+	foreach (array('modules', 'themes') as $cacheDir) {
+	    $cacheDirectory = $repositoryCachePath . $cacheDir;
+	    if (!@$platform->is_dir($cacheDirectory) && !@$platform->mkdir($cacheDirectory)) {
+		return array(false, $gallery->i18n('Couldn\'t create cache subdirectory. '
+			     . 'Make sure the web server has write permissions in it.'));
+	    }
+	}
+
+	return array(true, '');
+    }
+
+    /**
+     * Creates a list of URLs that
+     *
+     * @param array $pluginData array(pluginType => array(pluginId => array(packages)))
+     * @return array GalleryStatus a status code
+     *		     array list of packages with corresponding URLs
+     */
+    function getDownloadFileList($pluginData) {
+	$files = array();
+	foreach ($pluginData as $pluginType => $plugin) {
+	    foreach ($plugin as $pluginId => $packages) {
+		list ($ret, $pluginName) = $this->_index->getPluginName($pluginType, $pluginId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+
+		list ($ret, $descriptorUrl) =
+		    $this->_index->getDescriptorUrl($pluginType, $pluginId);
+		if ($ret) {
+		    return array($ret, null);
+		}
+
+		$files[$pluginType][$pluginId]['name'] = $pluginName;
+		$files[$pluginType][$pluginId]['files']['descriptor'] = $descriptorUrl;
+		foreach ($packages as $package => $value) {
+		    list ($ret, $packageUrl) =
+			$this->_index->getPackageUrl($pluginType, $pluginId, $package);
+		    if ($ret) {
+			print($ret->getAsHtml());
+			return array($ret, null);
+		    }
+
+		    $files[$pluginType][$pluginId]['files'][$package] = $packageUrl;
+		}
+	    }
+	}
+
+	return array(null, $files);
+    }
+
+    /**
+     * Downloads a file from the repository.
+     *
+     * If the file is a package, it will be put in the local cache and unpacked in the plugins/
+     * directory. If it is a descriptor, it will be deserialized and returned to the calling
+     * function.
+     *
+     * @todo Split this into two separate functions, one that downloads the file, the other that
+     *       returns the descriptor.  The function that downloads the file should take the
+     *       descriptor so that it can verify that the file that got downloaded is the right
+     *       length.
+     *
+     * @param string $pluginType
+     * @param string $pluginId
+     * @param string $packageName
+     * @param string $relativePackageUrl URL of the package to download relative to repository URL
+     * @return array GalleryStatus a status code
+     *		     array descriptor
+     */
+    function downloadAndUnpack($pluginType, $pluginId, $packageName, $relativePackageUrl) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+	$phpVm = $gallery->getPhpVm();
+
+	/* Download package from the Gallery server. */
+	$packageUrl =
+	    $gallery->getConfig('repository.url') . $this->_source . '/' . $relativePackageUrl;
+
+	list ($wasDownloaded, $packageContents) = $this->_utilities->downloadFile($packageUrl);
+	if (!$wasDownloaded) {
+	    return array(GalleryCoreApi::error(
+			     ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
+			     "Error downloading package from '$packageUrl'."), null);
+	}
+
+	/* Make sure output directory exists. */
+	$pluginOutputDir = sprintf(
+	    '%s%ss/%s/', GalleryCoreApi::getCodeBasePath(), $pluginType, $pluginId);
+	if (!$platform->file_exists($pluginOutputDir)
+		&& !$platform->mkdir($pluginOutputDir)) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					 "Couldn't create directory [$pluginOutputDir]"), null);
+	}
+
+	/* Write package to the local repository cache directory. */
+	$absolutePackagePath =
+	    $gallery->getConfig('repository.cache') . $this->_source . '/' . $relativePackageUrl;
+	if (false === $platform->file_put_contents($absolutePackagePath, $packageContents)) {
+	    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+					       "Error writing package [$absolutePackagePath]"),
+			 null);
+	}
+
+	$descriptor = array();
+	if (preg_match('/^.*package$/', $relativePackageUrl)) {
+	    $this->_utilities->unpackPackage($absolutePackagePath, $pluginOutputDir);
+	 } else {
+	    /* Unserialize descriptor. */
+	    $descriptor = array('pluginId' => $pluginId, 'pluginType' => $pluginType,
+				'contents' => unserialize($packageContents));
+	}
+
+	return array(null, $descriptor);
+    }
+
+    /**
+     * Download the specified packages.
+     * @param GalleryRepository $repository
+     * @param string $pluginType
+     * @param string $pluginId
+     * @param array $pluginDownloadData list of plugins to download
+     * @param array $callback information for progress bar updates
+     * @ret array GalleryStatus a status code
+     * 		  boolean a flag indicating the plugin should be re-activated
+     * 		  array string status messages indicating problems encounterd
+     */
+    function downloadPackagesForPlugin($pluginType, $pluginId, $pluginDownloadData, &$callback) {
+	global $gallery;
+
+	$status = array();
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$packageUrls = $pluginDownloadData['files'];
+	$pluginName = $pluginDownloadData['name'];
+
+	$preparingText = $module->translate(array('text' => 'Preparing %s', 'arg1' => $pluginName));
+	$downloadingText = $module->translate(array('text' => 'Downloading %s',
+	    'arg1' => $pluginName));
+
+	$percentage = ++$callback['current'] / $callback['total'];
+	call_user_func($callback['method'], $callback['title'], $preparingText, $percentage);
+
+	/*
+	 * Extract the descriptor and verify that all of our packages will unpack
+	 * safely before starting.
+	 */
+	$relativeDescriptorUrl = $packageUrls['descriptor'];
+	unset($packageUrls['descriptor']);
+
+	list ($ret, $descriptor) = $this->downloadAndUnpack($pluginType, $pluginId, 'descriptor',
+	    $relativeDescriptorUrl);
+	if ($ret) {
+	    if ($ret->getErrorCode() & ERROR_STORAGE_FAILURE) {
+		/* XXX: storage failure means we failed to download the file properly */
+		$status['failedToDownload'][$pluginType][$pluginName] = $relativeDescriptorUrl;
+		return array(null, false, $status);
+	    }
+	    return array($ret, null, null);
+	}
+
+	$errors = array();
+	foreach (array_keys($packageUrls) as $packageName) {
+	    $gallery->guaranteeTimeLimit(30);
+
+	    if (++$callback['current'] % 5 == 0) {
+		$percentage = $callback['current'] / $callback['total'];
+		call_user_func($callback['method'], $callback['title'], $preparingText,
+		    $percentage);
+	    }
+
+	    /* pre-verify here */
+	    $errors = array_merge(
+		$errors, $this->_utilities->preVerifyPackage(
+		    $pluginType, $pluginId, $packageName, $descriptor));
+	}
+
+	$errors = array_unique($errors);
+	if ($errors) {
+	    $status['failedToInstall'][$pluginType][$pluginName] = $errors;
+	    return array(null, false, $status);
+	}
+
+	$percentage = $callback['current'] / $callback['total'];
+	call_user_func($callback['method'],
+	    $callback['title'], sprintf($downloadingText, $pluginName), $percentage);
+
+	$reactivatePlugin = false;
+	foreach ($packageUrls as $packageName => $relativePackageUrl) {
+	    $gallery->guaranteeTimeLimit(30);
+
+	    if (++$callback['current'] % 5 == 0) {
+		call_user_func($callback['method'],
+		    $callback['title'], sprintf($downloadingText, $pluginName), $percentage);
+	    }
+
+	    /* Download and unpack package. */
+	    list ($ret, $ignored) = $this->downloadAndUnpack(
+		$pluginType, $pluginId, $packageName, $relativePackageUrl);
+	    if ($ret) {
+		if ($ret->getErrorCode() & ERROR_STORAGE_FAILURE) {
+		    /* XXX: storage failure means we failed to download the file */
+		    $status['failedToDownload'][$pluginType][$pluginName][] = $relativePackageUrl;
+		    if ($packageName == 'base') {
+			return array(null, false, $status);
+		    } else {
+			continue;
+		    }
+		}
+		return array($ret, null, null);
+	    }
+
+	    /* Check the unpacked files' integrity. */
+	    $ret = $this->_utilities->verifyPackageIntegrity($descriptor['pluginType'],
+		$descriptor['pluginId'], $packageName, $descriptor['contents']);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+
+	    /* Update plugin package map. */
+	    list ($ret, $version, $build) = $this->getPackageVersionAndBuild(
+		$pluginType, $pluginId, $packageName);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    $ret = $this->_utilities->updatePackageMetaData(
+		$pluginType, $pluginId, $packageName, $version, $build, 0);
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    $reactivatePlugin |= $packageName == 'base';
+	}
+
+	return array(null, (bool)$reactivatePlugin, $status);
+    }
+
+    /**
+     * Verify that a package will install cleanly by examining all of its paths and making sure
+     * that any file operations that we intend to make will be successful.
+     *
+     * @param string $packageName name of the package to check
+     * @param array $descriptor descriptor of the plugin the package belongs to
+     * @return array of files that can't be overwritten (empty array if everything is ok)
+     */
+    function preVerifyPackage($packageName, $descriptor) {
+	return $this->_utilities->preVerifyPackage($descriptor['pluginType'],
+	    $descriptor['pluginId'], $packageName, $descriptor);
+    }
+
+    /**
+     * Verifies the integrity of the specified packages' unpacked files.
+     *
+     * @param string $packageName name of the package to check
+     * @param array $descriptor descriptor of the plugin the package belongs to
+     * @return GalleryStatus a status code
+     */
+    function verifyPackageIntegrity($packageName, $descriptor) {
+	return $this->_utilities->verifyPackageIntegrity($descriptor['pluginType'],
+	    $descriptor['pluginId'], $packageName, $descriptor['contents']);
+    }
+
+    /**
+     * Scan one plugin and update its entries in the GalleryPluginPackageMap.
+     *
+     * @param $pluginType the plugin type ('module' or 'theme')
+     * @param $pluginId the plugin id (eg 'albumselect' or 'cart')
+     * @return GalleryStatus a status code
+     */
+    function scanPlugin($pluginType, $pluginId) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	/* Erase all data for this plugin */
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'GalleryPluginPackageMap', array('pluginType' => $pluginType, 'pluginId' => $pluginId));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$pluginDir = GalleryCoreApi::getCodeBasePath("{$pluginType}s/$pluginId");
+	$manifestPath = "$pluginDir/MANIFEST";
+
+	if (!$platform->file_exists($manifestPath)) {
+	    /*
+	     * We won't know the revision of this module, so ignore it.  TODO: perhaps we should
+	     * fall back on the revision of the module.inc file?  But if this is a user-written or
+	     * a contrib module, then it is probably not in svn which means that isn't valid
+	     * anyway.  Ignoring it is probably safest.
+	     */
+	    return null;
+	}
+
+	list($ret, $plugin) = GalleryCoreApi::loadPlugin($pluginType, $pluginId, true);
+	if ($ret) {
+	    return $ret;
+	}
+
+	list ($ret, $revision) = $this->_utilities->getFileRevision($manifestPath);
+	if ($ret) {
+	    return $ret;
+	}
+
+	$locked = $platform->is_writeable($manifestPath) ? 0 : 1;
+	$ret = GalleryCoreApi::addMapEntry(
+	    'GalleryPluginPackageMap',
+	    array('pluginType' => $pluginType,
+		  'pluginId' => $pluginId,
+		  'packageName' => 'base',
+		  'packageVersion' => $plugin->getVersion(),
+		  'packageBuild' => $revision,
+		  'locked' => $locked));
+	if ($ret) {
+	    return $ret;
+	}
+
+	$stringsRawFile = "$pluginDir/po/strings.raw";
+	if ($platform->file_exists($stringsRawFile)) {
+	    list ($ret, $stringsRevision) = $this->_utilities->getFileRevision($stringsRawFile);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    $poFiles = $platform->glob("$pluginDir/po/*.po");
+	    if ($poFiles) {
+		foreach ($poFiles as $file) {
+		    list ($ret, $revision) = $this->_utilities->getFileRevision($file);
+		    if ($ret) {
+			return $ret;
+		    }
+		    $ret = GalleryCoreApi::addMapEntry(
+			'GalleryPluginPackageMap',
+			array('pluginType' => $pluginType,
+			      'pluginId' => $pluginId,
+			      'packageName' => (
+				  'lang-' . GalleryUtilities::getFileBase(basename($file))),
+			      'packageVersion' => $stringsRevision,
+			      'packageBuild' => $revision,
+			      'locked' => $platform->is_writeable($file) ? 0 : 1));
+		    if ($ret) {
+			return $ret;
+		    }
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Translate the repository tag to its localized name
+     *
+     * @param $source string the name (released, experimental, community)
+     * @return array GalleryStatus a status code
+     *               string the localized name
+     * @static
+     * @public
+     */
+    function translateRepositoryName($source) {
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	switch($source) {
+	case 'released':
+	    return array(null, $module->translate('Official Release Repository'));
+
+	case 'experimental':
+	    return array(null, $module->translate('Experimental Repository'));
+
+	case 'community':
+	    return array(null, $module->translate('Community Repository'));
+
+	default:
+	    return array(null, '');
+	}
+    }
+
+    /**
+     * @see GalleryRepositoryIndex::existsInCache
+     */
+    function localIndexExists() {
+	return $this->_index->existsInCache();
+    }
+
+    /**
+     * @see GalleryRepositoryIndex::update
+     */
+    function downloadIndex() {
+	return $this->_index->update();
+    }
+
+    /**
+     * @see GalleryRepositoryIndex::containsPlugin
+     */
+    function pluginExistsInIndex($pluginType, $pluginId) {
+	return $this->_index->containsPlugin($pluginType, $pluginId);
+    }
+
+    /**
+     * @see GalleryRepositoryIndex::getMetaData
+     */
+    function getIndexMetaData() {
+	return $this->_index->getMetaData();
+    }
+
+    /**
+     * @see GalleryRepositoryIndex::getPackageVersionAndBuild
+     */
+    function getPackageVersionAndBuild($pluginType, $pluginId, $packageName) {
+	return $this->_index->getPackageVersionAndBuild($pluginType, $pluginId, $packageName);
+    }
+
+    /**
+     * @see GalleryRepositoryIndex::getPluginName
+     */
+    function getPluginName($pluginType, $pluginId) {
+	return $this->_index->getPluginName($pluginType, $pluginId);
+    }
+
+    /**
+     * @see GalleryRepositoryIndex::getLanguagePackageFiles
+     */
+    function getLanguagePackageFiles($locales) {
+	return $this->_index->getLanguagePackageFiles($locales);
+    }
+
+    /**
+     * Retrieve all the specified files as one http request and separate into individual packages.
+     * @param string $source name of the repository to be accessed
+     * @param array $filesToDownload list of files to download
+     * @param array $callback progress notification callback
+     * @return array GalleryStatus a status code
+     * 		     array string status messages indicating problems encounterd
+     * 		     int count of packages installed
+     */
+    function downloadAndUnpackPackages($filesToDownload, &$callback) {
+	global $gallery;
+	$phpVm = $gallery->getPhpVm();
+	$platform =& $gallery->getPlatform();
+
+	$utilities = $this->_utilities;
+
+	list ($ret, $aggregateFile) =
+	    $utilities->downloadAggregatePackages($this->_source, $filesToDownload);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	call_user_func($callback['method'], $callback['title'], '',
+	    ++$callback['current'] / $callback['total']);
+
+	list ($ret, $packages) = $utilities->splitAggregatePackage($this->_source, $aggregateFile,
+	    $callback);
+	$platform->unlink($aggregateFile);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	list($ret, $status) = $this->_preverifyAggregatePackages($packages, $callback);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$installedPackageCount = 0;
+	$cacheDir = $gallery->getConfig('repository.cache') . $this->_source . '/';
+	foreach ($packages as $pluginType => $plugins) {
+	    foreach ($plugins as $pluginId => $data) {
+		if (!empty($status['failedToInstall'][$pluginType][$pluginId])) {
+		    $callback['current'] +=
+			count($status['failedToInstall'][$pluginType][$pluginId]);
+		    call_user_func($callback['method'], $callback['title'], '',
+			$callback['current'] / $callback['total']);
+		    continue;
+		}
+		$pluginOutputDir = GalleryCoreApi::getCodeBasePath("{$pluginType}s/$pluginId/");
+
+		$descriptor = $data['descriptor'];
+		foreach ($data['files'] as $packageFile) {
+		    $gallery->guaranteeTimeLimit(30);
+		    /* Unpack files from package. */
+		    $utilities->unpackPackage($cacheDir . $packageFile[1], $pluginOutputDir);
+		    $installedPackageCount++;
+
+		    $ret = $utilities->verifyPackageIntegrity($pluginType, $pluginId,
+			$packageFile[0], $descriptor);
+		    if ($ret) {
+			return array($ret, null, null);
+		    }
+
+		    /* Update plugin package map. */
+		    list ($ret, $version, $build) = $this->getPackageVersionAndBuild(
+			$pluginType, $pluginId, $packageFile[0]);
+		    if ($ret) {
+			return array($ret, null, null);
+		    }
+		    $ret = $utilities->updatePackageMetaData(
+			    $pluginType, $pluginId, $packageFile[0], $version, $build, 0);
+		    if ($ret) {
+			return array($ret, null, null);
+		    }
+
+		    call_user_func($callback['method'], $callback['title'], '',
+			++$callback['current'] / $callback['total']);
+		}
+	    }
+	}
+
+	return array(null, $status, $installedPackageCount);
+    }
+
+    /**
+     * Preverify that we will have no trouble unpacking and writing the packages we downloaded
+     *
+     * @param array $packages packages returned from splitAggregatePackage
+     * @param array $callback progress notification callback
+     * @return array GalleryStatus a status code
+     *  	     array string status messages indicating problems encounterd
+     */
+    function _preverifyAggregatePackages($packages, &$callback) {
+	global $gallery;
+
+	$status = array();
+	foreach ($packages as $pluginType => $plugins) {
+	    foreach ($plugins as $pluginId => $data) {
+		$gallery->guaranteeTimeLimit(30);
+		/* Make sure output directory exists. */
+		$pluginOutputDir = GalleryCoreApi::getCodeBasePath("{$pluginType}s/$pluginId/");
+
+		list ($success) = GalleryUtilities::guaranteeDirExists($pluginOutputDir);
+		if (!$success) {
+		    return array(GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
+			"Couldn't create directory [$pluginOutputDir]"), null);
+		}
+
+		if (!empty($data['descriptor'])) {
+		    $descriptor = $data['descriptor'];
+		    foreach ($data['files'] as $packageFile) {
+			$lockedFiles = $this->_utilities->preVerifyPackage($pluginType, $pluginId,
+			    $packageFile[0], $descriptor);
+			if (!empty($lockedFiles)) {
+			    $status['failedToInstall'][$pluginType][$pluginId][] = $packageFile[1];
+			    continue;
+			}
+		    }
+		} else {
+		    GalleryCoreApi::addEventLogEntry('Gallery Error', 'No Descriptor',
+			sprintf('No descriptor requested for %s %s', $pluginType, $pluginId));
+
+		    foreach ($data['files'] as $packageFile) {
+			$status['failedToInstall'][$pluginType][$pluginId][] = $packageFile[1];
+			$callback['current']++;
+		    }
+		    $percentage = $callback['current'] / $callback['total'];
+		    call_user_func($callback['method'], $callback['title'], '', $percentage);
+		}
+	    }
+	}
+	return array(null, $status);
+    }
+
+    /**
+     * Remove obsolete files when a plugin is updated.
+     *
+     * @param string $pluginType A plugin type (module|theme)
+     * @param string $pluginId A plugin id
+     * @access public
+     */
+    function removeObsoleteFiles($pluginType, $pluginId) {
+	global $gallery;
+	$platform =& $gallery->getPlatform();
+
+	$manifestPath = GalleryCoreApi::getCodeBasePath("{$pluginType}s/$pluginId/MANIFEST");
+
+	$manifest =  array();
+	GalleryUtilities::readIndividualManifest($manifestPath, $manifest);
+
+	foreach ($manifest as $file => $detail) {
+	    if (!empty($detail['removed'])) {
+		$file = GalleryCoreApi::getCodeBasePath($file);
+		if ($platform->is_writeable($file)) {
+		    $platform->unlink($file);
+		}
+	    }
+	}
+    }
+}
+?>

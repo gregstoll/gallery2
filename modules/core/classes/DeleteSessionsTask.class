@@ -1,0 +1,128 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/AdminMaintenance.inc');
+
+/**
+ * This is a MaintenanceTask that removes all expired sessions from the database.
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Andy Staudacher <ast@gmx.ch>
+ * @version $Revision: 17580 $
+ */
+class DeleteSessionsTask extends MaintenanceTask {
+    /**
+     * @see MaintenanceTask::getInfo
+     */
+    function getInfo() {
+	global $gallery;
+
+	return array('l10Domain' => 'modules_core',
+		     'title' => $gallery->i18n('Delete user sessions'),
+		     'description' => $gallery->i18n(
+			 'Delete all persistent user sessions according to your current session ' .
+			 'expiration settings.'));
+    }
+
+    /**
+     * @see MaintenanceTask::run
+     */
+    function run() {
+	global $gallery;
+	$templateAdapter =& $gallery->getTemplateAdapter();
+	$session =& $gallery->getSession();
+	$phpVm = $gallery->getPhpVm();
+
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	/* Touch this admin session to ensure that we don't delete it */
+	$session->put('touch', $phpVm->time());
+	$ret = $session->save();
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	list ($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$inactivityTimeout = (int)$params['session.inactivityTimeout'];
+	$lifetime = (int)$params['session.lifetime'];
+	list ($ret, $anonymousUserId) = GalleryCoreApi::getAnonymousUserId();
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$templateAdapter->updateProgressBar($module->translate('Delete user sessions'), '', 0);
+
+	$data = array($phpVm->time() - $inactivityTimeout, $phpVm->time() - $lifetime,
+		      $anonymousUserId, $phpVm->time() - (7 * 86400));
+
+	$query = '
+	SELECT COUNT([GallerySessionMap::id])
+	FROM [GallerySessionMap]
+	WHERE [GallerySessionMap::modificationTimestamp] < ? OR
+	      [GallerySessionMap::creationTimestamp] < ? OR
+	      ([GallerySessionMap::userId] = ? AND [GallerySessionMap::creationTimestamp] < ?)
+	';
+	list ($ret, $results) = $gallery->search($query, $data);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$result = $results->nextResult();
+	$total = $result[0];
+
+	if ($total) {
+	    /* This limit controls the query text length, 1000 sessionIds => query size = 32kbyte */
+	    $stepSize = $session->_expirationLimit = 1000;
+	    $iterations = ceil($total / $stepSize);
+	    $option['limit']['count'] = $stepSize;
+
+	    for ($i = 1; $i <= $iterations; $i++) {
+		$gallery->guaranteeTimeLimit(120);
+		$ret = $session->_expireSessions();
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+
+		$templateAdapter->updateProgressBar(
+		    $module->translate('Delete user sessions'), '', $i / $iterations);
+	    }
+	}
+
+	$templateAdapter->updateProgressBar($module->translate('Delete user sessions'), '', 1);
+
+	$result = array($module->translate(array('text' => 'Deleted %d sessions.',
+						 'arg1' => (int)$total)));
+
+	return array(null, true, $result);
+    }
+
+    /**
+     * @see MaintenanceTask::requiresProgressBar
+     */
+    function requiresProgressBar() {
+	return true;
+    }
+}
+?>

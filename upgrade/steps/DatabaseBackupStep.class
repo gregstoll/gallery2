@@ -1,0 +1,159 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Allow the user to back up the database
+ * @package Upgrade
+ */
+class DatabaseBackupStep extends UpgradeStep {
+    /**
+     * Holds the instance of the StatusTemplate.
+     */
+    var $_template;
+
+    /**
+     * Holds the Progress Bar Title, so that it only has to be translated once.
+     */
+    var $_progressTitle;
+
+    function stepName() {
+	return _('Database Backup');
+    }
+
+    function isOptional() {
+	return true;
+    }
+
+    /**
+     * Process the database export request.
+     * @return boolean true to keep rendering the page, false to stop rendering.
+     */
+    function processRequest() {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+
+	if (!isset($_GET['backupDatabase'])) {
+	    $this->setComplete(false);
+	    return true;
+	}
+
+	$this->_template = new StatusTemplate();
+
+	/* If Gallery is not in maintenance mode, set it there now */
+	$mode = $gallery->getConfig('mode.maintenance');
+	if (!$mode) {
+	    $ret = GalleryCoreApi::setMaintenanceMode(true);
+	    if ($ret) {
+		$templateData['stackTrace'] = $ret->getAsHtml();
+		$templateData['errors'][] = _('Error attempting to enable maintenance mode.');
+		$this->_template->renderHeaderBodyAndFooter($templateData);
+		return false;
+	    }
+	}
+
+	$templateData['stackTrace'] = '';
+
+	/* Set up the progress bar. */
+	$this->_template->renderHeader(true);
+	$this->_progressTitle = _('Backing up the Gallery database');
+	$this->_template->renderStatusMessage($this->_progressTitle, '', 0);
+
+	$exporter = $storage->getDatabaseExporter();
+	list ($ret, $backupFile, $warnings) =
+	    $exporter->exportToXmlFile(array($this, 'backupCallback'));
+	if (!$ret) {
+	    $this->setComplete(true);
+	    if (!empty($warnings)) {
+		$templateData['backupWarnings'] = $warnings;
+	    }
+	} else {
+	    $templateData['stackTrace'] .= $ret->getAsHtml();
+	    $templateData['errors'][] = _('Errors occurred during the database backup');
+	}
+
+	$this->_template->renderStatusMessage($this->_progressTitle, '', 1);
+	$this->_template->hideStatusBlock();
+
+	$templateData['storeConfig'] = $gallery->getConfig('storage.config');
+	if ($this->isComplete()) {
+	    $templateData['bodyFile'] = 'DatabaseBackupSuccess.html';
+
+	    $templateData['backupFileName'] = $backupFile;
+	} else {
+	    $templateData['bodyFile'] = 'DatabaseBackupRequest.html';
+	}
+
+	/* If maintenance mode was not set by the this step, then don't unset it. */
+	if (!$mode) {
+	    $ret = GalleryCoreApi::setMaintenanceMode(false);
+	    if ($ret) {
+		$templateData['stackTrace'] .= $ret->getAsHtml();
+		$templateData['errors'][] = _('Error attempting to disable maintenance mode.');
+	    }
+	}
+
+	$this->_template->renderBodyAndFooter($templateData);
+	return false;
+    }
+
+    /**
+     * Update the progress bar with the current percent completion
+     * @param float $percentage The current completion percentage.
+     */
+    function backupCallback($percentage) {
+	$this->_template->renderStatusMessage($this->_progressTitle, '', $percentage);
+    }
+
+    function loadTemplateData(&$templateData) {
+	global $gallery;
+
+	$templateData['bodyFile'] = 'DatabaseBackupRequest.html';
+	$templateData['storeConfig'] = $gallery->getConfig('storage.config');
+
+	/* Load all table versions */
+	$storage =& $gallery->getStorage();
+	list ($ret, $tableVersions) = $storage->getTableVersions();
+	if ($ret) {
+	    $templateData['warnings'][] =
+		_('Unable to determine if automated backup is available.');
+	    $templateData['canDoBackup'] = false;
+	} else {
+	    list ($major, $minor) = $tableVersions['Schema'];
+	    $canDoBackup = version_compare("$major.$minor", '1.2', '>=');
+
+	    if ($canDoBackup) {
+		/* Verify that the type / info fields are populated */
+		$query = 'SELECT [::name] FROM [GallerySchema]
+			   WHERE [::type] in (\'map\',  \'entity\')';
+		list ($ret, $results) =
+		    $storage->search($query, array(), array('limit' => array('count' => 1)));
+		if ($ret) {
+		    $templateData['warnings'][] =
+			_('Unable to determine if automated backup is available.');
+		    $canDoBackup = false;
+		} else {
+		    $canDoBackup = $results->resultCount() > 0;
+		}
+	    }
+	    $templateData['canDoBackup'] = $canDoBackup;
+	}
+    }
+}
+?>

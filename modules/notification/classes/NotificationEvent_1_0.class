@@ -1,0 +1,143 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is the base class for formatting Gallery events into notification messages.
+ * @package Notification
+ * @subpackage Classes
+ * @author Zimzat <zimzat@zimzat.com>
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17648 $
+ * @abstract
+ */
+class NotificationEvent_1_0 {
+    /* The internal variable to hold the event that is the basis for a notification. */
+    var $_event;
+
+    /**
+     * Set the event that caused this notification to be created.
+     * @param GalleryEvent $event
+     */
+    function setEvent($event) {
+	$this->_event = $event;
+    }
+
+    /**
+     * Set the event that caused this notification to be created.
+     * @return GalleryEvent
+     */
+    function getEvent() {
+	return $this->_event;
+    }
+
+    /**
+     * Return a localized description of the event.
+     *
+     * @return array GalleryStatus a status codet
+     * 		     string Localized description of event
+     * @abstract
+     */
+    function getDescription() {
+	return array(null, null);
+    }
+
+    /**
+     * Return a formatted and localized plain text message describing the event to be used in any
+     * notification message.
+     *
+     * @return array GalleryStatus
+     *		     string A formatted and localized plain text message.
+     * @abstract
+     */
+    function getNotificationMessage() {
+	return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+    }
+
+    /**
+     * Get the item id contained in the event or return 0 if there is no item id.
+     * @return mixed Either a single id or an array of item ids
+     */
+    function getItemId() {
+	return 0;
+    }
+
+    /**
+     * What permission of the item should be checked to see if a user is allowed to
+     * get that event. Setting to null will limit the notifications to administrators
+     *
+     * @return string name of permission to check
+     * @abstract
+     */
+    function getPermission() {
+	return null;
+    }
+
+    /**
+     * Determines if this notification is global or applies to an item
+     * @return boolean true if the notification is not related to an item.
+     */
+    function isGlobal() {
+	return false;
+    }
+
+    /**
+     * Determines if the event is appropriate for the supplied item.  This could be null and might
+     * not be an object.
+     *
+     * @param GalleryItem $item The item to be checked against.
+     * @return boolean true or false if the event applies to provided item
+     */
+    function isAppropriateForItem($item) {
+	return false;
+    }
+
+    /**
+     * Returns the Event Specification
+     * The event specification determines the selection criteria for the particular event.  The only
+     * required entry is 'eventName'.
+     *
+     * @return array ('eventName' => eventName, 'entityType' => entityType,
+     * 		      'persistentFlag' => flags)
+     * @abstract
+     */
+    function getEventSpecs() {
+	return null;
+    }
+
+    /**
+     * Provide a common routine to do translations of descriptions and messages
+     *
+     * @param string $moduleId the module id
+     * @param mixed $translateParms parameters to the module translate method
+     * @return array GalleryStatus
+     *		     string A formatted and localized plain text message.
+     * @access protected
+     */
+    function _translateText($moduleId, $translateParms) {
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', $moduleId);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$text = $module->translate($translateParms);
+	return array(null, $text);
+    }
+}
+?>

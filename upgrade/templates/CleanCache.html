@@ -1,0 +1,29 @@
+    <?php if (empty($templateData['unclean'])): ?>
+    <div class="success">
+      <h1><?php print _("Successfully cleaned caches.") ?></h1>
+    </div>
+    <?php endif; ?>
+
+    <h1><?php print _("Delete Caches") ?></h1>
+
+    <p>
+      <?php print _("Gallery creates temporary copies of some of your data on your hard drive.  This helps it to run faster.  But when you upgrade, some of these files might be out of date so it's a good idea to get rid of them now.  Gallery will create them again as it needs them."); ?>
+    </p>
+
+    <?php if (!empty($templateData['unclean'])): ?>
+    <p>
+      <?php print _("We were unable to clean the following cache directories.  This is probably ok, but if you notice any weird behaviour, you should try to delete these directories yourself.  It's perfectly safe to get rid of them at any time."); ?>
+    </p>
+    <div class="example">
+      <?php foreach ($templateData['unclean'] as $dir): ?>
+      <?php print $dir ?> <br />
+      <?php endforeach; ?>
+    </div>
+
+    <p>
+      <?php print _("Even though there were errors, you can still continue.  Or, you can try deleting these directories yourself and then click the <b>Try Again</b> link below."); ?>
+    </p>
+    <div class="go">
+	  <a href="<?php generateUrl('index.php?step=' . $currentStep->getStepNumber()) ?>" class="btn continue"><i></i><span><span></span><i></i><?php print _('Try Again') ?></span></a>
+    </div>
+    <?php endif; ?>

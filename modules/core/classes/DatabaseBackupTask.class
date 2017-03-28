@@ -1,0 +1,108 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/AdminMaintenance.inc');
+
+/**
+ * This is a maintenance task that will back up the Gallery database.
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17580 $
+ */
+class DatabaseBackupTask extends MaintenanceTask {
+    /**
+     * @see MaintenanceTask::getInfo
+     */
+    function getInfo() {
+	global $gallery;
+	return array('l10Domain' => 'modules_core',
+		     'title' => $gallery->i18n('Backup the database'),
+		     'description' => $gallery->i18n(
+			     'Backup all your Gallery data (item data, users, comments, etc.) to a '
+			     . 'single file in your storage folder.  The backup does not include '
+			     . 'the image files.  Before running the backup, your Gallery '
+			     . 'installation needs to be set into maintenance mode, as this is not '
+			     . 'done automatically.'));
+    }
+
+    /**
+     * @see MaintenanceTask::run
+     */
+    function run() {
+	global $gallery;
+	$this->_templateAdapter =& $gallery->getTemplateAdapter();
+	$storage =& $gallery->getStorage();
+
+	list ($ret, $coreModule) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+	$this->_progressBarTitle = $coreModule->translate('Backing up Gallery Database');
+	$this->_statusText = $coreModule->translate('Exporting...');
+	$this->_templateAdapter->updateProgressBar($this->_progressBarTitle, '', 0);
+
+	$exporter = $storage->getDatabaseExporter();
+
+	list ($ret, $backupFile, $result) =
+	    $exporter->exportToXmlFile(array($this, 'progressCallBack'));
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$this->_templateAdapter->updateProgressBar($this->_progressBarTitle, '', 100);
+
+	$msg1 = $coreModule->translate(
+	    array('text' => 'Database backup completed and the backup file is located at: %s',
+		  'arg1' => $backupFile));
+        $msg2 = $coreModule->translate(
+	    array('text' => 'Please note that your backup contains sensitive data (like passwords) '
+		. 'and should not be stored online! We recommend that you download it from your '
+		. 'server and keep it safely offline.'));
+	$result[] = sprintf('%s<br/><h2>%s</h2>', $msg1, $msg2);
+
+	return array(null, true, $result);
+    }
+
+    /**
+     * @see MaintenanceTask::requiresProgressBar
+     */
+    function requiresProgressBar() {
+	return true;
+    }
+
+    /**
+     * @see MaintenanceTask::requiresMaintenanceMode
+     */
+    function requiresMaintenanceMode() {
+	return true;
+    }
+
+    /**
+     * Callback function to recieve notifications of database backup progess
+     * @param float $percentComplete from 0 to 1
+     */
+    function progressCallBack($percentage) {
+	$this->_templateAdapter->updateProgressBar($this->_progressBarTitle, $this->_statusText,
+						   $percentage);
+    }
+}
+?>

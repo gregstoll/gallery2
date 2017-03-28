@@ -1,0 +1,232 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/AdminMaintenance.inc');
+
+/**
+ * This is a MaintenanceTask that will ensure the data files for all derivatives
+ * (thumbnails, etc) have been built.
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17669 $
+ */
+class BuildDerivativesTask extends MaintenanceTask {
+    /**
+     * @see MaintenanceTask::getInfo
+     */
+    function getInfo() {
+	global $gallery;
+	return array('l10Domain' => 'modules_core',
+		     'title' => $gallery->i18n('Build all thumbnails/resizes'),
+		     'description' => $gallery->i18n(
+			 'Ensure data files for all derivatives (thumbnails, etc) have been ' .
+			 'built and rebuild broken ones.'));
+    }
+
+    /**
+     * @see MaintenanceTask::run
+     */
+    function run() {
+	global $gallery;
+	$templateAdapter =& $gallery->getTemplateAdapter();
+
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$templateAdapter->updateProgressBar(
+	    $module->translate('Build All Thumbnails/Resizes'), '', 0);
+
+	/* Check all existing derivatives */
+	$query = '
+	SELECT
+	  [DerivativeImage::id]
+	FROM
+	  [DerivativeImage]
+	ORDER BY [DerivativeImage::id] DESC
+	';
+	$gallery->guaranteeTimeLimit(120);
+	list ($ret, $derivatives) = $gallery->search($query);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	/*
+	 * With MSSQL if the next query gets any results it will generate a warning which
+	 * causes us to error out.  Turn off warnings to avoid this.
+	 */
+	$storage =& $gallery->getStorage();
+	if (GalleryUtilities::isA($storage, 'MSSqlStorage')) {
+	    $ret = $storage->execute('SET ANSI_WARNINGS OFF');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	}
+
+	/* Also attempt to add derivatives to items without them (no toolkit when item added) */
+	$query = '
+	SELECT
+	  [GalleryDataItem::id]
+	FROM
+	  [GalleryDataItem]
+	  LEFT JOIN [GalleryChildEntity] ON [GalleryDataItem::id] = [GalleryChildEntity::parentId]
+	  LEFT JOIN [GalleryDerivative] ON [GalleryChildEntity::id] = [GalleryDerivative::id]
+	GROUP BY
+	  [GalleryDataItem::id]
+	HAVING
+	  COUNT([GalleryDerivative::derivativeType]) = 0
+        ORDER BY
+          [GalleryDataItem::id] DESC
+	';
+	$gallery->guaranteeTimeLimit(120);
+	list ($ret, $items) = $gallery->search($query);
+	if ($ret) {
+	    return array($ret, null, null);
+	}
+
+	$i = $broken = $built = 0;
+	$total = $derivatives->resultCount() + $items->resultCount();
+	$gallery->guaranteeTimeLimit(120);
+	while ($result = $derivatives->nextResult()) {
+	    $gallery->startRecordingDebugSnippet();
+	    list ($ret, $derivative, $wasBuilt) =
+		GalleryCoreApi::rebuildDerivativeCacheIfNotCurrent($result[0], true);
+	    $debug = $gallery->stopRecordingDebugSnippet();
+	    if ($ret) {
+		$debug .= "\nError: building $result[0]: " . $ret->getAsHtml();
+	    }
+	    if ($ret || $derivative->getIsBroken()) {
+		$this->_printFailure($debug, ++$broken, $module);
+	    } else if ($wasBuilt) {
+		$built++;
+	    }
+
+	    if (++$i % 5 == 0 || $i == $total) {
+		$ret = $this->_updateProgress($module, $i, $total);
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+	    }
+	}
+
+	while ($result = $items->nextResult()) {
+	    list ($ret, $item) = GalleryCoreApi::loadEntitiesById($result[0], 'GalleryDataItem');
+	    if ($ret) {
+		return array($ret, null, null);
+	    }
+	    $error = '';
+	    $gallery->startRecordingDebugSnippet();
+	    if (method_exists($item, 'getWidth') && !$item->getWidth()) {
+		$ret = $this->_rescan($item);
+		if ($ret) {
+		    $error .= "\nError: rescan $result[0]: " . $ret->getAsHtml();
+		} else {
+		    $built++;
+		}
+	    }
+	    $ret = GalleryCoreApi::applyDerivativePreferences($item, $item->getParentId(), true);
+	    $debug = $gallery->stopRecordingDebugSnippet();
+	    if ($ret) {
+		$error .= "\nError: building $result[0]: " . $ret->getAsHtml();
+	    }
+	    if ($error) {
+		$this->_printFailure($debug . $error, ++$broken, $module);
+	    }
+
+	    if (++$i % 5 == 0 || $i == $total) {
+		$ret = $this->_updateProgress($module, $i, $total);
+		if ($ret) {
+		    return array($ret, null, null);
+		}
+	    }
+	}
+
+	$result = array($module->translate(array('text' => 'Checked %d items', 'arg1' => $total)));
+	if ($built) {
+	    $result[] = $module->translate(array('text' => '%d items built', 'arg1' => $built));
+	}
+	if ($broken) {
+	    $result[] = $module->translate(array('text' => '%d items failed', 'arg1' => $broken));
+	}
+	return array(null, true, $result);
+    }
+
+    function _rescan(&$item) {
+	list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($item->getId());
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $item) = $item->refresh();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+	$ret = $item->rescan();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+	$ret = $item->save();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::releaseLocks($lockId);
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    function _updateProgress(&$module, $i, $total) {
+	global $gallery;
+	$storage =& $gallery->getStorage();
+	$templateAdapter =& $gallery->getTemplateAdapter();
+
+	$message = $module->translate(
+		array('text' => 'Processing image %d of %d', 'arg1' => $i, 'arg2' => $total));
+	$templateAdapter->updateProgressBar($message, '', $i / $total);
+	/* Release locks (avoid too many open files for flock based locking) */
+	$ret = $storage->checkPoint();
+	if ($ret) {
+	    return $ret;
+	}
+	$gallery->guaranteeTimeLimit(120);
+	return null;
+    }
+
+    function _printFailure($message, $count, &$module) {
+	if ($count == 1) {
+	    print '<br/><h3>' . $module->translate('Debug output for failed items:') . '</h3>';
+	}
+	print '<pre class="gcBackground1 gcBorder2">' . $message . '</pre>';
+    }
+
+    /**
+     * @see MaintenanceTask::requiresProgressBar
+     */
+    function requiresProgressBar() {
+	return true;
+    }
+}
+?>

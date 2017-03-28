@@ -1,0 +1,62 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Security check
+ * @package Install
+ */
+class SecureStep extends InstallStep {
+    function stepName() {
+	return _('Check Security');
+    }
+
+    function loadTemplateData(&$templateData) {
+	$templateData['secure'] = 0;
+
+	/* For non-MS Windows, we show permission warnings too */
+	if ($doFilesystemPermissionCheck = strncasecmp(PHP_OS, 'win', 3) != 0) {
+	    $configFilePath = $_SESSION['configPath'] . '/config.php';
+
+	    if (!file_exists($configFilePath)) {
+		$templateData['errors']['missingConfigFile'] = 1;
+	    } else {
+		/* Grab the last 3 characters of the mode for file and parent dir */
+		$stat = stat($configFilePath);
+		$fileMode = substr(sprintf('%o', $stat['mode']), -3);
+		$stat = stat($_SESSION['configPath']);
+		$dirMode = substr(sprintf('%o', $stat['mode']), -3);
+
+		$templateData['configFilePath'] = realpath($configFilePath);
+		$templateData['file']['mode'] = $fileMode;
+		$templateData['file']['secure'] =
+			!((int)$fileMode{1} & 2 || (int)$fileMode{2} & 2);
+		$templateData['dir']['mode'] = $dirMode;
+		$templateData['dir']['secure'] = !((int)$dirMode{1} & 2 || (int)$dirMode{2} & 2);
+		$templateData['secure'] =
+			$templateData['file']['secure'] && $templateData['dir']['secure'];
+	    }
+	}
+	$templateData['showFileSystemPermissionWarnings'] = $doFilesystemPermissionCheck;
+
+	$templateData['bodyFile'] = 'Secure.html';
+	$this->setComplete(true);
+    }
+}
+?>

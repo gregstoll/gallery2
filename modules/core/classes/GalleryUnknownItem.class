@@ -1,0 +1,112 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryDataItem.class');
+
+/**
+ * A subclass of DataItem for containing unknown objects.
+ * These are objects that we know nothing about.  Currently this is exactly the same as
+ * a DataItem, although that may change.
+ *
+ * @g2 <class-name>GalleryUnknownItem</class-name>
+ * @g2 <parent-class-name>GalleryDataItem</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>0</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class GalleryUnknownItem extends GalleryDataItem {
+
+    /**
+     * Create a new GalleryUnknownItem from an image file
+     *
+     * @param int $parentId the id of the parent GalleryItem
+     * @param string $inputFileName the path to the source image
+     * @param string $mimeType
+     * @param string $targetName the desired name of the new item
+     * @param boolean $symlink (optional) a boolean true if we should symlink instead
+     *        of copy (default is false).
+     * @return GalleryStatus a status code
+     */
+    function create($parentId, $inputFileName, $mimeType, $targetName=null, $symlink=false) {
+	/* Create our data item */
+	$ret = parent::create($parentId, $inputFileName, $mimeType, $targetName, $symlink);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* We're linkable */
+	$this->setIsLinkable(true);
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::itemTypeName
+     * @staticvar mimeMap array(mimeTypePattern => array(CapName,name))
+     */
+    function itemTypeName($localized = true) {
+	global $gallery;
+	static $mimeMap;
+
+	if (!isset($mimeMap)) {
+	    $mimeMap = array(
+		':^audio/:'
+		    => array($gallery->i18n('Audio'), $gallery->i18n('audio')),
+		':^application/(zip|mac-[cb].*|x-((us|g)?tar|gzip|compress|cpio|stuffit|shar))$:'
+		    => array($gallery->i18n('Archive'), $gallery->i18n('archive')),
+		':^(text/|application/(pdf|postscript|photoshop|msword|vnd.ms-powerpoint)$):'
+		    => array($gallery->i18n('Document'), $gallery->i18n('document')),
+		':application/vnd.ms-excel:'
+		    => array($gallery->i18n('Spreadsheet'), $gallery->i18n('spreadsheet')),
+	    );
+	}
+
+	$core = null;
+	if ($localized) {
+	    list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+	    if ($ret) {
+		$core = null;
+	    }
+	}
+	foreach ($mimeMap as $pattern => $result) {
+	    if (preg_match($pattern, $this->mimeType)) {
+		return isset($core) ?
+		    array($core->translate($result[0]), $core->translate($result[1])) : $result;
+	    }
+	}
+	return isset($core) ? array($core->translate('File'), $core->translate('file'))
+			    : array('File', 'file');
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryUnknownItem';
+    }
+}
+?>

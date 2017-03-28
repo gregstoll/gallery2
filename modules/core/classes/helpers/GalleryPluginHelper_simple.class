@@ -1,0 +1,494 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Track all plugins and their state
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryPluginHelper_simple {
+
+    /**
+     * @see GalleryCoreApi::loadPlugin
+     * @param int $depth of recursion (don't set this; it's used internally)
+     */
+    function loadPlugin($pluginType, $pluginId, $ignoreVersionMismatch=false,
+			$errorOnVersionMismatch=false, $depth=0) {
+	global $gallery;
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('Loading plugin %s', $pluginId));
+	}
+
+	$cacheKey = "GalleryPluginHelper::loadPlugin($pluginType, $pluginId)";
+	if (!GalleryDataCache::containsKey($cacheKey)) {
+
+	    switch($pluginType) {
+	    case 'module':
+		$pluginSuperClass = 'GalleryModule';
+		$pluginClass = $pluginId . 'Module';
+		break;
+
+	    case 'theme':
+		$pluginSuperClass = 'GalleryTheme';
+		$pluginClass = $pluginId . 'Theme';
+		break;
+
+	    default:
+		return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+						  "pluginType = $pluginType"), null);
+	    }
+
+	    if (!class_exists($pluginClass)) {
+		if ($gallery->getDebug()) {
+		    $gallery->debug('Class not defined, trying to include it.');
+		}
+
+		$pluginBaseDir = GalleryCoreApi::getCodeBasePath();
+		$pluginFile = sprintf('%ss/%s/%s.inc', $pluginType, $pluginId, $pluginType);
+
+		GalleryCoreApi::requireOnce(
+		    sprintf('modules/core/classes/%s.class', $pluginSuperClass));
+
+		$platform =& $gallery->getPlatform();
+		if (!$platform->file_exists($pluginBaseDir . $pluginFile)) {
+		    /*
+		     * If we have a bad path, it may be because our cached plugin list is out of
+		     * date -- in which case we should flush the cache and try again.
+		     */
+		    if ($depth == 0) {
+			GalleryDataCache::remove(
+			    "GalleryPluginHelper::fetchPluginStatus($pluginType)");
+			GalleryDataCache::removeFromDisk(
+			    array('type' => $pluginType,
+				  'itemId' => 'GalleryPluginHelper_fetchPluginStatus',
+				  'id' => '_all'));
+			list ($ret, $plugin) = GalleryPluginHelper_simple::loadPlugin(
+			    $pluginType, $pluginId, $ignoreVersionMismatch,
+			    $errorOnVersionMismatch, $depth + 1);
+			if ($ret) {
+			    return array($ret, null);
+			}
+		    } else {
+			return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+							   $pluginBaseDir . $pluginFile), null);
+		    }
+		}
+
+		GalleryCoreApi::requireOnce($pluginFile);
+
+		if (!class_exists($pluginClass)) {
+		    return array(GalleryCoreApi::error(ERROR_BAD_PLUGIN, __FILE__, __LINE__,
+						      "Class $pluginClass does not exist"), null);
+		}
+	    }
+
+	    $plugin = new $pluginClass();
+	    /* Store it in our table */
+	    GalleryDataCache::put($cacheKey, $plugin, true);
+	} else {
+	    $plugin = GalleryDataCache::get($cacheKey);
+	}
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('%s plugin successfully instantiated', $pluginId));
+	}
+
+	if (!$ignoreVersionMismatch) {
+	    if ($gallery->getDebug()) {
+		$gallery->debug(sprintf('Check the version of the %s plugin', $pluginId));
+	    }
+
+	    /* Verify that the versions match */
+	    list ($ret, $status) = GalleryPluginHelper_simple::fetchPluginStatus($pluginType);
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    if (isset($status[$pluginId]) &&
+		($pluginId != 'core' || $pluginType != 'module')) {
+		$s = $status[$pluginId];
+
+		if (isset($s['active']) &&
+		    isset($s['version']) &&
+		    ($s['version'] != $plugin->getVersion() ||
+		     !GalleryPluginHelper_simple::isPluginCompatibleWithApis($plugin))) {
+
+		    /* Try to deactivate the plugin */
+		    list ($ret, $redirectInfo) = $plugin->deactivate();
+		    if ($ret) {
+			return array($ret, null);
+		    }
+
+		    if (!empty($redirectInfo) && !$errorOnVersionMismatch) {
+			/*
+			 * We were unable to automatically deactivate the plugin!
+			 * Forcibly abort this request and jump to the upgrader so this
+			 * plugin can be upgraded.
+			 */
+			if ($gallery->getDebug()) {
+			    $gallery->debug("Unable to deactivate $pluginId, jumping to upgrader.");
+			    $gallery->debug_r($redirectInfo);
+			}
+			$urlGenerator =& $gallery->getUrlGenerator();
+			$phpVm = $gallery->getPhpVm();
+			$phpVm->header('Location: ' .
+			       $urlGenerator->getCurrentUrlDir(true) . 'upgrade/index.php');
+			exit;
+		    }
+
+		    /*  Return a handleable error */
+		    return array(GalleryCoreApi::error(ERROR_PLUGIN_VERSION_MISMATCH,
+						      __FILE__, __LINE__,
+				     sprintf('[%s] db: (v: %s core api: %s, %s api: %s) '.
+					     'code: (v: %s core api: %s, %s api: %s) ',
+					     $pluginId,
+					     $s['version'],
+					     join('/', $s['requiredCoreApi']),
+					     $pluginType,
+					     join('/', $s[$pluginType == 'module' ?
+							  'requiredModuleApi' :
+							  'requiredThemeApi']),
+					     $plugin->getVersion(),
+					     join('/', GalleryCoreApi::getApiVersion()),
+					     $pluginType,
+					     join('/',
+						  $pluginType == 'module' ?
+						  GalleryModule::getApiVersion() :
+						  GalleryTheme::getApiVersion()))),
+				 $plugin);
+		}
+	    }
+	    if ($gallery->getDebug()) {
+		$gallery->debug(sprintf('The version of the %s plugin is ok', $pluginId));
+	    }
+	}
+
+	return array(null, $plugin);
+    }
+
+    /**
+     * @see GalleryCoreApi::isPluginCompatibleWithApis
+     */
+    function isPluginCompatibleWithApis($plugin) {
+	$pluginType = $plugin->getPluginType();
+	return GalleryUtilities::isCompatibleWithApi(
+	    $plugin->getRequiredCoreApi(), GalleryCoreApi::getApiVersion()) &&
+	    (($pluginType == 'module' &&
+	      GalleryUtilities::isCompatibleWithApi(
+		  $plugin->getRequiredModuleApi(), GalleryModule::getApiVersion())) ||
+	     ($pluginType == 'theme' &&
+	      GalleryUtilities::isCompatibleWithApi(
+		  $plugin->getRequiredThemeApi(), GalleryTheme::getApiVersion())));
+    }
+
+    /**
+     * @see GalleryCoreApi::getPluginParameter
+     */
+    function getParameter($pluginType, $pluginId, $parameterName, $itemId=0,
+			  $ignoreDiskCache=false) {
+	global $gallery;
+
+	if ($gallery->getDebug()) {
+	    $gallery->debug(sprintf('getParameter %s for %s plugin', $parameterName, $pluginId));
+	}
+
+	/* Convert null to 0, just in case */
+	if ($itemId == null) {
+	    $itemId = 0;
+	}
+
+	list ($ret, $params) = GalleryPluginHelper_simple::_fetchAllParameters(
+		$pluginType, $pluginId, $itemId, $ignoreDiskCache);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	/* Return the value, or null if the param doesn't exist */
+	if (!isset($params[$itemId][$parameterName])) {
+	    return array(null, null);
+	} else {
+	    return array(null, $params[$itemId][$parameterName]);
+	}
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchAllPluginParameters
+     */
+    function fetchAllParameters($pluginType, $pluginId, $itemId=0, $ignoreDiskCache=false) {
+	/* Convert null to 0, just in case */
+	if ($itemId == null) {
+	    $itemId = 0;
+	}
+	list ($ret, $params) = GalleryPluginHelper_simple::_fetchAllParameters(
+		$pluginType, $pluginId, $itemId, $ignoreDiskCache);
+	if ($ret) {
+	    return array($ret, null);
+	}
+	return array(null, $params[$itemId]);
+    }
+
+    /**
+     * Get all the parameters for this plugin
+     *
+     * @param string $pluginType the type of the plugin
+     * @param string $pluginId the id of the plugin
+     * @param mixed $itemId int id of item (or null/zero for a global setting) or array of ids
+     * @param bool $ignoreDiskCache ignore the cache (optional, default=false)
+     * @return array GalleryStatus a status code
+     *               array (itemId/zero => array(parameterName => parameterValue), ..)
+     * @access protected
+     */
+    function _fetchAllParameters($pluginType, $pluginId, $itemId, $ignoreDiskCache=false) {
+	global $gallery;
+	if (empty($pluginType) || empty($pluginId)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					       sprintf("Missing pluginType [%s] or pluginId [%s]",
+						       $pluginType, $pluginId)), null);
+	}
+
+	/* Convert null to 0, just in case */
+	if ($itemId == null) {
+	    $itemId = 0;
+	}
+
+	/* Check cache */
+	$data = $queryIds = array();
+	$itemIds = is_array($itemId) ? $itemId : array($itemId);
+	$cacheBase = "GalleryPluginHelper::fetchAllParameters($pluginType, $pluginId, ";
+	foreach ($itemIds as $itemId) {
+	    $cacheKey = $cacheBase . $itemId . ')';
+	    if (GalleryDataCache::containsKey($cacheKey)) {
+		$data[$itemId] = GalleryDataCache::get($cacheKey);
+		continue;
+	    }
+	    if (!$ignoreDiskCache) {
+		$cacheData =& GalleryDataCache::getFromDisk(
+		    array('type' => $pluginType, 'itemId' => $itemId, 'id' => $pluginId));
+		if (isset($cacheData)) {
+		    $data[$itemId] = $cacheData;
+		    GalleryDataCache::put($cacheKey, $cacheData);
+		    continue;
+		}
+	    }
+	    $queryIds[] = (int)$itemId;
+	}
+	if (empty($queryIds)) {
+	    return array(null, $data);
+	}
+
+	$whereId = count($queryIds) > 1 ? 'IN (' . GalleryUtilities::makeMarkers($queryIds) . ')'
+					: '= ?';
+	$query = '
+	  SELECT
+	    [GalleryPluginParameterMap::itemId],
+	    [GalleryPluginParameterMap::parameterName],
+	    [GalleryPluginParameterMap::parameterValue]
+	  FROM
+	    [GalleryPluginParameterMap]
+	  WHERE
+	    [GalleryPluginParameterMap::pluginType] = ?
+	    AND
+	    [GalleryPluginParameterMap::pluginId] = ?
+	    AND
+	    [GalleryPluginParameterMap::itemId] ' . $whereId;
+	array_unshift($queryIds, $pluginType, $pluginId);
+
+	list ($ret, $searchResults) = $gallery->search($query, $queryIds);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	while ($result = $searchResults->nextResult()) {
+	    $data[$result[0]][$result[1]] = (string)$result[2];
+	}
+
+	foreach (array_slice($queryIds, 2) as $itemId) {
+	    if (!isset($data[$itemId])) {
+		$data[$itemId] = array();
+	    }
+	    GalleryDataCache::putToDisk(array('type' => $pluginType,
+					      'itemId' => $itemId,
+					      'id' => $pluginId),
+					$data[$itemId]);
+	    GalleryDataCache::put($cacheBase . $itemId . ')', $data[$itemId]);
+	}
+
+	return array(null, $data);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchPluginStatus
+     */
+    function fetchPluginStatus($pluginType, $ignoreCache=false) {
+	global $gallery;
+
+	$cacheKey = "GalleryPluginHelper::fetchPluginStatus($pluginType)";
+	if ($ignoreCache || !GalleryDataCache::containsKey($cacheKey)) {
+	    if (!$ignoreCache) {
+		$plugins =& GalleryDataCache::getFromDisk(
+		    array('type' => $pluginType,
+			  'itemId' => 'GalleryPluginHelper_fetchPluginStatus',
+			  'id' => '_all'));
+	    }
+	    if (!isset($plugins)) {
+		list ($ret, $plugins) = GalleryPluginHelper_simple::fetchPluginList($pluginType);
+		if ($ret) {
+		    return array($ret, null);
+		}
+
+		$platform =& $gallery->getPlatform();
+
+		$pluginBaseIndexFile = sprintf(
+		    '%sindex.%ss', $gallery->getConfig('data.gallery.plugins'), $pluginType);
+
+		/* Scan modules directory for installed modules */
+		switch ($pluginType) {
+		case 'module':
+		    $pluginsDir = 'modules/';
+		    $pluginFile = 'module.inc';
+		    break;
+
+		case 'theme':
+		    $pluginsDir = 'themes/';
+		    $pluginFile = 'theme.inc';
+		    break;
+
+		default:
+		    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+						      sprintf("Wrong pluginType [%s]",
+							      $pluginType)),
+				 null);
+		}
+
+		$frameworkParams = array('version', 'callbacks', 'requiredCoreApi');
+		$frameworkParams[] =
+		    ($pluginType == 'module') ? 'requiredModuleApi' : 'requiredThemeApi';
+
+		$pluginBasePath = GalleryCoreApi::getCodeBasePath($pluginsDir);
+		if ($dir = $platform->opendir($pluginBasePath)) {
+		    while ($pluginId = $platform->readdir($dir)) {
+			if ($pluginId{0} == '.') {
+			    continue;
+			}
+			if (!$platform->is_dir($pluginBasePath . $pluginId)) {
+			    continue;
+			}
+
+			$path = $pluginBasePath . $pluginId . '/' . $pluginFile;
+			if ($platform->file_exists($path)) {
+			    $plugins[$pluginId]['available'] = 1;
+
+			    foreach ($frameworkParams as $paramName) {
+				list ($ret, $plugins[$pluginId][$paramName]) =
+				    GalleryPluginHelper_simple::getParameter(
+					$pluginType, $pluginId, '_' . $paramName, 0, true);
+				if ($ret) {
+				    return array($ret, null);
+				}
+
+				/* Separate out the major/minor version. */
+				if (!strncmp($paramName, 'required', 8)) {
+				    $tmp = explode(',', $plugins[$pluginId][$paramName]);
+				    $plugins[$pluginId][$paramName] = (count($tmp) < 2)
+					? array(-1, -1) : array((int)$tmp[0], (int)$tmp[1]);
+				}
+			    }
+			}
+		    }
+		    $platform->closedir($dir);
+		}
+
+		if ($pluginType == 'module') {
+		    /* Force the core module's status */
+		    $plugins['core']['active'] = 1;
+		    $plugins['core']['available'] = 1;
+		}
+
+		/* Find and remove plugins that are installed, but not available */
+		foreach ($plugins as $pluginId => $pluginStatus) {
+		    if (empty($pluginStatus['available'])) {
+			if ($gallery->getDebug()) {
+			    $gallery->debug("Plugin $pluginId no longer installed");
+			}
+			unset($plugins[$pluginId]);
+		    }
+		}
+
+		GalleryDataCache::putToDisk(
+			array('type' => $pluginType,
+			      'itemId' => 'GalleryPluginHelper_fetchPluginStatus',
+			      'id' => '_all'),
+			$plugins);
+	    }
+	    GalleryDataCache::put($cacheKey, $plugins);
+	} else {
+	    $plugins = GalleryDataCache::get($cacheKey);
+	}
+
+	return array(null, $plugins);
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchPluginList
+     */
+    function fetchPluginList($pluginType) {
+	global $gallery;
+
+	if (empty($pluginType)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					      "Missing plugin type"),
+			 null);
+	}
+
+	$cacheKey = "GalleryPluginHelper::fetchPluginList($pluginType)";
+	if (!GalleryDataCache::containsKey($cacheKey)) {
+	    /* Avoid a dependency on describeMap() (possible cyclic dependency) */
+	    $query = '
+	    SELECT
+	      [GalleryPluginMap::pluginId],
+	      [GalleryPluginMap::active]
+	    FROM
+	      [GalleryPluginMap]
+	    WHERE
+	      [GalleryPluginMap::pluginType] = ?
+	    ';
+
+	    list ($ret, $searchResults) = $gallery->search($query, array($pluginType));
+	    if ($ret) {
+		return array($ret, null);
+	    }
+
+	    $data = array();
+	    while ($result = $searchResults->nextResult()) {
+		$data[$result[0]] = array('active' => (int)$result[1]);
+	    }
+	    GalleryDataCache::put($cacheKey, $data);
+	} else {
+	    $data = GalleryDataCache::get($cacheKey);
+	}
+
+	return array(null, $data);
+    }
+}
+?>

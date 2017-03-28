@@ -1,0 +1,360 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Helper class for GalleryEntities
+ * @package GalleryCore
+ * @subpackage Helpers
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ * @static
+ */
+class GalleryEntityHelper_medium {
+
+    /**
+     * @see GalleryCoreApi::deleteEntityById
+     */
+    function deleteEntityById($id, $requiredEntityType=null) {
+	if (empty($id)) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	}
+	$lockIds = array();
+
+	/* Don't write lock it if it's already locked somewhere else */
+	if (!GalleryCoreApi::isWriteLocked($id)) {
+	    list ($ret, $lockIds[]) = GalleryCoreApi::acquireWriteLock($id);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	list ($ret, $entity) =
+	    GalleryEntityHelper_simple::loadEntitiesById($id, $requiredEntityType);
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockIds);
+	    return $ret;
+	}
+
+	if (GalleryUtilities::isA($entity, 'GalleryChildEntity')) {
+	    list ($ret, $lockIds[]) = GalleryCoreApi::acquireReadLockParents($id);
+	    if ($ret) {
+		GalleryCoreApi::releaseLocks($lockIds);
+		return $ret;
+	    }
+	}
+
+	/* If this item has links to it, make one of those links the master */
+	list ($ret, $linkedIds) = GalleryEntityHelper_medium::fetchEntitiesLinkedTo($id);
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockIds);
+	    return $ret;
+	}
+
+	if (!empty($linkedIds)) {
+	    /* Lock all of the linked items */
+	    list ($ret, $lockIds[]) = GalleryCoreApi::acquireWriteLock($linkedIds);
+	    if ($ret) {
+		GalleryCoreApi::releaseLocks($lockIds);
+		return $ret;
+	    }
+
+	    /* Make the first link the master, and point the rest at it */
+	    list ($ret, $linkedEntities) =
+			GalleryEntityHelper_simple::loadEntitiesById($linkedIds, 'GalleryEntity');
+	    if ($ret) {
+		GalleryCoreApi::releaseLocks($lockIds);
+		return $ret;
+	    }
+
+	    $ret = $linkedEntities[0]->detachLink();
+	    if ($ret) {
+		GalleryCoreApi::releaseLocks($lockIds);
+		return $ret;
+	    }
+
+	    $ret = $linkedEntities[0]->save();
+	    if ($ret) {
+		GalleryCoreApi::releaseLocks($lockIds);
+		return $ret;
+	    }
+	    for ($i = 1; $i < sizeof($linkedEntities); $i++) {
+		$linkedEntities[$i]->setLinkId($linkedEntities[0]->getId());
+		$linkedEntities[$i]->setLinkedEntity($linkedEntities[0]);
+		$ret = $linkedEntities[$i]->save();
+		if ($ret) {
+		    GalleryCoreApi::releaseLocks($lockIds);
+		    return $ret;
+		}
+	    }
+
+	    /* Remap any derivatives sourced from old-master to new-master */
+	    $ret = GalleryCoreApi::remapSourceIds($id, $linkedEntities[0]->getId());
+	    if ($ret) {
+		GalleryCoreApi::releaseLocks($lockIds);
+		return $ret;
+	    }
+	}
+
+	$ret = $entity->delete();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockIds);
+	    return $ret;
+	}
+
+	$ret = GalleryCoreApi::releaseLocks($lockIds);
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::fetchEntitiesLinkedTo
+     */
+    function fetchEntitiesLinkedTo($targetId) {
+	global $gallery;
+
+	$query = '
+	SELECT
+	  [GalleryEntity::id]
+	FROM
+	  [GalleryEntity]
+	WHERE
+	  [GalleryEntity::linkId] = ?
+	ORDER BY
+	  [GalleryEntity::id] ASC
+	';
+	$storage =& $gallery->getStorage();
+	list ($ret, $searchResults) = $gallery->search($query, array((int)$targetId));
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$linkedIds = array();
+	while ($result = $searchResults->nextResult()) {
+	    $linkedIds[] = $result[0];
+	}
+
+	return array(null, $linkedIds);
+    }
+
+    /**
+     * @see GalleryCoreApi::removeOnLoadHandlers
+     */
+    function removeOnLoadHandlers($handlerIds) {
+	global $gallery;
+
+	$query = 'SELECT [GalleryEntity::id] FROM [GalleryEntity]
+		  WHERE [GalleryEntity::onLoadHandlers] LIKE ?';
+	$i = 0;
+	foreach ($handlerIds as $handlerId) {
+	    list ($ret, $results) = $gallery->search($query, array("%|$handlerId|%"));
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    while ($result = $results->nextResult()) {
+		if ($i++ % 10 == 0) {
+		    $gallery->guaranteeTimeLimit(5);
+		}
+		$id = (int)$result[0];
+		list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($id);
+		if ($ret) {
+		    return $ret;
+		}
+		list ($ret, $entity) = GalleryCoreApi::loadEntitiesById($id, 'GalleryEntity');
+		if ($ret) {
+		    GalleryCoreApi::releaseLocks($lockId);
+		    return $ret;
+		}
+		$entity->removeOnLoadHandler($handlerId);
+		$ret = $entity->save();
+		if ($ret) {
+		    GalleryCoreApi::releaseLocks($lockId);
+		    return $ret;
+		}
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::updateModificationTimestamp
+     */
+    function updateModificationTimestamp($entityId) {
+	list ($ret, $lockId) = GalleryCoreApi::acquireWriteLock($entityId);
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $entity) = GalleryCoreApi::loadEntitiesById($entityId, 'GalleryEntity');
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+	$entity->setModificationTimestamp(time());
+	$ret = $entity->save();
+	if ($ret) {
+	    GalleryCoreApi::releaseLocks($lockId);
+	    return $ret;
+	}
+	$ret = GalleryCoreApi::releaseLocks($lockId);
+	if ($ret) {
+	    return $ret;
+	}
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::deleteFastDownloadFileById
+     */
+    function deleteFastDownloadFileById($entityId) {
+	global $gallery;
+
+	$fastDownloadFilePath = GalleryDataCache::getCachePath(
+	    array('type' => 'fast-download', 'itemId' => $entityId));
+	$platform =& $gallery->getPlatform();
+	if ($platform->file_exists($fastDownloadFilePath)) {
+	    $platform->unlink($fastDownloadFilePath);
+	}
+    }
+
+    /**
+     * @see GalleryCoreApi::createFastDownloadFile
+     */
+    function createFastDownloadFile($entity, $runEvenInUnitTest=false) {
+	global $gallery;
+
+	/* Disable this for unit tests, for now */
+	if (!$runEvenInUnitTest && class_exists('GalleryTestCase')) {
+	    return null;
+	}
+
+	/* Make sure this derivative is publicly viewable */
+	list ($ret, $anonymousUserId) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+	if ($ret) {
+	    return $ret;
+	}
+
+	$hasPermission = false;
+	$requiredPermission = null;
+	$itemIdForPermissions = $entity->getId();
+
+	if (GalleryUtilities::isA($entity, 'GalleryDerivative')) {
+	    switch ($entity->getDerivativeType()) {
+	    case DERIVATIVE_TYPE_IMAGE_THUMBNAIL:
+		$requiredPermission = 'core.view';
+		break;
+
+	    case DERIVATIVE_TYPE_IMAGE_RESIZE:
+		$requiredPermission = 'core.viewResizes';
+		break;
+
+	    case DERIVATIVE_TYPE_IMAGE_PREFERRED:
+		$requiredPermission = 'core.viewSource';
+		break;
+	    }
+	    $itemIdForPermissions = $entity->getParentId();
+	} else if (GalleryUtilities::isA($entity, 'GalleryDataItem')) {
+	    $requiredPermission = 'core.viewSource';
+	}
+
+	if ($requiredPermission) {
+	    list ($ret, $hasPermission) = GalleryCoreApi::hasItemPermission(
+		$itemIdForPermissions, $requiredPermission, $anonymousUserId);
+	    if ($ret) {
+		return $ret;
+	    }
+	}
+
+	if ($hasPermission) {
+	    /* Write the fast download file */
+	    list ($ret, $pseudoFileName) = GalleryUtilities::getPseudoFileName($entity);
+	    if ($ret) {
+		return $ret;
+	    }
+
+	    /*
+	     * Notice: To build the relative path, we assume that the cache and the albums folder
+	     * are both in the subdirectory-tree of gallery.data.base
+	     */
+	    $platform =& $gallery->getPlatform();
+	    $slash = $platform->getDirectorySeparator();
+	    if (GalleryUtilities::isA($entity, 'GalleryDerivative')) {
+		$fullPath = GalleryDataCache::getCachePath(
+		    array('type' => 'derivative', 'itemId' => $entity->getId()));
+	    } else if (method_exists($entity, 'fetchPath')) {
+		list ($ret, $fullPath) = $entity->fetchPath();
+		if ($ret) {
+		    return $ret;
+		}
+	    } else {
+		return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	    }
+	    $relativePath = str_replace($gallery->getConfig('data.gallery.base'), '', $fullPath);
+
+	    $stats = $platform->stat($fullPath);
+	    $contentLength = $stats[7];
+	    $lastModified = GalleryUtilities::getHttpDate($stats[9]);
+
+	    $fastDownloadFilePath = GalleryDataCache::getCachePath(
+		array('type' => 'fast-download', 'itemId' => $entity->getId()));
+	    $buf = sprintf('<?php function GalleryFastDownload() { ' .
+			   'return $GLOBALS[\'gallery\']->fastDownload(\'%s\', \'%s\', ' .
+			   '\'%s\', \'%s\', %d);} ?>',
+			   $relativePath, $pseudoFileName, $lastModified,
+			   $entity->getMimeType(), $contentLength);
+	    $platform->atomicWrite($fastDownloadFilePath, $buf);
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryCoreApi::getExternalAccessMemberList
+     */
+    function getExternalAccessMemberList($entityName) {
+	list ($ret, $entityInfo) = GalleryCoreApi::describeEntity($entityName);
+	if ($ret) {
+	    return array($ret, null);
+	}
+
+	$memberAccessInfo = array();
+	$target = $entityName;
+	while ($target) {
+	    foreach ($entityInfo[$target]['members'] as $memberName => $memberInfo) {
+		$memberAccessInfo[$memberName]['read'] = !empty($memberInfo['external-access'])
+			&& $memberInfo['external-access'] & EXTERNAL_ACCESS_READ;
+		$memberAccessInfo[$memberName]['write'] = !empty($memberInfo['external-access'])
+			&& $memberInfo['external-access'] & EXTERNAL_ACCESS_WRITE;
+	    }
+	    $target = $entityInfo[$target]['parent'];
+	}
+
+	return array(null, $memberAccessInfo);
+    }
+}
+?>

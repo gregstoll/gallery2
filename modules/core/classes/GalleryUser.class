@@ -1,0 +1,398 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryEntity.class');
+
+/**
+ * Representation of a single user.
+ * This class is the container for information about Gallery users.  Each instance of User
+ * contains a unique user id. It must be implemented by a class that has a persistent store for
+ * the relevant user data.
+ *
+ * @g2 <class-name>GalleryUser</class-name>
+ * @g2 <parent-class-name>GalleryEntity</parent-class-name>
+ * @g2 <schema>
+ * @g2   <schema-major>1</schema-major>
+ * @g2   <schema-minor>2</schema-minor>
+ * @g2 </schema>
+ * @g2 <requires-id/>
+ *
+ * @package GalleryCore
+ * @subpackage Classes
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17691 $
+ */
+class GalleryUser extends GalleryEntity {
+
+    /**
+     * The User's username
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>userName</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>SMALL</member-size>
+     * @g2   <unique/>
+     * @g2   <required/>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $userName;
+
+    /**
+     * The User's full name
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>fullName</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <member-external-access>FULL</member-external-access>
+     * @g2 </member>
+     */
+    var $fullName;
+
+    /**
+     * The User's password in a hashed form.
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>hashedPassword</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2 </member>
+     */
+    var $hashedPassword;
+
+    /**
+     * The User's email address.
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>email</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>LARGE</member-size>
+     * @g2 </member>
+     */
+    var $email;
+
+    /**
+     * The User's language preference
+     * @var string
+     *
+     * @g2 <member>
+     * @g2   <member-name>language</member-name>
+     * @g2   <member-type>STRING</member-type>
+     * @g2   <member-size>MEDIUM</member-size>
+     * @g2   <member-external-access>READ</member-external-access>
+     * @g2 </member>
+     */
+    var $language;
+
+    /**
+     * Locked flag - determines whether the user is allowed to edit their own settings
+     * @var bool
+     *
+     * @g2 <member>
+     * @g2   <member-name>locked</member-name>
+     * @g2   <member-type>BOOLEAN</member-type>
+     * @g2   <default>0</default>
+     * @g2 </member>
+     */
+    var $locked;
+
+    /**
+     * Create a new instance of this user in the persistent store
+     *
+     * @return GalleryStatus a status code
+     */
+    function create($userName) {
+	global $gallery;
+
+	$query = '
+	SELECT
+	  [GalleryUser::id]
+	FROM
+	  [GalleryUser]
+	WHERE
+	  [GalleryUser::userName] = ?
+	';
+
+	/* Check to see if we have a collision */
+	list ($ret, $results) =
+	    $gallery->search($query, array($userName),
+			     array('limit' => array('count' => 1)));
+
+	if ($ret) {
+	    return $ret;
+	}
+
+	$result = $results->nextResult();
+	if ($result[0] > 0) {
+	    return GalleryCoreApi::error(ERROR_COLLISION);
+	}
+
+	$ret = parent::create();
+	if ($ret) {
+	    return $ret;
+	}
+
+	$this->setUserName($userName);
+	$this->setFullName(null);
+	$this->setEmail(null);
+	$this->setHashedPassword(null);
+	$this->setLanguage(null);
+
+	return null;
+    }
+
+    /**
+     * Is the password provided correct?
+     *
+     * @param string $password a plaintext password
+     * @return boolean true if the password is correct
+     */
+    function isCorrectPassword($password) {
+	$valid = $this->getHashedPassword();
+	$salt = substr($valid, 0, 4);
+	/* Support both old (G1 thru 1.4.0; G2 thru alpha-4) and new password schemes: */
+	$guess = (strlen($valid) == 32) ? md5($password) : ($salt . md5($salt . $password));
+	if (!strcmp($guess, $valid)) {
+	    return true;
+	}
+
+	/* Passwords with <&"> created by G2 prior to 2.1 were hashed with entities */
+	$sanitizedPassword = $password;
+	GalleryUtilities::sanitizeInputValues($sanitizedPassword, false);
+	$guess = (strlen($valid) == 32) ? md5($sanitizedPassword)
+					: ($salt . md5($salt . $sanitizedPassword));
+	if (!strcmp($guess, $valid)) {
+	    return true;
+	}
+
+	/* Also support hashes generated by phpass for interoperability with other applications */
+	if (strlen($valid) == 34) {
+	    GalleryCoreApi::requireOnce('lib/phpass/PasswordHash.inc');
+	    $hashGenerator = new PasswordHash(10, true);
+	    return $hashGenerator->CheckPassword($password, $valid);
+	}
+
+	return false;
+    }
+
+    /**
+     * Change the user's password to the new value provided.
+     *
+     * @param string $newPassword a plaintext password
+     */
+    function changePassword($newPassword) {
+	$this->setHashedPassword(GalleryUtilities::md5Salt($newPassword));
+    }
+
+    /**
+     * Save the changes to this GalleryUser.
+     * Do some bookkeeping, like adding the user to the all user and everybody groups.
+     *
+     * @return GalleryStatus a status code
+     */
+    function save($postEvent=true) {
+	$isNew = $this->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED);
+
+	$ret = parent::save($postEvent);
+	if ($ret) {
+	    return $ret;
+	}
+
+	if ($isNew) {
+	    /* Add her to the various groups */
+	    foreach (array('id.allUserGroup', 'id.everybodyGroup') as $groupKey) {
+		list ($ret, $groupId) =
+		    GalleryCoreApi::getPluginParameter('module', 'core', $groupKey);
+		if ($ret) {
+		    return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserToGroup($this->getId(), $groupId);
+		if ($ret) {
+		    return $ret;
+		}
+	    }
+	}
+
+	return null;
+    }
+
+    /**
+     * Delete this GalleryUser.
+     * Do some bookkeeping, like removing the user from all groups, remapping his items to
+     * a site admin user and removing all of his permissions.
+     *
+     * @return GalleryStatus a status code
+     */
+    function delete() {
+	global $gallery;
+	$activeUserId = $gallery->getActiveUserId();
+	if ($activeUserId == $this->getId()) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					 'You cannot delete the active user!');
+	}
+
+	/* Don't allow deleting the guest user */
+	list ($ret, $anonymousUserId) =
+	    GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+	if ($ret) {
+	    return $ret;
+	}
+	if ($anonymousUserId == $this->getId()) {
+	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+					 'You cannot delete the anonymous user!');
+	}
+
+	/*
+	 * First assign all items of this user to another owner.
+	 * You should call remapOwner() before calling $user->delete() but we call it here again,
+	 * for 100% data integrity.  If remapOwner() has been called before, as it is the case with
+	 * the AdminDeleteUser controller, this 2nd call to remapOwner() does exactly nothing.
+	 */
+	/* Check if activeUser is Site Admin, if not, get any of the Site Admins */
+	list ($ret, $isAdmin) = GalleryCoreApi::isUserInSiteAdminGroup();
+	if ($ret) {
+	    return $ret;
+	}
+	if ($isAdmin) {
+	    $newOwnerId = $activeUserId;
+	} else {
+	    list ($ret, $siteAdminGroupId) =
+		GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+	    if ($ret) {
+		return $ret;
+	    }
+	    list ($ret, $adminUsers) = GalleryCoreApi::fetchUsersForGroup($siteAdminGroupId, 2);
+	    if ($ret) {
+		return $ret;
+	    }
+	    if (empty($adminUsers)) {
+		return GalleryCoreApi::error(ERROR_MISSING_VALUE);
+	    }
+	    $adminUsers = array_keys($adminUsers);
+	    if ($adminUsers[0] == $this->getId() && count($adminUsers) == 1) {
+		/* Block attempt to delete the only site admin */
+		return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
+	    }
+	    $newOwnerId = $adminUsers[0] != $this->getId() ? $adminUsers[0] : $adminUsers[1];
+	}
+
+	/* Now remap the owner of all of his items */
+	$ret = GalleryCoreApi::remapOwnerId($this->getId(), $newOwnerId);
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* Delete all of his permissions from the permissions map table */
+	$ret = GalleryCoreApi::removeMapEntry(
+	    'GalleryAccessMap', array('userOrGroupId' => $this->getId()));
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* And remove him from all groups he was a member of */
+	$ret = GalleryCoreApi::removeUserFromAllGroups($this->getId());
+	if ($ret) {
+	    return $ret;
+	}
+
+	/* And finally delete the user from the database */
+	$ret = parent::delete();
+	if ($ret) {
+	    return $ret;
+	}
+
+	return null;
+    }
+
+    /**
+     * @see GalleryEntity::itemTypeName
+     */
+    function itemTypeName($localized = true) {
+	if ($localized) {
+	    list ($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+	    if (!$ret) {
+		return array($core->translate('User'), $core->translate('user'));
+	    }
+	}
+	return array('User', 'user');
+    }
+
+    /**
+     * @see GalleryEntity::getClassName
+     */
+    function getClassName() {
+	return 'GalleryUser';
+    }
+
+    function getUserName() {
+	return $this->userName;
+    }
+
+    function setUserName($userName) {
+	$this->userName = $userName;
+    }
+
+    function getFullName() {
+	return $this->fullName;
+    }
+
+    function setFullName($fullName) {
+	$this->fullName = $fullName;
+    }
+
+    function getHashedPassword() {
+	return $this->hashedPassword;
+    }
+
+    function setHashedPassword($hashedPassword) {
+	$this->hashedPassword = $hashedPassword;
+    }
+
+    function getEmail() {
+	return $this->email;
+    }
+
+    function setEmail($email) {
+	$this->email = $email;
+    }
+
+    function getLanguage() {
+	return $this->language;
+    }
+
+    function setLanguage($language) {
+	$this->language = $language;
+    }
+
+    function isLocked() {
+        return (bool)$this->locked;
+    }
+
+    function setLocked($lock) {
+        $this->locked = (bool)$lock;
+    }
+}
+?>

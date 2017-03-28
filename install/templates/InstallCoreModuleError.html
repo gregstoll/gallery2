@@ -1,0 +1,30 @@
+    <div class="error">
+      <h1><?php print _("Error installing Gallery Core") ?></h1>
+    </div>
+
+    <p>
+      <?php print _("Something went wrong when we tried to install the core module.  What to do next?") ?>
+    </p>
+
+     <ol>
+      <li>
+	<?php print _("Go to the System Checks step of the installer and make sure all checks shows 'Success'. A common issue is that the file integrity warning is ignored."); ?>
+      </li><li>
+	<?php print _("If there are no warnings or failures in the System Checks step, empty your storage directory and delete the database tables and start the installation process a second time (redo all steps)."); ?>
+      </li><li>
+	<?php printf(_("Please visit the %sG2 FAQ%s and read the %sKnown issues section of the Readme%s."), '<a href="http://codex.gallery2.org/index.php/Gallery2:faq" target="_blank">', '</a>', '<a href="../README.html#known_issues" target="_blank">', '</a>'); ?>
+      </li><li>
+	<?php printf(_("If the problem persists, please copy the installation log which is located at %s and attach it (as install.log.zip) to a new forum topic in the %sG2 support forum%s or, if possible, just add a link to the install.log in the forum topic such that the support staff can analyze it if necessary."), $templateData['installLogPath'], '<a href="http://gallery.menalto.com/forum/66" target="_blank">', '</a>'); ?>
+      </li>
+    </ol>
+
+    <h2>
+      <?php print _("Stack Trace:") ?>
+    </h2>
+    <?php if (!empty($templateData['stackTrace'])): ?>
+    <div class="stack_trace">
+      <?php print implode('</br>', $templateData['stackTrace']) ?>
+    </div>
+    <?php endif ?>
+
+    <br/>

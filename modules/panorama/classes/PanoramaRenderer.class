@@ -1,0 +1,125 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryRenderer.class');
+
+/**
+ * A GalleryRenderer that uses the panorama applet
+ * @package Panorama
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class PanoramaRenderer extends GalleryRenderer {
+
+    /**
+     * @see GalleryRenderer::canBeViewedInline
+     */
+    function canBeViewedInline($item) {
+	return true;
+    }
+
+    /**
+     * @see GalleryRenderer::render
+     */
+    function render($format, $entity, $item, $params) {
+	global $gallery;
+	$urlGenerator =& $gallery->getUrlGenerator();
+
+	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'panorama');
+	if ($ret) {
+	    return $ret;
+	}
+	list ($ret, $viewWidth) = $module->getParameter('width');
+	if ($ret) {
+	    return $ret;
+	}
+
+	if (!empty($params['forceRawImage']) || $entity->getWidth() < $viewWidth) {
+	    /* Return nothing so that we fall back to the default renderer */
+	    return null;
+	}
+
+	switch($format) {
+	case 'HTML':
+	    $src = $urlGenerator->generateUrl(
+		array('view' => 'core.DownloadItem', 'itemId' => $entity->getId(),
+		      'serialNumber' => $entity->getSerialNumber()),
+		array('forceFullUrl' => true, 'forceSessionId' => true));
+	    $jarUrl = $urlGenerator->generateUrl(
+		array('href' => 'modules/panorama/java/Metamorphose.jar'),
+		array('forceFullUrl' => true));
+	    $scrollerUrl = $urlGenerator->generateUrl(
+		array('href' => 'modules/panorama/images/slider.png'),
+		array('forceFullUrl' => true));
+
+	    list ($width, $height) = array($entity->getWidth(), $entity->getHeight());
+
+	    $downloadText = $module->translate('Downloading the Panorama Applet');
+	    $noAppletText = $module->translate('Your browser does not support Java applets');
+
+	    return sprintf('
+	    <object classid="clsid:8AD9C840-044E-11D1-B3E9-00805F499D93"
+	     codebase="http://java.sun.com/products/plugin/autodl/' .
+			   'jinstall-1_4-windows-i586.cab#Version=1,4,0,0"
+	     width="%d" height="%d">
+		<param name="code" value="Metamorphose"/>
+		<param name="archive" value="%s"/>
+		<param name="type" value="application/x-java-applet;version=1.4"/>
+		<param name="scriptable" value="false"/>
+		<param name="progressbar" value="true"/>
+		<param name="boxmessage" value="%s"/>
+		<param name="BackgroundColor" value="#666666"/>
+		<param name="PanoramaRect" value="0,0,%d,%d"/>
+		<param name="ScrollerRect" value="0,%d,%d,17"/>
+		<param name="ScrollerThumb" value="%s"/>
+		<param name="PanoramaTile" value="%s"/>
+		<param name="PanoramaSize" value="%d,%d"/>
+
+		<comment>
+		<embed width="%d" height="%d" code="Metamorphose" archive="%s"
+		 type="application/x-java-applet;version=1.4"
+		 scriptable="false" progressbar="true" boxmessage="%s"
+		 pluginspage="http://java.sun.com/j2se/1.4.2/download.html"
+		 BackgroundColor="#666666"
+		 PanoramaRect="0,0,%d,%d"
+		 ScrollerRect="0,%d,%d,17"
+		 ScrollerThumb="%s"
+		 PanoramaTile="%s"
+		 PanoramaSize="%d,%d">
+		  <noembed alt="%s">%s</noembed>
+		</embed>
+		</comment>
+	    </object>
+	    ',
+		$viewWidth, $height + 17, $jarUrl, $downloadText,
+		$viewWidth, $height, $height, $viewWidth,
+		$scrollerUrl, $src, $width, $height,
+		$viewWidth, $height + 17, $jarUrl, $downloadText,
+		$viewWidth, $height, $height, $viewWidth,
+		$scrollerUrl, $src, $width, $height,
+		$noAppletText, $noAppletText);
+
+	default:
+	    return null;
+	}
+    }
+}
+?>

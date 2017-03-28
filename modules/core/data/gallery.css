@@ -1,0 +1,543 @@
+/* ================================================================ */
+/*                      container.css (YUI 2.2.0)                   */
+/*                                                                  */
+/* Modified from the original container.css to use as many div#id   */
+/* style tags as possible to tightly scope this CSS so that it      */
+/* doesn't leak out and affect our themes.                          */
+/* ================================================================ */
+.yui-overlay {
+  position:absolute;
+  display:block;
+}
+
+.yui-tt {
+  visibility:hidden;
+  position:absolute;
+  color:#333;
+  background-color:#FDFFB4;
+  font-family:arial,helvetica,verdana,sans-serif;
+  padding:2px;
+  border:1px solid #FCC90D;
+  font:100% sans-serif;
+  width:auto;
+}
+
+* html body.masked select {
+  visibility:hidden;
+}
+
+* html div.yui-panel-container select {
+  visibility:inherit;
+}
+
+* html div.drag select {
+  visibility:hidden;
+}
+
+* html div.hide-select select {
+  visibility:hidden;
+}
+
+div#gDialog_mask, #waitDialog_mask {
+  z-index:0;
+  display:none;
+  position:absolute;
+  top:0;
+  left:0;
+  -moz-opacity: 0.5;
+  opacity:.50;
+  filter: alpha(opacity=50);
+  background-color:#CCC;
+}
+
+div#gDialog_c.hide-scrollbars * {
+  overflow:hidden;
+}
+
+div#gDialog_c.hide-scrollbars textarea, .hide-scrollbars select {
+  overflow:hidden;
+  display:none;
+}
+
+div#gDialog_c.show-scrollbars textarea, .show-scrollbars select {
+  overflow:visible;
+}
+
+.yui-panel-container {
+  position:absolute;
+  background-color:transparent;
+  z-index:6;
+  visibility:hidden;
+  overflow:visible;
+  width:auto;
+}
+
+.yui-panel-container.focused {
+}
+
+
+.yui-panel-container.matte {
+  padding:3px;
+  background-color:#FFF;
+}
+
+.yui-panel-container.matte .underlay {
+  display:none;
+}
+
+.yui-panel-container.shadow {
+  padding:0px;
+  background-color:transparent;
+}
+
+.yui-panel-container.shadow .underlay {
+  visibility:inherit;
+  position:absolute;
+  background-color:#CCC;
+  top:3px;left:3px;
+  z-index:0;
+  width:100%;
+  height:100%;
+  -moz-opacity: 0.7;
+  opacity:.70;
+  filter:alpha(opacity=70);
+  zoom:1;
+}
+
+.yui-panel {
+  visibility:hidden;
+  border-collapse:separate;
+  position:relative;
+  left:0px;top:0px;
+  font:1em Arial;
+  background-color:#FFF;
+  border:1px solid #000;
+  z-index:1;
+  overflow:hidden;
+}
+
+.yui-panel .hd {
+  background-color:#3d77cb;
+  color:#FFF;
+  font-size:100%;
+  line-height:100%;
+  border:1px solid #FFF;
+  border-bottom:1px solid #000;
+  font-weight:bold;
+  overflow:hidden;
+  padding:4px;
+}
+
+.yui-panel .bd {
+  overflow:hidden;
+  padding:4px;
+}
+
+.yui-panel .bd p {
+  margin:0 0 1em;
+}
+
+.yui-panel .bd a {
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+  font-size: 62.5%;
+  font-weight: bold;
+  text-decoration: none;
+  color: #6b8cb7;
+}
+
+.yui-panel .container-close {
+  position:absolute;
+  top:5px;
+  right:4px;
+  z-index:6;
+  height:12px;
+  width:12px;
+  margin:0px;
+  padding:0px;
+  background:url(close12_1.gif) no-repeat;
+  cursor:pointer;
+  visibility:inherit;
+}
+
+.yui-panel .ft {
+  padding:4px;
+  overflow:hidden;
+}
+
+.yui-simple-dialog .bd .yui-icon {
+  background-repeat: no-repeat;
+  float: left;
+  height: 16px;
+  margin-bottom: 50px;
+  margin-right: 10px;
+  width: 16px;
+}
+
+.yui-simple-dialog .bd span.blckicon {
+  background: url("blck16_1.gif") no-repeat;
+}
+
+.yui-simple-dialog .bd span.alrticon {
+  background: url("alrt16_1.gif") no-repeat;
+}
+
+.yui-simple-dialog .bd span.hlpicon {
+  background: url("hlp16_1.gif") no-repeat;
+}
+
+.yui-simple-dialog .bd span.infoicon {
+  background: url("info16_1.gif") no-repeat;
+}
+
+.yui-simple-dialog .bd span.warnicon {
+  background: url("warn16_1.gif") no-repeat;
+}
+
+.yui-simple-dialog .bd span.tipicon {
+  background: url("tip16_1.gif") no-repeat;
+}
+
+.yui-dialog .ft, .simple-dialog .ft {
+  padding-bottom:5px;
+  padding-right:5px;
+  text-align:right;
+}
+
+.yui-dialog form, .yui-simple-dialog form {
+  margin:0;
+}
+
+div#gDialog_c.button-group button {
+  font:100 76% verdana;
+  text-decoration:none;
+  background-color: #E4E4E4;
+  color: #333;
+  cursor: hand;
+  vertical-align: middle;
+  border: 2px solid #797979;
+  border-top-color:#FFF;
+  border-left-color:#FFF;
+  margin:2px;
+  padding:2px;
+}
+
+div#gDialog_c.button-group button.default {
+  font-weight:bold;
+}
+
+div#gDialog_c.button-group button:hover, .button-group button.hover {
+  border:2px solid #90A029;
+  background-color:#EBF09E;
+  border-top-color:#FFF;
+  border-left-color:#FFF;
+}
+
+div#gDialog_c.button-group button:active {
+  border:2px solid #E4E4E4;
+  background-color:#BBB;
+  border-top-color:#333;
+  border-left-color:#333;
+}
+
+/* ================================================= */
+/*                 slider.css (YUI 2.2.0)            */
+/* based on YUI slider / color picker implementation */
+/* ================================================= */
+
+/* The box itself.  The position needs to be dynamic in order to pop up in the right place. */
+div#Markup_colorChooser {
+  position: absolute;
+  background-color: #eeeeee;
+  border: 1px solid #999999;
+  width: 360px;
+  height: 240px;
+  display: none;
+}
+
+/* upper border */
+div#Markup_colorHandle {
+  background-color: #bbbbbb;
+  height: 10px;
+  margin: 0px;
+  cursor: move;
+}
+
+div#Markup_hueThumb {
+  cursor: default;
+  width: 18px;
+  height: 18px;
+  z-index: 9;
+  position: absolute;
+}
+
+/* slider background */
+div#Markup_hueBg {
+  position: absolute;
+  left: 216px;
+  height: 198px;
+  width: 18px;
+  background: url(hue.png) no-repeat;
+  top: 18px;
+}
+
+/* big square */
+div#Markup_pickerDiv {
+  position: absolute;
+  left: 10px;
+  height: 187px;
+  width: 188px;
+  top: 20px;
+}
+
+div#Markup_pickerBg {
+  position: absolute;
+  z-index: 1;
+  top: 0px;
+  left: 0px;
+}
+
+div#Markup_selector {
+  cursor: default;
+  width: 11px;
+  height: 11px;
+  z-index: 9;
+  position: absolute;
+  top: 0px;
+  left: 0px;
+}
+
+div#Markup_valdiv {
+  text-align: right;
+  position: absolute;
+  top: 86px;
+  left: 246px;
+}
+
+div#Markup_valdiv input {
+  font-size: .85em
+}
+
+div#Markup_hint {
+  background-color: #cccccc;
+  border: 1px solid #ffffff;
+  padding: 2px 4px 2px 4px;
+  position: absolute;
+  top: 218px;
+  left: 120px;
+}
+
+div#Markup_rBG {
+  top: 180px
+}
+
+div#Markup_gBG {
+  top: 210px
+}
+
+div#Markup_bBG {
+  top: 240px
+}
+
+div#Markup_swatch {
+  position: absolute;
+  left: 260px;
+  top: 30px;
+  height: 60px;
+  width: 60px;
+  border: 2px solid #aaaaaa;
+}
+
+/*** Icons for username, groupname and password form fields ***/
+
+#giFormUsername, .giFormUsername {
+  background-image: url('userinfo.png');
+  background-repeat: no-repeat;
+  background-position: 0 1px;
+  padding-left: 17px;
+}
+
+#giFormGroupname {
+  background-image: url('groupinfo.png');
+  background-repeat: no-repeat;
+  background-position: 0 1px;
+  padding-left: 17px;
+}
+
+#giFormPassword {
+  background-image: url('key7-16-bw.gif');
+  background-repeat: no-repeat;
+  background-position: 0 1px;
+  padding-left: 17px;
+}
+
+/*** Status messages in AdminPlugins ***/
+
+#gbPluginStatusUpdates {
+  position: absolute;
+  font-size: 1.5em;
+  display: none;
+  background-color: #999;
+}
+
+#gbPluginStatusUpdates div.giSuccess {
+  background-color: #5c0;
+  color: white;
+  padding: 15px;
+  width: 350px;
+  text-align: center;
+}
+
+#gbPluginStatusUpdates div.giWarning {
+  background-color: #c50;
+  color: white;
+  padding: 15px;
+  width: 350px;
+  text-align: center;
+}
+
+/*** General styles ***/
+
+label {
+  cursor: pointer;
+}
+
+/*** Autocomplete ***/
+
+.autoCompleteShadow {
+  position: absolute;
+  margin: 0.3em;
+  z-index: 5;
+}
+
+.autoCompleteContainer {
+  position: relative;
+  bottom: 4px;
+  right: 4px;
+  overflow: hidden;
+  border-style: solid solid dotted;
+  border-width: 0 1px 1px;
+  margin-top: 0;
+  margin-bottom: -1px;
+}
+
+.autoCompleteContainer .yui-ac-content ul {
+  position: relative;
+  padding: 3px 0;
+  list-style: none;
+}
+
+.autoCompleteContainer .yui-ac-content li {
+  padding: 2px 4px;
+  cursor: default;
+  white-space: nowrap;
+  display: list-item;
+}
+
+/*** Icons for Plugins ***/
+
+.AdminPlugins_legend {
+  width: 100%;
+  text-align: right;
+  margin-bottom: 2px;
+}
+.AdminPlugins_legend span {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.icon-plugin-active {
+  padding-left: 16px;
+  background: url(module-active.gif) left center no-repeat;
+}
+.icon-plugin-inactive {
+  padding-left: 16px;
+  background: url(module-inactive.gif) left center no-repeat;
+}
+.icon-plugin-upgrade {
+  padding-left: 16px;
+  background: url(module-upgrade.gif) left center no-repeat;
+}
+.icon-plugin-uninstall {
+  padding-left: 16px;
+  background: url(module-install.gif) left center no-repeat;
+}
+.icon-plugin-incompatible {
+  padding-left: 16px;
+  background: url(module-incompatible.gif) left center no-repeat;
+}
+.icon-plugin-locked {
+  padding-left: 16px;
+  background: url(module-locked.gif) left center no-repeat;
+}
+#gallery.rtl .icon-plugin-active, #gallery.rtl .icon-plugin-inactive,
+#gallery.rtl .icon-plugin-upgrade, #gallery.rtl .icon-plugin-uninstall,
+#gallery.rtl .icon-plugin-incompatible, #gallery.rtl .icon-plugin-locked {
+  padding-left: 0;
+  padding-right: 16px;
+  background-position: right center;
+}
+
+/*** Progress Bar ***/
+
+#ProgressBar #progressDone {
+  width: 0%;
+  background-color: #fd6704;
+  border: thin solid #ddd;
+}
+
+#ProgressBar #progressToGo {
+  width: 100%;
+  background-color: #eee;
+  border: thin solid #ddd;
+  border-left: none;
+}
+
+#ProgressBar #progressContinueLink {
+  font-size: 1.5em;
+}
+
+/* Avoid disappearing text on IE6 */
+#gallery.IE #ProgressBar #progressTitle, #gallery.IE #ProgressBar #progressDescription,
+#gallery.IE #ProgressBar #progressTimeRemaining {
+  display: inline-block;
+}
+
+/*** Tooltip ***/
+
+span.gTooltipTarget {
+  border-bottom: 1px dashed #6b8cb7;
+}
+
+#gTooltip.tt {
+  visibility:hidden;
+  position:absolute;
+  color:#333;
+  background-color:#FDFFB4;
+  font-family:arial,helvetica,verdana,sans-serif;
+  padding:2px;
+  border:1px solid #FCC90D;
+  font:100% sans-serif;
+  width:auto;
+}
+
+#gTooltip.mask {
+  z-index:0;
+  display:none;
+  position:absolute;
+  top:0;
+  left:0;
+  background-color:#CCC;
+  -moz-opacity: 0.5;
+  opacity:.50;
+  filter: alpha(opacity=50);
+}
+
+#gTooltip.mask[id]{ /* IE6 and below Can't See This */
+  position:fixed;
+}
+
+/*** Help ***/
+
+div.gbLink-Help {
+  float: right;
+  cursor: pointer;
+}
