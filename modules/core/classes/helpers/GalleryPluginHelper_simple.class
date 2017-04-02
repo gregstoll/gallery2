@@ -32,7 +32,7 @@ class GalleryPluginHelper_simple {
      * @see GalleryCoreApi::loadPlugin
      * @param int $depth of recursion (don't set this; it's used internally)
      */
-    function loadPlugin($pluginType, $pluginId, $ignoreVersionMismatch=false,
+    static function loadPlugin($pluginType, $pluginId, $ignoreVersionMismatch=false,
 			$errorOnVersionMismatch=false, $depth=0) {
 	global $gallery;
 
@@ -205,7 +205,7 @@ class GalleryPluginHelper_simple {
     /**
      * @see GalleryCoreApi::getPluginParameter
      */
-    function getParameter($pluginType, $pluginId, $parameterName, $itemId=0,
+    static function getParameter($pluginType, $pluginId, $parameterName, $itemId=0,
 			  $ignoreDiskCache=false) {
 	global $gallery;
 
@@ -259,7 +259,7 @@ class GalleryPluginHelper_simple {
      *               array (itemId/zero => array(parameterName => parameterValue), ..)
      * @access protected
      */
-    function _fetchAllParameters($pluginType, $pluginId, $itemId, $ignoreDiskCache=false) {
+    static function _fetchAllParameters($pluginType, $pluginId, $itemId, $ignoreDiskCache=false) {
 	global $gallery;
 	if (empty($pluginType) || empty($pluginId)) {
 	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,

@@ -392,7 +392,7 @@ class GalleryUtilities {
      * @param string $key form variable name
      * @return string prefixed form variable name
      */
-    function prefixFormVariable($key) {
+    static function prefixFormVariable($key) {
 	return GALLERY_FORM_VARIABLE_PREFIX . $key;
     }
 
@@ -525,7 +525,7 @@ class GalleryUtilities {
      * @param string $className
      * @return boolean
      */
-    function isA($instance, $className) {
+    static function isA($instance, $className) {
 	return is_a($instance, $className);
     }
 
@@ -554,7 +554,7 @@ class GalleryUtilities {
      * @return array int the number of entities in the string
      *               string the output string
      */
-    function entitySubstr($string, $start, $length=null, $countEntitiesAsOne=true) {
+    static function entitySubstr($string, $start, $length=null, $countEntitiesAsOne=true) {
 	$stringLength = strlen($string);
 	if ($stringLength < $start) {
 	    return array(0, false);
@@ -618,7 +618,7 @@ class GalleryUtilities {
      * @param string $source encoded using UTF-8
      * @return string of unicode entities
      */
-    function utf8ToUnicodeEntities($source) {
+    static function utf8ToUnicodeEntities($source) {
 	/*
 	 * Array used to figure what number to decrement from character order value according to
 	 * number of characters used to map unicode to ASCII by UTF-8
@@ -831,7 +831,7 @@ class GalleryUtilities {
      * @deprecated
      * @todo Remove at the next major version bump of core API
      */
-    function htmlEntityDecode($string) {
+    static function htmlEntityDecode($string) {
 	return empty($string) ? $string : html_entity_decode($string, ENT_COMPAT);
     }
 
@@ -841,7 +841,7 @@ class GalleryUtilities {
      * @param string $markupType (optional) markup type, defaults from core markup parameter
      * @return string resulting text
      */
-    function markup($text, $markupType=null) {
+    static function markup($text, $markupType=null) {
 	GalleryCoreApi::requireOnce('lib/smarty_plugins/modifier.markup.php');
 	return smarty_modifier_markup($text, $markupType);
     }
@@ -1141,7 +1141,7 @@ class GalleryUtilities {
      * @return array GalleryStatus a status code
      *               string pseudoFileName a filename
      */
-    function getPseudoFileName($entity) {
+    static function getPseudoFileName($entity) {
 	/*
 	 * If our GalleryEntity is a GalleryFileSystemEntity, then we've got a path component so
 	 * we're cool.  If it's a derivative, then get the pseudo filename of its parent and use
@@ -1314,7 +1314,7 @@ class GalleryUtilities {
      * @param array $provided (major, minor)
      * @return boolean true if compatible
      */
-    function isCompatibleWithApi($required, $provided) {
+    static function isCompatibleWithApi($required, $provided) {
 	if (!is_array($required) || !is_array($provided)) {
 	    return false;
 	}
@@ -1475,7 +1475,7 @@ class GalleryUtilities {
      * @param boolean $force force the reevaluation of the HTTP header string Cookie
      * @param boolean $unset unset static variable for testability
      */
-    function fixCookieVars($force=false, $unset=false) {
+    static function fixCookieVars($force=false, $unset=false) {
 	static $fixed;
 	if (!isset($fixed) || $force) {
 	    $fixed = true;
@@ -1568,7 +1568,7 @@ class GalleryUtilities {
      * @param array $fixedCookies (string already registered cookie name, ...)
      * @access private
      */
-    function _registerCookieAttr($attr, &$fixedCookies) {
+    static function _registerCookieAttr($attr, &$fixedCookies) {
 	global $gallery;
 	/* Split NAME [=VALUE], value is optional for all attributes but the cookie name */
 	if (($pos = strpos($attr, '=')) !== false) {

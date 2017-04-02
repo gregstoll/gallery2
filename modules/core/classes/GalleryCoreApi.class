@@ -265,7 +265,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               object the plugin
      */
-    function loadPlugin($pluginType, $pluginId, $ignoreVersionMismatch=false,
+    static function loadPlugin($pluginType, $pluginId, $ignoreVersionMismatch=false,
 			$errorOnVersionMismatch=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_simple.class');
@@ -2857,7 +2857,7 @@ class GalleryCoreApi {
      * @param string $errorMessage
      * @return GalleryStatus an error status
      */
-    function error($errorCode, $fileName='ignored', $lineNumber='ignored', $errorMessage=null) {
+    static function error($errorCode, $fileName='ignored', $lineNumber='ignored', $errorMessage=null) {
 	GalleryCoreApi::requireOnce('modules/core/classes/GalleryStatus.class');
 	$status = new GalleryStatus(GALLERY_ERROR | $errorCode, $errorMessage);
 	$status->setStackTrace(debug_backtrace());
@@ -2901,7 +2901,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array the results
      */
-    function getMapEntry($mapName, $select, $match=array(), $optional=array()) {
+    static function getMapEntry($mapName, $select, $match=array(), $optional=array()) {
 	global $gallery;
 
 	if (empty($mapName) || empty($select) || !is_array($match) || !is_array($optional)) {
@@ -3268,7 +3268,7 @@ class GalleryCoreApi {
      * @return string local path to the Gallery code base.  If the optional parameter has not been
      *                supplied the return value will have the trailing slash appended.
      */
-    function getCodeBasePath($relativePath=null) {
+    static function getCodeBasePath($relativePath=null) {
         static $codeBaseDirectory;
         if (!isset($codeBaseDirectory)) {
 	    $codeBaseDirectory = dirname(dirname(dirname(dirname(__FILE__)))) . DIRECTORY_SEPARATOR;
