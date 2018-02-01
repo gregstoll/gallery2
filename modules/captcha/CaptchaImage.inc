@@ -88,7 +88,7 @@ class CaptchaImageView extends GalleryView {
 
 	/* Output the image and reclaim the memory it used */
 	/* Use low quality jpeg compression to make the image less OCR-able */
-	ImageJPEG($image, '', 50);
+	ImageJPEG($image, NULL, 50);
 	ImageDestroy($image);
 
 	return null;
