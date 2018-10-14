@@ -26,7 +26,7 @@
  */
 class CoreModule extends GalleryModule {
 
-    function CoreModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('core');
