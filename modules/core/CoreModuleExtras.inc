@@ -2605,7 +2605,7 @@ class CoreModuleExtras {
      *                        'add' => array of string additions)
      * @access private
      */
-    function _prepareConfigUpgrade($currentVersion) {
+    static function _prepareConfigUpgrade($currentVersion) {
 	global $gallery;
 	$configChanges = array();
 
@@ -2941,7 +2941,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
      * @param string $currentVersion current core version
      * @return boolean true if change is required
      */
-    function isConfigUpgradeRequired($currentVersion) {
+    static function isConfigUpgradeRequired($currentVersion) {
 	$configChanges = CoreModuleExtras::_prepareConfigUpgrade($currentVersion);
 	return !empty($configChanges);
     }

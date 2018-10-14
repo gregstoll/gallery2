@@ -66,7 +66,7 @@ class GalleryRepository {
      *               int error count (repositories that failed to load for some reason)
      * @static
      */
-    function getRepositories($sources=array(), $repositoryClassName='GalleryRepository') {
+    static function getRepositories($sources=array(), $repositoryClassName='GalleryRepository') {
 	$cacheKey = 'GalleryRepository::getRepositories(' . join('|', $sources) .
 	    ",$repositoryClassName)";
 	if (!GalleryDataCache::containsKey($cacheKey)) {
@@ -106,7 +106,7 @@ class GalleryRepository {
      *
      * @static
      */
-    function clearRepositoryCache($sources=array(), $repositoryClassName='GalleryRepository') {
+    static function clearRepositoryCache($sources=array(), $repositoryClassName='GalleryRepository') {
 	$cacheKey = 'GalleryRepository::getRepositories(' . join('|', $sources) .
 	    ",$repositoryClassName)";
 	GalleryDataCache::remove($cacheKey);

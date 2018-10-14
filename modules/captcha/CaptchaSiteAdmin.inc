@@ -172,7 +172,7 @@ class CaptchaAdminOption {
      *               array of string optionId => CaptchaAdminOption instance
      * @static
      */
-    function getAllOptions() {
+    static function getAllOptions() {
 	$testOptions = CaptchaAdminOption::testOptions();
 	if (isset($testOptions)) {
 	    return array(null, $testOptions);
@@ -203,7 +203,7 @@ class CaptchaAdminOption {
      * @return null or array of string optionId => CaptchaAdminOption test instance
      * @static
      */
-    function testOptions($options=null) {
+    static function testOptions($options=null) {
 	static $testOptions = null;
 	if (isset($options)) {
 	    $testOptions = $options;

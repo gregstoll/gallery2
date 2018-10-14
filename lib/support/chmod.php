@@ -312,7 +312,7 @@ class PermissionBits {
      * @return PermissionBits object
      * @static
      */
-    function fromString($bitsAsString) {
+    static function fromString($bitsAsString) {
     	$bitsAsString = (string)$bitsAsString;
     	if (strlen($bitsAsString) && $bitsAsString{0} != '0') {
     	    $bitsAsString = '0' . $bitsAsString;

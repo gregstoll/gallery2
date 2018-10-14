@@ -158,7 +158,7 @@ class RatingAlbumView extends GalleryView {
      *               array of item ids
      * @static
      */
-    function getChildIds($userId, $limit=null) {
+    static function getChildIds($userId, $limit=null) {
 	global $gallery;
 	$storage =& $gallery->getStorage();
 

@@ -471,7 +471,7 @@ class ItemEditOption {
      *               array ItemEditOption instances
      * @static
      */
-    function getAllOptions($editPlugin, $item, $thumbnail) {
+    static function getAllOptions($editPlugin, $item, $thumbnail) {
 	list ($ret, $allOptionIds) =
 	    GalleryCoreApi::getAllFactoryImplementationIdsWithHint('ItemEditOption', $editPlugin);
 	if ($ret) {

@@ -161,7 +161,7 @@ class UpdatesAlbumView extends GalleryView {
      *               array of item ids
      * @static
      */
-    function getChildIds($userId, $param='date', $orderBy='creationTimestamp',
+    static function getChildIds($userId, $param='date', $orderBy='creationTimestamp',
 	    $orderDirection=ORDER_DESCENDING, $table='GalleryEntity', $id='id') {
 	global $gallery;
 	$storage =& $gallery->getStorage();

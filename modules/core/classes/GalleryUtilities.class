@@ -1197,7 +1197,7 @@ class GalleryUtilities {
      * Get contents of MANIFEST files.
      * @return array (file => array('checksum'=>..,'size'=>..,'viewable'=>..), ..)
      */
-    function readManifest() {
+    static function readManifest() {
 	/*
 	 * Be careful not to reference $gallery here; this method is called from the installer.
 	 * Look in (modules|themes)/.../MANIFEST and top level MANIFEST.
@@ -1231,7 +1231,7 @@ class GalleryUtilities {
      * @param string $filePath the path to the MANIFEST file
      * @return array(file => array('checksum'=>..,'size'=>..,'viewable'=>..), ...)
      */
-    function readIndividualManifest($filePath, &$manifest) {
+    static function readIndividualManifest($filePath, &$manifest) {
 	global $gallery;
 
 	/* If the method getPlatform exists, then we are not installing and it is safe to use. */
@@ -1356,7 +1356,7 @@ class GalleryUtilities {
      * @param string $ini_string name of the php.ini value to be retrieved
      * @return boolean value
      */
-    function getPhpIniBool($ini_string) {
+    static function getPhpIniBool($ini_string) {
 	$value = ini_get($ini_string);
 
 	if (!strcasecmp('on', $value) || $value == 1 || $value === true) {

@@ -152,7 +152,7 @@ class KeywordAlbumView extends GalleryView {
      *               array of item ids
      * @static
      */
-    function getChildIds($userId, $keyword=null) {
+    static function getChildIds($userId, $keyword=null) {
 	global $gallery;
 	$storage =& $gallery->getStorage();
 

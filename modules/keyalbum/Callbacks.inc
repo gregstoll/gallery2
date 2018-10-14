@@ -89,7 +89,7 @@ class KeyAlbumCallbacks {
      * @return GalleryStatus a status code
      * @static
      */
-    function _findAllKeywords($param, $onlyPublic, $sizeLimit, $maxWeight, $includeFrequency) {
+    static function _findAllKeywords($param, $onlyPublic, $sizeLimit, $maxWeight, $includeFrequency) {
 	global $gallery;
 
 	$query = '

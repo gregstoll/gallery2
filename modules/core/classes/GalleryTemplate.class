@@ -369,7 +369,7 @@ class GalleryTemplate {
      * @return boolean false if the compiled templates should be used without any checking
      * @static
      */
-    function shouldDoCompileCheck() {
+    static function shouldDoCompileCheck() {
 	$cacheKey = 'GalleryTemplate::compileCheck';
 	if (!GalleryDataCache::containsKey($cacheKey)) {
 	    $compileCheck = (GalleryUtilities::getServerVar('HTTP_PRAGMA') == 'no-cache'
@@ -394,7 +394,7 @@ class GalleryTemplate {
      * @return string processed tpl content ready for compilation
      * @static
      */
-    function preFilter($source, &$smarty) {
+    static function preFilter($source, &$smarty) {
 	return preg_replace('/^\s+/m', '', $source);
     }
 
