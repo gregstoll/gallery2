@@ -129,7 +129,7 @@ class ErrorPageView extends GalleryView {
      *                 not be considered an error.
      * @static
      */
-    function errorHandler($error, $g2Data=null, $initOk=null) {
+    static function errorHandler($error, $g2Data=null, $initOk=null) {
 	global $gallery;
 	$failsafe = false;
 

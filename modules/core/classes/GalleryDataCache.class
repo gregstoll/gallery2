@@ -103,7 +103,7 @@ class GalleryDataCache {
      * Remove data from the cache
      * @param string $key
      */
-    function remove($key) {
+    static function remove($key) {
 	$cache =& GalleryDataCache::_getCache();
 	if (!$cache['memoryCacheEnabled']) {
 	    return;
@@ -224,7 +224,7 @@ class GalleryDataCache {
      * Empty the cache of all but protected entries
      * @param boolean $purgeProtected (optional) purge protected also?
      */
-    function reset($purgeProtected=false) {
+    static function reset($purgeProtected=false) {
 	$cache =& GalleryDataCache::_getCache();
 	if (!$cache['memoryCacheEnabled']) {
 	    return;
@@ -299,7 +299,7 @@ class GalleryDataCache {
      * @see GalleryDataCache::getCachePath
      * @param array $pathInfo the path info
      */
-    function removeFromDisk($pathInfo) {
+    static function removeFromDisk($pathInfo) {
 	$cache =& GalleryDataCache::_getCache();
 	if (!$cache['fileCacheEnabled']) {
 	    return null;

@@ -272,7 +272,7 @@ class GalleryPluginHelper_medium {
     /**
      * @see GalleryCoreApi::setPluginParameter
      */
-    function setParameter($pluginType, $pluginId, $parameterName, $parameterValue, $itemId=0) {
+    static function setParameter($pluginType, $pluginId, $parameterName, $parameterValue, $itemId=0) {
 	global $gallery;
 
 	if ($gallery->getDebug()) {
@@ -383,7 +383,7 @@ class GalleryPluginHelper_medium {
      * @return GalleryStatus a status code
      * @access private
      */
-    function _updateParameter($pluginType, $pluginId, $parameterName, $parameterValue, $itemId=0) {
+    static function _updateParameter($pluginType, $pluginId, $parameterName, $parameterValue, $itemId=0) {
 	if (empty($pluginType) || empty($pluginId) || empty($parameterName)) {
 	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
 	}

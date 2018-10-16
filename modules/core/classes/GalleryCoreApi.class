@@ -475,7 +475,7 @@ class GalleryCoreApi {
      * @param string $itemId (optional)
      * @return GalleryStatus a status code
      */
-    function setPluginParameter($pluginType, $pluginId, $parameterName,
+    static function setPluginParameter($pluginType, $pluginId, $parameterName,
 				$parameterValue, $itemId=0) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_medium.class');
@@ -2874,7 +2874,7 @@ class GalleryCoreApi {
      *                non transactional database connection for this operation.  Default is false.
      * @return GalleryStatus a status code
      */
-    function updateMapEntry($mapName, $match, $change, $useNonTransactionalConnection=false) {
+    static function updateMapEntry($mapName, $match, $change, $useNonTransactionalConnection=false) {
 	global $gallery;
 
 	if (sizeof($match) == 0 || sizeof($change) == 0) {

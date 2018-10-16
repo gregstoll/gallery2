@@ -34,7 +34,7 @@ class PicLensHelper {
      *               string the version of PicLens we just installed
      * @static
      */
-    function install() {
+    static function install() {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 
@@ -77,7 +77,7 @@ class PicLensHelper {
      *               'swfUrl' => url to the SWF file)
      * @static
      */
-    function getLatestPicLensInfo() {
+    static function getLatestPicLensInfo() {
 	$url = 'http://gallery.menalto.com/versioncheck/piclens/release';
 	list ($success, $body) = GalleryCoreApi::fetchWebPage($url);
 	if (!$success) {

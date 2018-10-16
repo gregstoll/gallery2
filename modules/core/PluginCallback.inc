@@ -112,7 +112,7 @@ class PluginCallbackView extends GalleryView {
      * @return array changed states (moduleId => state, ...)
      * @static
      */
-    function calculateStateChanges($beforeStates, $afterStates) {
+    static function calculateStateChanges($beforeStates, $afterStates) {
 	$states = array();
 	$deleted = array();
 	foreach (array('module', 'theme') as $type) {
@@ -135,7 +135,7 @@ class PluginCallbackView extends GalleryView {
      * @return GalleryStatus a status code
      * @static
      */
-    function handleCallback($command, &$result) {
+    static function handleCallback($command, &$result) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 
@@ -344,7 +344,7 @@ class PluginCallbackView extends GalleryView {
      *               array(moduleId => state, ...)
      * @static
      */
-    function getPluginStates() {
+    static function getPluginStates() {
 	$states = array();
 
 	foreach (array('module', 'theme') as $type) {
@@ -379,7 +379,7 @@ class PluginCallbackView extends GalleryView {
      *               string a state
      * @static
      */
-    function getPluginState($type, $plugin, $status) {
+    static function getPluginState($type, $plugin, $status) {
 	if ($type == 'module' && $plugin->getId() == 'core') {
 	    return array(null, 'active');
 	}

@@ -45,7 +45,7 @@ class RandomAlbumView extends UpdatesAlbumView {
      *               array of item ids
      * @static
      */
-    function getChildIds($userId) {
+    static function getChildIds($userId) {
 	return parent::getChildIds($userId, 'random', 'random', ORDER_ASCENDING, null, 'id');
     }
 }

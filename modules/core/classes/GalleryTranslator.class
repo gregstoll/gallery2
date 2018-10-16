@@ -58,7 +58,7 @@ class GalleryTranslator {
     var $_isRightToLeft;
 
 
-    function GalleryTranslator() {
+    function __construct() {
 	$this->_boundDomains = array();
     }
 
@@ -67,7 +67,7 @@ class GalleryTranslator {
      * @return boolean
      * @static
      */
-    function canTranslate() {
+    static function canTranslate() {
 	return function_exists('dgettext');
     }
 
@@ -76,7 +76,7 @@ class GalleryTranslator {
      * @return boolean
      * @static
      */
-    function canTranslatePlural() {
+    static function canTranslatePlural() {
 	return function_exists('dngettext');
     }
 
@@ -98,7 +98,7 @@ class GalleryTranslator {
      *                     ...)
      * @static
      */
-    function getLanguageData() {
+    static function getLanguageData() {
 	static $supportedLanguages = array();
 	static $defaultCountry = array();
 
@@ -277,7 +277,7 @@ class GalleryTranslator {
      *              array('description', 'right-to-left'?)
      * @deprecated Remove on next major api bump. Use GalleryCoreApi::getSupportedLanguages
      */
-    function getSupportedLanguages() {
+    static function getSupportedLanguages() {
 	return GalleryCoreApi::getSupportedLanguages();
     }
 
@@ -365,7 +365,7 @@ class GalleryTranslator {
      *               string language code
      * @static
      */
-    function getDefaultLanguageCode() {
+    static function getDefaultLanguageCode() {
 	list ($ret, $useBrowserPref) =
 	    GalleryCoreApi::getPluginParameter('module', 'core', 'language.useBrowserPref');
 	if ($ret) {
@@ -407,7 +407,7 @@ class GalleryTranslator {
      *                array data about this language code (description,right-to-left?))
      * @static
      */
-    function getSupportedLanguageCode($languageCode, $fallback=true) {
+    static function getSupportedLanguageCode($languageCode, $fallback=true) {
 	static $supportedLanguages;
 	static $defaultCountry;
 	if (!isset($supportedLanguages)) {
@@ -439,7 +439,7 @@ class GalleryTranslator {
      * @return null or a language code in the <language>_<COUNTRY> format, eg: en_US
      * @static
      */
-    function getLanguageCodeFromRequest() {
+    static function getLanguageCodeFromRequest() {
 	/* Take the first thing the browser accepts that we can use */
 	$httpAcceptLanguage = GalleryUtilities::getServerVar('HTTP_ACCEPT_LANGUAGE');
 	if (!empty($httpAcceptLanguage)) {

@@ -26,7 +26,7 @@
  */
 class CoreModule extends GalleryModule {
 
-    function CoreModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('core');
@@ -513,7 +513,7 @@ class CoreModule extends GalleryModule {
      * @return array 'core' => core module version, 'gallery' => gallery version
      * @static
      */
-    function getInstalledVersions() {
+    static function getInstalledVersions() {
 	global $gallery;
 
 	if (GalleryDataCache::containsKey('CoreModule::installedVersions')) {

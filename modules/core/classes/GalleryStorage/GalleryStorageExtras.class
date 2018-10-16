@@ -30,7 +30,7 @@ class GalleryStorageExtras /* the other half of GalleryStorage */ {
     /**
      * @param GalleryStorage $galleryStorage the database storage instance
      */
-    function GalleryStorageExtras(&$galleryStorage) {
+    function __construct(&$galleryStorage) {
 	$this->_gs =& $galleryStorage;
     }
 
@@ -1185,7 +1185,7 @@ class GalleryStorageExtras /* the other half of GalleryStorage */ {
      * @return array the parsed results
      * @static
      */
-    function parseSqlTemplate($sqlData, $dbType) {
+    static function parseSqlTemplate($sqlData, $dbType) {
 	$info = array('table' => array(), 'alter' => array(),
 		      'remove' => array(), 'test' => array());
 	$dbname = $tablename = null;

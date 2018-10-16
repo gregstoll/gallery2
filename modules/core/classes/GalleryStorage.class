@@ -179,7 +179,7 @@ class GalleryStorage {
     /**
      * @param array $config database configuration values
      */
-    function GalleryStorage($config) {
+    function __construct($config) {
 	$this->_type = $config['type'];
 	$this->_username = $config['username'];
 	$this->_password = $config['password'];
@@ -1517,7 +1517,7 @@ class GallerySearchResults {
      */
     var $_mapInfo;
 
-    function GallerySearchResults($recordSet, $fieldNames=null, $mapInfo=null) {
+    function __construct($recordSet, $fieldNames=null, $mapInfo=null) {
 	$this->_recordSet = $recordSet;
 	$this->_fieldNames = $fieldNames;
 	$this->_mapInfo = $mapInfo;
@@ -1579,7 +1579,7 @@ class GallerySqlFragment {
      * @param array $values values.. variable number of parameters must match
      *                        number of ? markers in sql fragment
      */
-    function GallerySqlFragment($fragment, $values) {
+    function __construct($fragment, $values) {
 	$this->_values = func_get_args();
 	$this->_fragment = array_shift($this->_values);
     }
@@ -1669,8 +1669,8 @@ function GalleryAdodbErrorHandler($dbms, $fn, $errno, $errmsg, $p1=false, $p2=fa
  */
 class MySqlStorage extends GalleryStorage {
 
-    function MySqlStorage($config) {
-	$this->GalleryStorage($config);
+    function __construct($config) {
+	parent::__construct($config);
 	if ($this->_type != 'mysql' /* mysqlt and mysqli are transactional */) {
 	    $this->_isTransactional = true;
 	}

@@ -143,7 +143,7 @@ class GalleryUrlGenerator {
      * @return string the current URL path component plus query parameters
      * @static
      */
-    function getCurrentRequestUri() {
+    static function getCurrentRequestUri() {
 	$cacheKey = 'GalleryUrlGenerator::currentRequestUri';
 	if (GalleryDataCache::containsKey($cacheKey)) {
 	    $path = GalleryDataCache::get($cacheKey);
@@ -182,7 +182,7 @@ class GalleryUrlGenerator {
      * @return string the new URL (&amp; separates added params)
      * @static
      */
-    function appendParamsToUrl($url, $params, $addPrefix=true, $htmlEntities=true,
+    static function appendParamsToUrl($url, $params, $addPrefix=true, $htmlEntities=true,
 			       $urlEncode=true) {
 	if (empty($params)) {
 	    return $url;
@@ -254,7 +254,7 @@ class GalleryUrlGenerator {
      * @access private
      * @static
      */
-    function _parseUri($uri) {
+    static function _parseUri($uri) {
 	/*
 	 * baseUri / g2Uri can have the following patterns:
 	 *    - Everything before the two last '/' is interpreted as path
@@ -975,7 +975,7 @@ class GalleryUrlGenerator {
      * @access private
      * @static
      */
-    function _saveLocalUrlMap(&$urlGenerator) {
+    static function _saveLocalUrlMap(&$urlGenerator) {
 	if (!empty($urlGenerator->_localUrlMapDirty)) {
 	    GalleryDataCache::putToDisk(array('type' => 'local-url-map'),
 					$urlGenerator->_localUrlMap);
