@@ -37,7 +37,7 @@ class CombinedJavascriptView extends GalleryView {
     /**
      * @see GalleryView::renderImmediate
      */
-    function renderImmediate() {
+    function renderImmediate($status, $error) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 	$phpVm = $gallery->getPhpVm();

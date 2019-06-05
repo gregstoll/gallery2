@@ -48,7 +48,7 @@ class MigrateModule extends GalleryModule /* and GalleryEventListener */ {
      * We pushed all this code into its own file since we need it very rarely so it doesn't
      * make sense to load it every single time.
      */
-    function upgrade($currentVersion, $statusMonitor) {
+    function upgrade($currentVersion, $statusMonitor=null) {
 	global $gallery;
 	$storage =& $gallery->getStorage();
 

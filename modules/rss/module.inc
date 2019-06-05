@@ -192,7 +192,7 @@ class RssModule extends GalleryModule /* and GalleryEventListener */ {
     /**
      * @see GalleryModule::upgrade
      */
-    function upgrade($currentVersion) {
+    function upgrade($currentVersion, $statusMonitor=null) {
 
 	/**
 	 * @todo add a default to this switch statement and include all historical versions, like

@@ -66,7 +66,7 @@ class SlideshowModule extends GalleryModule {
     /**
      * @see GalleryModule::upgrade
      */
-    function upgrade($currentVersion) {
+    function upgrade($currentVersion, $statusMonitor=null) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 
@@ -116,7 +116,7 @@ class SlideshowModule extends GalleryModule {
     /**
      * @see GalleryModule::getItemLinks
      */
-    function getItemLinks($items, $wantsDetailedLinks, $permissions) {
+    function getItemLinks($items, $wantsDetailedLinks, $permissions, $userId=null) {
 	global $gallery;
 	$urlGenerator =& $gallery->getUrlGenerator();
 

@@ -48,7 +48,7 @@ class PermalinksModule extends GalleryModule /* and GalleryEventListener */ {
     /**
      * @see GalleryModule::upgrade
      */
-    function upgrade($currentVersion) {
+    function upgrade($currentVersion, $statusMonitor=null) {
 	list ($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'permalinks');
 	if ($ret) {
 	    return $ret;

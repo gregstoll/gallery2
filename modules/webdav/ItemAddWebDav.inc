@@ -33,7 +33,7 @@ class ItemAddWebDav extends ItemAddPlugin {
     /**
      * @see ItemAddPlugin::handleRequest
      */
-    function handleRequest($form, &$item) {
+    function handleRequest($form, &$item, &$addController=null) {
 	$requestMethod = strtolower(GalleryUtilities::getServerVar('REQUEST_METHOD'));
 	if ($requestMethod != 'put') {
 	    return array(GalleryCoreApi::error(ERROR_REQUEST_FORGED), null, null);

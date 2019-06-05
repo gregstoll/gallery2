@@ -44,7 +44,7 @@ class ShutterflyModule extends GalleryModule {
     /**
      * @see GalleryModule::upgrade
      */
-    function upgrade($currentVersion) {
+    function upgrade($currentVersion, $statusMonitor=null) {
 	global $gallery;
 	if (!isset($currentVersion)) {
 	    $currentVersion = '0';
@@ -137,7 +137,7 @@ class ShutterflyModule extends GalleryModule {
     /**
      * @see GalleryModule::getItemLinks
      */
-    function getItemLinks($items, $wantsDetailedLinks, $permissions) {
+    function getItemLinks($items, $wantsDetailedLinks, $permissions, $userId=null) {
 	global $gallery;
 	$session =& $gallery->getSession();
 
