@@ -64,7 +64,7 @@ class WebDavModule extends GalleryModule /* and GalleryEventListener */ {
     /**
      * @see GalleryModule::upgrade
      */
-    function upgrade($currentVersion) {
+    function upgrade($currentVersion, $statusMonitor=null) {
 	global $gallery;
 
 	switch ($currentVersion) {

@@ -44,7 +44,7 @@ class QuotasModule extends GalleryModule {
     /**
      * @see GalleryModule::upgrade
      */
-    function upgrade($currentVersion) {
+    function upgrade($currentVersion, $statusMonitor=null) {
 	global $gallery;
 
 	if (!empty($currentVersion) && version_compare($currentVersion, '1.0.1', '<')) {

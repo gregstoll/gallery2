@@ -84,7 +84,7 @@ class GalleryAlbumItem extends GalleryItem {
      * @param int $parentId the id of the parent of this object
      * @return GalleryStatus a status code
      */
-    function create($parentId, $albumName) {
+    function create($parentId=false, $albumName=false, $canContainChildren = false) {
 	global $gallery;
 
 	if (empty($albumName) || empty($parentId)) {
@@ -247,7 +247,7 @@ class GalleryAlbumItem extends GalleryItem {
     /**
      * @see GalleryItem::save()
      */
-    function save($postEvent=true) {
+    function save($postEvent=true, $setAclId=null) {
 	global $gallery;
 	$session =& $gallery->getSession();
 

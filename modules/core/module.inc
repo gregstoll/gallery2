@@ -481,7 +481,7 @@ class CoreModule extends GalleryModule {
      *
      * @see GalleryModule::install
      */
-    function upgrade($currentVersion, $statusMonitor) {
+    function upgrade($currentVersion, $statusMonitor=null) {
 	GalleryCoreApi::requireOnce('modules/core/CoreModuleExtras.inc');
 	$ret = CoreModuleExtras::upgrade($this, $currentVersion, $statusMonitor);
 	if ($ret) {
