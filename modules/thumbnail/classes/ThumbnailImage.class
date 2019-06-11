@@ -137,7 +137,7 @@ class ThumbnailImage extends GalleryFileSystemEntity {
      * @param int $parentId (optional) Id of the parent entity or null. Defaults to null.
      * @return GalleryStatus a status code
      */
-    function create($inputFileName, $mimeType, $targetName=null, $parentId=null) {
+    function create($inputFileName=false, $mimeType=false, $targetName=false, $parentId=null) {
 	GalleryCoreApi::requireOnce('modules/thumbnail/classes/ThumbnailHelper.class');
 	global $gallery;
 	$platform =& $gallery->getPlatform();
@@ -236,8 +236,8 @@ class ThumbnailImage extends GalleryFileSystemEntity {
     /**
      * @see GalleryEntity::save
      */
-    function save($postEvent=true) {
-	return parent::save($postEvent, 0);
+    function save($postEvent=true, $setAclId=0) {
+	return parent::save($postEvent, $setAclId);
     }
 
     /**
