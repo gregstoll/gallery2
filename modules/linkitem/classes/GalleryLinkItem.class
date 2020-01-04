@@ -60,9 +60,10 @@ class GalleryLinkItem extends GalleryItem {
      *
      * @param int $parentId the id of the parent object
      * @param mixed $link the link target: either string url or int id of a GalleryAlbumItem
+     * @param boolean $canContainChildren ignored (for compatibility with base class)
      * @return GalleryStatus a status code
      */
-    function create($parentId, $link) {
+    function create($parentId=null, $link=null, $canContainChildren=false) {
 	if (!isset($parentId) || empty($link)) {
 	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
 	}
