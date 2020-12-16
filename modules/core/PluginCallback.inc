@@ -359,7 +359,7 @@ class PluginCallbackView extends GalleryView {
 		}
 
 		list ($ret, $states[$type][$pluginId]) =
-		    $this->getPluginState($type, $plugin, $status);
+		    PluginCallbackView::getPluginState($type, $plugin, $status);
 		if ($ret) {
 		    return array($ret, null);
 		}
