@@ -1340,7 +1340,6 @@ class soap_transport_http extends nusoap_base {
 		if($this->encoding != '' && function_exists('gzdeflate')){
 			$encoding_headers = "Accept-Encoding: $this->encoding\r\n".
 			"Connection: close\r\n";
-			@set_magic_quotes_runtime(0);
 		} else {
 			$encoding_headers = '';
 		}
@@ -1508,7 +1507,6 @@ class soap_transport_http extends nusoap_base {
 			if(function_exists('gzdeflate')){
 				$encoding_headers = "Accept-Encoding: $this->encoding\r\n".
 				"Connection: close\r\n";
-				@set_magic_quotes_runtime(0);
 			}
 		}
 		

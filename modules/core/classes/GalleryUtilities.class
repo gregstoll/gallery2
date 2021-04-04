@@ -733,13 +733,6 @@ class GalleryUtilities {
 	    /* Unsanitize dangerous html entities */
 	    /* bugs.php.net/bug.php?id=22014 - TODO: remove empty check when min php is 4.3.2+ */
 	    $value = empty($value) ? $value : html_entity_decode($value);
-
-	    /* Redo the damage caused by magic_quotes */
-	    if ($adaptForMagicQuotes) {
-		if (get_magic_quotes_gpc()) {
-		    $value = addslashes($value);
-		}
-	    }
 	}
     }
 
@@ -1589,12 +1582,6 @@ class GalleryUtilities {
 	}
 	/* Urldecode value */
 	$val = trim(urldecode($val));
-	/* Add slashes if magic_quotes_gpc is on */
-	$phpVm = $gallery->getPhpVm();
-	if ($phpVm->get_magic_quotes_gpc()) {
-	    $key = addslashes($key);
-	    $val = addslashes($val);
-	}
 	if (!isset($fixedCookies[$key])) {
 	    $_COOKIE[$key] = $val;
 	    $fixedCookies[$key] = true;

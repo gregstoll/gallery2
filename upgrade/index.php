@@ -37,12 +37,6 @@
 /* Show all errors. */
 @ini_set('display_errors', 1);
 
-/*
- * Disable magic_quotes runtime -- it causes problems with legitimate quotes
- * in our SQL, as well as reading/writing the config.php
- */
-@ini_set('magic_quotes_runtime', 0);
-
 $g2Base = dirname(dirname(__FILE__)) . '/';
 require_once($g2Base . 'upgrade/UpgradeStep.class');
 require_once($g2Base . 'upgrade/StatusTemplate.class');

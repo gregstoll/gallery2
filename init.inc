@@ -29,8 +29,6 @@ require_once(dirname(__FILE__) . '/modules/core/classes/GalleryUtilities.class')
 function GalleryInitFirstPass($params=array()) {
     global $gallery;
 
-    ini_set('magic_quotes_runtime', 0);
-    ini_set('magic_quotes_sybase', 0);
     if (function_exists('date_default_timezone_set')) {
 	/* PHP 5.3 requires a default be set before using any date/time functions */
 	@date_default_timezone_set(date_default_timezone_get());

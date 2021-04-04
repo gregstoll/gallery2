@@ -37,12 +37,6 @@
 /* Show all errors. */
 @ini_set('display_errors', 1);
 
-/*
- * Disable magic_quotes runtime -- it causes problems with legitimate quotes
- * in our SQL, as well as reading/writing the config.php
- */
-@ini_set('magic_quotes_runtime', 0);
-
 $g2Base = dirname(dirname(__FILE__)) . '/';
 require_once($g2Base . 'install/GalleryStub.class');
 require_once($g2Base . 'install/InstallStep.class');
@@ -176,10 +170,6 @@ if ($currentStep->processRequest()) {
 
 function processAutoCompleteRequest() {
     $path = !empty($_GET['path']) ? $_GET['path'] : '';
-    /* Undo the damage caused by magic_quotes */
-    if (get_magic_quotes_gpc()) {
-	$path = stripslashes($path);
-    }
 
     if (is_dir($path)) {
 	$match = '';
