@@ -150,7 +150,7 @@ class GalleryUrlGenerator {
 	} else {
 	    if ($path = GalleryUtilities::getServerVar('REQUEST_URI')) {
 		/* Sometimes, REQUEST_URI has a host part. Remove it. */
-		if ($path{0} != '/') {
+		if ($path[0] != '/') {
 		    $components = parse_url($path);
 		    $path = $components['path'];
 		    $path .= empty($components['query']) ? '' : '?' . $components['query'];
@@ -414,7 +414,7 @@ class GalleryUrlGenerator {
     function makeUrl($path, $forceDirect=false) {
 	if (empty($path)) {
 	    $path = '/';
-	} else if ($path{0} != '/') {
+	} else if ($path[0] != '/') {
 	    $path = '/' . $path;
 	}
 
