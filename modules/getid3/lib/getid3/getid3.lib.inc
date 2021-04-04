@@ -33,9 +33,6 @@ class getid3_lib
 	}
 
 	function SafeStripSlashes($text) {
-		if (get_magic_quotes_gpc()) {
-			return stripslashes($text);
-		}
 		return $text;
 	}
 
