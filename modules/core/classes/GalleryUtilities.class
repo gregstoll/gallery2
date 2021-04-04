@@ -104,9 +104,6 @@ class GalleryUtilities {
 	     * those are escaped at this time.  There's gotta be a better way to handle this.
 	     */
 	    $file = $_FILES[$key];
-	    if (get_magic_quotes_gpc()) {
-		$file['tmp_name'] = addslashes($file['tmp_name']);
-	    }
 
 	    /* Perform any necessary transformations on our values */
 	    GalleryUtilities::sanitizeInputValues($file);
@@ -137,11 +134,6 @@ class GalleryUtilities {
 	     * those are escaped at this time.  There's gotta be a better way to handle this.
 	     */
 	    $postForm = $_FILES[$key];
-	    if (get_magic_quotes_gpc()) {
-		foreach ($postForm['tmp_name'] as $i => $unused) {
-		    $postForm['tmp_name'][$i] = addslashes($postForm['tmp_name'][$i]);
-		}
-	    }
 	    $form = GalleryUtilities::array_merge_replace($form, $postForm);
 	}
 
@@ -723,13 +715,6 @@ class GalleryUtilities {
 	    $value = str_replace(array('&', '"', '<', '>'),
 				 array('&amp;', '&quot;', '&lt;', '&gt;'),
 				 $value);
-
-	    /* Undo the damage caused by magic_quotes */
-	    if ($adaptForMagicQuotes) {
-		if (get_magic_quotes_gpc()) {
-		    $value = stripslashes($value);
-		}
-	    }
 	}
     }
 
