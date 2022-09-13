@@ -141,7 +141,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code,
      *               object an instance
      */
-    function newFactoryInstanceByHint($classType, $hints) {
+    static function newFactoryInstanceByHint($classType, $hints) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFactoryHelper_simple.class');
 	return GalleryFactoryHelper_simple::newInstanceByHint($classType, $hints);
@@ -155,7 +155,7 @@ class GalleryCoreApi {
      * @return GalleryStatus a status code
      *         object the instance
      */
-    function newFactoryInstance($classType, $className=null) {
+    static function newFactoryInstance($classType, $className=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFactoryHelper_simple.class');
 	return GalleryFactoryHelper_simple::newInstance($classType, $className);
@@ -169,7 +169,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code,
      *               object an instance
      */
-    function newFactoryInstanceById($classType, $id) {
+    static function newFactoryInstanceById($classType, $id) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFactoryHelper_simple.class');
 	return GalleryFactoryHelper_simple::newInstanceById($classType, $id);
