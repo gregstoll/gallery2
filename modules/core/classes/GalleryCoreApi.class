@@ -182,7 +182,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (id => className, ...)
      */
-    function getAllFactoryImplementationIds($classType) {
+    static function getAllFactoryImplementationIds($classType) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFactoryHelper_simple.class');
 	return GalleryFactoryHelper_simple::getAllImplementationIds($classType);
@@ -194,7 +194,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (id => className, ...)
      */
-    function getAllFactoryImplementationIdsWithHint($classType, $hint) {
+    static function getAllFactoryImplementationIdsWithHint($classType, $hint) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFactoryHelper_medium.class');
 	return GalleryFactoryHelper_medium::getAllImplementationIdsWithHint($classType, $hint);
@@ -208,7 +208,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus
      *               array Hints for the specified implementation id and class type
      */
-    function getFactoryDefinitionHints($classType, $implId) {
+    static function getFactoryDefinitionHints($classType, $implId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFactoryHelper_medium.class');
 	return GalleryFactoryHelper_medium::getFactoryDefinitionHints($classType, $implId);
@@ -222,7 +222,7 @@ class GalleryCoreApi {
      * @param mixed $hints array of hints to try (in order) or single string hint (eg. 'image/jpeg')
      * @return GalleryStatus
      */
-    function updateFactoryDefinitionHints($classType, $implId, $hints) {
+    static function updateFactoryDefinitionHints($classType, $implId, $hints) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFactoryHelper_medium.class');
 	return
@@ -2198,7 +2198,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (toolkitId=>priority, ..)
      */
-    function getRedundantToolkitPriorities() {
+    static function getRedundantToolkitPriorities() {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_medium.class');
 	return GalleryToolkitHelper_medium::getRedundantPriorities();
@@ -2209,7 +2209,7 @@ class GalleryCoreApi {
      * @param string $eventName the name of the event, e.g. GalleryEntity::save
      * @return GalleryEvent an event with the given name
      */
-    function newEvent($eventName) {
+    static function newEvent($eventName) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryEventHelper_simple.class');
 	return GalleryEventHelper_simple::newEvent($eventName);
     }

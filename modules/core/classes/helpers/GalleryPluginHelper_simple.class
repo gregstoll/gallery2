@@ -340,7 +340,7 @@ class GalleryPluginHelper_simple {
     /**
      * @see GalleryCoreApi::fetchPluginStatus
      */
-    function fetchPluginStatus($pluginType, $ignoreCache=false) {
+    static function fetchPluginStatus($pluginType, $ignoreCache=false) {
 	global $gallery;
 
 	$cacheKey = "GalleryPluginHelper::fetchPluginStatus($pluginType)";
@@ -388,7 +388,7 @@ class GalleryPluginHelper_simple {
 		$pluginBasePath = GalleryCoreApi::getCodeBasePath($pluginsDir);
 		if ($dir = $platform->opendir($pluginBasePath)) {
 		    while ($pluginId = $platform->readdir($dir)) {
-			if ($pluginId{0} == '.') {
+			if ($pluginId[0] == '.') {
 			    continue;
 			}
 			if (!$platform->is_dir($pluginBasePath . $pluginId)) {
@@ -452,7 +452,7 @@ class GalleryPluginHelper_simple {
     /**
      * @see GalleryCoreApi::fetchPluginList
      */
-    function fetchPluginList($pluginType) {
+    static function fetchPluginList($pluginType) {
 	global $gallery;
 
 	if (empty($pluginType)) {

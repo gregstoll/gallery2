@@ -31,7 +31,7 @@ class GalleryEventHelper_simple {
     /**
      * @see GalleryCoreApi::newEvent
      */
-    function newEvent($eventName) {
+    static function newEvent($eventName) {
 	GalleryCoreApi::requireOnce('modules/core/classes/GalleryEvent.class');
 	$event = new GalleryEvent();
 	$event->setEventName($eventName);
@@ -41,7 +41,7 @@ class GalleryEventHelper_simple {
     /**
      * @see GalleryCoreApi::postEvent
      */
-    function postEvent($event) {
+    static function postEvent($event) {
 	list ($ret, $eventListeners) = GalleryCoreApi::getAllFactoryImplementationIdsWithHint(
 	    'GalleryEventListener', $event->getEventName());
 	if ($ret) {
