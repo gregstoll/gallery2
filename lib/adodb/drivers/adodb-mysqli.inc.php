@@ -881,7 +881,7 @@ class ADORecordSet_mysqli extends ADORecordSet{
 	{
 		if ($this->EOF) return false;
 		$this->_currentRow++;
-		$this->fields = @mysqli_fetch_array($this->_queryID,$this->fetchMode);
+		$this->fields = @mysqli_fetch_array($this->_queryID,$this->fetchMode ? $this->fetchMode : MYSQLI_BOTH);
 		
 		if (is_array($this->fields)) return true;
 		$this->EOF = true;
@@ -890,7 +890,7 @@ class ADORecordSet_mysqli extends ADORecordSet{
 	
 	function _fetch()
 	{
-		$this->fields = mysqli_fetch_array($this->_queryID,$this->fetchMode);  
+		$this->fields = mysqli_fetch_array($this->_queryID,$this->fetchMode ? $this->fetchMode : MYSQLI_BOTH);  
 	  	return is_array($this->fields);
 	}
 	

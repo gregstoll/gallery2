@@ -40,7 +40,7 @@ class HttpAuthHelper /* extends HttpAuthInterface_1_0 */ {
      * @return array GalleryStatus a status code
      *               int HTTP auth status code
      */
-    function checkConfiguration() {
+    static function checkConfiguration() {
 	global $gallery;
 	$urlGenerator =& $gallery->getUrlGenerator();
 
@@ -108,7 +108,7 @@ class HttpAuthHelper /* extends HttpAuthInterface_1_0 */ {
      * @return array GalleryStatus a status code
      *               boolean true if Gallery can access HTTP usernames and passwords
      */
-    function checkHttpAuth() {
+    static function checkHttpAuth() {
 	global $gallery;
 	$urlGenerator =& $gallery->getUrlGenerator();
 
@@ -144,7 +144,7 @@ class HttpAuthHelper /* extends HttpAuthInterface_1_0 */ {
      *               string HTTP username
      *               string HTTP password
      */
-    function getHttpAuth() {
+    static function getHttpAuth() {
 	$authtype = GalleryUtilities::getServerVar('AUTH_TYPE');
 	$username = GalleryUtilities::getServerVar('PHP_AUTH_USER');
 	$password = GalleryUtilities::getServerVar('PHP_AUTH_PW');
@@ -178,7 +178,7 @@ class HttpAuthHelper /* extends HttpAuthInterface_1_0 */ {
      * @return array GalleryStatus a status code
      *               GalleryUser the active user or null
      */
-    function getUser($authtype, $username) {
+    static function getUser($authtype, $username) {
 	list ($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'httpauth');
 	if ($ret) {
 	    return array($ret, null);
@@ -227,7 +227,7 @@ class HttpAuthHelper /* extends HttpAuthInterface_1_0 */ {
      * @param GalleryUser $authenticatedUser user authenticated for this request
      * @return GalleryStatus a status code
      */
-    function regenerateSessionIfNecessary($authenticatedUser) {
+    static function regenerateSessionIfNecessary($authenticatedUser) {
 	global $gallery;
 	$session =& $gallery->getSession();
 
@@ -249,7 +249,7 @@ class HttpAuthHelper /* extends HttpAuthInterface_1_0 */ {
      * @param string $username
      * @param string $password
      */
-    function addHttpAuthToUrl($url, $username, $password) {
+    static function addHttpAuthToUrl($url, $username, $password) {
 	$components = parse_url($url);
 	$components['user'] = $username;
 	$components['pass'] = $password;
@@ -260,7 +260,7 @@ class HttpAuthHelper /* extends HttpAuthInterface_1_0 */ {
      * Removes user:pass from the given URL.
      * @param string $url An absolute URL
      */
-    function stripHttpAuthFromUrl($url) {
+    static function stripHttpAuthFromUrl($url) {
 	$components = parse_url($url);
 	unset($components['user']);
 	unset($components['pass']);
@@ -270,7 +270,7 @@ class HttpAuthHelper /* extends HttpAuthInterface_1_0 */ {
     /**
      * @see HttpAuthInterface_1_0::getConfiguration
      */
-    function getConfiguration() {
+    static function getConfiguration() {
 	list ($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'httpauth');
 	if ($ret) {
 	    return array($ret, null, null, null);
@@ -282,7 +282,7 @@ class HttpAuthHelper /* extends HttpAuthInterface_1_0 */ {
     /**
      * @see HttpAuthInterface_1_0::setConfiguration
      */
-    function setConfiguration($enableHttpAuth, $enableServerAuth=false, $useGlobally=false) {
+    static function setConfiguration($enableHttpAuth, $enableServerAuth=false, $useGlobally=false) {
 	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'httpauth');
 	if ($ret) {
 	    return $ret;
@@ -312,7 +312,7 @@ class HttpAuthHelper /* extends HttpAuthInterface_1_0 */ {
     /**
      * @see HttpAuthInterface_1_0::requestAuthentication
      */
-    function requestAuthentication($ignoreUseGloballyFlag=true) {
+    static function requestAuthentication($ignoreUseGloballyFlag=true) {
 	list ($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'httpauth');
 	if ($ret) {
 	    return $ret;
@@ -338,7 +338,7 @@ class HttpAuthHelper /* extends HttpAuthInterface_1_0 */ {
      * @param array $components URL components in the format of parse_url
      * @access private
      */
-    function _buildUrl($components) {
+    static function _buildUrl($components) {
 	$url = '';
 	if (!empty($components['scheme']) && !empty($components['host'])) {
 	    $auth = '';
