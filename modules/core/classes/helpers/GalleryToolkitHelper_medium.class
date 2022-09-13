@@ -35,7 +35,7 @@ class GalleryToolkitHelper_medium {
     /**
      * @see GalleryCoreApi::registerToolkitOperation
      */
-    function registerOperation($toolkitId, $mimeTypes, $operationName,
+    static function registerOperation($toolkitId, $mimeTypes, $operationName,
 			       $parameterTypesArray, $description,
 			       $outputMimeType='', $priority=5) {
 	global $gallery;
@@ -130,7 +130,7 @@ class GalleryToolkitHelper_medium {
     /**
      * @see GalleryCoreApi::registerToolkitProperty
      */
-    function registerProperty($toolkitId, $mimeTypes, $propertyName, $type, $description) {
+    static function registerProperty($toolkitId, $mimeTypes, $propertyName, $type, $description) {
 	global $gallery;
 
 	/* Check to see if the property name exists, but with a different unique id. */
@@ -184,7 +184,7 @@ class GalleryToolkitHelper_medium {
     /**
      * @see GalleryCoreApi::unregisterToolkitOperation
      */
-    function unregisterOperation($toolkitId, $operationName, $mimeTypes=array()) {
+    static function unregisterOperation($toolkitId, $operationName, $mimeTypes=array()) {
 	$entry = array('toolkitId' => $toolkitId, 'operationName' => $operationName);
 	if (!empty($mimeTypes)) {
 	    $entry['mimeType'] = $mimeTypes;
@@ -203,7 +203,7 @@ class GalleryToolkitHelper_medium {
     /**
      * @see GalleryCoreApi::unregisterToolkit
      */
-    function unregisterToolkit($toolkitId) {
+    static function unregisterToolkit($toolkitId) {
 	global $gallery;
 
 	/* Remove our toolkit/operation mappings */
@@ -292,7 +292,7 @@ class GalleryToolkitHelper_medium {
     /**
      * @see GalleryCoreApi::unregisterToolkitsByModuleId
      */
-    function unregisterToolkitsByModuleId($moduleId) {
+    static function unregisterToolkitsByModuleId($moduleId) {
 	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryFactoryMap',
 	    array('implId'), array('implModuleId' => $moduleId));
 	if ($ret) {
@@ -318,7 +318,7 @@ class GalleryToolkitHelper_medium {
      * @see GalleryCoreApi::getToolkitOperations
      * @todo use priorities for choosing the correct toolkit
      */
-    function getOperations($mimeType) {
+    static function getOperations($mimeType) {
 	global $gallery;
 
 	$cacheKey = "GalleryToolkitHelper::getOperations($mimeType)";
@@ -381,7 +381,7 @@ class GalleryToolkitHelper_medium {
      * @see GalleryCoreApi::getToolkitProperties
      * @todo use priorities for choosing the correct toolkit
      */
-    function getProperties($mimeType) {
+    static function getProperties($mimeType) {
 	global $gallery;
 
 	$cacheKey = "GalleryToolkitHelper::getProperties($mimeType)";
@@ -423,7 +423,7 @@ class GalleryToolkitHelper_medium {
     /**
      * @see GalleryCoreApi::getToolkitOperationMimeTypes
      */
-    function getOperationMimeTypes($operationName) {
+    static function getOperationMimeTypes($operationName) {
 	global $gallery;
 
 	$cacheKey = "GalleryToolkitHelper::getOperationMimeTypes($operationName)";
@@ -455,7 +455,7 @@ class GalleryToolkitHelper_medium {
     /**
      * @see GalleryCoreApi::getRedundantToolkitPriorities
      */
-    function getRedundantPriorities() {
+    static function getRedundantPriorities() {
 	global $gallery;
 
 	$cacheKey = "GalleryToolkitHelper::getRedundantPriorities()";
@@ -499,7 +499,7 @@ class GalleryToolkitHelper_medium {
     /**
      * @see GalleryCoreApi::isSupportedOperationSequence
      */
-    function isSupportedOperationSequence($mimeType, $operations) {
+    static function isSupportedOperationSequence($mimeType, $operations) {
 
 	$isSupported = true;
 	foreach (explode(';', $operations) as $operation) {
@@ -528,7 +528,7 @@ class GalleryToolkitHelper_medium {
     /**
      * @see GalleryCoreApi::makeSupportedViewableOperationSequence
      */
-    function makeSupportedViewableOperationSequence($mimeType, $operations,
+    static function makeSupportedViewableOperationSequence($mimeType, $operations,
 						    $prependConversion=true) {
 	if (empty($operations)) {
 	    $isSupported = true;
@@ -598,7 +598,7 @@ class GalleryToolkitHelper_medium {
     /**
      * @see GalleryCoreApi::estimateDerivativeDimensions
      */
-    function estimateDerivativeDimensions(&$derivative, $source) {
+    static function estimateDerivativeDimensions(&$derivative, $source) {
 	if (preg_match('/^(thumbnail|scale|resize)\|/',
 		       $derivative->getDerivativeOperations(), $matches)) {
 	    if (!empty($matches[1])) {

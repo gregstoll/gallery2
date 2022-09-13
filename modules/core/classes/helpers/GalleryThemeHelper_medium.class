@@ -32,7 +32,7 @@ class GalleryThemeHelper_medium {
     /**
      * @see GalleryCoreApi::loadThemeSettingsForm
      */
-    function loadThemeSettingsForm($themeId, $itemId, &$template, &$form) {
+    static function loadThemeSettingsForm($themeId, $itemId, &$template, &$form) {
 	$data = array();
 	if (empty($themeId)) {
 	    list ($ret, $themeId) =
@@ -115,7 +115,7 @@ class GalleryThemeHelper_medium {
     /**
      * @see GalleryCoreApi::loadAvailableBlocks
      */
-    function loadAvailableBlocks($getInactive=false) {
+    static function loadAvailableBlocks($getInactive=false) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 
@@ -150,7 +150,7 @@ class GalleryThemeHelper_medium {
     /**
      * @see GalleryCoreApi::handleThemeSettingsRequest
      */
-    function handleThemeSettingsRequest($themeId, $itemId, $form) {
+    static function handleThemeSettingsRequest($themeId, $itemId, $form) {
 	if (empty($themeId)) {
 	    list ($ret, $themeId) =
 		GalleryCoreApi::getPluginParameter('module', 'core', 'default.theme');

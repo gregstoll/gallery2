@@ -33,7 +33,7 @@ class MaintenanceHelper_simple {
      * @return array GalleryStatus a status code
      *               array(taskId => MaintenanceTask, ...)
      */
-    function fetchTasks() {
+    static function fetchTasks() {
 	/* Get all the option plugins */
 	list ($ret, $allTaskIds) =
 	    GalleryCoreApi::getAllFactoryImplementationIds('MaintenanceTask');
@@ -64,7 +64,7 @@ class MaintenanceHelper_simple {
      *                     success => bool,
      *                     details => string)
      */
-    function fetchLastRun($taskId) {
+    static function fetchLastRun($taskId) {
 	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('GalleryMaintenanceMap',
 	    array('runId', 'timestamp', 'success', 'details'), array('taskId' => $taskId),
 	    array('orderBy' => array('timestamp' => ORDER_DESCENDING),
@@ -93,7 +93,7 @@ class MaintenanceHelper_simple {
      * @param array $details string task details
      * @return GalleryStatus a status code
      */
-    function addRun($taskId, $timestamp, $success, $details) {
+    static function addRun($taskId, $timestamp, $success, $details) {
 	global $gallery;
 
 	$storage =& $gallery->getStorage();
@@ -119,7 +119,7 @@ class MaintenanceHelper_simple {
     /**
      * @see GalleryCoreApi::setMaintenanceMode
      */
-    function setMaintenanceMode($mode) {
+    static function setMaintenanceMode($mode) {
 	global $gallery;
 
 	$currentMode = $gallery->getConfig('mode.maintenance');

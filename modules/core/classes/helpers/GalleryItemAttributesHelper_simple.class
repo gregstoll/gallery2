@@ -31,7 +31,7 @@ class GalleryItemAttributesHelper_simple {
     /**
      * @see GalleryCoreApi::incrementItemViewCount
      */
-    function incrementViewCount($itemId, $step=1) {
+    static function incrementViewCount($itemId, $step=1) {
 	global $gallery;
 	$session =& $gallery->getSession();
 
@@ -97,7 +97,7 @@ class GalleryItemAttributesHelper_simple {
     /**
      * @see GalleryCoreApi::fetchItemViewCount
      */
-    function fetchViewCount($itemId) {
+    static function fetchViewCount($itemId) {
 	list ($ret, $viewCounts) =
 	    GalleryItemAttributesHelper_simple::fetchViewCounts(array($itemId));
 	if ($ret) {
@@ -110,7 +110,7 @@ class GalleryItemAttributesHelper_simple {
     /**
      * @see GalleryCoreApi::fetchItemViewCounts
      */
-    function fetchViewCounts($itemIds) {
+    static function fetchViewCounts($itemIds) {
 	foreach ($itemIds as $idx => $id) {
 	    $itemIds[$idx] = (int)$id;
 	}
@@ -135,7 +135,7 @@ class GalleryItemAttributesHelper_simple {
     /**
      * @see GalleryCoreApi::fetchParentSequence
      */
-    function fetchParentSequence($itemId, $filterBreadcrumb=false) {
+    static function fetchParentSequence($itemId, $filterBreadcrumb=false) {
 	global $gallery;
 	if ($filterBreadcrumb && ($filter = $gallery->getConfig('breadcrumbRootId'))
 		&& $itemId == $filter) {

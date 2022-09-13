@@ -190,7 +190,7 @@ class GalleryPluginHelper_simple {
     /**
      * @see GalleryCoreApi::isPluginCompatibleWithApis
      */
-    function isPluginCompatibleWithApis($plugin) {
+    static function isPluginCompatibleWithApis($plugin) {
 	$pluginType = $plugin->getPluginType();
 	return GalleryUtilities::isCompatibleWithApi(
 	    $plugin->getRequiredCoreApi(), GalleryCoreApi::getApiVersion()) &&
@@ -235,7 +235,7 @@ class GalleryPluginHelper_simple {
     /**
      * @see GalleryCoreApi::fetchAllPluginParameters
      */
-    function fetchAllParameters($pluginType, $pluginId, $itemId=0, $ignoreDiskCache=false) {
+    static function fetchAllParameters($pluginType, $pluginId, $itemId=0, $ignoreDiskCache=false) {
 	/* Convert null to 0, just in case */
 	if ($itemId == null) {
 	    $itemId = 0;

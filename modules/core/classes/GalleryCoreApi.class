@@ -87,7 +87,7 @@ class GalleryCoreApi {
      * - convert the contents of GALLERY_PERMISSION_SESSION_KEY to array indices instead of array
      *   of values.
      */
-    function getApiVersion() {
+    static function getApiVersion() {
 	return array(7, 54);
     }
 
@@ -104,7 +104,7 @@ class GalleryCoreApi {
      *              implementation (eg. array('image/jpeg', 'image/gif'))
      * @param int $orderWeight the priority of this implementation (lower number == higher priority)
      */
-    function registerFactoryImplementation($classType, $className, $implId, $implPath,
+    static function registerFactoryImplementation($classType, $className, $implId, $implPath,
 					   $implModuleId, $hints, $orderWeight=5) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFactoryHelper_medium.class');
@@ -125,7 +125,7 @@ class GalleryCoreApi {
      *              implementation (eg. array('image/jpeg', 'image/gif'))
      * @return GalleryStatus
      */
-    function registerFactoryImplementationForRequest($classType, $className, $implId, $implPath,
+    static function registerFactoryImplementationForRequest($classType, $className, $implId, $implPath,
 					      $implModuleId, $hints) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFactoryHelper_medium.class');
@@ -235,7 +235,7 @@ class GalleryCoreApi {
      * @param string $moduleId an id (eg. 'netpbm')
      * @return GalleryStatus a status code
      */
-    function unregisterFactoryImplementationsByModuleId($moduleId) {
+    static function unregisterFactoryImplementationsByModuleId($moduleId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFactoryHelper_medium.class');
 	return GalleryFactoryHelper_medium::unregisterImplementationsByModuleId($moduleId);
@@ -248,7 +248,7 @@ class GalleryCoreApi {
      * @param string $implId an implementation id (eg. 'NetPBM')
      * @return GalleryStatus a status code
      */
-    function unregisterFactoryImplementation($classType, $implId) {
+    static function unregisterFactoryImplementation($classType, $implId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFactoryHelper_medium.class');
 	return GalleryFactoryHelper_medium::unregisterImplementation($classType, $implId);
@@ -279,7 +279,7 @@ class GalleryCoreApi {
      * @param GalleryPlugin $plugin
      * @return boolean true if the plugin is compatible
      */
-    function isPluginCompatibleWithApis($plugin) {
+    static function isPluginCompatibleWithApis($plugin) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_simple.class');
 	return GalleryPluginHelper_simple::isPluginCompatibleWithApis($plugin);
@@ -311,7 +311,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (parameterName => parameterValue)
      */
-    function fetchAllPluginParameters($pluginType, $pluginId, $itemId=0) {
+    static function fetchAllPluginParameters($pluginType, $pluginId, $itemId=0) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_simple.class');
 	return GalleryPluginHelper_simple::fetchAllParameters($pluginType, $pluginId, $itemId);
@@ -323,7 +323,7 @@ class GalleryCoreApi {
      * @param int $itemId the id of the GalleryItem
      * @return GalleryStatus a status code
      */
-    function removePluginParametersForItemId($itemId) {
+    static function removePluginParametersForItemId($itemId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_medium.class');
 	return GalleryPluginHelper_medium::removeParametersForItemId($itemId);
@@ -338,7 +338,7 @@ class GalleryCoreApi {
      * @param mixed $parameterValue the value to be matched
      * @return GalleryStatus a status code
      */
-    function removePluginParameterByValue($pluginType, $pluginId, $parameterName, $parameterValue) {
+    static function removePluginParameterByValue($pluginType, $pluginId, $parameterName, $parameterValue) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_medium.class');
 	return GalleryPluginHelper_medium::removeParameterByValue($pluginType, $pluginId,
@@ -390,7 +390,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array redirect info for error page (empty for success)
      */
-    function activatePlugin($pluginType, $pluginId) {
+    static function activatePlugin($pluginType, $pluginId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_medium.class');
 	return GalleryPluginHelper_medium::activate($pluginType, $pluginId);
@@ -404,7 +404,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array redirect info for error page (empty for success)
      */
-    function deactivatePlugin($pluginType, $pluginId) {
+    static function deactivatePlugin($pluginType, $pluginId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_medium.class');
 	return GalleryPluginHelper_medium::deactivate($pluginType, $pluginId);
@@ -417,7 +417,7 @@ class GalleryCoreApi {
      * @param string $pluginId
      * @return GalleryStatus a status code
      */
-    function removePlugin($pluginType, $pluginId) {
+    static function removePlugin($pluginType, $pluginId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_medium.class');
 	return GalleryPluginHelper_medium::removePlugin($pluginType, $pluginId);
@@ -430,7 +430,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               string plugin ids
      */
-    function getAllPluginIds($pluginType) {
+    static function getAllPluginIds($pluginType) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_medium.class');
 	return GalleryPluginHelper_medium::getAllPluginIds($pluginType);
@@ -445,7 +445,7 @@ class GalleryCoreApi {
      * @param int $itemId the id of item (or null for a global setting)
      * @return GalleryStatus a status code
      */
-    function removePluginParameter($pluginType, $pluginId, $parameterName, $itemId=0) {
+    static function removePluginParameter($pluginType, $pluginId, $parameterName, $itemId=0) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_medium.class');
 	return GalleryPluginHelper_medium::removeParameter($pluginType, $pluginId,
@@ -459,7 +459,7 @@ class GalleryCoreApi {
      * @param string $pluginId
      * @return GalleryStatus a status code
      */
-    function removeAllPluginParameters($pluginType, $pluginId) {
+    static function removeAllPluginParameters($pluginType, $pluginId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPluginHelper_medium.class');
 	return GalleryPluginHelper_medium::removeAllParameters($pluginType, $pluginId);
@@ -494,7 +494,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array int access list ids
      */
-    function fetchAccessListIds($permission, $userId, $sessionPermissions=true) {
+    static function fetchAccessListIds($permission, $userId, $sessionPermissions=true) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_simple.class');
 	return GalleryPermissionHelper_simple::fetchAccessListIds(
@@ -506,7 +506,7 @@ class GalleryCoreApi {
      *
      * @return GalleryStatus a status code
      */
-    function maybeCompactAccessLists() {
+    static function maybeCompactAccessLists() {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::maybeCompactAccessLists();
@@ -518,7 +518,7 @@ class GalleryCoreApi {
      *
      * @return GalleryStatus a status code
      */
-    function compactAccessLists() {
+    static function compactAccessLists() {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::compactAccessLists();
@@ -531,7 +531,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code,
      *               int accessListId the associated item's list
      */
-    function fetchAccessListId($itemId) {
+    static function fetchAccessListId($itemId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::fetchAccessListId($itemId);
@@ -545,7 +545,7 @@ class GalleryCoreApi {
      * @return GalleryStatus success if the user has permission,
      *                              ERROR_PERMISSION_DENIED if not.
      */
-    function assertHasItemPermission($itemId, $permission) {
+    static function assertHasItemPermission($itemId, $permission) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryUserHelper_simple.class');
 	return GalleryUserHelper_simple::assertHasItemPermission($itemId, $permission);
     }
@@ -560,7 +560,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               boolean true if yes
      */
-    function hasItemPermission($itemId, $permission, $userId=null, $sessionPermissions=true) {
+    static function hasItemPermission($itemId, $permission, $userId=null, $sessionPermissions=true) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryUserHelper_simple.class');
 	return GalleryUserHelper_simple::hasItemPermission(
 	    $itemId, $permission, $userId, $sessionPermissions);
@@ -577,7 +577,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (username, username, ...)
      */
-    function fetchUsernames($count=null, $offset=null, $substring=null) {
+    static function fetchUsernames($count=null, $offset=null, $substring=null) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryUserHelper_medium.class');
 	return GalleryUserHelper_medium::fetchUsernames($count, $offset, $substring);
     }
@@ -589,7 +589,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int number of users
      */
-    function fetchUserCount($substring=null, $groupId=null) {
+    static function fetchUserCount($substring=null, $groupId=null) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryUserHelper_medium.class');
 	return GalleryUserHelper_medium::fetchUserCount($substring, $groupId);
     }
@@ -601,7 +601,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               GalleryUser a user
      */
-    function fetchUserByUserName($userName=null) {
+    static function fetchUserByUserName($userName=null) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryUserHelper_medium.class');
 	return GalleryUserHelper_medium::fetchUserByUserName($userName);
     }
@@ -612,7 +612,7 @@ class GalleryCoreApi {
      * @return GalleryStatus success if the user is an administrator
      *                              ERROR_PERMISSION_DENIED if not.
      */
-    function assertUserIsSiteAdministrator() {
+    static function assertUserIsSiteAdministrator() {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryUserHelper_medium.class');
 	return GalleryUserHelper_medium::assertSiteAdministrator();
     }
@@ -624,7 +624,7 @@ class GalleryCoreApi {
      * @param int $userId
      * @return array GalleryStatus a status code
      */
-    function deleteUserItems($userId) {
+    static function deleteUserItems($userId) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryUserHelper_medium.class');
 	return GalleryUserHelper_medium::deleteUserItems($userId);
     }
@@ -639,7 +639,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (groupname, groupname, ...)
      */
-    function fetchGroupNames($count=null, $offset=null, $substring=null) {
+    static function fetchGroupNames($count=null, $offset=null, $substring=null) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryGroupHelper_simple.class');
 	return GalleryGroupHelper_simple::fetchGroupNames($count, $offset, $substring);
     }
@@ -651,7 +651,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int group count
      */
-    function fetchGroupCount($substring=null) {
+    static function fetchGroupCount($substring=null) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryGroupHelper_simple.class');
 	return GalleryGroupHelper_simple::fetchGroupCount($substring);
     }
@@ -663,7 +663,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               GalleryGroup a group
      */
-    function fetchGroupByGroupName($groupName=null) {
+    static function fetchGroupByGroupName($groupName=null) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryGroupHelper_simple.class');
 	return GalleryGroupHelper_simple::fetchGroupByGroupName($groupName);
     }
@@ -675,7 +675,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               integer bits
      */
-    function convertPermissionIdsToBits($permissionIds) {
+    static function convertPermissionIdsToBits($permissionIds) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_simple.class');
 	return GalleryPermissionHelper_simple::convertIdsToBits($permissionIds);
@@ -689,7 +689,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (bits, bits, bits)
      */
-    function convertPermissionBitsToIds($permissionBits, $compress=false) {
+    static function convertPermissionBitsToIds($permissionBits, $compress=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_simple.class');
 	return GalleryPermissionHelper_simple::convertBitsToIds($permissionBits, $compress);
@@ -704,7 +704,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (id => array(array(permission.id => 1, ...), ...)
      */
-    function fetchPermissionsForItems($itemIds, $userId=null, $sessionPermissions=true) {
+    static function fetchPermissionsForItems($itemIds, $userId=null, $sessionPermissions=true) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_simple.class');
 	return GalleryPermissionHelper_simple::fetchPermissionsForItems(
@@ -720,7 +720,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (perm1, perm2)
      */
-    function getPermissions($itemId, $userId=null, $sessionPermissions=true) {
+    static function getPermissions($itemId, $userId=null, $sessionPermissions=true) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_simple.class');
 	return GalleryPermissionHelper_simple::getPermissions(
@@ -738,7 +738,7 @@ class GalleryCoreApi {
      * @deprecated Use fetchPermissionsForItems instead.
      * @return GalleryStatus a status code
      */
-    function studyPermissions($itemIds, $userId=null, $sessionPermissions=true) {
+    static function studyPermissions($itemIds, $userId=null, $sessionPermissions=true) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_simple.class');
 	return GalleryPermissionHelper_simple::studyPermissions(
@@ -754,7 +754,7 @@ class GalleryCoreApi {
      * @param boolean $applyToChildren (optional) whether or not this call applies to child items
      * @return GalleryStatus a status code
      */
-    function addUserPermission($itemId, $userId, $permission, $applyToChildren=false) {
+    static function addUserPermission($itemId, $userId, $permission, $applyToChildren=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::addUserPermission($itemId, $userId,
@@ -767,7 +767,7 @@ class GalleryCoreApi {
      * @param int $entityId The permission identifier (e.g. a user, group, or entity id) which 
      *			    grants one or more permissions to one or more items
      */
-    function addPermissionToSession($entityId) {
+    static function addPermissionToSession($entityId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_simple.class');
 	return GalleryPermissionHelper_simple::addPermissionToSession($entityId);
@@ -782,7 +782,7 @@ class GalleryCoreApi {
      * @param boolean $applyToChildren (optional) whether or not this call applies to child items
      * @return GalleryStatus a status code
      */
-    function addGroupPermission($itemId, $groupId, $permission, $applyToChildren=false) {
+    static function addGroupPermission($itemId, $groupId, $permission, $applyToChildren=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::addGroupPermission($itemId, $groupId,
@@ -800,7 +800,7 @@ class GalleryCoreApi {
      * @param boolean $applyToChildren (optional) whether or not this call applies to child items
      * @return GalleryStatus a status code
      */
-    function addEntityPermission($itemId, $entityId, $permission, $applyToChildren=false) {
+    static function addEntityPermission($itemId, $entityId, $permission, $applyToChildren=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::addEntityPermission($itemId, $entityId,
@@ -816,7 +816,7 @@ class GalleryCoreApi {
      * @param boolean $applyToChildren (optional) whether or not this call applies to child items
      * @return GalleryStatus a status code
      */
-    function removeUserPermission($itemId, $userId, $permission, $applyToChildren=false) {
+    static function removeUserPermission($itemId, $userId, $permission, $applyToChildren=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::removeUserPermission(
@@ -832,7 +832,7 @@ class GalleryCoreApi {
      * @param boolean $applyToChildren (optional) whether or not this call applies to child items
      * @return GalleryStatus a status code
      */
-    function removeGroupPermission($itemId, $groupId, $permission, $applyToChildren=false) {
+    static function removeGroupPermission($itemId, $groupId, $permission, $applyToChildren=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::removeGroupPermission(
@@ -848,7 +848,7 @@ class GalleryCoreApi {
      * @param boolean $applyToChildren (optional) whether or not this call applies to child items
      * @return GalleryStatus a status code
      */
-    function removeEntityPermission($itemId, $entityId, $permission, $applyToChildren=false) {
+    static function removeEntityPermission($itemId, $entityId, $permission, $applyToChildren=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::removeEntityPermission(
@@ -861,7 +861,7 @@ class GalleryCoreApi {
      * @param int $itemId
      * @return GalleryStatus a status code
      */
-    function removeItemPermissions($itemId) {
+    static function removeItemPermissions($itemId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::removeItemPermissions($itemId);
@@ -876,7 +876,7 @@ class GalleryCoreApi {
      *               array array('userId' or 'groupId' or 'entityId' => ...,
      *                           'permission' => ...)
      */
-    function fetchAllPermissionsForItem($itemId, $compress=false) {
+    static function fetchAllPermissionsForItem($itemId, $compress=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::fetchAllPermissionsForItem($itemId, $compress);
@@ -889,7 +889,7 @@ class GalleryCoreApi {
      * @param int $fromId the id of the source item
      * @return GalleryStatus a status code
      */
-    function copyPermissions($itemId, $fromId) {
+    static function copyPermissions($itemId, $fromId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::copyPermissions($itemId, $fromId);
@@ -905,7 +905,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               boolean true if yes
      */
-    function hasPermission($itemId, $entityIds, $permissions) {
+    static function hasPermission($itemId, $entityIds, $permissions) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::hasPermission($itemId, $entityIds, $permissions);
@@ -921,7 +921,7 @@ class GalleryCoreApi {
      * @param array $composites (optional) ids of other permissions that compose this one
      * @return GalleryStatus a status code
      */
-    function registerPermission($module, $permissionId, $description,
+    static function registerPermission($module, $permissionId, $description,
 				$flags=0, $composites=array()) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
@@ -937,7 +937,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (id => description, id => description, ...)
      */
-    function getPermissionIds($flags=0) {
+    static function getPermissionIds($flags=0) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::getPermissionIds($flags);
@@ -951,7 +951,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array(array('id' => ..., 'description' => ...), ...)
      */
-    function getSubPermissions($permissionId) {
+    static function getSubPermissions($permissionId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::getSubPermissions($permissionId);
@@ -962,7 +962,7 @@ class GalleryCoreApi {
      *
      * @return GalleryStatus a status code
      */
-    function unregisterModulePermissions($moduleId) {
+    static function unregisterModulePermissions($moduleId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryPermissionHelper_advanced.class');
 	return GalleryPermissionHelper_advanced::unregisterModulePermissions($moduleId);
@@ -978,7 +978,7 @@ class GalleryCoreApi {
      *               GalleryDerivative the up-to-date derivative
      *               boolean true if it had to be rebuilt, false if not
      */
-    function rebuildDerivativeCacheIfNotCurrent($derivativeId, $fixBroken=false) {
+    static function rebuildDerivativeCacheIfNotCurrent($derivativeId, $fixBroken=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_simple.class');
 	return GalleryDerivativeHelper_simple::rebuildCacheIfNotCurrent($derivativeId, $fixBroken);
@@ -991,7 +991,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               GalleryDerivative the rebuilt derivative
      */
-    function rebuildDerivativeCache($derivativeId) {
+    static function rebuildDerivativeCache($derivativeId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::rebuildCache($derivativeId);
@@ -1003,7 +1003,7 @@ class GalleryCoreApi {
      * @param array $ids source ids
      * @return GalleryStatus a status code
      */
-    function expireDerivativeTreeBySourceIds($ids) {
+    static function expireDerivativeTreeBySourceIds($ids) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::expireDerivativeTreeBySourceIds($ids);
@@ -1016,7 +1016,7 @@ class GalleryCoreApi {
      * @param array $ids source ids
      * @return GalleryStatus a status code
      */
-    function invalidateDerivativeDimensionsBySourceIds($ids) {
+    static function invalidateDerivativeDimensionsBySourceIds($ids) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::invalidateDerivativeDimensionsBySourceIds($ids);
@@ -1034,7 +1034,7 @@ class GalleryCoreApi {
      *               GalleryEntity (either a GalleryDataItem or a GalleryDerivative) the
      *               preferred source
      */
-    function fetchPreferredSource($item) {
+    static function fetchPreferredSource($item) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::fetchPreferredSource($item);
@@ -1047,7 +1047,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array(GalleryItem id => GalleryDerivativeImage, ...)
      */
-    function fetchThumbnailsByItemIds($ids) {
+    static function fetchThumbnailsByItemIds($ids) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_simple.class');
 	return GalleryDerivativeHelper_simple::fetchThumbnailsByItemIds($ids);
@@ -1060,7 +1060,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array(GalleryItem id => GalleryDerivativeImage, ...)
      */
-    function fetchPreferredsByItemIds($ids) {
+    static function fetchPreferredsByItemIds($ids) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_medium.class');
 	return GalleryDerivativeHelper_medium::fetchPreferredsByItemIds($ids);
@@ -1074,7 +1074,7 @@ class GalleryCoreApi {
      *               array(GalleryItem id => array(GalleryDerivativeImage, ...)
      *                     ...)
      */
-    function fetchResizesByItemIds($ids) {
+    static function fetchResizesByItemIds($ids) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_medium.class');
 	return GalleryDerivativeHelper_medium::fetchResizesByItemIds($ids);
@@ -1097,7 +1097,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               the merged operation set
      */
-    function mergeDerivativeOperations($operationSet1, $operationSet2, $highPriority=false) {
+    static function mergeDerivativeOperations($operationSet1, $operationSet2, $highPriority=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::mergeOperations($operationSet1, $operationSet2,
@@ -1109,7 +1109,7 @@ class GalleryCoreApi {
      *
      * @return string the new operation set
      */
-    function removeDerivativeOperation($operation, $operationSet) {
+    static function removeDerivativeOperation($operation, $operationSet) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::removeOperation($operation, $operationSet);
@@ -1123,7 +1123,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array(GalleryItem id => GalleryDerivativeImage, ...)
      */
-    function fetchDerivativesBySourceIds($ids, $types=array()) {
+    static function fetchDerivativesBySourceIds($ids, $types=array()) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::fetchDerivativesBySourceIds($ids, $types);
@@ -1136,7 +1136,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array(GalleryItem id => GalleryDerivativeImage, ...)
      */
-    function fetchDerivativesByItemIds($ids) {
+    static function fetchDerivativesByItemIds($ids) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::fetchDerivativesByItemIds($ids);
@@ -1155,7 +1155,7 @@ class GalleryCoreApi {
      * @param boolean $reverse (optional) true if we should apply the transform in reverse
      * @return GalleryStatus a status code
      */
-    function adjustDependentDerivatives($id, $operation, $reverse=false) {
+    static function adjustDependentDerivatives($id, $operation, $reverse=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::adjustDependentDerivatives($id, $operation,
@@ -1173,7 +1173,7 @@ class GalleryCoreApi {
      * @param int $serialNumber (optional) avoid concurrent edits
      * @return GalleryStatus a status code
      */
-    function applyToolkitOperation($operation, $args, $preserveOriginal,
+    static function applyToolkitOperation($operation, $args, $preserveOriginal,
 				   &$item, $preferred=null, $serialNumber=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
@@ -1188,7 +1188,7 @@ class GalleryCoreApi {
      * @param string $newSourceId the new source id
      * @return GalleryStatus a status code
      */
-    function remapSourceIds($originalSourceId, $newSourceId) {
+    static function remapSourceIds($originalSourceId, $newSourceId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::remapSourceIds($originalSourceId, $newSourceId);
@@ -1202,7 +1202,7 @@ class GalleryCoreApi {
      * @param int $targetId the target id
      * @return GalleryStatus a status code
      */
-    function copyDerivativePreferences($sourceId, $targetId) {
+    static function copyDerivativePreferences($sourceId, $targetId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::copyPreferences($sourceId, $targetId);
@@ -1215,7 +1215,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (derivativeType => ..., derivativeOperations => ...)
      */
-    function fetchDerivativePreferencesForItem($targetId) {
+    static function fetchDerivativePreferencesForItem($targetId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::fetchPreferencesForItem($targetId);
@@ -1230,7 +1230,7 @@ class GalleryCoreApi {
      * @param string $derivativeOperations (eg. 'thumbnail|200')
      * @return GalleryStatus a status code
      */
-    function addDerivativePreference($order, $itemId, $derivativeType, $derivativeOperations) {
+    static function addDerivativePreference($order, $itemId, $derivativeType, $derivativeOperations) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::addPreference($order, $itemId, $derivativeType,
@@ -1244,7 +1244,7 @@ class GalleryCoreApi {
      * @param int $derivativeType
      * @return GalleryStatus a status code
      */
-    function removeDerivativePreferenceForItemType($itemId, $derivativeType) {
+    static function removeDerivativePreferenceForItemType($itemId, $derivativeType) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::removePreferenceForItemType($itemId,
@@ -1257,7 +1257,7 @@ class GalleryCoreApi {
      * @param int $itemId
      * @return GalleryStatus a status code
      */
-    function removeDerivativePreferencesForItem($itemId) {
+    static function removeDerivativePreferencesForItem($itemId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryDerivativeHelper_advanced.class');
 	return GalleryDerivativeHelper_advanced::removePreferencesForItem($itemId);
@@ -1273,7 +1273,7 @@ class GalleryCoreApi {
      *               (probably a GalleryPhotoItem or GalleryMovieItem)
      * @return GalleryStatus a status code
      */
-    function estimateDerivativeDimensions(&$derivative, $source) {
+    static function estimateDerivativeDimensions(&$derivative, $source) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_medium.class');
 	return GalleryToolkitHelper_medium::estimateDerivativeDimensions($derivative, $source);
@@ -1285,7 +1285,7 @@ class GalleryCoreApi {
      * @param int $entityId
      * @return GalleryStatus a status code
      */
-    function updateModificationTimestamp($entityId) {
+    static function updateModificationTimestamp($entityId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryEntityHelper_medium.class');
 	return GalleryEntityHelper_medium::updateModificationTimestamp($entityId);
@@ -1297,7 +1297,7 @@ class GalleryCoreApi {
      * @param int $step the amount to increment
      * @return GalleryStatus a status code
      */
-    function incrementItemViewCount($itemId, $step=1) {
+    static function incrementItemViewCount($itemId, $step=1) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_simple.class');
 	return GalleryItemAttributesHelper_simple::incrementViewCount($itemId, $step);
@@ -1309,7 +1309,7 @@ class GalleryCoreApi {
      * @param array $parentSequence the sequence of parent ids
      * @return GalleryStatus a status code
      */
-    function createItemAttributes($itemId, $parentSequence) {
+    static function createItemAttributes($itemId, $parentSequence) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_advanced.class');
 	return GalleryItemAttributesHelper_advanced::createItemAttributes($itemId, $parentSequence);
@@ -1320,7 +1320,7 @@ class GalleryCoreApi {
      * @param int $itemId
      * @return GalleryStatus a status code
      */
-    function removeItemAttributes($itemId) {
+    static function removeItemAttributes($itemId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_advanced.class');
 	return GalleryItemAttributesHelper_advanced::removeItemAttributes($itemId);
@@ -1332,7 +1332,7 @@ class GalleryCoreApi {
      * @param int $count the new count
      * @return GalleryStatus a status code
      */
-    function setItemViewCount($itemId, $count) {
+    static function setItemViewCount($itemId, $count) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_advanced.class');
 	return GalleryItemAttributesHelper_advanced::setViewCount($itemId, $count);
@@ -1344,7 +1344,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int view count
      */
-    function fetchItemViewCount($itemId) {
+    static function fetchItemViewCount($itemId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_simple.class');
 	return GalleryItemAttributesHelper_simple::fetchViewCount($itemId);
@@ -1356,7 +1356,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (itemId => viewCount, ..)
      */
-    function fetchItemViewCounts($itemIds) {
+    static function fetchItemViewCounts($itemIds) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_simple.class');
 	return GalleryItemAttributesHelper_simple::fetchViewCounts($itemIds);
@@ -1368,7 +1368,7 @@ class GalleryCoreApi {
      * @param int $orderWeight the new order weight
      * @return GalleryStatus a status code
      */
-    function setItemOrderWeight($itemId, $orderWeight) {
+    static function setItemOrderWeight($itemId, $orderWeight) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_advanced.class');
 	return GalleryItemAttributesHelper_advanced::setOrderWeight($itemId, $orderWeight);
@@ -1380,7 +1380,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int the order weight
      */
-    function fetchItemOrderWeight($itemId) {
+    static function fetchItemOrderWeight($itemId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_medium.class');
 	return GalleryItemAttributesHelper_medium::fetchOrderWeight($itemId);
@@ -1393,7 +1393,7 @@ class GalleryCoreApi {
      *               array(itemId1 => orderWeight1,
      *                     itemId2 => orderWeight2, ...)
      */
-    function fetchItemOrderWeights($itemIds) {
+    static function fetchItemOrderWeights($itemIds) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_medium.class');
 	return GalleryItemAttributesHelper_medium::fetchOrderWeights($itemIds);
@@ -1408,7 +1408,7 @@ class GalleryCoreApi {
      * @param int $spacing the order spacing
      * @return GalleryStatus a status code
      */
-    function rebalanceChildOrderWeights($parentItemId, $spacing=1000) {
+    static function rebalanceChildOrderWeights($parentItemId, $spacing=1000) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_advanced.class');
 	return GalleryItemAttributesHelper_advanced::rebalanceChildOrderWeights($parentItemId,
@@ -1421,7 +1421,7 @@ class GalleryCoreApi {
      * @param int $direction the direction (HIGHER_WEIGHT, LOWER_WEIGHT)
      * @return int a weight
      */
-    function fetchExtremeChildWeight($itemId, $direction) {
+    static function fetchExtremeChildWeight($itemId, $direction) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_advanced.class');
 	return GalleryItemAttributesHelper_advanced::fetchExtremeChildWeight($itemId, $direction);
@@ -1434,7 +1434,7 @@ class GalleryCoreApi {
      * @param int $direction the direction (HIGHER_WEIGHT, LOWER_WEIGHT)
      * @return int a weight
      */
-    function fetchNextItemWeight($itemId, $direction) {
+    static function fetchNextItemWeight($itemId, $direction) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_advanced.class');
 	return GalleryItemAttributesHelper_advanced::fetchNextWeight($itemId, $direction);
@@ -1447,7 +1447,7 @@ class GalleryCoreApi {
      * @param array $parentSequence the parent sequence (ids)
      * @return GalleryStatus a status code
      */
-    function setParentSequence($itemId, $parentSequence) {
+    static function setParentSequence($itemId, $parentSequence) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_advanced.class');
 	return GalleryItemAttributesHelper_advanced::setParentSequence($itemId, $parentSequence);
@@ -1460,7 +1460,7 @@ class GalleryCoreApi {
      * @param array $newParentSequence the parent sequence (ids)
      * @return GalleryStatus a status code
      */
-    function updateParentSequence($oldParentSequence, $newParentSequence) {
+    static function updateParentSequence($oldParentSequence, $newParentSequence) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_advanced.class');
 	return GalleryItemAttributesHelper_advanced::updateParentSequence($oldParentSequence,
@@ -1474,7 +1474,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array the parent id sequence from root album down; given itemId not included
      */
-    function fetchParentSequence($itemId, $filterBreadcrumb=false) {
+    static function fetchParentSequence($itemId, $filterBreadcrumb=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemAttributesHelper_simple.class');
 	return GalleryItemAttributesHelper_simple::fetchParentSequence($itemId, $filterBreadcrumb);
@@ -1488,7 +1488,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               string a theme plugi
      */
-    function fetchThemeId($item) {
+    static function fetchThemeId($item) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_simple.class');
 	return GalleryItemHelper_simple::fetchThemeId($item);
     }
@@ -1501,7 +1501,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (itemId => count, itemId => count, ...)
      */
-    function fetchChildCounts($itemIds, $userId=null) {
+    static function fetchChildCounts($itemIds, $userId=null) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_simple.class');
 	return GalleryItemHelper_simple::fetchChildCounts($itemIds, $userId);
     }
@@ -1514,7 +1514,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array(id => ##, id => ##)
      */
-    function fetchDescendentCounts($itemIds, $userId=null) {
+    static function fetchDescendentCounts($itemIds, $userId=null) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_simple.class');
 	return GalleryItemHelper_simple::fetchDescendentCounts($itemIds, $userId);
     }
@@ -1530,7 +1530,7 @@ class GalleryCoreApi {
      *                     id => array('GalleryAlbumItem' => ##,
      *                                 'GalleryDataItem' => ##))
      */
-    function fetchItemizedDescendentCounts($itemIds) {
+    static function fetchItemizedDescendentCounts($itemIds) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemHelper_advanced.class');
 	return GalleryItemHelper_advanced::fetchItemizedDescendentCounts($itemIds);
@@ -1545,7 +1545,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int a count
      */
-    function fetchItemIdCount($itemType, $permission='core.view', $userId=null) {
+    static function fetchItemIdCount($itemType, $permission='core.view', $userId=null) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_simple.class');
 	return GalleryItemHelper_simple::fetchItemIdCount($itemType, $permission, $userId);
     }
@@ -1560,7 +1560,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array a list of ids
      */
-    function fetchChildItemIdsWithPermission($itemId, $permissionId) {
+    static function fetchChildItemIdsWithPermission($itemId, $permissionId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryChildEntityHelper_simple.class');
 	return GalleryChildEntityHelper_simple::fetchChildItemIdsWithPermission($itemId,
@@ -1579,7 +1579,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array a list of ids
      */
-    function fetchLinkableChildItemIdsWithPermission($itemId, $permissionId) {
+    static function fetchLinkableChildItemIdsWithPermission($itemId, $permissionId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryChildEntityHelper_simple.class');
 	return GalleryChildEntityHelper_simple::fetchLinkableChildItemIdsWithPermission($itemId,
@@ -1595,7 +1595,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array(id, id, id, ...)
      */
-    function fetchAllItemIds($itemType, $permission='core.view') {
+    static function fetchAllItemIds($itemType, $permission='core.view') {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_medium.class');
 	return GalleryItemHelper_medium::fetchAllItemIds($itemType, $permission);
     }
@@ -1608,7 +1608,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array(id, id, id, ...)
      */
-    function fetchAllItemIdsByOwnerId($ownerId) {
+    static function fetchAllItemIdsByOwnerId($ownerId) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_medium.class');
 	return GalleryItemHelper_medium::fetchAllItemIdsByOwnerId($ownerId);
     }
@@ -1622,7 +1622,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               GalleryItem an item
      */
-    function newItemByMimeType($mimeType) {
+    static function newItemByMimeType($mimeType) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_medium.class');
 	return GalleryItemHelper_medium::newItemByMimeType($mimeType);
     }
@@ -1639,7 +1639,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               GalleryAlbumItem a new album
      */
-    function createAlbum($parentAlbumId, $name, $title, $summary, $description, $keywords) {
+    static function createAlbum($parentAlbumId, $name, $title, $summary, $description, $keywords) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemHelper_advanced.class');
 	return GalleryItemHelper_advanced::createAlbum($parentAlbumId, $name, $title, $summary,
@@ -1661,7 +1661,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               GalleryDataItem a new item
      */
-    function addItemToAlbum($fileName, $itemName, $title, $summary,
+    static function addItemToAlbum($fileName, $itemName, $title, $summary,
 			    $description, $mimeType, $albumId, $symlink=false) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_medium.class');
 	return GalleryItemHelper_medium::addItemToAlbum(
@@ -1676,7 +1676,7 @@ class GalleryCoreApi {
      * @param boolean $isNew (optional) if true, skip check for existing derivatives
      * @return GalleryStatus a status code
      */
-    function addExistingItemToAlbum($item, $albumId, $isNew=false) {
+    static function addExistingItemToAlbum($item, $albumId, $isNew=false) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_medium.class');
 	return GalleryItemHelper_medium::addExistingItemToAlbum($item, $albumId, $isNew);
     }
@@ -1689,7 +1689,7 @@ class GalleryCoreApi {
      * @param boolean $isNew (optional) if true, skip check for existing derivatives
      * @return GalleryStatus a status code
      */
-    function applyDerivativePreferences($item, $albumId, $isNew=false) {
+    static function applyDerivativePreferences($item, $albumId, $isNew=false) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_medium.class');
 	return GalleryItemHelper_medium::applyDerivativePreferences($item, $albumId, $isNew);
     }
@@ -1701,7 +1701,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int a timestamp or null if nothing was found
      */
-    function fetchOriginationTimestamp($item) {
+    static function fetchOriginationTimestamp($item) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_medium.class');
 	return GalleryItemHelper_medium::fetchOriginationTimestamp($item);
     }
@@ -1715,7 +1715,7 @@ class GalleryCoreApi {
      * @return GalleryStatus a status code
      *                boolean true if successful
      */
-    function setThumbnailFromItem($itemId, $fromItemId) {
+    static function setThumbnailFromItem($itemId, $fromItemId) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryItemHelper_medium.class');
 	return GalleryItemHelper_medium::setThumbnailFromItem($itemId, $fromItemId);
     }
@@ -1728,7 +1728,7 @@ class GalleryCoreApi {
      * @return GalleryStatus a status code
      *                boolean true if successful
      */
-    function guaranteeAlbumHasThumbnail($itemId) {
+    static function guaranteeAlbumHasThumbnail($itemId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemHelper_advanced.class');
 	return GalleryItemHelper_advanced::guaranteeAlbumHasThumbnail($itemId);
@@ -1744,7 +1744,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array (albumId => array(albumId => array, ..), ..)
      */
-    function fetchAlbumTree($itemId=null, $depth=null, $userId=null) {
+    static function fetchAlbumTree($itemId=null, $depth=null, $userId=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemHelper_simple.class');
 	return GalleryItemHelper_simple::fetchAlbumTree($itemId, $depth, $userId);
@@ -1757,7 +1757,7 @@ class GalleryCoreApi {
      * @param int $newUserId the user id of the new owner
      * @return GalleryStatus a status code
      */
-    function remapOwnerId($oldUserId, $newUserId) {
+    static function remapOwnerId($oldUserId, $newUserId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemHelper_advanced.class');
 	return GalleryItemHelper_advanced::remapOwnerId($oldUserId, $newUserId);
@@ -1770,7 +1770,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               boolean true if yes
      */
-    function isUserInSiteAdminGroup($userId=null) {
+    static function isUserInSiteAdminGroup($userId=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryUserGroupHelper_simple.class');
 	return GalleryUserGroupHelper_simple::isUserInSiteAdminGroup($userId);
@@ -1784,7 +1784,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               boolean true if yes
      */
-    function isUserInGroup($userId, $groupId) {
+    static function isUserInGroup($userId, $groupId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryUserGroupHelper_simple.class');
 	return GalleryUserGroupHelper_simple::isUserInGroup($userId, $groupId);
@@ -1797,7 +1797,7 @@ class GalleryCoreApi {
      * @param int $groupId
      * @return GalleryStatus a status code
      */
-    function addUserToGroup($userId, $groupId) {
+    static function addUserToGroup($userId, $groupId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryUserGroupHelper_medium.class');
 	return GalleryUserGroupHelper_medium::addUserToGroup($userId, $groupId);
@@ -1810,7 +1810,7 @@ class GalleryCoreApi {
      * @param int $groupId
      * @return GalleryStatus a status code
      */
-    function removeUserFromGroup($userId, $groupId) {
+    static function removeUserFromGroup($userId, $groupId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryUserGroupHelper_medium.class');
 	return GalleryUserGroupHelper_medium::removeUserFromGroup($userId, $groupId);
@@ -1822,7 +1822,7 @@ class GalleryCoreApi {
      * @param int $userId
      * @return GalleryStatus a status code
      */
-    function removeUserFromAllGroups($userId) {
+    static function removeUserFromAllGroups($userId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryUserGroupHelper_medium.class');
 	return GalleryUserGroupHelper_medium::removeUserFromAllGroups($userId);
@@ -1834,7 +1834,7 @@ class GalleryCoreApi {
      * @param int $groupId
      * @return GalleryStatus a status code
      */
-    function removeAllUsersFromGroup($groupId) {
+    static function removeAllUsersFromGroup($groupId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryUserGroupHelper_medium.class');
 	return GalleryUserGroupHelper_medium::removeAllUsersFromGroup($groupId);
@@ -1853,7 +1853,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array user id => user name
      */
-    function fetchUsersForGroup($groupId, $count=null, $offset=null, $substring=null) {
+    static function fetchUsersForGroup($groupId, $count=null, $offset=null, $substring=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryUserGroupHelper_medium.class');
 	return GalleryUserGroupHelper_medium::fetchUsersForGroup($groupId, $count,
@@ -1870,7 +1870,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array group id => group name
      */
-    function fetchGroupsForUser($userId, $count=null, $offset=null) {
+    static function fetchGroupsForUser($userId, $count=null, $offset=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryUserGroupHelper_simple.class');
 	return GalleryUserGroupHelper_simple::fetchGroupsForUser($userId, $count, $offset);
@@ -1883,7 +1883,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               string code of preferred locale
      */
-    function fetchLanguageCodeForUser($userId) {
+    static function fetchLanguageCodeForUser($userId) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryUserHelper_medium.class');
 	return GalleryUserHelper_medium::fetchLanguageCodeForUser($userId);
     }
@@ -1895,7 +1895,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int the item id
      */
-    function fetchItemIdByPath($path) {
+    static function fetchItemIdByPath($path) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFileSystemEntityHelper_simple.class');
 	return GalleryFileSystemEntityHelper_simple::fetchItemIdByPath($path);
@@ -1910,7 +1910,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               boolean true if there's a collision
      */
-    function checkPathCollision($pathComponent, $parentId, $selfId=null) {
+    static function checkPathCollision($pathComponent, $parentId, $selfId=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFileSystemEntityHelper_medium.class');
 	return GalleryFileSystemEntityHelper_medium::checkPathCollision($pathComponent,
@@ -1929,7 +1929,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               string the legal path component
      */
-    function getLegalPathComponent($pathComponent, $parentId, $selfId=null, $forDirectory=false) {
+    static function getLegalPathComponent($pathComponent, $parentId, $selfId=null, $forDirectory=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFileSystemEntityHelper_medium.class');
 	return GalleryFileSystemEntityHelper_medium::getLegalPathComponent(
@@ -1945,7 +1945,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int an id
      */
-    function fetchChildIdByPathComponent($parentId, $pathComponent) {
+    static function fetchChildIdByPathComponent($parentId, $pathComponent) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryFileSystemEntityHelper_simple.class');
 	return GalleryFileSystemEntityHelper_simple::fetchChildIdByPathComponent($parentId,
@@ -1968,7 +1968,7 @@ class GalleryCoreApi {
      * @param int $priority priority of this implementation vs other toolkits
      * @return GalleryStatus a status code
      */
-    function registerToolkitOperation($toolkitId, $mimeTypes, $operationName,
+    static function registerToolkitOperation($toolkitId, $mimeTypes, $operationName,
 				      $parameterTypesArray, $description,
 				      $outputMimeType='', $priority=5) {
 	GalleryCoreApi::requireOnce(
@@ -1986,7 +1986,7 @@ class GalleryCoreApi {
      * @param array $mimeTypes the applicable mime types to remove; empty for all mime types
      * @return GalleryStatus a status code
      */
-    function unregisterToolkitOperation($toolkitId, $operationName, $mimeTypes=array()) {
+    static function unregisterToolkitOperation($toolkitId, $operationName, $mimeTypes=array()) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_medium.class');
 	return GalleryToolkitHelper_medium::unregisterOperation($toolkitId, $operationName,
@@ -1999,7 +1999,7 @@ class GalleryCoreApi {
      * @param string $moduleId
      * @return GalleryStatus a status code
      */
-    function unregisterToolkitsByModuleId($moduleId) {
+    static function unregisterToolkitsByModuleId($moduleId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_medium.class');
 	return GalleryToolkitHelper_medium::unregisterToolkitsByModuleId($moduleId);
@@ -2019,7 +2019,7 @@ class GalleryCoreApi {
      * @param string $description a translatable description of this property
      * @return GalleryStatus a status code
      */
-    function registerToolkitProperty($toolkitId, $mimeTypes, $propertyName, $type, $description) {
+    static function registerToolkitProperty($toolkitId, $mimeTypes, $propertyName, $type, $description) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_medium.class');
 	return GalleryToolkitHelper_medium::registerProperty($toolkitId, $mimeTypes,
@@ -2033,7 +2033,7 @@ class GalleryCoreApi {
      * @param string $toolkitId
      * @return GalleryStatus a status code
      */
-    function unregisterToolkit($toolkitId) {
+    static function unregisterToolkit($toolkitId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_medium.class');
 	return GalleryToolkitHelper_medium::unregisterToolkit($toolkitId);
@@ -2051,7 +2051,7 @@ class GalleryCoreApi {
      *                                        'description' => ...),
      *                                  ...)
      */
-    function getToolkitOperations($mimeType) {
+    static function getToolkitOperations($mimeType) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_medium.class');
 	return GalleryToolkitHelper_medium::getOperations($mimeType);
@@ -2064,7 +2064,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array(mime type => array(toolkit ids, sorted by priority))
      */
-    function getToolkitOperationMimeTypes($operationName) {
+    static function getToolkitOperationMimeTypes($operationName) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_medium.class');
 	return GalleryToolkitHelper_medium::getOperationMimeTypes($operationName);
@@ -2080,7 +2080,7 @@ class GalleryCoreApi {
      *               )
      *
      */
-    function getToolkitProperties($mimeType) {
+    static function getToolkitProperties($mimeType) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_medium.class');
 	return GalleryToolkitHelper_medium::getProperties($mimeType);
@@ -2095,7 +2095,7 @@ class GalleryCoreApi {
      *               GalleryToolkit a toolkit
      *               string a result mime type
      */
-    function getToolkitByOperation($mimeType, $operationName) {
+    static function getToolkitByOperation($mimeType, $operationName) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_simple.class');
 	return GalleryToolkitHelper_simple::getToolkitByOperation($mimeType, $operationName);
@@ -2112,7 +2112,7 @@ class GalleryCoreApi {
      *         boolean true if supported, false if not
      *         string the output mime type
      */
-    function isSupportedOperationSequence($mimeType, $operations) {
+    static function isSupportedOperationSequence($mimeType, $operations) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_medium.class');
 	return GalleryToolkitHelper_medium::isSupportedOperationSequence($mimeType, $operations);
@@ -2129,7 +2129,7 @@ class GalleryCoreApi {
      *               string a sequence of operations, null if not supported
      *               string the output mime type, null if not supported
      */
-    function makeSupportedViewableOperationSequence($mimeType, $operations,
+    static function makeSupportedViewableOperationSequence($mimeType, $operations,
 						    $prependConversion=true) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_medium.class');
@@ -2145,7 +2145,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               GalleryToolkit a toolkit
      */
-    function getToolkitByProperty($mimeType, $propertyName) {
+    static function getToolkitByProperty($mimeType, $propertyName) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_simple.class');
 	return GalleryToolkitHelper_simple::getToolkitByProperty($mimeType, $propertyName);
@@ -2159,7 +2159,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array of toolkitIds
      */
-    function getToolkitsByProperty($mimeType, $propertyName) {
+    static function getToolkitsByProperty($mimeType, $propertyName) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_simple.class');
 	return GalleryToolkitHelper_simple::getToolkitsByProperty($mimeType, $propertyName);
@@ -2171,7 +2171,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int priority
      */
-    function getMaximumManagedToolkitPriority() {
+    static function getMaximumManagedToolkitPriority() {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_simple.class');
 	return GalleryToolkitHelper_simple::getMaximumManagedPriority();
@@ -2184,7 +2184,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int priority
      */
-    function getToolkitPriorityById($toolkitId) {
+    static function getToolkitPriorityById($toolkitId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryToolkitHelper_simple.class');
 	return GalleryToolkitHelper_simple::getToolkitPriorityById($toolkitId);
@@ -2221,7 +2221,7 @@ class GalleryCoreApi {
      * @param boolean $disableForUnitTests (optional) if true, disable event listener during tests
      * @deprecated Use GalleryCoreApi::registerFactoryImplementation('GalleryEventListener', ...
      */
-    function registerEventListener($eventName, &$eventListener, $disableForUnitTests=false) {
+    static function registerEventListener($eventName, &$eventListener, $disableForUnitTests=false) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryEventHelper_simple.class');
 	return GalleryEventHelper_simple::registerEventListener(
 	    $eventName, $eventListener, $disableForUnitTests);
@@ -2233,7 +2233,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array data returned from listeners, if any
      */
-    function postEvent($event) {
+    static function postEvent($event) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryEventHelper_simple.class');
 	return GalleryEventHelper_simple::postEvent($event);
     }
@@ -2247,7 +2247,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int the lock id
      */
-    function acquireReadLock($ids, $timeout=10) {
+    static function acquireReadLock($ids, $timeout=10) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryLockHelper_simple.class');
 	return GalleryLockHelper_simple::acquireReadLock($ids, $timeout);
     }
@@ -2262,7 +2262,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int the lock id
      */
-    function acquireReadLockParents($id, $timeout=10) {
+    static function acquireReadLockParents($id, $timeout=10) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryLockHelper_simple.class');
 	return GalleryLockHelper_simple::acquireReadLockParents($id, $timeout);
     }
@@ -2273,7 +2273,7 @@ class GalleryCoreApi {
      * @param int $id an entity id
      * @return boolean true if the entity is read locked
      */
-    function isReadLocked($id) {
+    static function isReadLocked($id) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryLockHelper_simple.class');
 	return GalleryLockHelper_simple::isReadLocked($id);
     }
@@ -2286,7 +2286,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int the lock id
      */
-    function acquireWriteLock($ids, $timeout=10) {
+    static function acquireWriteLock($ids, $timeout=10) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryLockHelper_simple.class');
 	return GalleryLockHelper_simple::acquireWriteLock($ids, $timeout);
     }
@@ -2297,7 +2297,7 @@ class GalleryCoreApi {
      * @param int $id an entity id
      * @return boolean true if the entity is write locked
      */
-    function isWriteLocked($id) {
+    static function isWriteLocked($id) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryLockHelper_simple.class');
 	return GalleryLockHelper_simple::isWriteLocked($id);
     }
@@ -2308,7 +2308,7 @@ class GalleryCoreApi {
      * @param mixed $lockIds array of lock ids, or a single lock id
      * @return GalleryStatus a status code
      */
-    function releaseLocks($lockIds) {
+    static function releaseLocks($lockIds) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryLockHelper_simple.class');
 	return GalleryLockHelper_simple::releaseLocks($lockIds);
     }
@@ -2318,7 +2318,7 @@ class GalleryCoreApi {
      *
      * @return GalleryStatus a status code
      */
-    function releaseAllLocks() {
+    static function releaseAllLocks() {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryLockHelper_simple.class');
 	return GalleryLockHelper_simple::releaseAllLocks();
     }
@@ -2329,7 +2329,7 @@ class GalleryCoreApi {
      * @param int $freshUntil the new "fresh until" timestamp
      * @return GalleryStatus a status code
      */
-    function refreshLocks($freshUntil) {
+    static function refreshLocks($freshUntil) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryLockHelper_simple.class');
 	return GalleryLockHelper_simple::refreshLocks($freshUntil);
     }
@@ -2339,7 +2339,7 @@ class GalleryCoreApi {
      *
      * @return object array of lock ids
      */
-    function getLockIds() {
+    static function getLockIds() {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryLockHelper_simple.class');
 	return GalleryLockHelper_simple::getLockIds();
     }
@@ -2371,7 +2371,7 @@ class GalleryCoreApi {
      * @return GalleryStatus a status code
      * @deprecated $requiredEntityType will no longer be optional after the next major API change
      */
-    function deleteEntityById($id, $requiredEntityType=null) {
+    static function deleteEntityById($id, $requiredEntityType=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryEntityHelper_medium.class');
 	return GalleryEntityHelper_medium::deleteEntityById($id, $requiredEntityType);
@@ -2384,7 +2384,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array entity ids
      */
-    function fetchEntitiesLinkedTo($targetId) {
+    static function fetchEntitiesLinkedTo($targetId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryEntityHelper_medium.class');
 	return GalleryEntityHelper_medium::fetchEntitiesLinkedTo($targetId);
@@ -2398,7 +2398,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               GalleryEntity
      */
-    function loadEntityByExternalId($externalId, $entityType) {
+    static function loadEntityByExternalId($externalId, $entityType) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryEntityHelper_simple.class');
 	return GalleryEntityHelper_simple::loadEntityByExternalId($externalId, $entityType);
@@ -2410,7 +2410,7 @@ class GalleryCoreApi {
      * @param array $handlerIds of factory impl ids
      * @return GalleryStatus a status code
      */
-    function removeOnLoadHandlers($handlerIds) {
+    static function removeOnLoadHandlers($handlerIds) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryEntityHelper_medium.class');
 	return GalleryEntityHelper_medium::removeOnLoadHandlers($handlerIds);
@@ -2426,7 +2426,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array integer ids
      */
-    function fetchDescendentItemIds($item, $offset=null, $count=null, $permission='core.view') {
+    static function fetchDescendentItemIds($item, $offset=null, $count=null, $permission='core.view') {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryChildEntityHelper_simple.class');
 	return GalleryChildEntityHelper_simple::fetchDescendentItemIds($item, $offset,
@@ -2444,7 +2444,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array integer ids
      */
-    function fetchChildItemIds($item, $offset=null, $count=null, $userId=null) {
+    static function fetchChildItemIds($item, $offset=null, $count=null, $userId=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryChildEntityHelper_simple.class');
 	return GalleryChildEntityHelper_simple::fetchChildItemIds($item, $offset, $count, $userId);
@@ -2460,7 +2460,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array integer ids
      */
-    function fetchDescendentAlbumItemIds($item, $offset=null, $count=null,
+    static function fetchDescendentAlbumItemIds($item, $offset=null, $count=null,
 					 $permission='core.view') {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryChildEntityHelper_simple.class');
@@ -2478,7 +2478,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array integer ids
      */
-    function fetchChildAlbumItemIds($item, $offset=null, $count=null, $userId=null) {
+    static function fetchChildAlbumItemIds($item, $offset=null, $count=null, $userId=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryChildEntityHelper_simple.class');
 	return GalleryChildEntityHelper_simple::fetchChildAlbumItemIds($item, $offset,
@@ -2495,7 +2495,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array integer ids
      */
-    function fetchChildDataItemIds($item, $offset=null, $count=null, $userId=null) {
+    static function fetchChildDataItemIds($item, $offset=null, $count=null, $userId=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryChildEntityHelper_simple.class');
 	return GalleryChildEntityHelper_simple::fetchChildDataItemIds($item, $offset,
@@ -2511,7 +2511,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array integer ids
      */
-    function fetchChildItemIdsIgnorePermissions($item, $offset=null, $count=null) {
+    static function fetchChildItemIdsIgnorePermissions($item, $offset=null, $count=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryChildEntityHelper_simple.class');
 	return GalleryChildEntityHelper_simple::fetchChildItemIdsIgnorePermissions($item, $offset,
@@ -2528,7 +2528,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array of GalleryItem, from top level to parent item
      */
-    function fetchParents($item, $permission=null, $filterBreadcrumb=false) {
+    static function fetchParents($item, $permission=null, $filterBreadcrumb=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryChildEntityHelper_simple.class');
 	return GalleryChildEntityHelper_simple::fetchParents($item, $permission, $filterBreadcrumb);
@@ -2551,7 +2551,7 @@ class GalleryCoreApi {
      *               string query
      *               array data items for query (not including any ? marks in baseQuery)
      */
-    function buildItemQuery($baseTable, $baseIdColumn, $baseQuery, $orderBy, $orderDirection,
+    static function buildItemQuery($baseTable, $baseIdColumn, $baseQuery, $orderBy, $orderDirection,
 			    $class, $requiredPermission, $linkableOnly, $userId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryChildEntityHelper_simple.class');
@@ -2567,7 +2567,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               string a mime type (application/unknown if no known mapping)
      */
-    function convertExtensionToMime($extension) {
+    static function convertExtensionToMime($extension) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryMimeTypeHelper_simple.class');
 	return GalleryMimeTypeHelper_simple::convertExtensionToMime($extension);
@@ -2580,7 +2580,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array of file extensions (empty array if no known mapping)
      */
-    function convertMimeToExtensions($mimeType) {
+    static function convertMimeToExtensions($mimeType) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryMimeTypeHelper_simple.class');
 	return GalleryMimeTypeHelper_simple::convertMimeToExtensions($mimeType);
@@ -2595,7 +2595,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               string a mime type (application/unknown if no known extension)
      */
-    function getMimeType($filename, $requestMimeType=null) {
+    static function getMimeType($filename, $requestMimeType=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryMimeTypeHelper_simple.class');
 	return GalleryMimeTypeHelper_simple::getMimeType($filename, $requestMimeType);
@@ -2608,7 +2608,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               boolean
      */
-    function isViewableMimeType($mimeType) {
+    static function isViewableMimeType($mimeType) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryMimeTypeHelper_simple.class');
 	return GalleryMimeTypeHelper_simple::isViewableMimeType($mimeType);
@@ -2621,7 +2621,7 @@ class GalleryCoreApi {
      * @param array $mimeMatch (keys/values to delete)
      * @return GalleryStatus a status code
      */
-    function removeMimeType($mimeMatch) {
+    static function removeMimeType($mimeMatch) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryMimeTypeHelper_advanced.class');
 	return GalleryMimeTypeHelper_advanced::removeMimeType($mimeMatch);
@@ -2638,7 +2638,7 @@ class GalleryCoreApi {
      * @param bool $viewable whether or not it's browser viewable
      * @return GalleryStatus a status code
      */
-    function addMimeType($extension, $mimeType, $viewable) {
+    static function addMimeType($extension, $mimeType, $viewable) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryMimeTypeHelper_advanced.class');
 	return GalleryMimeTypeHelper_advanced::addMimeType($extension, $mimeType, $viewable);
@@ -2655,7 +2655,7 @@ class GalleryCoreApi {
      * @return array(boolean success, http response, headers, url)
      *  the url is the final url retrieved after redirects
      */
-    function fetchWebFile($url, $outputFile, $extraHeaders=array(), $postDataArray=array()) {
+    static function fetchWebFile($url, $outputFile, $extraHeaders=array(), $postDataArray=array()) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/WebHelper_simple.class');
 	return WebHelper_simple::fetchWebFile($url, $outputFile, $extraHeaders, $postDataArray);
     }
@@ -2669,7 +2669,7 @@ class GalleryCoreApi {
      * @return array(boolean success, string body, http response, headers, url)
      *	the url is the final url retrieved after redirects
      */
-    function fetchWebPage($url, $extraHeaders=array()) {
+    static function fetchWebPage($url, $extraHeaders=array()) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/WebHelper_simple.class');
 	return WebHelper_simple::fetchWebPage($url, $extraHeaders);
     }
@@ -2682,7 +2682,7 @@ class GalleryCoreApi {
      * @param array $extraHeaders (optional) extra headers to pass to the server
      * @return array(body, http response, headers)
      */
-    function postToWebPage($url, $postDataArray, $extraHeaders=array()) {
+    static function postToWebPage($url, $postDataArray, $extraHeaders=array()) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/WebHelper_simple.class');
 	return WebHelper_simple::postToWebPage($url, $postDataArray, $extraHeaders);
     }
@@ -2695,7 +2695,7 @@ class GalleryCoreApi {
      * @param string $requestBody (optional) the request body to pass to the server
      * @return array($responseStatus, $responseHeaders, $responseBody)
      */
-    function requestWebPage($url, $requestMethod='GET', $requestHeaders=array(), $requestBody='') {
+    static function requestWebPage($url, $requestMethod='GET', $requestHeaders=array(), $requestBody='') {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/WebHelper_simple.class');
 	return WebHelper_simple::requestWebPage(
 	    $url, $requestMethod, $requestHeaders, $requestBody);
@@ -2721,7 +2721,7 @@ class GalleryCoreApi {
      * @param string $targetEncoding target encoding (eg. 'ISO-8859-1'), defaults to system charset
      * @return string the result
      */
-    function convertFromUtf8($inputString, $targetEncoding=null) {
+    static function convertFromUtf8($inputString, $targetEncoding=null) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryCharsetHelper_simple.class');
 	return GalleryCharsetHelper_simple::convertFromUtf8($inputString, $targetEncoding);
@@ -2761,7 +2761,7 @@ class GalleryCoreApi {
      * This function should only be used in special circumstances, for example when a list of all
      * plugins needs to be made.  Currently it returns gallery2/ and gallery2/plugins/.
      */
-     function getPluginBaseDirs() {
+     static function getPluginBaseDirs() {
 	 return array('base' => dirname(dirname(dirname(dirname(__FILE__)))) . '/');
      }
 
@@ -2780,7 +2780,7 @@ class GalleryCoreApi {
      * @param bool $clearCache (optional) force index to be reread from the filesystem
      * @return string plugin base directory
      */
-    function getPluginBaseDir($pluginType, $pluginId, $clearCache=false) {
+    static function getPluginBaseDir($pluginType, $pluginId, $clearCache=false) {
 	return dirname(dirname(dirname(dirname(__FILE__)))) . '/';
     }
 
@@ -2802,7 +2802,7 @@ class GalleryCoreApi {
      * @param bool $clearCache (optional) force index to be reread from the filesystem
      * @return boolean
      */
-    function isPluginInDefaultLocation($pluginType, $pluginId, $clearCache=false) {
+    static function isPluginInDefaultLocation($pluginType, $pluginId, $clearCache=false) {
 	return true;
     }
 
@@ -2839,7 +2839,7 @@ class GalleryCoreApi {
      * @param string $headers (optional) additional headers (\r\n separated)
      * @return GalleryStatus a status code
      */
-    function sendTemplatedEmail($file, $data, $from, $to, $subject, $headers='') {
+    static function sendTemplatedEmail($file, $data, $from, $to, $subject, $headers='') {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/MailHelper_simple.class');
 	return MailHelper_simple::sendTemplatedEmail($file, $data, $from, $to, $subject, $headers);
     }
@@ -2924,7 +2924,7 @@ class GalleryCoreApi {
      * @param array $data an associative array of data about the entries to match
      * @return GalleryStatus a status code
      */
-    function removeMapEntry($mapName, $data) {
+    static function removeMapEntry($mapName, $data) {
 	global $gallery;
 
 	if (sizeof($data) == 0) {
@@ -2948,7 +2948,7 @@ class GalleryCoreApi {
      *                non transactional database connection for this operation.  Default is false.
      * @return GalleryStatus a status code
      */
-    function addMapEntry($mapName, $data, $useNonTransactionalConnection=false) {
+    static function addMapEntry($mapName, $data, $useNonTransactionalConnection=false) {
 	global $gallery;
 
 	$storage =& $gallery->getStorage();
@@ -2968,7 +2968,7 @@ class GalleryCoreApi {
      *             TRUNCATE statement).
      * @return GalleryStatus a status code
      */
-    function removeAllMapEntries($mapName, $useNonTransactionalConnection=false) {
+    static function removeAllMapEntries($mapName, $useNonTransactionalConnection=false) {
 	global $gallery;
 
 	$storage =& $gallery->getStorage();
@@ -2987,7 +2987,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code,
      *               array member name => member type
      */
-    function describeMap($mapName, $tryAllModules=false) {
+    static function describeMap($mapName, $tryAllModules=false) {
 	global $gallery;
 
 	$storage =& $gallery->getStorage();
@@ -3007,7 +3007,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               entity associative array
      */
-    function describeEntity($entityName, $tryAllModules=false) {
+    static function describeEntity($entityName, $tryAllModules=false) {
 	global $gallery;
 	$storage =& $gallery->getStorage();
 	list ($ret, $entityInfo) = $storage->describeEntity($entityName, $tryAllModules);
@@ -3023,7 +3023,7 @@ class GalleryCoreApi {
      *
      * @param int $entityId
      */
-    function deleteFastDownloadFileById($entityId) {
+    static function deleteFastDownloadFileById($entityId) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryEntityHelper_medium.class');
 	return GalleryEntityHelper_medium::deleteFastDownloadFileById($entityId);
@@ -3038,7 +3038,7 @@ class GalleryCoreApi {
      * @param bool $runEvenInUnitTest (optional) force this to run, even in the unit test framework
      * @return GalleryStatus a status code
      */
-    function createFastDownloadFile($entity, $runEvenInUnitTest=false) {
+    static function createFastDownloadFile($entity, $runEvenInUnitTest=false) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryEntityHelper_medium.class');
 	return GalleryEntityHelper_medium::createFastDownloadFile($entity, $runEvenInUnitTest);
@@ -3049,7 +3049,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int album id
      */
-    function getDefaultAlbumId() {
+    static function getDefaultAlbumId() {
 	global $gallery;
 
 	$defaultId = $gallery->getConfig('defaultAlbumId');
@@ -3070,7 +3070,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               int user id
      */
-    function getAnonymousUserId() {
+    static function getAnonymousUserId() {
 	global $gallery;
 	$id = $gallery->getConfig('anonymousUserId');
 	if (empty($id)) {
@@ -3090,7 +3090,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               boolean true if anonymous
      */
-    function isAnonymousUser($userId=null) {
+    static function isAnonymousUser($userId=null) {
 	if (empty($userId)) {
 	    global $gallery;
 	    $userId = $gallery->getActiveUserId();
@@ -3109,7 +3109,7 @@ class GalleryCoreApi {
      * @param string $sortOrder
      * @return GalleryStatus a status code
      */
-    function deleteSortOrder($sortOrder) {
+    static function deleteSortOrder($sortOrder) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemHelper_advanced.class');
 	return GalleryItemHelper_advanced::deleteSortOrder($sortOrder);
@@ -3121,7 +3121,7 @@ class GalleryCoreApi {
      * @param string $rendererClassName
      * @return GalleryStatus a status code
      */
-    function deleteRenderer($rendererClassName) {
+    static function deleteRenderer($rendererClassName) {
 	GalleryCoreApi::requireOnce(
 	    'modules/core/classes/helpers/GalleryItemHelper_advanced.class');
 	return GalleryItemHelper_advanced::deleteRenderer($rendererClassName);
@@ -3136,7 +3136,7 @@ class GalleryCoreApi {
      * @param array $form
      * @return GalleryStatus a status code
      */
-    function loadThemeSettingsForm($themeId, $itemId, &$template, &$form) {
+    static function loadThemeSettingsForm($themeId, $itemId, &$template, &$form) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryThemeHelper_medium.class');
 	return GalleryThemeHelper_medium::loadThemeSettingsForm(
 		$themeId, $itemId, $template, $form);
@@ -3149,7 +3149,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               array block configurations
      */
-    function loadAvailableBlocks($getInactive=false) {
+    static function loadAvailableBlocks($getInactive=false) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryThemeHelper_medium.class');
 	return GalleryThemeHelper_medium::loadAvailableBlocks($getInactive);
     }
@@ -3164,7 +3164,7 @@ class GalleryCoreApi {
      *               array error messages
      *               string localized status message
      */
-    function handleThemeSettingsRequest($themeId, $itemId, $form) {
+    static function handleThemeSettingsRequest($themeId, $itemId, $form) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryThemeHelper_medium.class');
 	return GalleryThemeHelper_medium::handleThemeSettingsRequest($themeId, $itemId, $form);
     }
@@ -3177,7 +3177,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *               bool true if the account is disabled
      */
-    function isDisabledUsername($userName) {
+    static function isDisabledUsername($userName) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryUserHelper_medium.class');
 	return GalleryUserHelper_medium::isDisabledUsername($userName);
     }
@@ -3192,7 +3192,7 @@ class GalleryCoreApi {
      *                                array('read' => boolean true if it's ok to show,
      *                                      'write' => boolean true if it's ok to set))
      */
-    function getExternalAccessMemberList($entityName) {
+    static function getExternalAccessMemberList($entityName) {
 	GalleryCoreApi::requireOnce(
 		'modules/core/classes/helpers/GalleryEntityHelper_medium.class');
 	return GalleryEntityHelper_medium::getExternalAccessMemberList($entityName);
@@ -3205,7 +3205,7 @@ class GalleryCoreApi {
      * @param string $pluginId the id of the plugin
      * @return GalleryStatus a status code
      */
-    function installTranslationsForPlugin($pluginType, $pluginId) {
+    static function installTranslationsForPlugin($pluginType, $pluginId) {
 	GalleryCoreApi::requireOnce(
 		'modules/core/classes/helpers/GalleryTranslatorHelper_medium.class');
 	return GalleryTranslatorHelper_medium::installTranslationsForPlugin($pluginType, $pluginId);
@@ -3218,7 +3218,7 @@ class GalleryCoreApi {
      * @param string $pluginId the id of the plugin
      * @return GalleryStatus a status code
      */
-    function removeTranslationsForPlugin($pluginType, $pluginId) {
+    static function removeTranslationsForPlugin($pluginType, $pluginId) {
 	GalleryCoreApi::requireOnce(
 		'modules/core/classes/helpers/GalleryTranslatorHelper_medium.class');
 	return GalleryTranslatorHelper_medium::removeTranslationsForPlugin($pluginType, $pluginId);
@@ -3230,7 +3230,7 @@ class GalleryCoreApi {
      * @param string $locale (optional) Defaults to translator's current locale
      * @return GalleryStatus a status code
      */
-    function installTranslationsForLocale($locale=null) {
+    static function installTranslationsForLocale($locale=null) {
 	GalleryCoreApi::requireOnce(
 		'modules/core/classes/helpers/GalleryTranslatorHelper_medium.class');
 	return GalleryTranslatorHelper_medium::installTranslationsForLocale($locale);
@@ -3241,7 +3241,7 @@ class GalleryCoreApi {
      * @return array['language code']['country code'] =
      *              array('description', 'right-to-left'?)
      */
-    function getSupportedLanguages() {
+    static function getSupportedLanguages() {
     	GalleryCoreApi::requireOnce(
 		'modules/core/classes/helpers/GalleryTranslatorHelper_medium.class');
 	return GalleryTranslatorHelper_medium::getSupportedLanguages();
@@ -3255,7 +3255,7 @@ class GalleryCoreApi {
      * @return array GalleryStatus a status code
      *		     string language description
      */
-    function getLanguageDescription($languageCode) {
+    static function getLanguageDescription($languageCode) {
     	GalleryCoreApi::requireOnce(
 		'modules/core/classes/helpers/GalleryTranslatorHelper_medium.class');
 	return GalleryTranslatorHelper_medium::getLanguageDescription($languageCode);
@@ -3282,7 +3282,7 @@ class GalleryCoreApi {
      * are still up to date. The result is cached in memory.
      * @return boolean false if the compiled templates should be used without any checking
      */
-    function shouldDoCompileCheck() {
+    static function shouldDoCompileCheck() {
 	GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
 	return GalleryTemplate::shouldDoCompileCheck();
     }
@@ -3293,7 +3293,7 @@ class GalleryCoreApi {
      * 			  custom maintenance mode page.
      * @return GalleryStatus a status code
      */
-    function setMaintenanceMode($mode) {
+    static function setMaintenanceMode($mode) {
 	GalleryCoreApi::requireOnce('modules/core/classes/helpers/MaintenanceHelper_simple.class');
 	return MaintenanceHelper_simple::setMaintenanceMode($mode);
     }
@@ -3306,7 +3306,7 @@ class GalleryCoreApi {
      * @param string $detail the event details
      * @return GalleryStatus a status code
      */
-    function addEventLogEntry($type, $summary, $details) {
+    static function addEventLogEntry($type, $summary, $details) {
 	GalleryCoreApi::requireOnce(
 		'modules/core/classes/helpers/GalleryEventLogHelper_medium.class');
 	return GalleryEventLogHelper_medium::addEventLogEntry($type, $summary, $details);

@@ -35,7 +35,7 @@ class WebHelper_simple {
      *       header to verify that we got all the data we expected.
      *
      */
-    function fetchWebFile($url, $outputFile, $extraHeaders=array(), $postDataArray=array(),
+    static function fetchWebFile($url, $outputFile, $extraHeaders=array(), $postDataArray=array(),
 	    $depth=0) {
 	global $gallery;
 
@@ -153,7 +153,7 @@ class WebHelper_simple {
     /**
      * @see GalleryCoreApi::fetchWebPage
      */
-    function fetchWebPage($url, $extraHeaders=array(), $depth=0) {
+    static function fetchWebPage($url, $extraHeaders=array(), $depth=0) {
 	global $gallery;
 
 	/* Don't redirect too far */
@@ -190,7 +190,7 @@ class WebHelper_simple {
     /**
      * @see GalleryCoreApi::postToWebPage
      */
-    function postToWebPage($url, $postDataArray, $extraHeaders=array()) {
+    static function postToWebPage($url, $postDataArray, $extraHeaders=array()) {
 	$postDataRaw = WebHelper_simple::_encodePostData($postDataArray, $extraHeaders);
 
 	/* Read the web page into a buffer */
@@ -208,7 +208,7 @@ class WebHelper_simple {
      * @param array $extraHeaders extra headers to pass to the server
      * @return string the encoded post data
      */
-    function _encodePostData($postDataArray, &$extraHeaders) {
+    static function _encodePostData($postDataArray, &$extraHeaders) {
 	$postDataRaw = '';
 	foreach ($postDataArray as $key => $value) {
 	    if (!empty($postDataRaw)) {
@@ -226,7 +226,7 @@ class WebHelper_simple {
     /**
      * @see GalleryCoreApi::requestWebPage
      */
-    function requestWebPage($url, $requestMethod='GET', $requestHeaders=array(), $requestBody='') {
+    static function requestWebPage($url, $requestMethod='GET', $requestHeaders=array(), $requestBody='') {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 
@@ -307,7 +307,7 @@ class WebHelper_simple {
      * @return array url components
      * @access private
      */
-    function _parseUrlForFsockopen($url) {
+    static function _parseUrlForFsockopen($url) {
 	$urlComponents = parse_url($url);
 	if (GalleryUtilities::strToLower($urlComponents['scheme']) == 'https') {
 	    $urlComponents['fsockhost'] = 'ssl://' . $urlComponents['host'];
@@ -335,7 +335,7 @@ class WebHelper_simple {
      * @param array $fromComponents context we're redirecting from
      * @param string redirect URL
      */
-    function _parseLocation($location, $fromComponents) {
+    static function _parseLocation($location, $fromComponents) {
 	if (is_array($location)) {
 	    /* If odd http response has multiple Location headers just pick the first */
 	    $location = array_shift($location);

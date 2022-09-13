@@ -35,7 +35,7 @@ class GalleryMimeTypeHelper_advanced {
      * Initialize mime types and store them in the database
      * @return GalleryStatus a status code
      */
-    function initializeMimeTypes() {
+    static function initializeMimeTypes() {
 	$mimeTypes = array(
 	    /* This data was lifted from Apache's mime.types listing. */
 	    'z' => 'application/x-compress',
@@ -228,7 +228,7 @@ class GalleryMimeTypeHelper_advanced {
     /**
      * @see GalleryCoreApi::removeMimeType
      */
-    function removeMimeType($mimeMatch) {
+    static function removeMimeType($mimeMatch) {
 	$ret = GalleryCoreApi::removeMapEntry('GalleryMimeTypeMap', $mimeMatch);
 	if ($ret) {
 	    return $ret;
@@ -240,7 +240,7 @@ class GalleryMimeTypeHelper_advanced {
     /**
      * @see GalleryCoreApi::addMimeType
      */
-    function addMimeType($extension, $mimeType, $viewable) {
+    static function addMimeType($extension, $mimeType, $viewable) {
 	global $gallery;
 
 	/* Check to see if the extension already exists. */

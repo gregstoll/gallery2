@@ -71,7 +71,7 @@ class GalleryFactoryHelper_medium {
     /**
      * @see GalleryCoreApi::updateFactoryDefinitionHints
      */
-    function updateFactoryDefinitionHints($classType, $implId, $hints) {
+    static function updateFactoryDefinitionHints($classType, $implId, $hints) {
 	foreach ($hints as $i => $hint) {
 	    $hints[$i] = GalleryUtilities::strToLower($hint);
 	}
@@ -92,7 +92,7 @@ class GalleryFactoryHelper_medium {
     /**
      * @see GalleryCoreApi::unregisterFactoryImplementationsByModuleId
      */
-    function unregisterImplementationsByModuleId($moduleId) {
+    static function unregisterImplementationsByModuleId($moduleId) {
 	$ret = GalleryCoreApi::removeMapEntry(
 	    'GalleryFactoryMap', array('implModuleId' => $moduleId));
 	if ($ret) {
@@ -107,7 +107,7 @@ class GalleryFactoryHelper_medium {
     /**
      * @see GalleryCoreApi::unregisterFactoryImplementation
      */
-    function unregisterImplementation($classType, $implId) {
+    static function unregisterImplementation($classType, $implId) {
 	$ret = GalleryCoreApi::removeMapEntry(
 	    'GalleryFactoryMap',
 	    array('classType' => $classType, 'implId' => $implId));
@@ -123,7 +123,7 @@ class GalleryFactoryHelper_medium {
     /**
      * @see GalleryCoreApi::registerFactoryImplementation
      */
-    function registerImplementation($classType, $className, $implId, $implPath,
+    static function registerImplementation($classType, $className, $implId, $implPath,
 				    $implModuleId, $hints, $orderWeight) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
@@ -164,7 +164,7 @@ class GalleryFactoryHelper_medium {
     /**
      * @see GalleryCoreApi::registerFactoryImplementation
      */
-    function registerFactoryImplementationForRequest($classType, $className, $implId, $implPath,
+    static function registerFactoryImplementationForRequest($classType, $className, $implId, $implPath,
 						     $implModuleId, $hints) {
 	$registryData =& GalleryFactoryHelper_simple::_getFactoryData();
 	if ($registryData[0]) {
@@ -207,7 +207,7 @@ class GalleryFactoryHelper_medium {
      * @param string $value the value of the new entry
      * @access private
      */
-    function _array_unshift_key_value(&$array, $key, $value) {
+    static function _array_unshift_key_value(&$array, $key, $value) {
 	unset($array[$key]);
 	$array = array_merge(array($key => $value), $array);
     }

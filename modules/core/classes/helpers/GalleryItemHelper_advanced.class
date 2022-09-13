@@ -31,7 +31,7 @@ class GalleryItemHelper_advanced {
     /**
      * @see GalleryCoreApi::fetchItemizedDescendentCounts
      */
-    function fetchItemizedDescendentCounts($itemIds) {
+    static function fetchItemizedDescendentCounts($itemIds) {
 	global $gallery;
 
 	foreach ($itemIds as $idx => $id) {
@@ -115,7 +115,7 @@ class GalleryItemHelper_advanced {
     /**
      * @see GalleryCoreApi::guaranteeAlbumHasThumbnail
      */
-    function guaranteeAlbumHasThumbnail($albumId) {
+    static function guaranteeAlbumHasThumbnail($albumId) {
 	global $gallery;
 
 	list ($ret, $thumbnails) = GalleryCoreApi::fetchThumbnailsByItemIds(array($albumId));
@@ -195,7 +195,7 @@ class GalleryItemHelper_advanced {
     /**
      * @see GalleryCoreApi::createAlbum
      */
-    function createAlbum($parentAlbumId, $name, $title, $summary, $description, $keywords) {
+    static function createAlbum($parentAlbumId, $name, $title, $summary, $description, $keywords) {
 	global $gallery;
 
 	/* Can't work without a name and a parentAlbum */
@@ -274,7 +274,7 @@ class GalleryItemHelper_advanced {
      * @see GalleryCoreApi::remapOwnerId
      * @todo Scalability - Lock and load the items in batches (open files limit).
      */
-    function remapOwnerId($oldUserId, $newUserId) {
+    static function remapOwnerId($oldUserId, $newUserId) {
 	global $gallery;
 
 	if (empty($oldUserId) || empty($newUserId)) {
@@ -388,7 +388,7 @@ class GalleryItemHelper_advanced {
     /**
      * @see GalleryCoreApi::deleteSortOrder
      */
-    function deleteSortOrder($sortOrder) {
+    static function deleteSortOrder($sortOrder) {
 	global $gallery;
 
 	$query = '
@@ -462,7 +462,7 @@ class GalleryItemHelper_advanced {
     /**
      * @see GalleryCoreApi::deleteRenderer
      */
-    function deleteRenderer($rendererClassName) {
+    static function deleteRenderer($rendererClassName) {
 	global $gallery;
 
 	$query = '

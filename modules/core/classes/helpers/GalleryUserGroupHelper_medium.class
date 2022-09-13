@@ -31,7 +31,7 @@ class GalleryUserGroupHelper_medium {
     /**
      * @see GalleryCoreApi::addUserToGroup
      */
-    function addUserToGroup($userId, $groupId) {
+    static function addUserToGroup($userId, $groupId) {
 	global $gallery;
 	if (empty($userId) || empty($groupId)) {
 	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
@@ -70,7 +70,7 @@ class GalleryUserGroupHelper_medium {
     /**
      * @see GalleryCoreApi::removeUserFromGroup
      */
-    function removeUserFromGroup($userId, $groupId) {
+    static function removeUserFromGroup($userId, $groupId) {
 	global $gallery;
 	if (empty($userId) || empty($groupId)) {
 	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
@@ -100,7 +100,7 @@ class GalleryUserGroupHelper_medium {
     /**
      * @see GalleryCoreApi::removeUserFromAllGroups
      */
-    function removeUserFromAllGroups($userId) {
+    static function removeUserFromAllGroups($userId) {
 	global $gallery;
 	if (empty($userId)) {
 	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
@@ -127,7 +127,7 @@ class GalleryUserGroupHelper_medium {
     /**
      * @see GalleryCoreApi::removeAllUsersFromGroup
      */
-    function removeAllUsersFromGroup($groupId) {
+    static function removeAllUsersFromGroup($groupId) {
 	global $gallery;
 	if (empty($groupId)) {
 	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
@@ -165,7 +165,7 @@ class GalleryUserGroupHelper_medium {
     /**
      * @see GalleryCoreApi::fetchUsersForGroup
      */
-    function fetchUsersForGroup($groupId, $count=null, $offset=null, $substring=null) {
+    static function fetchUsersForGroup($groupId, $count=null, $offset=null, $substring=null) {
 	global $gallery;
 
 	$data = array();
