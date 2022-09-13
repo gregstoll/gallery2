@@ -504,7 +504,7 @@ class GalleryUtilities {
     function castToFloat($value) {
 	if (is_string($value) && (float)'1.1' != 1.1
 		&& ($test = (string)1.1) != '1.1' && strlen($test) == 3) {
-	    return (float)str_replace('.', $test{1}, $value);
+	    return (float)str_replace('.', $test[1], $value);
 	}
 	return (float)$value;
     }
@@ -958,7 +958,7 @@ class GalleryUtilities {
 	     * Make sure the compare directory has a trailing slash so that /tmp doesn't
 	     * accidentally match /tmpfoo
 	     */
-	    if ($element{strlen($element)-1} != $slash) {
+	    if ($element[strlen($element)-1] != $slash) {
 		$element .= $slash;
 	    }
 
@@ -1263,7 +1263,7 @@ class GalleryUtilities {
 	if (empty($salt)) {
 	    for ($i = 0; $i < 4; $i++) {
 		$char = mt_rand(48, 109);
-		$char += ($char > 90) ? 13 : ($char > 57) ? 7 : 0;
+		$char += ($char > 90) ? 13 : (($char > 57) ? 7 : 0);
 		$salt .= chr($char);
 	    }
 	} else {
@@ -1487,7 +1487,7 @@ class GalleryUtilities {
 		    $i = 0;
 		    $lastPos = 0;
 		    while ($i < $len) {
-			switch ($string{$i}) {
+			switch ($string[$i]) {
 			    /* Two attr-pair separators */
 			case ',':
 			case ';':
@@ -1569,8 +1569,8 @@ class GalleryUtilities {
 	}
 	/* Make it a binary safe variable name */
 	for ($i = 0; $i < $len; $i++) {
-	    if ($key{$i} == ' ' || $key{$i} == '.') {
-		$key{$i} = '_';
+	    if ($key[$i] == ' ' || $key[$i] == '.') {
+		$key[$i] = '_';
 	    }
 	}
 	/*
@@ -1616,7 +1616,7 @@ class GalleryUtilities {
      * @param string $header
      * @return bool true if the given header is safe
      */
-    function isSafeHttpHeader($header) {
+    static function isSafeHttpHeader($header) {
 	if (!is_string($header)) {
 	    return false;
 	}

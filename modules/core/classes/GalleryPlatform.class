@@ -132,7 +132,7 @@ class GalleryPlatform {
 	}
 
 	$slash = $this->getDirectorySeparator();
-	$dir = $dir{strlen($dir) - 1} == $slash ? substr($dir, 0, strlen($dir) - 1) : $dir;
+	$dir = $dir[strlen($dir) - 1] == $slash ? substr($dir, 0, strlen($dir) - 1) : $dir;
 
 	$tempfile = tempnam($dir, $prefix);
 	if ($tempfile !== false) {
@@ -527,7 +527,7 @@ class GalleryPlatform {
 	    $gallery->debug("recursiveRmdir($dirname)");
 	}
 
-	if ($dirname{strlen($dirname)-1} != $this->getDirectorySeparator()) {
+	if ($dirname[strlen($dirname)-1] != $this->getDirectorySeparator()) {
 	    $dirname .= $this->getDirectorySeparator();
 	}
 
