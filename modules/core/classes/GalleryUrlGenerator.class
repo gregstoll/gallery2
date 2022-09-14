@@ -220,7 +220,7 @@ class GalleryUrlGenerator {
      * @static
      * @access private
      */
-    function _flattenParamsArray($nestedParams, &$flatParams, $keyBase=null) {
+    static function _flattenParamsArray($nestedParams, &$flatParams, $keyBase=null) {
 	foreach ($nestedParams as $key => $value) {
 	    $key = empty($keyBase) ? $key : $keyBase . '[' . $key . ']';
 	    if (is_array($value)) {
@@ -239,7 +239,7 @@ class GalleryUrlGenerator {
      * @static
      * @deprecated
      */
-    function getGalleryId() {
+    static function getGalleryId() {
 	return '';
     }
 

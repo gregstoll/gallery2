@@ -321,7 +321,7 @@ class GalleryTemplate {
      * @static
      * @access private
      */
-    function _getSmarty($trimWhitespace) {
+    static function _getSmarty($trimWhitespace) {
 	global $gallery;
 
 	GalleryCoreApi::requireOnce('modules/core/classes/GallerySmarty.class');
@@ -414,7 +414,7 @@ class GalleryTemplate {
      * @param Smarty $smarty
      * @deprecated
      */
-    function resourceGetTemplateBaseDir($templateName, &$smarty) {
+    static function resourceGetTemplateBaseDir($templateName, &$smarty) {
 	if (preg_match('/^(module|theme)s\/(.+)(\/.+)/iU', $templateName, $pluginId)) {
 	    return GalleryCoreApi::getCodeBasePath();
 	} else {
@@ -431,7 +431,7 @@ class GalleryTemplate {
      *
      * @see function _getActualTemplatePath
      */
-    function resourceGetTemplate($templateName, &$templateSource, &$smarty) {
+    static function resourceGetTemplate($templateName, &$templateSource, &$smarty) {
 	$templatePath = GalleryTemplate::_getActualTemplatePath($templateName, $smarty);
 
 	$success = false;
@@ -456,7 +456,7 @@ class GalleryTemplate {
      *
      * @see function _getActualTemplatePath
      */
-    function resourceGetTimestamp($templateName, &$templateTimestamp, &$smarty) {
+    static function resourceGetTimestamp($templateName, &$templateTimestamp, &$smarty) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 
@@ -484,7 +484,7 @@ class GalleryTemplate {
      * @static
      * @access private
      */
-     function _getActualTemplatePath($templateName, &$smarty) {
+    static function _getActualTemplatePath($templateName, &$smarty) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 
@@ -555,7 +555,7 @@ class GalleryTemplate {
      * @static
      * @access private
      */
-    function _getThemeId() {
+    static function _getThemeId() {
 	$view = new GalleryView();
 	list ($ret, $itemId) = $view->getItem();
 	if ($ret) {
