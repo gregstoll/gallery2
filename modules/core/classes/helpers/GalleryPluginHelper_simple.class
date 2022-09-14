@@ -409,7 +409,8 @@ class GalleryPluginHelper_simple {
 
 				/* Separate out the major/minor version. */
 				if (!strncmp($paramName, 'required', 8)) {
-				    $tmp = explode(',', $plugins[$pluginId][$paramName]);
+				    $pluginParamName = $plugins[$pluginId][$paramName];
+				    $tmp = explode(',', is_null($pluginParamName) ? '' : $pluginParamName);
 				    $plugins[$pluginId][$paramName] = (count($tmp) < 2)
 					? array(-1, -1) : array((int)$tmp[0], (int)$tmp[1]);
 				}

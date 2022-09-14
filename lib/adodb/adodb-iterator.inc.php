@@ -69,7 +69,7 @@
 
 
 class ADODB_BASE_RS implements IteratorAggregate {
-    function getIterator() {
+    function getIterator() : Traversable {
         return new ADODB_Iterator($this);
     }
 	
