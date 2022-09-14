@@ -59,7 +59,7 @@ class GalleryDataCache {
      * Is in-memory caching enabled?
      * @return boolean true if it's enabled
      */
-    function isMemoryCachingEnabled() {
+    static function isMemoryCachingEnabled() {
 	$cache =& GalleryDataCache::_getCache();
 	return $cache['memoryCacheEnabled'];
     }
@@ -68,7 +68,7 @@ class GalleryDataCache {
      * Turn in-memory caching on or off
      * @param boolean $bool
      */
-    function setMemoryCachingEnabled($bool) {
+    static function setMemoryCachingEnabled($bool) {
 	$cache =& GalleryDataCache::_getCache();
 	$cache['memoryCacheEnabled'] = $bool;
     }
@@ -118,7 +118,7 @@ class GalleryDataCache {
      * Remove data from the cache
      * @param string $pattern regexp
      */
-    function removeByPattern($pattern) {
+    static function removeByPattern($pattern) {
 	$cache =& GalleryDataCache::_getCache();
 	if (!$cache['memoryCacheEnabled']) {
 	    return;
@@ -140,7 +140,7 @@ class GalleryDataCache {
      * @param mixed $data
      * @param boolean $protected (optional) should this key survive a reset call?
      */
-    function putByReference($key, &$data, $protected=false) {
+    static function putByReference($key, &$data, $protected=false) {
 	$cache =& GalleryDataCache::_getCache();
 	if (!$cache['memoryCacheEnabled']) {
 	    return;
@@ -164,7 +164,7 @@ class GalleryDataCache {
      *
      * @access private
      */
-    function _performMaintenance() {
+    static function _performMaintenance() {
 	$cache =& GalleryDataCache::_getCache();
 	$numToExpire = count($cache['positions']) - $cache['minKeys'];
 	asort($cache['positions']);
@@ -211,7 +211,7 @@ class GalleryDataCache {
      * Return all the keys in the cache
      * @return array string keys
      */
-    function getAllKeys() {
+    static function getAllKeys() {
 	$cache =& GalleryDataCache::_getCache();
 	if (!$cache['memoryCacheEnabled']) {
 	    return array();
@@ -247,7 +247,7 @@ class GalleryDataCache {
      * Is caching to disk enabled?
      * @return boolean
      */
-    function &isFileCachingEnabled() {
+    static function &isFileCachingEnabled() {
 	$cache =& GalleryDataCache::_getCache();
 	return $cache['fileCacheEnabled'];
     }
@@ -257,7 +257,7 @@ class GalleryDataCache {
      * @param boolean $bool
 
      */
-    function setFileCachingEnabled($bool) {
+    static function setFileCachingEnabled($bool) {
 	$cache =& GalleryDataCache::_getCache();
 	$cache['fileCacheEnabled'] = $bool;
     }
@@ -475,7 +475,7 @@ class GalleryDataCache {
      * @param mixed $ids item ids (can be an array of ids or a single id)
      * @param string $permission
      */
-    function cachePermissions($ids, $permission) {
+    static function cachePermissions($ids, $permission) {
 	global $gallery;
 	$session =& $gallery->getSession();
 	if (!isset($session)) {
@@ -539,7 +539,7 @@ class GalleryDataCache {
      * @param string $permission
      * @return boolean
      */
-    function hasPermission($id, $permission) {
+    static function hasPermission($id, $permission) {
 	global $gallery;
 	$session =& $gallery->getSession();
 	if (!isset($session)) {
@@ -563,7 +563,7 @@ class GalleryDataCache {
     /**
      * Clear permission cache for active user.
      */
-    function clearPermissionCache() {
+    static function clearPermissionCache() {
 	global $gallery;
 	$session =& $gallery->getSession();
 	if (isset($session)) {
@@ -579,7 +579,7 @@ class GalleryDataCache {
      * @return array GalleryStatus a status code
      *               string the page data
      */
-    function getPageData($type, $keyData) {
+    static function getPageData($type, $keyData) {
 	global $gallery;
 
 	list ($ret, $acceleration) =
@@ -649,7 +649,7 @@ class GalleryDataCache {
      * @param string $value the page data
      * @return GalleryStatus a status code
      */
-    function putPageData($type, $itemId, $keyData, $value) {
+    static function putPageData($type, $itemId, $keyData, $value) {
 	global $gallery;
 
 	$userId = $gallery->getActiveUserId();
@@ -724,7 +724,7 @@ class GalleryDataCache {
      * @param mixed $itemIds one item id, or an array of item ids
      * @return GalleryStatus a status code
      */
-    function removePageData($itemIds) {
+    static function removePageData($itemIds) {
 	$ret = GalleryCoreApi::removeMapEntry('GalleryCacheMap', array('itemId' => $itemIds));
 	if ($ret) {
 	    return $ret;
@@ -788,7 +788,7 @@ class GalleryDataCache {
      * @return array GalleryStatus a status code
      *               string extra cache key
      */
-    function _getExtraPageCacheKey() {
+    static function _getExtraPageCacheKey() {
 	global $gallery;
 	$session =& $gallery->getSession();
 
@@ -813,7 +813,7 @@ class GalleryDataCache {
      *
      * @return GalleryStatus a status code
      */
-    function _cleanPageDataCache() {
+    static function _cleanPageDataCache() {
 	global $gallery;
 
 	list ($ret, $anonymousUserId) =

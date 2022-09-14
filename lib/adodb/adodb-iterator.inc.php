@@ -29,27 +29,27 @@
 	{
         $this->rs = $rs;
     }
-    function rewind() 
+    function rewind() : void
 	{
         $this->rs->MoveFirst();
     }
 
-	function valid() 
+	function valid() : bool
 	{
         return !$this->rs->EOF;
     }
 	
-    function key() 
+    function key() : mixed
 	{
         return $this->rs->_currentRow;
     }
 	
-    function current() 
+    function current() : mixed
 	{
         return $this->rs->fields;
     }
 	
-    function next() 
+    function next() : void
 	{
         $this->rs->MoveNext();
     }
@@ -60,7 +60,7 @@
 	}
 
 	
-	function hasMore()
+	function hasMore() : bool
 	{
 		return !$this->rs->EOF;
 	}
