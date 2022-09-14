@@ -1538,7 +1538,7 @@ class Smarty_Compiler extends Smarty {
         preg_match_all('~(?:' . $this->_obj_call_regexp . '|' . $this->_qstr_regexp . ' | (?>[^"\'=\s]+)
                          )+ |
                          [=]
-                        ~x', $tag_args, $match);
+                        ~x', is_null($tag_args) ? '' : $tag_args, $match);
         $tokens       = $match[0];
 
         $attrs = array();
