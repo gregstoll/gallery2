@@ -27,7 +27,7 @@
  */
 class FloatrixTheme extends GalleryTheme {
 
-    function FloatrixTheme() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('floatrix');

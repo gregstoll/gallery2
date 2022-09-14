@@ -28,7 +28,7 @@
  */
 class ClassicTheme extends GalleryTheme {
 
-    function ClassicTheme() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('classic');

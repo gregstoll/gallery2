@@ -28,7 +28,7 @@
  */
 class SliderTheme extends GalleryTheme {
 
-    function SliderTheme() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('slider');

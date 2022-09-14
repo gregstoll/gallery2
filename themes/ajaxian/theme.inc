@@ -27,7 +27,7 @@
  */
 class AjaxianTheme extends GalleryTheme {
 
-    function AjaxianTheme() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('ajaxian');
