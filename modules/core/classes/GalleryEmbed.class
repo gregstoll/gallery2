@@ -1040,7 +1040,8 @@ class GalleryEmbed /* implements GalleryEventListener */ {
 	    if ($template->hasVariable('head')) {
 		$head = $template->getVariable('head');
 		if (!empty($head['tpl'])) {
-		    list ($tpl) = each($head['tpl']);
+		    $tpl = current($head['tpl']);
+            next($head['tpl']);
 		    list ($ret, $headHtml) = $template->fetch("gallery:$tpl");
 		    if ($ret) {
 			return array($ret, null, null);
