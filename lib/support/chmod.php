@@ -302,7 +302,7 @@ class PermissionBits {
      * Constructor
      * @param int $bits permission bits in decimal integer representation, eg. octdec(0755)
      */
-    function PermissionBits($bits) {
+    function __construct($bits) {
     	$this->_bits = decoct($bits);
     }
 
