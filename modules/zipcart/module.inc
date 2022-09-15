@@ -27,7 +27,7 @@
  */
 class ZipCartModule extends GalleryModule {
 
-    function ZipCartModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('zipcart');

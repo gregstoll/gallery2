@@ -305,7 +305,7 @@ class AlbumSelectCallbacks {
  */
 class AlbumSelectTreeSorter {
     var $_titles;
-    function AlbumSelectTreeSorter(&$titles) {
+    function __construct(&$titles) {
 	$this->_titles =& $titles;
     }
     function sort($a, $b) {

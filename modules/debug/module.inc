@@ -29,7 +29,7 @@
  */
 class DebugModule extends GalleryModule {
 
-    function DebugModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('debug');

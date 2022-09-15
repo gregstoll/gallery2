@@ -25,7 +25,7 @@
  */
 class RemoteModule extends GalleryModule {
 
-    function RemoteModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('remote');
 	$this->setName($gallery->i18n('Remote'));

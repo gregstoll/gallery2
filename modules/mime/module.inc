@@ -29,7 +29,7 @@
  */
 class MimeModule extends GalleryModule {
 
-    function MimeModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('mime');
 	$this->setName($gallery->i18n('MIME Maintenance'));

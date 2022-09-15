@@ -27,7 +27,7 @@
  */
 class CartModule extends GalleryModule {
 
-    function CartModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('cart');

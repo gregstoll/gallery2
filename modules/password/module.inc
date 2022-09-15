@@ -31,7 +31,7 @@
  */
 class PasswordModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function PasswordModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('password');

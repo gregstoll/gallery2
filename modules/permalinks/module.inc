@@ -30,7 +30,7 @@
  */
 class PermalinksModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function PermalinksModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('permalinks');

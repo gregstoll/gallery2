@@ -30,7 +30,7 @@
  */
 class ImageMagickModule extends GalleryModule {
 
-    function ImageMagickModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('imagemagick');

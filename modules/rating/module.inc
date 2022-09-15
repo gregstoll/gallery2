@@ -26,7 +26,7 @@
  */
 class RatingModule extends GalleryModule {
 
-    function RatingModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('rating');

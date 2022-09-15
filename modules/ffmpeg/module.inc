@@ -29,7 +29,7 @@
  */
 class FfmpegModule extends GalleryModule {
 
-    function FfmpegModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('ffmpeg');

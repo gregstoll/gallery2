@@ -34,7 +34,7 @@ define('COMMENT_PUBLISH_STATUS_SPAM', 2);
  */
 class CommentModule extends GalleryModule {
 
-    function CommentModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('comment');

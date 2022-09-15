@@ -31,7 +31,7 @@
  */
 class ExifModule extends GalleryModule {
 
-    function ExifModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('exif');

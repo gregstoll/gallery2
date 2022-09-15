@@ -27,7 +27,7 @@
  */
 class IconsModule extends GalleryModule {
 
-    function IconsModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('icons');
 	$this->setName($gallery->i18n('Icons'));

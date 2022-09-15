@@ -26,7 +26,7 @@
  */
 class RandomHighlightModule extends GalleryModule {
 
-    function RandomHighlightModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('randomhighlight');
 	$this->setName($gallery->i18n('Random Highlight'));

@@ -27,7 +27,7 @@
  */
 class ShutterflyModule extends GalleryModule {
 
-    function ShutterflyModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('shutterfly');

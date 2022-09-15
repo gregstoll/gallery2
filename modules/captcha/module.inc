@@ -28,7 +28,7 @@
  */
 class CaptchaModule extends GalleryModule {
 
-    function CaptchaModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('captcha');
 	$this->setName($gallery->i18n('Captcha'));

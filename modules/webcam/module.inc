@@ -25,7 +25,7 @@
  */
 class WebCamModule extends GalleryModule {
 
-    function WebCamModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('webcam');
 	$this->setName($gallery->i18n('WebCam'));

@@ -27,7 +27,7 @@
  */
 class ThumbPageModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function ThumbPageModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('thumbpage');
