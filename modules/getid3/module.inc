@@ -29,7 +29,7 @@
  */
 class Getid3Module extends GalleryModule {
 
-    function Getid3Module() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('getid3');

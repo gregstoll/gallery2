@@ -27,7 +27,7 @@
  */
 class PhotoAccessModule extends GalleryModule {
 
-    function PhotoAccessModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('photoaccess');

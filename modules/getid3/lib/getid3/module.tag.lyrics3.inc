@@ -17,7 +17,7 @@
 class getid3_lyrics3
 {
 
-	function getid3_lyrics3(&$fd, &$ThisFileInfo) {
+	function __construct(&$fd, &$ThisFileInfo) {
 		// http://www.volweb.cz/str/tags.htm
 
 		fseek($fd, (0 - 128 - 9 - 6), SEEK_END);          // end - ID3v1 - LYRICSEND - [Lyrics3size]

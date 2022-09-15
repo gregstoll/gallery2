@@ -27,7 +27,7 @@
  */
 class ImageBlockModule extends GalleryModule {
 
-    function ImageBlockModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('imageblock');
 	$this->setName($gallery->i18n('Image Block'));

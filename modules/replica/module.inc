@@ -28,7 +28,7 @@
  */
 class ReplicaModule extends GalleryModule {
 
-    function ReplicaModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('replica');
 	$this->setName($gallery->i18n('Replica'));

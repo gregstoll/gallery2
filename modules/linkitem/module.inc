@@ -25,7 +25,7 @@
  */
 class LinkItemModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function LinkItemModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('linkitem');
 	$this->setName($gallery->i18n('Link Items'));

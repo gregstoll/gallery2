@@ -17,7 +17,7 @@
 class getid3_iso
 {
 
-	function getid3_iso($fd, &$ThisFileInfo) {
+	function __construct($fd, &$ThisFileInfo) {
 		$ThisFileInfo['fileformat'] = 'iso';
 
 		for ($i = 16; $i <= 19; $i++) {

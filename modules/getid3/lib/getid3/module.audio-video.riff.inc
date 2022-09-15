@@ -21,7 +21,7 @@ getid3_lib::IncludeDependency(GETID3_INCLUDEPATH.'module.audio.mp3.inc', __FILE_
 class getid3_riff
 {
 
-	function getid3_riff(&$fd, &$ThisFileInfo) {
+	function __construct(&$fd, &$ThisFileInfo) {
 
 		// initialize these values to an empty array, otherwise they default to NULL
 		// and you can't append array values to a NULL value

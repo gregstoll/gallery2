@@ -27,7 +27,7 @@
  */
 class NetPbmModule extends GalleryModule {
 
-    function NetPbmModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('netpbm');

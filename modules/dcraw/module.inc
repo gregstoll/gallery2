@@ -29,7 +29,7 @@
  */
 class DcrawModule extends GalleryModule {
 
-    function DcrawModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('dcraw');

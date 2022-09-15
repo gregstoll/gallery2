@@ -26,7 +26,7 @@
  */
 class HttpAuthModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function HttpAuthModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('httpauth');

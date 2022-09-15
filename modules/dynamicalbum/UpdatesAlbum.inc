@@ -27,7 +27,7 @@
  */
 class UpdatesAlbumView extends GalleryView {
 
-    function UpdatesAlbumView() {
+    function __construct() {
 	global $gallery;
 	$this->_view = 'dynamicalbum.UpdatesAlbum';
 	$this->_title = $gallery->i18n('Recent Updates');

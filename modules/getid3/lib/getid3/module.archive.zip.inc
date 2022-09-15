@@ -17,7 +17,7 @@
 class getid3_zip
 {
 
-	function getid3_zip(&$fd, &$ThisFileInfo) {
+	function __construct(&$fd, &$ThisFileInfo) {
 
 		$ThisFileInfo['fileformat']      = 'zip';
 		$ThisFileInfo['zip']['encoding'] = 'ISO-8859-1';

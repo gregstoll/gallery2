@@ -28,7 +28,7 @@
  */
 class EcardModule extends GalleryModule {
 
-    function EcardModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('ecard');

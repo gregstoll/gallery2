@@ -30,7 +30,7 @@
  */
 class SquareThumbModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function SquareThumbModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('squarethumb');

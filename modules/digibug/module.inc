@@ -27,7 +27,7 @@
  */
 class DigibugModule extends GalleryModule {
 
-    function DigibugModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('digibug');

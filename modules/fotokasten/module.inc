@@ -30,7 +30,7 @@ define('FOTOKASTEN_GALLERY_AFFILIATE_PASSWORD', 'f12a65d90445f95b90e5fd30c75ee74
  */
 class FotokastenModule extends GalleryModule {
 
-    function FotokastenModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('fotokasten');

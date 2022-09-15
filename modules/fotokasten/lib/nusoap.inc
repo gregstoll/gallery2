@@ -532,7 +532,7 @@ class XMLSchema extends nusoap_base  {
 	* @param    string $xml xml document URI
 	* @access   public
 	*/
-	function XMLSchema($schema='',$xml=''){
+	function __construct($schema='',$xml=''){
 
 		$this->debug('xmlschema class instantiated, inside constructor');
 		// files

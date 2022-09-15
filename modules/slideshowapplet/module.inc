@@ -25,7 +25,7 @@
  */
 class SlideshowAppletModule extends GalleryModule {
 
-    function SlideshowAppletModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('slideshowapplet');
 	$this->setName($gallery->i18n('Slideshow Applet'));

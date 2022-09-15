@@ -28,7 +28,7 @@
  * @version $Revision: 20954 $
  */
 class MigrateModule extends GalleryModule /* and GalleryEventListener */ {
-    function MigrateModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('migrate');

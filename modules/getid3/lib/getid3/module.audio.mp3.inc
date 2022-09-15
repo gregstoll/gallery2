@@ -26,7 +26,7 @@ class getid3_mp3
 
 	var $allow_bruteforce = false; // forces getID3() to scan the file byte-by-byte and log all the valid audio frame headers - extremely slow, unrecommended, but may provide data from otherwise-unusuable files
 
-	function getid3_mp3(&$fd, &$ThisFileInfo) {
+	function __construct(&$fd, &$ThisFileInfo) {
 
 		if (!$this->getOnlyMPEGaudioInfo($fd, $ThisFileInfo, $ThisFileInfo['avdataoffset'])) {
 			if ($this->allow_bruteforce) {

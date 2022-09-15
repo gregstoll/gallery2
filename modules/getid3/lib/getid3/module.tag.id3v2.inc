@@ -18,7 +18,7 @@ getid3_lib::IncludeDependency(GETID3_INCLUDEPATH.'module.tag.id3v1.inc', __FILE_
 class getid3_id3v2
 {
 
-	function getid3_id3v2(&$fd, &$ThisFileInfo, $StartingOffset=0) {
+	function __construct(&$fd, &$ThisFileInfo, $StartingOffset=0) {
 		//    Overall tag structure:
 		//        +-----------------------------+
 		//        |      Header (10 bytes)      |

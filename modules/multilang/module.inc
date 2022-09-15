@@ -27,7 +27,7 @@
  */
 class MultiLangModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function MultiLangModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('multilang');

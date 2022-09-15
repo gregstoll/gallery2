@@ -25,7 +25,7 @@
  */
 class UploadAppletModule extends GalleryModule {
 
-    function UploadAppletModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('uploadapplet');
 	$this->setName($gallery->i18n('Upload Applet'));

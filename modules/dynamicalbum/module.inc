@@ -27,7 +27,7 @@
  */
 class DynamicAlbumModule extends GalleryModule {
 
-    function DynamicAlbumModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('dynamicalbum');
 	$this->setName($gallery->i18n('Dynamic Albums'));

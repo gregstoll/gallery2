@@ -30,7 +30,7 @@
  */
 class NokiaUploadModule extends GalleryModule {
 
-    function NokiaUploadModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('nokiaupload');

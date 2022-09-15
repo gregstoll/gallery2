@@ -28,7 +28,7 @@
  */
 class ArchiveUploadModule extends GalleryModule {
 
-    function ArchiveUploadModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('archiveupload');

@@ -16,7 +16,7 @@
 class getid3_apetag
 {
 
-	function getid3_apetag(&$fd, &$ThisFileInfo, $overrideendoffset=0) {
+	function __construct(&$fd, &$ThisFileInfo, $overrideendoffset=0) {
 		$id3v1tagsize     = 128;
 		$apetagheadersize = 32;
 		$lyrics3tagsize   = 10;

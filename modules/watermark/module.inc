@@ -27,7 +27,7 @@
  */
 class WatermarkModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function WatermarkModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('watermark');

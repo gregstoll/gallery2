@@ -18,7 +18,7 @@ getid3_lib::IncludeDependency(GETID3_INCLUDEPATH.'module.audio.mp3.inc', __FILE_
 class getid3_quicktime
 {
 
-	function getid3_quicktime(&$fd, &$ThisFileInfo, $ReturnAtomData=true, $ParseAllPossibleAtoms=false) {
+	function __construct(&$fd, &$ThisFileInfo, $ReturnAtomData=true, $ParseAllPossibleAtoms=false) {
 
 		$ThisFileInfo['fileformat'] = 'quicktime';
 		$ThisFileInfo['quicktime']['hinting'] = false;

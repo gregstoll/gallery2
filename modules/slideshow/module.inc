@@ -28,7 +28,7 @@
  */
 class SlideshowModule extends GalleryModule {
 
-    function SlideshowModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('slideshow');
 	$this->setName($gallery->i18n('Slideshow'));

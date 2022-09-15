@@ -42,7 +42,7 @@ define('REWRITE_STATUS_EMBED_HTACCESS_CANT_WRITE', 18);
  */
 class ModRewriteParser extends RewriteParser {
 
-    function ModRewriteParser() {
+    function __construct() {
 	$this->_setParserId('modrewrite');
 	$this->_setParserType('preGallery');
 	$this->_setUrlGeneratorId('ModRewriteUrlGenerator');

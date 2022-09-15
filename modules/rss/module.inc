@@ -29,7 +29,7 @@
  */
 class RssModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function RssModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('rss');

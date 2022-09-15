@@ -28,7 +28,7 @@
  */
 class ItemAddModule extends GalleryModule {
 
-    function ItemAddModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('itemadd');
 	$this->setName($gallery->i18n('Add Items'));
