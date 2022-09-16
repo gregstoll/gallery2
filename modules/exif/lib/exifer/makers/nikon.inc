@@ -160,7 +160,7 @@ function formatNikonData($type,$tag,$intel,$model,$data) {
 	} else if($type=="UNDEFINED") {
 		
 		if($tag=="0001" && $model==1) { //Unknown (Version?)
-			$data=$data/100;
+			$data=intval($data)/100;
 		}
 		if($tag=="0088" && $model==1) { //AF Focus Position
 			$temp = "Center";
