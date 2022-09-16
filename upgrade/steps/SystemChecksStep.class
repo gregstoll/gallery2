@@ -33,7 +33,7 @@ class SystemChecksStep extends UpgradeStep {
      */
     function _getBytes($val) {
 	$val = trim($val);
-	$last = $val{strlen($val)-1};
+	$last = $val[strlen($val)-1];
 	switch ($last) {
 	case 'g':
 	case 'G':
@@ -540,7 +540,7 @@ class SystemChecksStep extends UpgradeStep {
 	if (empty($storagePath)) {
 	    return array(sprintf(_('The storage folder path is not defined in config.php (%s)'),
 				 'data.gallery.base'));
-	} else if ($storagePath{strlen($storagePath)-1} != $platform->getDirectorySeparator()) {
+	} else if ($storagePath[strlen($storagePath)-1] != $platform->getDirectorySeparator()) {
 	    $storagePath .= $platform->getDirectorySeparator();
 	}
 
