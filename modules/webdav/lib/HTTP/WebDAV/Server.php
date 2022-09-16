@@ -1633,7 +1633,7 @@ class HTTP_WebDAV_Server
         // set headers before we start printing
         $this->setResponseStatus($status);
 
-        if ($status{0} == 2) { // 2xx states are ok
+        if ($status[0] == 2) { // 2xx states are ok
             $this->setResponseHeader('Content-Type: text/xml; charset="utf-8"');
 
             // RFC2518 8.10.1: In order to indicate the lock token associated
@@ -2123,10 +2123,10 @@ class HTTP_WebDAV_Server
         $uuid = md5(microtime() . getmypid()); // this should be random enough for now
 
         // set variant and version fields for 'true' random uuid
-        $uuid{12} = '4';
-        $n = 8 + (ord($uuid{16}) & 3);
+        $uuid[12] = '4';
+        $n = 8 + (ord($uuid[16]) & 3);
         $hex = '0123456789abcdef';
-        $uuid{16} = $hex{$n};
+        $uuid{16} = $hex[$n];
 
         // return formated uuid
         return substr($uuid,  0, 8)
@@ -2161,7 +2161,7 @@ class HTTP_WebDAV_Server
     function _if_header_lexer($string, &$pos)
     {
         // skip whitespace
-        while (ctype_space($string{$pos})) {
+        while (ctype_space($string[$pos])) {
             ++$pos;
         }
 
@@ -2171,7 +2171,7 @@ class HTTP_WebDAV_Server
         }
 
         // get next character
-        $c = $string{$pos++};
+        $c = $string[$pos++];
 
         // now it depends on what we found
         switch ($c) {
@@ -2186,7 +2186,7 @@ class HTTP_WebDAV_Server
             // ETags are enclosed in [...]
             case '[':
                 $type = 'ETAG_STRONG';
-                if ($string{$pos} == 'W') {
+                if ($string[$pos] == 'W') {
                     $type = 'ETAG_WEAK';
                     $pos += 2;
                 }
