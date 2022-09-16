@@ -50,7 +50,7 @@ class RatingAlbumView extends GalleryView {
 	    return array($ret, null, null, null);
 	}
 	list ($limit, $itemId) = GalleryUtilities::getRequestVariables('limit', 'itemId');
-	$item->create(
+	$item->createDynamicAlbum(
 	    $module->translate(array('text' => 'Rating Album: %s', 'arg1' => $limit)),
 	    array(array('Rating Album', 'rating album'),
 		  array($module->translate('Rating Album'), $module->translate('rating album')))

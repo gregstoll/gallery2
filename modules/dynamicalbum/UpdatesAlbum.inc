@@ -58,7 +58,7 @@ class UpdatesAlbumView extends GalleryView {
 	if ($ret) {
 	    return array($ret, null, null, null);
 	}
-	$item->create(
+	$item->createDynamicAlbum(
 	    $module->translate($this->_title),
 	    array($this->_itemType, array_map(array($module, 'translate'), $this->_itemType))
 	);
