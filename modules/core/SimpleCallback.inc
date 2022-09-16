@@ -120,7 +120,7 @@ class SimpleCallbackView extends GalleryView {
 	$dirList = $fileList = array();
 	if ($dir = $platform->opendir($path)) {
 	    $slash = $platform->getDirectorySeparator();
-	    if ($path{strlen($path)-1} != $slash) {
+	    if ($path[strlen($path)-1] != $slash) {
 		$path .= $slash;
 	    }
 	    while (($file = $platform->readdir($dir)) !== false) {

@@ -64,10 +64,10 @@ class AdminCoreController extends GalleryController {
 		    $urlComponents = parse_url($urlGenerator->getCurrentUrlDir(false));
 		    $paths['embedded'] = $urlComponents['path'];
 		    foreach ($paths as $key => $value) {
-			if ($value{strlen($value)-1} != '/') {
+			if ($value[strlen($value)-1] != '/') {
 			    $value .= '/';
 			}
-			if ($value{0} != '/') {
+			if ($value[0] != '/') {
 			    $value = '/' . $value;
 			}
 			$paths[$key] = $value;
@@ -86,7 +86,7 @@ class AdminCoreController extends GalleryController {
 		/* It should either be empty or a substring of the request-host */
 		if (!empty($form['cookie']['domain'])) {
 		    $cookieDomain = $form['cookie']['domain'];
-		    if ($cookieDomain{0} != '.') {
+		    if ($cookieDomain[0] != '.') {
 			$cookieDomain = '.' . $cookieDomain;
 		    }
 		    $urlComponents = parse_url($urlGenerator->getCurrentUrlDir());
