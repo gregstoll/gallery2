@@ -1315,7 +1315,7 @@ class getid3_riff
 			$RIFFdataLength = strlen($RIFFdata);
 			$NewLengthString = getid3_lib::LittleEndian2String($RIFFdataLength, 4);
 			for ($i = 0; $i < 4; $i++) {
-				$RIFFdata{$i + 4} = $NewLengthString{$i};
+				$RIFFdata[$i + 4] = $NewLengthString[$i];
 			}
 			fwrite($fp_temp, $RIFFdata);
 			fclose($fp_temp);
