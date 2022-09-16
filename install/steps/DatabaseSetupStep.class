@@ -609,7 +609,7 @@ class DatabaseSetupStep extends InstallStep {
 	     * all cases
 	     */
 	    $configPath = $galleryStub->getConfig('data.gallery.base');
-	    if ($configPath{strlen($configPath)-1} != DIRECTORY_SEPARATOR) {
+	    if ($configPath[strlen($configPath)-1] != DIRECTORY_SEPARATOR) {
 		$configPath .=  DIRECTORY_SEPARATOR;
 	    }
 	    $GLOBALS['gallery']->setConfig('data.gallery.base', $configPath);
@@ -676,7 +676,7 @@ class DatabaseSetupStep extends InstallStep {
 	$baseDir = $gallery->getConfig('data.gallery.base');
 	$platform =& $gallery->getPlatform();
 
-	if ($baseDir{strlen($baseDir)-1} != $platform->getDirectorySeparator()) {
+	if ($baseDir[strlen($baseDir)-1] != $platform->getDirectorySeparator()) {
 	    $baseDir .= $platform->getDirectorySeparator();
 	}
 
