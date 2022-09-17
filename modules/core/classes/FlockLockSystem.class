@@ -106,7 +106,7 @@ class FlockLockSystem extends GalleryLockSystem {
 		    }
 		    return array(GalleryCoreApi::error(ERROR_LOCK_TIMEOUT, __FILE__, __LINE__,
 			array_reduce($notLocked,
-			    create_function('$v,$w', 'return empty($v) ? $w[1] : "$v $w[1]";'))),
+			    function($v,$w) {return empty($v) ? $w[1] : "$v $w[1]";})),
 			null);
 		}
 

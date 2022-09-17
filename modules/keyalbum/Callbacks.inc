@@ -152,8 +152,9 @@ class KeyAlbumCallbacks {
 
 	if ($sizeLimit > 0 && count($keywords) > $sizeLimit) {
 	    /* Sort by frequency and drop least common */
-	    uasort($keywords, create_function('$a,$b', '$c = $a[\'count\']; $d = $b[\'count\']; '
-						    . 'return $c > $d ? -1 : ($c == $d ? 0 : 1);'));
+        uasort($keywords, function($a,$b) {
+            $c = $a[\'count\']; $d = $b[\'count\'];
+		    return $c > $d ? -1 : ($c == $d ? 0 : 1);});
 
 	    /* Avoid renumbering of numeric keys from array_splice */
 	    for ($newKeywords = array(), reset($keywords), $i = 0; $i < $sizeLimit; $i++) {
