@@ -41,7 +41,7 @@ class ThumbnailHelper {
      * @return array GalleryStatus a status code
      *               array of itemId=>fileName
      */
-    function fetchThumbnails($listAll=false, $count=null, $offset=null, $substring=null) {
+    static function fetchThumbnails($listAll=false, $count=null, $offset=null, $substring=null) {
 	global $gallery;
 
 	$where = $data = array();
@@ -85,7 +85,7 @@ class ThumbnailHelper {
      * @return array GalleryStatus a status code
      *               ThumbnailImage or null
      */
-    function fetchThumbnail($itemId) {
+    static function fetchThumbnail($itemId) {
 	global $gallery;
 
 	list ($ret, $searchResults) = $gallery->search(
@@ -114,7 +114,7 @@ class ThumbnailHelper {
      * @return array GalleryStatus a status code
      *               array of mimeType=>itemId
      */
-    function fetchMimeTypeMap() {
+    static function fetchMimeTypeMap() {
 	global $gallery;
 	list ($ret, $searchResults) = $gallery->search(
 	    'SELECT [ThumbnailImage::id], [ThumbnailImage::itemMimeTypes]
@@ -141,7 +141,7 @@ class ThumbnailHelper {
      *               :by-mimeType: null
      *                or by-toolkit: array of mimeType conflicts
      */
-    function fetchToolkitSupport($byMimeType=true) {
+    static function fetchToolkitSupport($byMimeType=true) {
 	list ($ret, $tList) = GalleryCoreApi::getToolkitOperationMimeTypes('thumbnail');
 	if ($ret) {
 	    return array($ret, null, null);
@@ -174,7 +174,7 @@ class ThumbnailHelper {
      * @param mixed $mimeTypes array or single string
      * @return GalleryStatus a status code
      */
-    function registerToolkitOperation($mimeTypes) {
+    static function registerToolkitOperation($mimeTypes) {
 	global $gallery;
 	if (!is_array($mimeTypes)) {
 	    $mimeTypes = array($mimeTypes);
@@ -211,7 +211,7 @@ class ThumbnailHelper {
      * @return array GalleryStatus a status code,
      *               int id of newly created object
      */
-    function addItem($mimeType, $parentId,
+    static function addItem($mimeType, $parentId,
 		     $filename, $tmpfile, $fileMimeType, $knownSize=array(), $item=null) {
 	/* Get the mime type. */
 	list ($ret, $fileMimeType) = GalleryCoreApi::getMimeType($filename, $fileMimeType);
@@ -282,7 +282,7 @@ class ThumbnailHelper {
      * @param boolean $isAdd (optional) true to add mime type, false to delete
      * @return GalleryStatus a status code
      */
-    function updateItem($itemId, $mimeType, $isAdd=true) {
+    static function updateItem($itemId, $mimeType, $isAdd=true) {
 	list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId, 'ThumbnailImage');
 	if ($ret) {
 	    return $ret;
@@ -335,7 +335,7 @@ class ThumbnailHelper {
      * @param int $thumbnailId id of ThumbnailImage
      * @return GalleryStatus a status code
      */
-    function applyThumbnail(&$item, $thumbnailId) {
+    static function applyThumbnail(&$item, $thumbnailId) {
 	list ($ret, $derivative) = GalleryCoreApi::fetchThumbnailsByItemIds(array($item->getId()));
 	if ($ret) {
 	    return $ret;
@@ -417,7 +417,7 @@ class ThumbnailHelper {
      * @return array GalleryStatus a status code
      *               array (string mime type => string list of extensions)
      */
-    function getMimeTypeMap() {
+    static function getMimeTypeMap() {
 	global $gallery;
 
 	$query = '
