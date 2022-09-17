@@ -516,7 +516,7 @@ function formatData($type,$tag,$intel,$data) {
 	} else if($type=="UNDEFINED") {
 
 		if($tag=="9000" || $tag=="a000" || $tag=="0002") { //ExifVersion,FlashPixVersion,InteroperabilityVersion
-			$data="version ".$data/100;
+			$data="version ".intval($data)/100;
 		}
 		if($tag=="a300") { //FileSource
 			$data = bin2hex($data);
