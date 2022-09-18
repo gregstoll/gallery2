@@ -44,7 +44,7 @@ class PasswordOption extends ItemEditOption {
 	 * Password protected items are not fully protected, but their descendants are. Only show
 	 * the option for non-album items that already are password protected.
 	 */
-	list ($ret, $hasPassword) = PasswordHelper::hasPassword($item);
+	list ($ret, $hasPassword) = PasswordHelper::hasPasswordStatic($item);
 	if ($ret) {
 	    return array($ret, null);
 	}
@@ -74,7 +74,7 @@ class PasswordOption extends ItemEditOption {
 	}
 
 	if (!empty($form['PasswordOption']['remove'])) {
-	    $ret = PasswordHelper::removePassword($item, $useProgressBar);
+	    $ret = PasswordHelper::removePasswordStatic($item, $useProgressBar);
 	    if ($ret) {
 		return array($ret, null, null);
 	    }
@@ -84,7 +84,7 @@ class PasswordOption extends ItemEditOption {
 		GalleryUtilities::unsanitizeInputValues($form['PasswordOption']['password1'],
 							false);
 		GalleryCoreApi::requireOnce('modules/password/classes/PasswordHelper.class');
-		$ret = PasswordHelper::setPassword($item, $form['PasswordOption']['password1'],
+		$ret = PasswordHelper::setPasswordStatic($item, $form['PasswordOption']['password1'],
 						   $useProgressBar);
 		if ($ret) {
 		    return array($ret, null, null);
