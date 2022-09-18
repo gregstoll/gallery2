@@ -30,10 +30,7 @@ GalleryCoreApi::requireOnce('modules/exif/classes/ExifInterface_1_0.class');
  */
 class ExifExtractor extends ExifInterface_1_0 {
 
-    /**
-     * @see ExifInterface_1_0::getMetaData
-     */
-    function getMetaData($itemIds, $properties=array()) {
+    static function getMetaDataStatic($itemIds, $properties=array()) {
 	global $gallery;
 	GalleryCoreApi::requireOnce('modules/exif/lib/exifer/exif.inc');
 
@@ -86,6 +83,13 @@ class ExifExtractor extends ExifInterface_1_0 {
 	}
 
 	return array(null, $data);
+    }
+
+    /**
+     * @see ExifInterface_1_0::getMetaData
+     */
+    function getMetaData($itemIds, $properties=array()) {
+        return ExifExtractor::getMetaDataStatic($itemIds, $properties);
     }
 }
 ?>

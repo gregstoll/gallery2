@@ -93,7 +93,7 @@ class ExifDescriptionOption extends ItemAddOption {
 		    return array($ret, null, null);
 		}
 
-		list ($ret, $exifData) = ExifExtractor::getMetaData($currentItemIds, $needed);
+		list ($ret, $exifData) = ExifExtractor::getMetaDataStatic($currentItemIds, $needed);
 		if ($ret) {
 		    GalleryCoreApi::releaseLocks($lockId);
 		    return array($ret, null, null);
