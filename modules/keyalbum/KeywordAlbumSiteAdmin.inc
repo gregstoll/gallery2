@@ -126,8 +126,8 @@ class KeywordAlbumSiteAdminView extends GalleryView {
 	    $split = $form['split'];
 	    $form['split'] = array();
 	    for ($i = 0; $i < strlen($split); $i++) {
-		if (isset($map[$split{$i}])) {
-		    $form['split'][$map[$split{$i}]] = 1;
+		if (isset($map[$split[$i]])) {
+		    $form['split'][$map[$split[$i]]] = 1;
 		}
 	    }
 	} else {

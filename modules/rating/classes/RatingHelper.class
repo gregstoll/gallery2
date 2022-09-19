@@ -37,7 +37,7 @@ class RatingHelper {
      *               array  double  latest average rating
      *                      int     count of total ratings
      */
-    function fetchRatings($itemIds, $userId) {
+    static function fetchRatings($itemIds, $userId) {
 	global $gallery;
 
 	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('RatingCacheMap',
@@ -123,7 +123,7 @@ class RatingHelper {
      *               array  double  new avg rating for itemId
      *                      int     total votes for itemId
      */
-    function rateItem($itemId, $rating, $userId) {
+    static function rateItem($itemId, $rating, $userId) {
 	global $gallery;
 
 	/* Make sure the user isn't a search engine crawler */

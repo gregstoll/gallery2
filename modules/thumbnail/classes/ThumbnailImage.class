@@ -431,7 +431,7 @@ class ThumbnailImage extends GalleryFileSystemEntity {
 	if ($this->getParentId() != $thumbnailContainerId) {
 	    /* Custom thumbnails are stored in a decimal tree, e.g. 7/75.jpg. */
 	    $id = (string)$this->getId();
-	    $path = $id{0} . '/' . $id . '.jpg';
+	    $path = $id[0] . '/' . $id . '.jpg';
 	} else {
 	    /* Mime-type thumbnails are right under the plugin_data/modules/thumbnail/ folder. */
 	    $path = $this->getPathComponent();

@@ -29,7 +29,7 @@ GalleryCoreApi::requireOnce('modules/dynamicalbum/UpdatesAlbum.inc');
  */
 class RandomAlbumView extends UpdatesAlbumView {
 
-    function RandomAlbumView() {
+    function __construct() {
 	global $gallery;
 	$this->_view = 'dynamicalbum.RandomAlbum';
 	$this->_title = $gallery->i18n('Random Items');

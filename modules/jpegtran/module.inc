@@ -30,7 +30,7 @@
  */
 class JpegtranModule extends GalleryModule {
 
-    function JpegtranModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('jpegtran');
@@ -177,7 +177,7 @@ class JpegtranModule extends GalleryModule {
 		if (empty($path)) {
 		    continue;
 		}
-		if ($path{strlen($path)-1} != $slash) {
+		if ($path[strlen($path)-1] != $slash) {
 		    $path .= $slash;
 		}
 		$paths[] = $path . 'jpegtran.exe';
@@ -199,7 +199,7 @@ class JpegtranModule extends GalleryModule {
 		if (empty($path)) {
 		    continue;
 		}
-		if ($path{strlen($path)-1} != $slash) {
+		if ($path[strlen($path)-1] != $slash) {
 		    $path .= $slash;
 		}
 		$paths[] = $path . 'jpegtran';

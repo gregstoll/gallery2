@@ -29,7 +29,7 @@
  */
 class NewItemsModule extends GalleryModule {
 
-    function NewItemsModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('newitems');

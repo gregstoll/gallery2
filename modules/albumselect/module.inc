@@ -28,7 +28,7 @@
  */
 class AlbumSelectModule extends GalleryModule {
 
-    function AlbumSelectModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('albumselect');
 	$this->setName($gallery->i18n('Album Select'));

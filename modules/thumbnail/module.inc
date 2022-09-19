@@ -29,7 +29,7 @@
  */
 class ThumbnailModule extends GalleryModule {
 
-    function ThumbnailModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('thumbnail');

@@ -53,7 +53,7 @@ class ArchiveUploadSiteAdminController extends GalleryController {
 		    $platform =& $gallery->getPlatform();
 		    $slash = $platform->getDirectorySeparator();
 		    $retryPath = $form['unzipPath'];
-		    if ($retryPath{strlen($retryPath)-1} != $slash) {
+		    if ($retryPath[strlen($retryPath)-1] != $slash) {
 			$retryPath .= $slash;
 		    }
 		    $retryPath .= 'unzip';

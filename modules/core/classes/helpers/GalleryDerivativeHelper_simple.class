@@ -31,7 +31,7 @@ class GalleryDerivativeHelper_simple {
     /**
      * @see GalleryCoreApi::rebuildDerivativeCacheIfNotCurrent
      */
-    function rebuildCacheIfNotCurrent($derivativeId, $fixBroken=false) {
+    static function rebuildCacheIfNotCurrent($derivativeId, $fixBroken=false) {
 	global $gallery;
 
 	list ($ret, $derivative) =
@@ -60,7 +60,7 @@ class GalleryDerivativeHelper_simple {
     /**
      * @see GalleryCoreApi::fetchThumbnailsByItemIds
      */
-    function fetchThumbnailsByItemIds($ids) {
+    static function fetchThumbnailsByItemIds($ids) {
 	if (!is_array($ids)) {
 	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
 	}
@@ -93,7 +93,7 @@ class GalleryDerivativeHelper_simple {
      *               array(GalleryItem id => GalleryDerivativeImage, ...)
      * @access private
      */
-    function _loadDerivatives($itemIds, $sourceIds, $types=array()) {
+    static function _loadDerivatives($itemIds, $sourceIds, $types=array()) {
 	global $gallery;
 
 	if (empty($itemIds) && empty($sourceIds) ||

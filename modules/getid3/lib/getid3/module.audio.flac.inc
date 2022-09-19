@@ -19,7 +19,7 @@ getid3_lib::IncludeDependency(GETID3_INCLUDEPATH.'module.audio.ogg.inc', __FILE_
 class getid3_flac
 {
 
-	function getid3_flac(&$fd, &$ThisFileInfo) {
+	function __construct(&$fd, &$ThisFileInfo) {
 		// http://flac.sourceforge.net/format.html
 
 		fseek($fd, $ThisFileInfo['avdataoffset'], SEEK_SET);

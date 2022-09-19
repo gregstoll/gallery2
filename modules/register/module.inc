@@ -27,7 +27,7 @@
  */
 class RegisterModule extends GalleryModule {
 
-    function RegisterModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('register');

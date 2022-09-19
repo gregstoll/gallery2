@@ -27,7 +27,7 @@
  */
 class UserAlbumModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function UserAlbumModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('useralbum');
 	$this->setName($gallery->i18n('User Albums'));

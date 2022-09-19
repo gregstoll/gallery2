@@ -35,7 +35,7 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
      * @param array $params (optional) image block parameters (to override module settings)
      * @return GalleryStatus a status code
      */
-    function loadImageBlocks(&$template, $params) {
+    static function loadImageBlocks(&$template, $params) {
 	global $gallery;
 	list ($ret, $moduleParams) =
 	    GalleryCoreApi::fetchAllPluginParameters('module', 'imageblock');
@@ -206,7 +206,7 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
     /**
      * @access private
      */
-    function _getBlockData($itemType, $order, $count, $parentId=null,
+    static function _getBlockData($itemType, $order, $count, $parentId=null,
 			   $fullSize=false, $userId=null, $maxSize=null, $biggerOnly=false) {
 	$blocks = $data = array();
 	switch ($order) {
@@ -493,7 +493,7 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
      * @return array GalleryStatus a status code
      *               array of arrays containing id, viewCount of items (empty array if none found)
      */
-    function fetchViewableData($itemType, $order, $count, $parentId=null, $userId=null) {
+    static function fetchViewableData($itemType, $order, $count, $parentId=null, $userId=null) {
 	global $gallery;
 	$storage =& $gallery->getStorage();
 	$typeMap = array('Image' => 1, 'Album' => 2);
@@ -634,7 +634,7 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
      * @return array GalleryStatus a status code
      *               string containing SQL ORDER BY statement
      */
-    function _buildOrderBy($order) {
+    static function _buildOrderBy($order) {
 	global $gallery;
 	$orderBy = null;
 
@@ -657,7 +657,7 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
     /**
      * @access private
      */
-    function _runQuery($query, $data) {
+    static function _runQuery($query, $data) {
 	global $gallery;
 	list ($ret, $searchResults) = $gallery->search($query, $data);
 	if ($ret) {
@@ -677,7 +677,7 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
     /**
      * @access private
      */
-    function _isCached($userId) {
+    static function _isCached($userId) {
 	global $gallery;
 	list ($ret, $searchResults) = $gallery->search(
 	    'SELECT COUNT(*) FROM [ImageBlockCacheMap] WHERE [ImageBlockCacheMap::userId] = ?',
@@ -695,7 +695,7 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
      * @return GalleryStatus a status code
      * @todo Respect DisabledMap on INSERT such that we don't have to join the DisabledMap on SELECT
      */
-    function cacheViewableTree($userId) {
+    static function cacheViewableTree($userId) {
 	global $gallery;
 	$storage =& $gallery->getStorage();
 
@@ -883,7 +883,7 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
      * @param boolean $useProgressBar (optional) use a progressbar during update? (default=false)
      * @return GalleryStatus a status code
      */
-    function setDisabledFlag($parentAlbum, $recursive, $disabled, $useProgressBar=false) {
+    static function setDisabledFlag($parentAlbum, $recursive, $disabled, $useProgressBar=false) {
 	global $gallery;
 
 	$parentAlbumId = $parentAlbum->getId();
@@ -975,7 +975,7 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
      * @return array GalleryStatus a status code
      *               boolean disabledFlag for the GalleryDataItem
      */
-    function getDisabledFlag($itemId) {
+    static function getDisabledFlag($itemId) {
 	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('ImageBlockDisabledMap',
 	    array('itemId'), array('itemId' => (int)$itemId));
 	if ($ret) {
@@ -995,14 +995,14 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
      * @param  int $max(optional) the maximim number to generate (default: 2147483647)
      * @return int a number between 0 and 2147483647.
      */
-    function getRandomKey($min=0, $max=2147483647) {
+    static function getRandomKey($min=0, $max=2147483647) {
     	global $gallery;
     	$phpVm = $gallery->getPhpVm();
 	static $initialized = false;
 
 	if (!$initialized) {
 	    list($usec, $sec) = explode(' ', microtime());
-	    srand($sec + $usec * 100000);
+	    srand($sec + intval($usec) * 100000);
 	    $initialized = true;
 	}
 	return $phpVm->rand($min, $max);
@@ -1018,7 +1018,7 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
      *		     array int Minimum value of the random number to be genereated
      *			   int Maximum value of the random number to be generated
      */
-    function getRandomKeyRange($userId, $itemType, $parentSequence=null) {
+    static function getRandomKeyRange($userId, $itemType, $parentSequence=null) {
 	global $gallery;
 	$storage = $gallery->getStorage();
 

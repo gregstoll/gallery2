@@ -31,7 +31,7 @@ class MailHelper_simple {
     /**
      * @see GalleryCoreApi::sendTemplatedEmail
      */
-    function sendTemplatedEmail($file, $data, $from, $to, $subject, $headers='') {
+    static function sendTemplatedEmail($file, $data, $from, $to, $subject, $headers='') {
 	global $gallery;
 
 	GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
@@ -73,8 +73,8 @@ class MailHelper_simple {
 	}
 	if (!empty($subject)) {
 	    for ($buf = '', $i = 0; $i < strlen($subject); $i++) {
-		$val = ord($subject{$i});
-		$buf .= ($val > 127) ? '=' . dechex($val) : $subject{$i};
+		$val = ord($subject[$i]);
+		$buf .= ($val > 127) ? '=' . dechex($val) : $subject[$i];
 	    }
 	    if ($buf != $subject) {
 		/* Encode subject for UTF-8 display if any extended characters are present */

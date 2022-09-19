@@ -26,7 +26,7 @@
  */
 class SitemapModule extends GalleryModule {
 
-    function SitemapModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('sitemap');
 	$this->setName($gallery->i18n('Sitemap'));

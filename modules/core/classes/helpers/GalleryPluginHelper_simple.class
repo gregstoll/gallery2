@@ -190,7 +190,7 @@ class GalleryPluginHelper_simple {
     /**
      * @see GalleryCoreApi::isPluginCompatibleWithApis
      */
-    function isPluginCompatibleWithApis($plugin) {
+    static function isPluginCompatibleWithApis($plugin) {
 	$pluginType = $plugin->getPluginType();
 	return GalleryUtilities::isCompatibleWithApi(
 	    $plugin->getRequiredCoreApi(), GalleryCoreApi::getApiVersion()) &&
@@ -235,7 +235,7 @@ class GalleryPluginHelper_simple {
     /**
      * @see GalleryCoreApi::fetchAllPluginParameters
      */
-    function fetchAllParameters($pluginType, $pluginId, $itemId=0, $ignoreDiskCache=false) {
+    static function fetchAllParameters($pluginType, $pluginId, $itemId=0, $ignoreDiskCache=false) {
 	/* Convert null to 0, just in case */
 	if ($itemId == null) {
 	    $itemId = 0;
@@ -340,7 +340,7 @@ class GalleryPluginHelper_simple {
     /**
      * @see GalleryCoreApi::fetchPluginStatus
      */
-    function fetchPluginStatus($pluginType, $ignoreCache=false) {
+    static function fetchPluginStatus($pluginType, $ignoreCache=false) {
 	global $gallery;
 
 	$cacheKey = "GalleryPluginHelper::fetchPluginStatus($pluginType)";
@@ -388,7 +388,7 @@ class GalleryPluginHelper_simple {
 		$pluginBasePath = GalleryCoreApi::getCodeBasePath($pluginsDir);
 		if ($dir = $platform->opendir($pluginBasePath)) {
 		    while ($pluginId = $platform->readdir($dir)) {
-			if ($pluginId{0} == '.') {
+			if ($pluginId[0] == '.') {
 			    continue;
 			}
 			if (!$platform->is_dir($pluginBasePath . $pluginId)) {
@@ -409,7 +409,8 @@ class GalleryPluginHelper_simple {
 
 				/* Separate out the major/minor version. */
 				if (!strncmp($paramName, 'required', 8)) {
-				    $tmp = explode(',', $plugins[$pluginId][$paramName]);
+				    $pluginParamName = $plugins[$pluginId][$paramName];
+				    $tmp = explode(',', is_null($pluginParamName) ? '' : $pluginParamName);
 				    $plugins[$pluginId][$paramName] = (count($tmp) < 2)
 					? array(-1, -1) : array((int)$tmp[0], (int)$tmp[1]);
 				}
@@ -452,7 +453,7 @@ class GalleryPluginHelper_simple {
     /**
      * @see GalleryCoreApi::fetchPluginList
      */
-    function fetchPluginList($pluginType) {
+    static function fetchPluginList($pluginType) {
 	global $gallery;
 
 	if (empty($pluginType)) {

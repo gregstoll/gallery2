@@ -27,7 +27,7 @@
  */
 class SiriuxTheme extends GalleryTheme {
 
-    function SiriuxTheme() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('siriux');

@@ -184,7 +184,7 @@ function processAutoCompleteRequest() {
 
     $dirList = array();
     if ($dir = opendir($path)) {
-	if ($path{strlen($path)-1} != DIRECTORY_SEPARATOR) {
+	if ($path[strlen($path)-1] != DIRECTORY_SEPARATOR) {
 	    $path .= DIRECTORY_SEPARATOR;
 	}
 	while (($file = readdir($dir)) !== false) {
@@ -215,7 +215,7 @@ function populateDataDirectory($dataBase) {
     /* Use non-restrictive umask to create directories with lax permissions */
     umask(0);
 
-    if ($dataBase{strlen($dataBase)-1} != DIRECTORY_SEPARATOR) {
+    if ($dataBase[strlen($dataBase)-1] != DIRECTORY_SEPARATOR) {
 	$dataBase .= DIRECTORY_SEPARATOR;
     }
 

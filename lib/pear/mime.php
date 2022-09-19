@@ -114,7 +114,7 @@ class Mail_mime
      *
      * @access public
      */
-    function Mail_mime($crlf = "\r\n")
+    function __construct($crlf = "\r\n")
     {
         $this->_setEOL($crlf);
         $this->_build_params = array(

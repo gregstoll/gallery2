@@ -27,7 +27,7 @@
  */
 class CarbonTheme extends GalleryTheme {
 
-    function CarbonTheme() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('carbon');

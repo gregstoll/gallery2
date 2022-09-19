@@ -28,7 +28,7 @@
  */
 class MultirootModule extends GalleryModule {
 
-    function MultirootModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('multiroot');

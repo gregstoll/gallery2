@@ -286,13 +286,13 @@ class HTML_Safe
      *
      * @access public
      */
-    function HTML_Safe() 
+    function __construct() 
     {
         //making regular expressions based on Proto & CSS arrays
         foreach ($this->blackProtocols as $proto) {
             $preg = "/[\s\x01-\x1F]*";
             for ($i=0; $i<strlen($proto); $i++) {
-                $preg .= $proto{$i} . "[\s\x01-\x1F]*";
+                $preg .= $proto[$i] . "[\s\x01-\x1F]*";
             }
             $preg .= ":/i";
             $this->_protoRegexps[] = $preg;

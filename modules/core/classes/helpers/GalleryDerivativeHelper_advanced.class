@@ -31,7 +31,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::fetchDerivativesBySourceIds
      */
-    function fetchDerivativesBySourceIds($ids, $types=array()) {
+    static function fetchDerivativesBySourceIds($ids, $types=array()) {
 	GalleryCoreApi::requireOnce(
 		'modules/core/classes/helpers/GalleryDerivativeHelper_simple.class');
 	list ($ret, $results) =
@@ -46,7 +46,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::fetchDerivativesByItemIds
      */
-    function fetchDerivativesByItemIds($ids) {
+    static function fetchDerivativesByItemIds($ids) {
 	GalleryCoreApi::requireOnce(
 		'modules/core/classes/helpers/GalleryDerivativeHelper_simple.class');
 	if (empty($ids)) {
@@ -63,7 +63,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::adjustDependentDerivatives
      */
-    function adjustDependentDerivatives($id, $operation, $reverse=false) {
+    static function adjustDependentDerivatives($id, $operation, $reverse=false) {
 	global $gallery;
 
 	$ids = array((int)$id => 1);
@@ -159,7 +159,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::applyToolkitOperation
      */
-    function applyToolkitOperation($operation, $args, $preserveOriginal,
+    static function applyToolkitOperation($operation, $args, $preserveOriginal,
 				   &$item, $preferred=null, $serialNumber=null) {
 	if ($item->isLinked()) {
 	    $isLinked = true;
@@ -359,7 +359,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::remapSourceIds
      */
-    function remapSourceIds($originalSourceId, $newSourceId) {
+    static function remapSourceIds($originalSourceId, $newSourceId) {
 	global $gallery;
 
 	if ($originalSourceId == $newSourceId) {
@@ -432,7 +432,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::copyDerivativePreferences
      */
-    function copyPreferences($sourceId, $targetId) {
+    static function copyPreferences($sourceId, $targetId) {
 	list ($ret, $preferences) = GalleryCoreApi::fetchDerivativePreferencesForItem($sourceId);
 	if ($ret) {
 	    return $ret;
@@ -453,7 +453,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::addDerivativePreference
      */
-    function addPreference($order, $itemId, $derivativeType, $derivativeOperations) {
+    static function addPreference($order, $itemId, $derivativeType, $derivativeOperations) {
 	if (is_array($itemId)) {
 	    /* Allow for adding same set of preferences to multiple items */
 	    $order = array_fill(0, count($itemId), $order);
@@ -476,7 +476,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::removeDerivativePreferencesForItem
      */
-    function removePreferencesForItem($itemId) {
+    static function removePreferencesForItem($itemId) {
 	$ret = GalleryCoreApi::removeMapEntry(
 	    'GalleryDerivativePreferencesMap', array('itemId' => $itemId));
 	if ($ret) {
@@ -489,7 +489,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::removeDerivativePreferencesForItemType
      */
-    function removePreferenceForItemType($itemId, $derivativeType) {
+    static function removePreferenceForItemType($itemId, $derivativeType) {
 	$ret = GalleryCoreApi::removeMapEntry(
 	    'GalleryDerivativePreferencesMap',
 	    array('itemId' => $itemId, 'derivativeType' => $derivativeType));
@@ -503,7 +503,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::fetchDerivativePreferencesForItem
      */
-    function fetchPreferencesForItem($targetId) {
+    static function fetchPreferencesForItem($targetId) {
 	global $gallery;
 
 	$query = '
@@ -536,7 +536,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::mergeDerivativeOperations
      */
-    function mergeOperations($operationSet1, $operationSet2, $highPriority=false) {
+    static function mergeOperations($operationSet1, $operationSet2, $highPriority=false) {
 	global $gallery;
 
 	/* Get all toolkits */
@@ -631,7 +631,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::removeDerivativeOperation
      */
-    function removeOperation($operation, $operationSet) {
+    static function removeOperation($operation, $operationSet) {
 	if (!empty($operationSet)) {
 	    $newOperations = array();
 	    $match = $operation . '|';
@@ -651,7 +651,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::expireDerivativeTreeBySourceIds
      */
-    function expireDerivativeTreeBySourceIds($ids) {
+    static function expireDerivativeTreeBySourceIds($ids) {
 	global $gallery;
 
 	if (!is_array($ids)) {
@@ -712,7 +712,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::invalidateDerivativeDimensionsBySourceIds
      */
-    function invalidateDerivativeDimensionsBySourceIds($ids) {
+    static function invalidateDerivativeDimensionsBySourceIds($ids) {
 	global $gallery;
 
 	if (!is_array($ids)) {
@@ -792,7 +792,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::rebuildDerivativeCache
      */
-    function rebuildCache($derivativeId) {
+    static function rebuildCache($derivativeId) {
 	global $gallery;
 
 	$gallery->guaranteeTimeLimit(10);
@@ -864,7 +864,7 @@ class GalleryDerivativeHelper_advanced {
     /**
      * @see GalleryCoreApi::fetchPreferredSource
      */
-    function fetchPreferredSource($item) {
+    static function fetchPreferredSource($item) {
 	$sourceIds = array();
 	$sourceIds[] = $item->getId();
 	if ($item->isLinked()) {

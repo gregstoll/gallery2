@@ -31,7 +31,7 @@
  */
 class HiddenModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function HiddenModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('hidden');

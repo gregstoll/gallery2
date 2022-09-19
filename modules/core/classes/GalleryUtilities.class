@@ -118,7 +118,7 @@ class GalleryUtilities {
      * @param boolean $prefix (optional) false to omit Gallery variable prefix (not recommended)
      * @return array key value pairs
      */
-    function getFormVariables($key, $prefix=true) {
+    static function getFormVariables($key, $prefix=true) {
 	if ($prefix) {
 	    $key = GALLERY_FORM_VARIABLE_PREFIX . $key;
 	}
@@ -153,7 +153,7 @@ class GalleryUtilities {
      * @param boolean $prefix (optional) if true, remove form variable prefix from keys in result
      * @return array unsanitized key value pairs
      */
-    function getUrlVariablesFiltered($skip=array(), $prefix=false) {
+    static function getUrlVariablesFiltered($skip=array(), $prefix=false) {
 	$filter = array();
 	foreach ($skip as $key) {
 	    $filter[GALLERY_FORM_VARIABLE_PREFIX . $key] = true;
@@ -183,7 +183,7 @@ class GalleryUtilities {
      * @author Tobias Tom <t.tom@succont.de>
      * @todo Verify that both arguments are arrays.
      */
-    function array_merge_replace($array, $newValues) {
+    static function array_merge_replace($array, $newValues) {
 	foreach ($newValues as $key => $value) {
 	    if (is_array($value)) {
 		if (!isset($array[$key])) {
@@ -211,7 +211,7 @@ class GalleryUtilities {
      * @param string $key
      * @param boolean $prefix (optional) false to omit Gallery variable prefix (not recommended)
      */
-    function removeFormVariables($key, $prefix=true) {
+    static function removeFormVariables($key, $prefix=true) {
 	/* Remove all matching GET and POST variables */
 	if ($prefix) {
 	    $key = GALLERY_FORM_VARIABLE_PREFIX . $key;
@@ -319,7 +319,7 @@ class GalleryUtilities {
      * @param mixed $value
      * @param array $array the destination
      */
-    function _internalPutRequestVariable($keyPath, $value, &$array) {
+    static function _internalPutRequestVariable($keyPath, $value, &$array) {
 	$key = array_shift($keyPath);
 	while (!empty($keyPath)) {
 	    $array =& $array[$key];
@@ -334,7 +334,7 @@ class GalleryUtilities {
      * @param string $key
      * @param boolean $prefix (optional) false to omit Gallery variable prefix (not recommended)
      */
-    function hasRequestVariable($key, $prefix=true) {
+    static function hasRequestVariable($key, $prefix=true) {
 	if ($prefix) {
 	    $key = GALLERY_FORM_VARIABLE_PREFIX . $key;
 	}
@@ -347,7 +347,7 @@ class GalleryUtilities {
      * @param string $key
      * @param boolean $prefix (optional) false to omit Gallery variable prefix (not recommended)
      */
-    function removeRequestVariable($key, $prefix=true) {
+    static function removeRequestVariable($key, $prefix=true) {
 	if ($prefix) {
 	    $key = GALLERY_FORM_VARIABLE_PREFIX . $key;
 	}
@@ -469,7 +469,7 @@ class GalleryUtilities {
      * @param int $targetHeight (optional) target height, defaults to same as width
      * @return array(width, height)
      */
-    function scaleDimensionsToFit($width, $height, $targetWidth, $targetHeight=null) {
+    static function scaleDimensionsToFit($width, $height, $targetWidth, $targetHeight=null) {
 	if (!isset($targetHeight)) {
 	    $targetHeight = $targetWidth;
 	}
@@ -501,10 +501,10 @@ class GalleryUtilities {
      * can ditch this method and just cast to (float).  (Note that newer PHP versions may accept
      * only "." even if locale uses ",").
      */
-    function castToFloat($value) {
+    static function castToFloat($value) {
 	if (is_string($value) && (float)'1.1' != 1.1
 		&& ($test = (string)1.1) != '1.1' && strlen($test) == 3) {
-	    return (float)str_replace('.', $test{1}, $value);
+	    return (float)str_replace('.', $test[1], $value);
 	}
 	return (float)$value;
     }
@@ -830,7 +830,7 @@ class GalleryUtilities {
      * @param boolean $decode (optional) true to decode entities, process, then recode
      * @return string safe HTML
      */
-    function htmlSafe($html, $decode=false) {
+    static function htmlSafe($html, $decode=false) {
 	GalleryCoreApi::requireOnce('lib/pear/Safe.php');
 	static $parser;
 	if (!isset($parser)) {
@@ -893,7 +893,7 @@ class GalleryUtilities {
      *     existing header.  This differs from the PHP header() $replace param which adds a header
      *     if it would otherwise replace and existing header.
      */
-    function setResponseHeader($header, $replace=true) {
+    static function setResponseHeader($header, $replace=true) {
 	/* Use our PHP VM for testability */
 	global $gallery;
 	$phpVm = $gallery->getPhpVm();
@@ -931,7 +931,7 @@ class GalleryUtilities {
      * @return array key => value pairs of headers
      * @access private
      */
-    function &_getResponseHeaders() {
+    static function &_getResponseHeaders() {
 	static $responseHeaders;
 	return $responseHeaders;
     }
@@ -943,7 +943,7 @@ class GalleryUtilities {
      * @param string $list the list of legal paths
      * @return boolean
      */
-    function isPathInList($path, $list) {
+    static function isPathInList($path, $list) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 	$slash = $platform->getDirectorySeparator();
@@ -958,7 +958,7 @@ class GalleryUtilities {
 	     * Make sure the compare directory has a trailing slash so that /tmp doesn't
 	     * accidentally match /tmpfoo
 	     */
-	    if ($element{strlen($element)-1} != $slash) {
+	    if ($element[strlen($element)-1] != $slash) {
 		$element .= $slash;
 	    }
 
@@ -974,7 +974,7 @@ class GalleryUtilities {
      * @param string $addr an address in dotted quad form
      * @return boolean
      */
-    function isTrustedProxy($addr) {
+    static function isTrustedProxy($addr) {
 	return (boolean)preg_match('/^((10\.\d{1,3}\.\d{1,3}\.\d{1,3})|'
 	    . '(172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})|'
 	    . '(192\.168\.\d{1,3}\.\d{1,3}))$/', $addr);
@@ -1007,7 +1007,7 @@ class GalleryUtilities {
      * @return array boolean true if dir exists or was created successfully
      *               array of directories that were created
      */
-    function guaranteeDirExists($dir) {
+    static function guaranteeDirExists($dir) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 	if ($platform->file_exists($dir)) {
@@ -1050,7 +1050,7 @@ class GalleryUtilities {
      * @return array an associative array of tree data.  Each node has a 'depth' element, and a
      *               'data' element that contains all the members of the current album item.
      */
-    function createAlbumTree($albums) {
+    static function createAlbumTree($albums) {
 	if (empty($albums)) {
 	    $tree = array(); return $tree;  /* Help CodeAudit match up returns */
 	}
@@ -1100,7 +1100,7 @@ class GalleryUtilities {
      * @param int $depth (optional) current depth
      * @access private
      */
-    function _createDepthTree(&$map, $id, $depth=0) {
+    static function _createDepthTree(&$map, $id, $depth=0) {
 	$data = array();
 	$data[] = array('depth' => $depth, 'data' => (array)$map[$id]['instance']);
 	if (isset($map[$id]['children'])) {
@@ -1166,7 +1166,7 @@ class GalleryUtilities {
      * @see Gallery::getHttpDate
      * @deprecated
      */
-    function getHttpDate($time='') {
+    static function getHttpDate($time='') {
 	global $gallery;
 	return $gallery->getHttpDate($time);
     }
@@ -1249,7 +1249,7 @@ class GalleryUtilities {
      * @param string $email email address
      * @return boolean
      */
-    function isValidEmailString($email) {
+    static function isValidEmailString($email) {
 	return (preg_match('/^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9_.-]+\.[a-zA-Z]{2,6}$/', $email) > 0);
     }
 
@@ -1259,11 +1259,11 @@ class GalleryUtilities {
      * @param string $salt (optional) salt or hash containing salt (randomly generated if omitted)
      * @return string hashed password
      */
-    function md5Salt($password, $salt='') {
+    static function md5Salt($password, $salt='') {
 	if (empty($salt)) {
 	    for ($i = 0; $i < 4; $i++) {
 		$char = mt_rand(48, 109);
-		$char += ($char > 90) ? 13 : ($char > 57) ? 7 : 0;
+		$char += ($char > 90) ? 13 : (($char > 57) ? 7 : 0);
 		$salt .= chr($char);
 	    }
 	} else {
@@ -1278,7 +1278,7 @@ class GalleryUtilities {
      * @param string $hashedPassword hashed password
      * @return boolean true if correct
      */
-    function isCorrectPassword($guess, $hashedPassword) {
+    static function isCorrectPassword($guess, $hashedPassword) {
 	return (GalleryUtilities::md5Salt($guess, $hashedPassword) === $hashedPassword);
     }
 
@@ -1318,7 +1318,7 @@ class GalleryUtilities {
      * @param array $array
      * @return array of keys
      */
-    function arrayKeysRecursive($array) {
+    static function arrayKeysRecursive($array) {
 	$keys = array();
 	foreach ($array as $key => $item) {
 	    $keys[] = $key;
@@ -1353,7 +1353,7 @@ class GalleryUtilities {
      * Return id of the search engine currently crawling the site by analyzing the current request.
      * @return string the crawler id, or null if it's a regular user
      */
-    function identifySearchEngine() {
+    static function identifySearchEngine() {
 	if (!isset($_SERVER['HTTP_USER_AGENT'])) {
 	    return null;
 	}
@@ -1397,7 +1397,7 @@ class GalleryUtilities {
      * @param string $key the key in the _COOKIE superglobal
      * @return string the value
      */
-    function getCookieVar($key) {
+    static function getCookieVar($key) {
 	if (!isset($_COOKIE[$key])) {
 	    return null;
 	}
@@ -1487,7 +1487,7 @@ class GalleryUtilities {
 		    $i = 0;
 		    $lastPos = 0;
 		    while ($i < $len) {
-			switch ($string{$i}) {
+			switch ($string[$i]) {
 			    /* Two attr-pair separators */
 			case ',':
 			case ';':
@@ -1569,8 +1569,8 @@ class GalleryUtilities {
 	}
 	/* Make it a binary safe variable name */
 	for ($i = 0; $i < $len; $i++) {
-	    if ($key{$i} == ' ' || $key{$i} == '.') {
-		$key{$i} = '_';
+	    if ($key[$i] == ' ' || $key[$i] == '.') {
+		$key[$i] = '_';
 	    }
 	}
 	/*
@@ -1616,7 +1616,7 @@ class GalleryUtilities {
      * @param string $header
      * @return bool true if the given header is safe
      */
-    function isSafeHttpHeader($header) {
+    static function isSafeHttpHeader($header) {
 	if (!is_string($header)) {
 	    return false;
 	}

@@ -27,7 +27,7 @@
  */
 class QuotasModule extends GalleryModule {
 
-    function QuotasModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('quotas');

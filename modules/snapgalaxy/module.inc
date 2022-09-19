@@ -29,7 +29,7 @@
  */
 class SnapGalaxyModule extends GalleryModule {
 
-    function SnapGalaxyModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('snapgalaxy');

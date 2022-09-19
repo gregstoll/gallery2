@@ -35,7 +35,7 @@ class EcardHelper {
      * @return array GalleryStatus a status code
      *               GalleryItem an item
      */
-    function getSmallestSize($itemId) {
+    static function getSmallestSize($itemId) {
 	list ($ret, $permissions) = GalleryCoreApi::getPermissions($itemId);
 	if ($ret) {
 	    return array($ret, null);
@@ -97,7 +97,7 @@ class EcardHelper {
      * @param array $array the submitted form
      * @return string output string
      */
-    function replaceKeywords($str, $array) {
+    static function replaceKeywords($str, $array) {
 	$result = $str;
 	foreach (array('from', 'fromName', 'to', 'toName',
 		       'text', 'header', 'footer', 'image', 'link') as $key) {
@@ -114,7 +114,7 @@ class EcardHelper {
      * @return array GalleryStatus a status code
      *               boolean true to use validation plugins
      */
-    function useValidationPlugins() {
+    static function useValidationPlugins() {
 	list ($ret, $level) =
 	    GalleryCoreApi::getPluginParameter('module', 'ecard', 'validation.level');
 	if ($ret) {

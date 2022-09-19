@@ -27,7 +27,7 @@
  */
 class ReuploadModule extends GalleryModule {
 
-    function ReuploadModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('reupload');
 	$this->setName($gallery->i18n('Reupload'));

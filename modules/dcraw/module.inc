@@ -29,7 +29,7 @@
  */
 class DcrawModule extends GalleryModule {
 
-    function DcrawModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('dcraw');
@@ -190,7 +190,7 @@ class DcrawModule extends GalleryModule {
 		if (empty($path)) {
 		    continue;
 		}
-		if ($path{strlen($path)-1} != $slash) {
+		if ($path[strlen($path)-1] != $slash) {
 		    $path .= $slash;
 		}
 		$paths[] = $path;
@@ -209,7 +209,7 @@ class DcrawModule extends GalleryModule {
 		if (empty($path)) {
 		    continue;
 		}
-		if ($path{strlen($path)-1} != $slash) {
+		if ($path[strlen($path)-1] != $slash) {
 		    $path .= $slash;
 		}
 		$paths[] = $path;

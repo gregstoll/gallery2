@@ -44,7 +44,7 @@ class GalleryDynamicAlbum extends GalleryItem {
      * @param string $title localized title
      * @param array $itemTypeNameData itemTypeName data, eg. array(Photo, photo), array(Foto, foto)
      */
-    function create($title, $itemTypeNameData=null) {
+    function createDynamicAlbum($title, $itemTypeNameData=null) {
 	global $gallery;
 
 	$this->setId(null);
@@ -114,7 +114,7 @@ class GalleryDynamicAlbum extends GalleryItem {
     /**
      * @see GalleryEntity::save
      */
-    function save($postEvent=true) {
+    function save($postEvent=true, $setAclId=null) {
 	return GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION);
     }
 

@@ -29,7 +29,7 @@ GalleryCoreApi::requireOnce('modules/dynamicalbum/UpdatesAlbum.inc');
  */
 class PopularAlbumView extends UpdatesAlbumView {
 
-    function PopularAlbumView() {
+    function __construct() {
 	global $gallery;
 	$this->_view = 'dynamicalbum.PopularAlbum';
 	$this->_title = $gallery->i18n('Most Viewed Items');

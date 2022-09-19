@@ -31,7 +31,7 @@ GalleryCoreApi::requireOnce('modules/notification/classes/GalleryCoreEventNotifi
  * @version $Revision: 18172 $
  */
 class NotificationModule extends GalleryModule {
-    function NotificationModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('notification');
 	$this->setName($gallery->i18n('Notification'));

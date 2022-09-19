@@ -91,7 +91,7 @@ class ItemAddFromServer extends ItemAddPlugin {
 		return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER),
 			     null, null);
 	    }
-	    if ($dir{strlen($dir)-1} != $this->_dirSep) {
+	    if ($dir[strlen($dir)-1] != $this->_dirSep) {
 		$dir .= $this->_dirSep;
 	    }
 

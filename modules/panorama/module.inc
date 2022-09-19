@@ -30,7 +30,7 @@
  */
 class PanoramaModule extends GalleryModule {
 
-    function PanoramaModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('panorama');
 	$this->setName($gallery->i18n('Panorama'));

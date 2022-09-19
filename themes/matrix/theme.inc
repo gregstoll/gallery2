@@ -27,7 +27,7 @@
  */
 class MatrixTheme extends GalleryTheme {
 
-    function MatrixTheme() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('matrix');

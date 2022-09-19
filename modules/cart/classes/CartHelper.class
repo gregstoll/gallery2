@@ -34,7 +34,7 @@ class CartHelper {
      * @return array GalleryStatus a status code
      *               array (itemId => count, itemId => count, ..)
      */
-    function fetchCartItemCounts() {
+    static function fetchCartItemCounts() {
 	global $gallery;
 	$session =& $gallery->getSession();
 
@@ -54,7 +54,7 @@ class CartHelper {
      * @param array $ids int item ids
      * @return GalleryStatus a status code
      */
-    function addItemsToCart($ids) {
+    static function addItemsToCart($ids) {
 	list ($ret, $cartItemIds) = CartHelper::fetchCartItemCounts();
 	if ($ret) {
 	    return $ret;
@@ -95,7 +95,7 @@ class CartHelper {
      * @param array $cartItemIds (itemId => count, itemId => count, ..)
      * @return GalleryStatus a status code
      */
-    function setCartItemCounts($cartItemIds) {
+    static function setCartItemCounts($cartItemIds) {
 	global $gallery;
 	$session =& $gallery->getSession();
 
@@ -115,7 +115,7 @@ class CartHelper {
      * @return array GalleryStatus a status code
      *               array of items
      */
-    function loadCartItems() {
+    static function loadCartItems() {
 	list ($ret, $cartItemIds) = CartHelper::fetchCartItemCounts();
 	if ($ret) {
 	    return array($ret, null);

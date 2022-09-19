@@ -213,8 +213,8 @@ class SendEcardController extends GalleryController {
 		$hdrs .= $key . ': ' . $value . "\n";
 	    }
 	    for ($buf = '', $i = 0; $i < strlen($headers['subject']); $i++) {
-		$val = ord($headers['subject']{$i});
-		$buf .= ($val > 127) ? '=' . dechex($val) : $headers['subject']{$i};
+		$val = ord($headers['subject'][$i]);
+		$buf .= ($val > 127) ? '=' . dechex($val) : $headers['subject'][$i];
 	    }
 	    if ($buf != $headers['subject']) {
 		/* Encode subject for UTF-8 display if any extended characters are present */

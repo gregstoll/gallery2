@@ -30,7 +30,7 @@
  */
 class ImageMagickModule extends GalleryModule {
 
-    function ImageMagickModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('imagemagick');
@@ -245,7 +245,7 @@ class ImageMagickModule extends GalleryModule {
 		if (empty($path)) {
 		    continue;
 		}
-		if ($path{strlen($path)-1} != $slash) {
+		if ($path[strlen($path)-1] != $slash) {
 		    $path .= $slash;
 		}
 		$paths[] = $path;
@@ -266,7 +266,7 @@ class ImageMagickModule extends GalleryModule {
 		if (empty($path)) {
 		    continue;
 		}
-		if ($path{strlen($path)-1} != $slash) {
+		if ($path[strlen($path)-1] != $slash) {
 		    $path .= $slash;
 		}
 		$paths[] = $path;

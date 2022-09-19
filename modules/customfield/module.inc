@@ -29,7 +29,7 @@
  */
 class CustomFieldModule extends GalleryModule {
 
-    function CustomFieldModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('customfield');

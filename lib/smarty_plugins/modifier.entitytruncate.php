@@ -58,7 +58,7 @@ function smarty_modifier_entitytruncate($string, $length, $etc='...', $breakWord
 	list ($tmp, $piece) = GalleryUtilities::entitySubstr($piece, 0, $length - $etcLength);
 
 	$pieceLength = strlen($piece);
-	if (!$breakWords && $string{$pieceLength-1} != ' ' && $string{$pieceLength} != ' ') {
+	if (!$breakWords && $string[$pieceLength-1] != ' ' && $string[$pieceLength] != ' ') {
 	    /* We split a word, and we're not allowed to.  Try to back up to the last space */
 	    $splitIndex = strrpos($piece, ' ');
 	    if ($splitIndex > 0) {

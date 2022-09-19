@@ -196,8 +196,8 @@ class WinNtPlatform extends GalleryPlatform {
 	     * %d returns always 2 digits, 01 - 31
 	     * Replace leading 0 for single digit months with a space
 	     */
-	    $format{$pos} = ($replacement{0} == '0') ? ' ' : $replacement{0};
-	    $format{$pos+1} = $replacement{1};
+	    $format[$pos] = ($replacement[0] == '0') ? ' ' : $replacement[0];
+	    $format[$pos+1] = $replacement[1];
 	}
 	return parent::strftime($format, $timestamp);
     }

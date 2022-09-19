@@ -27,7 +27,7 @@
  */
 class SizeLimitModule extends GalleryModule {
 
-    function SizeLimitModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('sizelimit');

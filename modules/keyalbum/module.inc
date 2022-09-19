@@ -27,7 +27,7 @@
  */
 class KeyAlbumModule extends GalleryModule {
 
-    function KeyAlbumModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('keyalbum');
 	$this->setName($gallery->i18n('Keyword Albums'));

@@ -32,7 +32,7 @@ class RewriteModuleExtras {
     /**
      * @see GalleryModule::upgrade
      */
-    function upgrade($module, $currentVersion) {
+    static function upgrade($module, $currentVersion) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 
@@ -389,7 +389,7 @@ class RewriteModuleExtras {
     /**
      * @see GalleryModule::handleEvent
      */
-    function handleDeactivatePlugin($module, $pluginId) {
+    static function handleDeactivatePlugin($module, $pluginId) {
 	list ($ret, $activeRules) = $module->getParameter('activeRules');
 	if ($ret) {
 	    return $ret;
@@ -423,7 +423,7 @@ class RewriteModuleExtras {
     /**
      * @see GalleryModule::handleEvent
      */
-    function handleUninstallPlugin($module, $pluginId) {
+    static function handleUninstallPlugin($module, $pluginId) {
 	$ret = RewriteHelper::setHistoryForModule($pluginId, array());
 	if ($ret) {
 	    return $ret;
@@ -435,7 +435,7 @@ class RewriteModuleExtras {
     /**
      * @see GalleryModule::handleEvent
      */
-    function handleActivatePlugin($module, $pluginId) {
+    static function handleActivatePlugin($module, $pluginId) {
 	/* Get saved patterns */
 	list ($ret, $plugin) = GalleryCoreApi::loadPlugin('module', $pluginId);
 	if ($ret) {

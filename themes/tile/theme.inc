@@ -27,7 +27,7 @@
  */
 class TileTheme extends GalleryTheme {
 
-    function TileTheme() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('tile');

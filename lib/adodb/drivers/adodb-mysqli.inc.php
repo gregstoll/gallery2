@@ -52,7 +52,7 @@ class ADODB_mysqli extends ADOConnection {
 	var $optionFlags = array(array(MYSQLI_READ_DEFAULT_GROUP,0));
   var $arrayClass = 'ADORecordSet_array_mysqli';
 	
-	function ADODB_mysqli() 
+	function __construct() 
 	{			
 	 // if(!extension_loaded("mysqli"))
 	      ;//trigger_error("You must have the mysqli extension installed.", E_USER_ERROR);
@@ -308,7 +308,7 @@ class ADODB_mysqli extends ADOConnection {
 	}
 
 	  
-	function &MetaIndexes ($table, $primary = FALSE)
+	function &MetaIndexes ($table, $primary = FALSE, $owner = false)
 	{
 		// save old fetch mode
 		global $ADODB_FETCH_MODE;
@@ -522,7 +522,7 @@ class ADODB_mysqli extends ADOConnection {
 	    return  $foreign_keys;
 	}
 	
- 	function &MetaColumns($table) 
+ 	function &MetaColumns($table, $normalize = true) 
 	{
 		$false = false;
 		if (!$this->metaColumnsSQL)
@@ -765,7 +765,7 @@ class ADORecordSet_mysqli extends ADORecordSet{
 	var $databaseType = "mysqli";
 	var $canSeek = true;
 	
-	function ADORecordSet_mysqli($queryID, $mode = false) 
+	function __construct($queryID, $mode = false) 
 	{
 	  if ($mode === false) 
 	   { 
@@ -881,7 +881,7 @@ class ADORecordSet_mysqli extends ADORecordSet{
 	{
 		if ($this->EOF) return false;
 		$this->_currentRow++;
-		$this->fields = @mysqli_fetch_array($this->_queryID,$this->fetchMode);
+		$this->fields = @mysqli_fetch_array($this->_queryID,$this->fetchMode ? $this->fetchMode : MYSQLI_BOTH);
 		
 		if (is_array($this->fields)) return true;
 		$this->EOF = true;
@@ -890,7 +890,7 @@ class ADORecordSet_mysqli extends ADORecordSet{
 	
 	function _fetch()
 	{
-		$this->fields = mysqli_fetch_array($this->_queryID,$this->fetchMode);  
+		$this->fields = mysqli_fetch_array($this->_queryID,$this->fetchMode ? $this->fetchMode : MYSQLI_BOTH);  
 	  	return is_array($this->fields);
 	}
 	
@@ -1030,9 +1030,9 @@ class ADORecordSet_mysqli extends ADORecordSet{
 }
 
 class ADORecordSet_array_mysqli extends ADORecordSet_array {
-  function ADORecordSet_array_mysqli($id=-1,$mode=false) 
+  function __construct($id=-1,$mode=false) 
   {
-    $this->ADORecordSet_array($id,$mode);
+      parent::__construct($id,$mode);
   }
   
 

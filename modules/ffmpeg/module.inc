@@ -29,7 +29,7 @@
  */
 class FfmpegModule extends GalleryModule {
 
-    function FfmpegModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('ffmpeg');
@@ -138,7 +138,7 @@ class FfmpegModule extends GalleryModule {
 		if (empty($path)) {
 		    continue;
 		}
-		if ($path{strlen($path)-1} != $slash) {
+		if ($path[strlen($path)-1] != $slash) {
 		    $path .= $slash;
 		}
 		$paths[] = $path . 'ffmpeg.exe';
@@ -152,7 +152,7 @@ class FfmpegModule extends GalleryModule {
 		if (empty($path)) {
 		    continue;
 		}
-		if ($path{strlen($path)-1} != $slash) {
+		if ($path[strlen($path)-1] != $slash) {
 		    $path .= $slash;
 		}
 		$paths[] = $path . 'ffmpeg';

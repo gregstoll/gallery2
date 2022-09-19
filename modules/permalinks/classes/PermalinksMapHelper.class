@@ -35,7 +35,7 @@ class PermalinksMapHelper {
      * @return array GalleryStatus a status code
      *         array of aliase names
      */
-    function fetchAliasesForItem($itemId=null) {
+    static function fetchAliasesForItem($itemId=null) {
 	$match = isset($itemId) ? array('destId' => (int)$itemId) : array();
 	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('PermalinksMap',
 	    array('aliasName'), $match);
@@ -57,7 +57,7 @@ class PermalinksMapHelper {
      * @return array GalleryStatus a status code
      *               int item id
      */
-    function fetchItemIdForAlias($aliasName) {
+    static function fetchItemIdForAlias($aliasName) {
 	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry('PermalinksMap',
 	    array('destId'), array('aliasName' => $aliasName));
 	if ($ret) {
@@ -79,7 +79,7 @@ class PermalinksMapHelper {
      * @param int $itemId
      * @return GalleryStatus a status code
      */
-    function createAlias($aliasName, $itemId) {
+    static function createAlias($aliasName, $itemId) {
 	/* first, check for collision */
 	list ($ret, $collisionId) = PermalinksMapHelper::fetchItemIdForAlias($aliasName);
 	if ($ret) {
@@ -106,7 +106,7 @@ class PermalinksMapHelper {
      * @param int $aliasName
      * @return GalleryStatus a status code
      */
-    function deleteAlias($aliasName) {
+    static function deleteAlias($aliasName) {
 	/* Remove this alias from our groups table. */
 	$ret = GalleryCoreApi::removeMapEntry('PermalinksMap', array('aliasName' => $aliasName));
 	if ($ret) {

@@ -1053,12 +1053,12 @@ class StringParser_BBCode extends StringParser {
 			$ol = strlen ($output);
 			switch ($node->getFlag ('newlinemode.begin', 'integer', BBCODE_NEWLINE_PARSE)) {
 			case BBCODE_NEWLINE_IGNORE:
-				if ($ol && $output{0} == "\n") {
+				if ($ol && $output[0] == "\n") {
 					$before = "\n";
 				}
 				// don't break!
 			case BBCODE_NEWLINE_DROP:
-				if ($ol && $output{0} == "\n") {
+				if ($ol && $output[0] == "\n") {
 					$output = substr ($output, 1);
 					$ol--;
 				}
@@ -1066,12 +1066,12 @@ class StringParser_BBCode extends StringParser {
 			}
 			switch ($node->getFlag ('newlinemode.end', 'integer', BBCODE_NEWLINE_PARSE)) {
 			case BBCODE_NEWLINE_IGNORE:
-				if ($ol && $output{$ol-1} == "\n") {
+				if ($ol && $output[$ol-1] == "\n") {
 					$after = "\n";
 				}
 				// don't break!
 			case BBCODE_NEWLINE_DROP:
-				if ($ol && $output{$ol-1} == "\n") {
+				if ($ol && $output[$ol-1] == "\n") {
 					$output = substr ($output, 0, -1);
 					$ol--;
 				}
@@ -1449,10 +1449,10 @@ class StringParser_BBCode_Node_Paragraph extends StringParser_Node {
 			$f_begin = $this->_children[0]->getFlag ('newlinemode.begin', 'integer', BBCODE_NEWLINE_PARSE);
 			$f_end = $this->_children[0]->getFlag ('newlinemode.end', 'integer', BBCODE_NEWLINE_PARSE);
 			$content = $this->_children[0]->content;
-			if ($f_begin != BBCODE_NEWLINE_PARSE && $content{0} == "\n") {
+			if ($f_begin != BBCODE_NEWLINE_PARSE && $content[0] == "\n") {
 				$content = substr ($content, 1);
 			}
-			if ($f_end != BBCODE_NEWLINE_PARSE && $content{strlen($content)-1} == "\n") {
+			if ($f_end != BBCODE_NEWLINE_PARSE && $content[strlen($content)-1] == "\n") {
 				$content = substr ($content, 0, -1);
 			}
 			if (!strlen ($content)) {

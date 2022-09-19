@@ -69,7 +69,7 @@ class GalleryImportElement extends GalleryXmlHandler {
      * @param GalleryImportElement $parent The parent object. Used to follow the parent chain in
      *           order to set error messages and to provide status information to the caller.
      */
-    function GalleryImportElement($parent=null) {
+    function __construct($parent=null) {
 	global $gallery;
 
 	$this->_parent = $parent;
@@ -137,8 +137,8 @@ class GalleryDatabaseImport extends GalleryImportElement {
      */
     var $_fileReadChunkSize = 8192;
 
-    function GalleryDatabaseImport() {
-	parent::GalleryImportElement();
+    function __construct() {
+	parent::__construct();
     }
 
     /**
@@ -608,8 +608,8 @@ class _GalleryCreateSqlTag extends GalleryImportElement {
     /** Holds the generated insert for this table */
     var $_currentSql = '';
 
-    function GalleryTableImport($parent, $attributes) {
-	parent::GalleryImportElement($parent);
+    function __construct($parent, $attributes) {
+	parent::__construct($parent);
 	$this->_currentSql = '';
     }
 
@@ -846,7 +846,7 @@ class GalleryXmlProcessor {
      */
     var $_xmlParser;
     
-    function GalleryXmlProcessor($rootElement) {
+    function __construct($rootElement) {
 	$this->_elementStack[] = $rootElement;
 
 	$this->_xmlParser = xml_parser_create('UTF-8');

@@ -29,7 +29,7 @@
  */
 class SearchModule extends GalleryModule {
 
-    function SearchModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('search');

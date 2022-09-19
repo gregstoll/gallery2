@@ -42,7 +42,7 @@ class GalleryCommentHelper /* implements GalleryEventListener */ {
      * @return array GalleryStatus a status code,
      *               array (entityId => GalleryComment, ...)
      */
-    function fetchComments($itemId, $count=null, $orderDirection=ORDER_ASCENDING,
+    static function fetchComments($itemId, $count=null, $orderDirection=ORDER_ASCENDING,
 			   $publishStatus=COMMENT_PUBLISH_STATUS_PUBLISHED) {
 	global $gallery;
 
@@ -120,7 +120,7 @@ class GalleryCommentHelper /* implements GalleryEventListener */ {
      *               array (entityId => GalleryComment, ...)
      *               int total number of comments available
      */
-    function fetchAllComments($itemId, $count=null, $offset=null, $orderDirection=ORDER_ASCENDING,
+    static function fetchAllComments($itemId, $count=null, $offset=null, $orderDirection=ORDER_ASCENDING,
 			      $publishStatus=COMMENT_PUBLISH_STATUS_PUBLISHED) {
 	global $gallery;
 
@@ -169,7 +169,8 @@ class GalleryCommentHelper /* implements GalleryEventListener */ {
 	 AND
 	   [GalleryAccessSubscriberMap::itemId] = [GalleryItemAttributesMap::itemId]';
 	if ($publishStatus !== null) {
-	    $statusMarkers = GalleryUtilities::makeMarkers(count($publishStatus));
+        $numPublishStatuses = is_array($publishStatus) ? count($publishStatus) : 1;
+	    $statusMarkers = GalleryUtilities::makeMarkers($numPublishStatuses);
 	    $queryBase .= '
 	 AND
 	   [GalleryComment::publishStatus] IN (' . $statusMarkers . ')';
@@ -248,7 +249,7 @@ class GalleryCommentHelper /* implements GalleryEventListener */ {
      * @return array GalleryStatus a status code
      *               int a count
      */
-    function fetchCommentCounts($itemIds) {
+    static function fetchCommentCounts($itemIds) {
 	global $gallery;
 
 	$markers = GalleryUtilities::makeMarkers(sizeof($itemIds));
@@ -290,7 +291,7 @@ class GalleryCommentHelper /* implements GalleryEventListener */ {
      * @return array GalleryStatus a status code,
      *               int latest comment time
      */
-    function getLatestCommentTime($hostAddress) {
+    static function getLatestCommentTime($hostAddress) {
 	global $gallery;
 
 	$data = array($hostAddress);
@@ -329,7 +330,7 @@ class GalleryCommentHelper /* implements GalleryEventListener */ {
      * @return array GalleryStatus a status code
      *               array values used for the AddComment page (itemId, host, validation plugins)
      */
-    function getAddComment(&$item, &$form) {
+    static function getAddComment(&$item, &$form) {
 	/* Make sure we have permission to add a comment */
 	list ($ret, $permissions) = GalleryCoreApi::getPermissions($item->getId());
 	if ($ret) {
@@ -395,7 +396,7 @@ class GalleryCommentHelper /* implements GalleryEventListener */ {
      * @return array GalleryStatus a status code
      *               boolean true to use validation plugins
      */
-    function useValidationPlugins() {
+    static function useValidationPlugins() {
 	list ($ret, $level) =
 	    GalleryCoreApi::getPluginParameter('module', 'comment', 'validation.level');
 	if ($ret) {
@@ -424,7 +425,7 @@ class GalleryCommentHelper /* implements GalleryEventListener */ {
       *
       * @see GalleryEventListener::handleEvent
       */
-    function handleEvent($event) {
+    static function handleEvent($event) {
 	global $gallery;
 
 	switch ($event->getEventName()) {

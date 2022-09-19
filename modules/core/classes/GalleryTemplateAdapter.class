@@ -66,7 +66,7 @@ class GalleryTemplateAdapter {
     var $_progressBarStats;
 
 
-    function GalleryTemplateAdapter() {
+    function __construct() {
 	$this->_callCount = array();
 	$this->_theme = null;
 	$this->_trailer = null;
@@ -518,11 +518,12 @@ class GalleryTemplateAdapter {
 		      'id' => '_all'),
 		$contents);
 	    if ($phpVm->function_exists('gzencode')) {
+		    $encodedContents = $phpVm->gzencode($contents, 9, FORCE_GZIP);
 		GalleryDataCache::putToDisk(
 		    array('type' => 'module',
 			  'itemId' => 'CombinedJavascript_gzip_' . $key,
 			  'id' => '_all'),
-		    $phpVm->gzencode($contents, 9, FORCE_GZIP));
+		    $encodedContents);
 	    }
 	}
 	return $urlGenerator->generateUrl(
@@ -1169,7 +1170,7 @@ class GalleryTemplateAdapter {
 	    $timeRemaining = $coreModule->translate(
 		array('text' => 'Estimated time remaining: %d:%02d',
 		      'arg1' => (int)($timeRemaining / 60),
-		      'arg2' => $timeRemaining % 60));
+		      'arg2' => (int)($timeRemaining % 60)));
 	} else {
 	    $timeRemaining = '';
 	}

@@ -26,7 +26,7 @@
  */
 class WebDavModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function WebDavModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('webdav');

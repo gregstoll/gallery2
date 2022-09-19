@@ -27,7 +27,7 @@
  */
 class DigibugModule extends GalleryModule {
 
-    function DigibugModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('digibug');
@@ -130,7 +130,7 @@ class DigibugModule extends GalleryModule {
     /**
      * @see GalleryModule::getItemLinks
      */
-    function getItemLinks($items, $wantsDetailedLinks, $permissions) {
+    function getItemLinks($items, $wantsDetailedLinks, $permissions, $userId) {
 	global $gallery;
 	$session =& $gallery->getSession();
 

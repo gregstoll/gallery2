@@ -31,7 +31,7 @@ class GalleryUserHelper_medium /* extends GalleryEventListener */ {
     /**
      * @see GalleryCoreApi::fetchUsernames
      */
-    function fetchUsernames($count=null, $offset=null, $substring=null) {
+    static function fetchUsernames($count=null, $offset=null, $substring=null) {
 	global $gallery;
 
 	$data = array();
@@ -73,7 +73,7 @@ class GalleryUserHelper_medium /* extends GalleryEventListener */ {
     /**
      * @see GalleryCoreApi::fetchUserCount
      */
-    function fetchUserCount($substring=null, $groupId=null) {
+    static function fetchUserCount($substring=null, $groupId=null) {
 	global $gallery;
 	if (empty($groupId)) {
 	    list($ret, $groupId) =
@@ -123,7 +123,7 @@ class GalleryUserHelper_medium /* extends GalleryEventListener */ {
     /**
      * @see GalleryCoreApi::fetchUserByUserName
      */
-    function fetchUserByUserName($userName=null) {
+    static function fetchUserByUserName($userName=null) {
 	global $gallery;
 
 	$query = '
@@ -156,7 +156,7 @@ class GalleryUserHelper_medium /* extends GalleryEventListener */ {
     /**
      * @see GalleryCoreApi::fetchLanguageCodeForUser
      */
-    function fetchLanguageCodeForUser($userId) {
+    static function fetchLanguageCodeForUser($userId) {
 	global $gallery;
 
 	list ($ret, $user) = GalleryCoreApi::loadEntitiesById($userId, 'GalleryUser');
@@ -178,7 +178,7 @@ class GalleryUserHelper_medium /* extends GalleryEventListener */ {
     /**
      * @see GalleryCoreApi::assertUserIsSiteAdministrator
      */
-    function assertSiteAdministrator() {
+    static function assertSiteAdministrator() {
 	global $gallery;
 	$session =& $gallery->getSession();
 	$phpVm = $gallery->getPhpVm();
@@ -209,7 +209,7 @@ class GalleryUserHelper_medium /* extends GalleryEventListener */ {
     /**
      * @see GalleryCoreApi::deleteUserItems
      */
-    function deleteUserItems($userId) {
+    static function deleteUserItems($userId) {
 	global $gallery;
 
 	if (empty($userId)) {
@@ -345,7 +345,7 @@ class GalleryUserHelper_medium /* extends GalleryEventListener */ {
      *
      * @see GalleryEventListener::handleEvent
      */
-    function handleEvent($event) {
+    static function handleEvent($event) {
 	global $gallery;
 	$phpVm = $gallery->getPhpVm();
 
@@ -416,7 +416,7 @@ class GalleryUserHelper_medium /* extends GalleryEventListener */ {
     /**
      * @see GalleryCoreApi::isDisabledUsername
      */
-    function isDisabledUsername($userName) {
+    static function isDisabledUsername($userName) {
 	global $gallery;
 
 	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry(
@@ -448,7 +448,7 @@ class GalleryUserHelper_medium /* extends GalleryEventListener */ {
      * @return bool true if the account is disabled
      * @access private
      */
-    function _isDisabled($count, $lastAttempt) {
+    static function _isDisabled($count, $lastAttempt) {
 	global $gallery;
 
 	if ($count >= 10) {

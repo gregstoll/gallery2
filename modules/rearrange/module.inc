@@ -27,7 +27,7 @@
  */
 class RearrangeModule extends GalleryModule {
 
-    function RearrangeModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('rearrange');
 	$this->setName($gallery->i18n('Rearrange'));

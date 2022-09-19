@@ -49,7 +49,7 @@ class SlideshowHelper {
      *               int the offset value for the previous page, null for no previous page
      *               int the offset value for the next page, null for no next page
      */
-    function buildAlbumSlideshow($item, $startId=null, $offset=0) {
+    static function buildAlbumSlideshow($item, $startId=null, $offset=0) {
 	list ($ret, $canView) = GalleryCoreApi::hasItemPermission($item->getId(), 'core.view');
 	if ($ret) {
 	    return array($ret, null, null, null, null);
@@ -107,7 +107,7 @@ class SlideshowHelper {
      *                     containing item, image and thumbnail entities
      *               int the index into the data array where the slideshow should start.
      */
-    function buildItemsSlideshow($childIds, $startId=null) {
+    static function buildItemsSlideshow($childIds, $startId=null) {
 	global $gallery;
 
 	if (empty($childIds)) {
@@ -220,7 +220,7 @@ class SlideshowHelper {
      *               int the offset value for the previous page, null for no previous page
      *               int the offset value for the next page, null for no next page
      */
-    function paginateItemSlideshow($itemId, $offset=0) {
+    static function paginateItemSlideshow($itemId, $offset=0) {
 	list ($ret, $itemCount) = GalleryCoreApi::fetchChildCounts(array($itemId));
 	if ($ret) {
 	    return array($ret, null, null);

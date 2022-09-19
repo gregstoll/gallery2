@@ -35,7 +35,7 @@ class GalleryToolkitHelper_simple {
     /**
      * @see GalleryCoreApi::getToolkitByOperation
      */
-    function getToolkitByOperation($mimeType, $operationName) {
+    static function getToolkitByOperation($mimeType, $operationName) {
 	global $gallery;
 
 	$cacheKey = "GalleryToolkitHelper::getToolkitByOperation($mimeType, $operationName)";
@@ -93,7 +93,7 @@ class GalleryToolkitHelper_simple {
     /**
      * @see GalleryCoreApi::getToolkitByProperty
      */
-    function getToolkitByProperty($mimeType, $propertyName) {
+    static function getToolkitByProperty($mimeType, $propertyName) {
 	$cacheKey = "GalleryToolkitHelper::getToolkitByProperty($mimeType, $propertyName)";
 	if (!GalleryDataCache::containsKey($cacheKey)) {
 	    list ($ret, $toolkits) =
@@ -111,7 +111,7 @@ class GalleryToolkitHelper_simple {
     /**
      * @see GalleryCoreApi::getToolkitsByProperty
      */
-    function getToolkitsByProperty($mimeType, $propertyName) {
+    static function getToolkitsByProperty($mimeType, $propertyName) {
 	global $gallery;
 
 	$cacheKey = "GalleryToolkitHelper::getToolkitsByProperty($mimeType, $propertyName)";
@@ -158,7 +158,7 @@ class GalleryToolkitHelper_simple {
     /**
      * @see GalleryCoreApi::getMaximumManagedToolkitPriority
      */
-    function getMaximumManagedPriority() {
+    static function getMaximumManagedPriority() {
 	global $gallery;
 
 	$query =
@@ -189,7 +189,7 @@ class GalleryToolkitHelper_simple {
     /**
      * @see GalleryCoreApi::getToolkitPriorityById
      */
-    function getToolkitPriorityById($toolkitId) {
+    static function getToolkitPriorityById($toolkitId) {
 	list ($ret, $searchResults) = GalleryCoreApi::getMapEntry(
 	    'GalleryToolkitOperationMimeTypeMap',
 	    array('priority'), array('toolkitId' => (string)$toolkitId));

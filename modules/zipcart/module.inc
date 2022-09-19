@@ -27,7 +27,7 @@
  */
 class ZipCartModule extends GalleryModule {
 
-    function ZipCartModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('zipcart');
@@ -108,7 +108,7 @@ class ZipCartModule extends GalleryModule {
 		if (empty($path)) {
 		    continue;
 		}
-		if ($path{strlen($path)-1} != $slash) {
+		if ($path[strlen($path)-1] != $slash) {
 		    $path .= $slash;
 		}
 		$paths[] = $path . 'zip.exe';
@@ -124,7 +124,7 @@ class ZipCartModule extends GalleryModule {
 		if (empty($path)) {
 		    continue;
 		}
-		if ($path{strlen($path)-1} != $slash) {
+		if ($path[strlen($path)-1] != $slash) {
 		    $path .= $slash;
 		}
 		$paths[] = $path . 'zip';

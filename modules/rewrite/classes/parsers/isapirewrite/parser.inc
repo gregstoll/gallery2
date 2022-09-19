@@ -38,7 +38,7 @@ define('REWRITE_STATUS_HTTPDINI_CANT_WRITE', 34);
  */
 class IsapiRewriteParser extends RewriteParser {
 
-    function IsapiRewriteParser() {
+    function __construct() {
 	$this->_setParserId('isapirewrite');
 	$this->_setParserType('preGallery');
 	$this->_setUrlGeneratorId('IsapiRewriteUrlGenerator');

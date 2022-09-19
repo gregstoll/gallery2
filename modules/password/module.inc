@@ -31,7 +31,7 @@
  */
 class PasswordModule extends GalleryModule /* and GalleryEventListener */ {
 
-    function PasswordModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('password');
@@ -142,7 +142,7 @@ class PasswordModule extends GalleryModule /* and GalleryEventListener */ {
 		return $ret;
 	    }
 	    foreach ($items as $item) {
-		$ret = PasswordHelper::removePassword($item);
+		$ret = PasswordHelper::removePasswordStatic($item);
 		if ($ret) {
 		    return $ret;
 		}

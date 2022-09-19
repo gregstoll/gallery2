@@ -26,7 +26,7 @@
  */
 class MembersModule extends GalleryModule {
 
-    function MembersModule() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('members');

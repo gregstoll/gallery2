@@ -27,7 +27,7 @@
  */
 class HybridTheme extends GalleryTheme {
 
-    function HybridTheme() {
+    function __construct() {
 	global $gallery;
 
 	$this->setId('hybrid');

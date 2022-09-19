@@ -21,7 +21,7 @@ getid3_lib::IncludeDependency(GETID3_INCLUDEPATH.'module.audio.mp3.inc', __FILE_
 class getid3_riff
 {
 
-	function getid3_riff(&$fd, &$ThisFileInfo) {
+	function __construct(&$fd, &$ThisFileInfo) {
 
 		// initialize these values to an empty array, otherwise they default to NULL
 		// and you can't append array values to a NULL value
@@ -1315,7 +1315,7 @@ class getid3_riff
 			$RIFFdataLength = strlen($RIFFdata);
 			$NewLengthString = getid3_lib::LittleEndian2String($RIFFdataLength, 4);
 			for ($i = 0; $i < 4; $i++) {
-				$RIFFdata{$i + 4} = $NewLengthString{$i};
+				$RIFFdata[$i + 4] = $NewLengthString[$i];
 			}
 			fwrite($fp_temp, $RIFFdata);
 			fclose($fp_temp);

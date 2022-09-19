@@ -17,14 +17,14 @@
 class getid3_iso
 {
 
-	function getid3_iso($fd, &$ThisFileInfo) {
+	function __construct($fd, &$ThisFileInfo) {
 		$ThisFileInfo['fileformat'] = 'iso';
 
 		for ($i = 16; $i <= 19; $i++) {
 			fseek($fd, 2048 * $i, SEEK_SET);
 			$ISOheader = fread($fd, 2048);
 			if (substr($ISOheader, 1, 5) == 'CD001') {
-				switch (ord($ISOheader{0})) {
+				switch (ord($ISOheader[0])) {
 					case 1:
 						$ThisFileInfo['iso']['primary_volume_descriptor']['offset'] = 2048 * $i;
 						$this->ParsePrimaryVolumeDescriptor($ISOheader, $ThisFileInfo);
@@ -275,9 +275,9 @@ class getid3_iso
 		fseek($fd, $directorydata['location_bytes'], SEEK_SET);
 		$DirectoryRecordData = fread($fd, 1);
 
-		while (ord($DirectoryRecordData{0}) > 33) {
+		while (ord($DirectoryRecordData[0]) > 33) {
 
-			$DirectoryRecordData .= fread($fd, ord($DirectoryRecordData{0}) - 1);
+			$DirectoryRecordData .= fread($fd, ord($DirectoryRecordData[0]) - 1);
 
 			$ThisDirectoryRecord['raw']['length']                    = getid3_lib::LittleEndian2Int(substr($DirectoryRecordData,  0, 1));
 			$ThisDirectoryRecord['raw']['extended_attribute_length'] = getid3_lib::LittleEndian2Int(substr($DirectoryRecordData,  1, 1));
@@ -351,13 +351,13 @@ class getid3_iso
 		// 6: second of the minute from 0 to 59
 		// 7: Offset from Greenwich Mean Time in number of 15 minute intervals from -48 (West) to +52 (East)
 
-		$UNIXyear   = ord($ISOtime{0}) + 1900;
-		$UNIXmonth  = ord($ISOtime{1});
-		$UNIXday    = ord($ISOtime{2});
-		$UNIXhour   = ord($ISOtime{3});
-		$UNIXminute = ord($ISOtime{4});
-		$UNIXsecond = ord($ISOtime{5});
-		$GMToffset  = $this->TwosCompliment2Decimal(ord($ISOtime{5}));
+		$UNIXyear   = ord($ISOtime[0]) + 1900;
+		$UNIXmonth  = ord($ISOtime[1]);
+		$UNIXday    = ord($ISOtime[2]);
+		$UNIXhour   = ord($ISOtime[3]);
+		$UNIXminute = ord($ISOtime[4]);
+		$UNIXsecond = ord($ISOtime[5]);
+		$GMToffset  = $this->TwosCompliment2Decimal(ord($ISOtime[5]));
 
 		return gmmktime($UNIXhour, $UNIXminute, $UNIXsecond, $UNIXmonth, $UNIXday, $UNIXyear);
 	}

@@ -27,7 +27,7 @@
  */
 class UpdatesAlbumView extends GalleryView {
 
-    function UpdatesAlbumView() {
+    function __construct() {
 	global $gallery;
 	$this->_view = 'dynamicalbum.UpdatesAlbum';
 	$this->_title = $gallery->i18n('Recent Updates');
@@ -58,7 +58,7 @@ class UpdatesAlbumView extends GalleryView {
 	if ($ret) {
 	    return array($ret, null, null, null);
 	}
-	$item->create(
+	$item->createDynamicAlbum(
 	    $module->translate($this->_title),
 	    array($this->_itemType, array_map(array($module, 'translate'), $this->_itemType))
 	);

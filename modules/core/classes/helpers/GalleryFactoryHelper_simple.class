@@ -31,7 +31,7 @@ class GalleryFactoryHelper_simple {
     /**
      * Reset the static factory registry
      */
-    function deleteCache() {
+    static function deleteCache() {
 	$cacheParams = array('type' => 'module',
 			     'itemId' => 'GalleryFactoryHelper_loadRegistry',
 			     'id' => '_all');
@@ -47,7 +47,7 @@ class GalleryFactoryHelper_simple {
      * @return array factory registry data
      * @access private
      */
-    function &_getSingleton() {
+    static function &_getSingleton() {
 	static $registry = array();
 	return $registry;
     }
@@ -59,7 +59,7 @@ class GalleryFactoryHelper_simple {
      * @return array factory data
      * @access private
      */
-    function &_getFactoryData() {
+    static function &_getFactoryData() {
 	$registry =& GalleryFactoryHelper_simple::_getSingleton();
 	if (empty($registry)) {
 	    $cacheParams = array('type' => 'module',
@@ -101,7 +101,7 @@ class GalleryFactoryHelper_simple {
     /**
      * @see GalleryCoreApi::newFactoryInstanceByHint
      */
-    function newInstanceByHint($classType, $hints) {
+    static function newInstanceByHint($classType, $hints) {
 	list ($ret, $registry) = GalleryFactoryHelper_simple::_getFactoryData();
 	if ($ret) {
 	    return array($ret, null);
@@ -135,7 +135,7 @@ class GalleryFactoryHelper_simple {
     /**
      * @see GalleryCoreApi::newFactoryInstance
      */
-    function newInstance($classType, $className=null) {
+    static function newInstance($classType, $className=null) {
 	global $gallery;
 
 	list ($ret, $registry) = GalleryFactoryHelper_simple::_getFactoryData();
@@ -187,7 +187,7 @@ class GalleryFactoryHelper_simple {
     /**
      * @see GalleryCoreApi::newFactoryInstanceById
      */
-    function newInstanceById($classType, $id) {
+    static function newInstanceById($classType, $id) {
 	list ($ret, $registry) = GalleryFactoryHelper_simple::_getFactoryData();
 	if ($ret) {
 	    return array($ret, null);
@@ -209,7 +209,7 @@ class GalleryFactoryHelper_simple {
     /**
      * @see GalleryCoreApi::getAllFactoryImplementationIds
      */
-    function getAllImplementationIds($classType) {
+    static function getAllImplementationIds($classType) {
 	list ($ret, $registry) = GalleryFactoryHelper_simple::_getFactoryData();
 	if ($ret) {
 	    return array($ret, null);

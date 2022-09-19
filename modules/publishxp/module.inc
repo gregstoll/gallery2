@@ -31,7 +31,7 @@
  */
 class PublishXpModule extends GalleryModule {
 
-    function PublishXpModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('publishxp');
 	$this->setName($gallery->i18n('Windows Publishing Wizard'));
