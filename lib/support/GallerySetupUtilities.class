@@ -362,12 +362,12 @@ class GallerySetupUtilities {
 	 * attack.  Either create a clean session, or if we detect that this session is clean,
 	 * sign it in a way that we'll recognize.
 	 */
-	$remoteId = GallerySession::getRemoteIdentifier();
+	$remoteId = (new GallerySession)->getRemoteIdentifier();
 	$cutoff = time() - G2_SUPPORT_MAX_SESSION_LIFETIME;
 	$configDir = GallerySetupUtilities::getConfigDir();
 	if (!empty($sessionId) && (
 		    !isset($_SESSION['_remoteId'])
-		    || GallerySession::compareIdentifiers($_SESSION['_remoteId'], $remoteId) == 0
+		    || (new GallerySession)->getRemoteIdentifier($_SESSION['_remoteId'], $remoteId) == 0
 		    || !isset($_SESSION['_startTime']) || $_SESSION['_startTime'] < $cutoff
 		    || !isset($_SESSION['_path']) || $_SESSION['_path'] != $configDir)) {
 	    /*
