@@ -248,7 +248,7 @@ class GallerySession {
 		 */
 		$this->_remoteIdentifier = $currentRemoteIdentifier;
 		$this->_forceSaveSession = true;
-	    } else if ($this->compareIdentifiers($this->_remoteIdentifier,
+	    } else if (GallerySession::compareIdentifiers($this->_remoteIdentifier,
 						 $currentRemoteIdentifier) == 0) {
 		/* If we upgrade, allowSessionAccess could be missing */
 		$allowFrom = @$gallery->getConfig('allowSessionAccess');
@@ -1303,7 +1303,7 @@ class GallerySession {
      *
      * @return int a score
      */
-    function compareIdentifiers($a, $b) {
+    static function compareIdentifiers($a, $b) {
 	$score = 0;
 	if (is_array($a) && is_array($b)) {
 	    for ($i = 0; $i < sizeof($a); $i++) {
