@@ -712,9 +712,10 @@ class GalleryUtilities {
 	     * changes the character set of the input data (in one environment it converted the
 	     * UTF-8 data to ISO-8859-1)
 	     */
-	    $value = str_replace(array('&', '"', '<', '>'),
-				 array('&amp;', '&quot;', '&lt;', '&gt;'),
-				 $value);
+	    $value = $value ? str_replace(array('&', '"', '<', '>'),
+				    array('&amp;', '&quot;', '&lt;', '&gt;'),
+				    $value)
+                 : null;
 	}
     }
 
@@ -1213,7 +1214,7 @@ class GalleryUtilities {
 	global $gallery;
 
 	/* If the method getPlatform exists, then we are not installing and it is safe to use. */
-	if (method_exists($gallery, "getPlatform")) {
+	if (!is_null($gallery) && method_exists($gallery, "getPlatform")) {
 	    $platform =& $gallery->getPlatform();
 	    $lines = $platform->file($filePath);
 	} else {
