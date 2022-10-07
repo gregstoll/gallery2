@@ -171,7 +171,7 @@ class FfmpegModule extends GalleryModule {
 
 	/* Now try each path in turn to see which ones work */
 	foreach ($paths as $path) {
-	    list ($ret, $testResults) = FfmpegToolkitHelper::testBinary($path);
+	    list ($ret, $testResults) = ($this->($path));
 	    if ($ret) {
 		/* Something went wrong with this path -- try the next path */
 		continue;
