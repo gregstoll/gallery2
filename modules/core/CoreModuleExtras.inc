@@ -35,7 +35,7 @@ class CoreModuleExtras {
      * @param GalleryModule $module the core module
      * @param string $currentVersion the current installed version
      */
-    function upgrade($module, $currentVersion, $statusMonitor) {
+    static function upgrade($module, $currentVersion, $statusMonitor) {
 	global $gallery;
 	$storage =& $gallery->getStorage();
 	$platform =& $gallery->getPlatform();
@@ -2952,7 +2952,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
      * @param string $currentVersion current core version
      * @return GalleryStatus a status code
      */
-    function performConfigUpgrade($currentVersion) {
+    static function performConfigUpgrade($currentVersion) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 
@@ -3010,7 +3010,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
      * @param GalleryModule $module the core module
      * @return GalleryStatus a status code
      */
-    function _createAllUsersGroup($module) {
+    static function _createAllUsersGroup($module) {
 	global $gallery;
 
 	list ($ret, $id) = $module->getParameter('id.allUserGroup');
@@ -3050,7 +3050,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
      * @param GalleryModule $module the core module
      * @return GalleryStatus a status code
      */
-    function _createSiteAdminsGroup($module) {
+    static function _createSiteAdminsGroup($module) {
 	global $gallery;
 
 	list ($ret, $id) = $module->getParameter('id.adminGroup');
@@ -3090,7 +3090,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
      * @param GalleryModule $module the core module
      * @return GalleryStatus a status code
      */
-    function _createEverybodyGroup($module) {
+    static function _createEverybodyGroup($module) {
 	global $gallery;
 
 	list ($ret, $id) = $module->getParameter('id.everybodyGroup');
@@ -3130,7 +3130,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
      * @param GalleryModule $module the core module
      * @return GalleryStatus a status code
      */
-    function _createAnonymousUser($module) {
+    static function _createAnonymousUser($module) {
 	global $gallery;
 
 	list ($ret, $id) = $module->getParameter('id.anonymousUser');
@@ -3183,7 +3183,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
      * @param GalleryModule $module the core module
      * @return GalleryStatus a status code
      */
-    function _createAdminUser($module) {
+    static function _createAdminUser($module) {
 	global $gallery;
 
 	/* Don't create if there is already a user in the admin group */
@@ -3246,7 +3246,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
      * @param GalleryModule $module the core module
      * @return GalleryStatus a status code
      */
-    function _createRootAlbumItem($module) {
+    static function _createRootAlbumItem($module) {
 	global $gallery;
 
 	/* Do we already have a root? */
@@ -3308,7 +3308,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
      * @param GalleryModule $module the core module
      * @return GalleryStatus a status code
      */
-    function _createAccessListCompacterLock($module) {
+    static function _createAccessListCompacterLock($module) {
 	global $gallery;
 
 	/* Do we already have a root? */
@@ -3336,7 +3336,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
     /**
      * @see GalleryModule::performFactoryRegistrations
      */
-    function performFactoryRegistrations($module) {
+    static function performFactoryRegistrations($module) {
 	/* Register all our factory implementations */
 	$regs[] = array('GalleryEntity', 'GalleryEntity', 'class', null);
 	$regs[] = array('GalleryEntity', 'GalleryChildEntity', 'class', null);
@@ -3440,7 +3440,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
      *               bool true if any conversions took place
      * @access public
      */
-    function convertCharacterSetToUtf8($module, $statusMonitor) {
+    static function convertCharacterSetToUtf8($module, $statusMonitor) {
 	global $gallery;
 	$storage =& $gallery->getStorage();
 	$converted = false;
@@ -3574,7 +3574,7 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
      * Sort an associative array where the key is the name of the table.  Force
      * the schema table to be last in line.
      */
-    function _sortSchemaTableLast($a, $b) {
+    static function _sortSchemaTableLast($a, $b) {
 	if ($a == 'Schema') {
 	    return -1;
 	} else if ($b == 'Schema') {
