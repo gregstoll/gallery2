@@ -48,6 +48,10 @@ class HiddenHelper extends HiddenInterface_1_0 {
      */
     function hideItem(&$item, $useProgressBar=false,
 		      $hideId=null, $hiddenAncestor=null, $passwordAncestor=null) {
+        return HiddenHelper::hideItemStatic($item, $useProgressBar, $hideId, $hiddenAncestor, $passwordAncestor);
+    }
+    static function hideItemStatic(&$item, $useProgressBar=false,
+		      $hideId=null, $hiddenAncestor=null, $passwordAncestor=null) {
 	global $gallery;
 
 	/* If item is already hidden, we're done */
@@ -235,6 +239,10 @@ class HiddenHelper extends HiddenInterface_1_0 {
      */
     function unHideItem(&$item, $useProgressBar=false,
 			$hideId=null, $hiddenAncestor=null, $passwordAncestor=null) {
+        return HiddenHelper::unHideItemStatic($item, $useProgressBar, $hideId, $hiddenAncestor, $passwordAncestor);
+    }
+    static function unHideItemStatic(&$item, $useProgressBar=false,
+			$hideId=null, $hiddenAncestor=null, $passwordAncestor=null) {
 	global $gallery;
 	/* If given item is not hidden or subitem is hidden, we're done */
 	if ($item->hasOnLoadHandler('Hidden') == isset($hideId)) {
@@ -412,7 +420,7 @@ class HiddenHelper extends HiddenInterface_1_0 {
 		    return $ret;
 		}
 		foreach ($childItems as $child) {
-		    $ret = HiddenHelper::unHideItem($child, false, $hideId,
+		    $ret = HiddenHelper::unHideItemStatic($child, false, $hideId,
 						    $hiddenAncestor, $passwordAncestor);
 		    if ($ret) {
 			return $ret;
@@ -446,7 +454,7 @@ class HiddenHelper extends HiddenInterface_1_0 {
      *               mixed id of nearest password protected ancestor or false
      * @access private
      */
-    function _checkAncestors($item, $passwordInterface) {
+    static function _checkAncestors($item, $passwordInterface) {
 	list ($ret, $ancestors) = GalleryCoreApi::fetchParents($item);
 	if ($ret) {
 	    return array($ret, null, null);
@@ -475,7 +483,7 @@ class HiddenHelper extends HiddenInterface_1_0 {
      * @param GalleryItem $item item that has moved
      * @return GalleryStatus a status code
      */
-    function handleMoveItem($item) {
+    static function handleMoveItem($item) {
 	global $gallery;
 	$oldParentId = $item->getOriginalValue('parentId');
 	$newParentId = $item->getParentId();
@@ -508,7 +516,7 @@ class HiddenHelper extends HiddenInterface_1_0 {
 	} else if ($hiddenAncestors[0]) {
 	    /* Old location was hidden, new location is not */
 	    $gallery->guaranteeTimeLimit(60);
-	    $ret = HiddenHelper::unHideItem($item, false, $hiddenAncestors[0], false);
+	    $ret = HiddenHelper::unHideItemStatic($item, false, $hiddenAncestors[0], false);
 	    if ($ret) {
 		return $ret;
 	    }
