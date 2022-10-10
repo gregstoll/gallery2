@@ -35,7 +35,7 @@ class FfmpegToolkitHelper {
      * @return GalleryStatus a status code
      *         array('operations' => ..., 'properties' => ...)
      */
-    function getOperationsAndProperties() {
+    static function getOperationsAndProperties() {
 	global $gallery;
 
 	list ($ret, $ffmpegPath) = GalleryCoreApi::getPluginParameter('module', 'ffmpeg', 'path');
@@ -173,7 +173,7 @@ class FfmpegToolkitHelper {
      *         array of strings listing available audio codecs for encoding
      *         string containing the ffmpeg version
      */
-    function testBinary($ffmpegPath) {
+    static function testBinary($ffmpegPath) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 

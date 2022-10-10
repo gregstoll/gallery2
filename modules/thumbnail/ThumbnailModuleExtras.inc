@@ -31,7 +31,7 @@ class ThumbnailModuleExtras {
     /**
      * @see GalleryModule::upgrade
      */
-    function upgrade($module, $currentVersion) {
+    static function upgrade($module, $currentVersion) {
 	global $gallery;
 
 	$platform =& $gallery->getPlatform();
@@ -356,7 +356,7 @@ class ThumbnailModuleExtras {
     /**
      * @see GalleryModule::activate
      */
-    function activate($postActivationEvent=true) {
+    static function activate($postActivationEvent=true) {
 	GalleryCoreApi::requireOnce('modules/thumbnail/classes/ThumbnailHelper.class');
 
 	/* Register toolkit operation for any mime type settings already in the database */
@@ -412,7 +412,7 @@ class ThumbnailModuleExtras {
      * @param ThumbnailModule $module
      * @return GalleryStatus a status code
      */
-    function _createThumbnailContainer($module) {
+    static function _createThumbnailContainer($module) {
 	list ($ret, $container) =
 		GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryChildEntity');
 	if ($ret) {

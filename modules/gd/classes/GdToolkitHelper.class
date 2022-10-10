@@ -37,7 +37,7 @@ class GdToolkitHelper {
      *	 array('operations' => ...
      *	       'properties' => ...)
      */
-    function getOperationsAndProperties($gd=null) {
+    static function getOperationsAndProperties($gd=null) {
 	global $gallery;
 
 	if (!isset($gd)) {
@@ -181,7 +181,7 @@ class GdToolkitHelper {
      * Checks if a certain operation is supported by this GD library
      * @return boolean
      */
-    function isOperationSupported($operation, $gd=null) {
+    static function isOperationSupported($operation, $gd=null) {
 	if (!isset($gd)) {
 	    $gd =& GdToolkitHelper::getGdFunctionality();
 	}
@@ -211,7 +211,7 @@ class GdToolkitHelper {
      * The minimal version of GD that this module supports
      * @return string A version string
      */
-    function minGdVersion() {
+    static function minGdVersion() {
 	return '2.0';
     }
 
@@ -230,7 +230,7 @@ class GdToolkitHelper {
      *         string the GD version number or '0' if there is no GD support
      *                Prefixed with '>' if PHP says "or higher"
      */
-    function discoverGdVersion($gd=null) {
+    static function discoverGdVersion($gd=null) {
 	/*
 	 * Caching this result breaks our unit tests, which checks against a variety of
 	 * dummy GdFunctionality instances.
@@ -272,7 +272,7 @@ class GdToolkitHelper {
      * @return array GalleryStatus
      *	       boolean true if supported, false otherwise
      */
-    function isGdVersionSupported($gdVersion=null, $gd=null) {
+    static function isGdVersionSupported($gdVersion=null, $gd=null) {
 	if (!isset($gdVersion)) {
 	    /* Find out current GD version */
 	    if (!isset($gd)) {
@@ -298,7 +298,7 @@ class GdToolkitHelper {
      * @return array GalleryStatus
      *	       boolean true if it is the bundled library, false otherwise
      */
-    function isBundled($gd=null) {
+    static function isBundled($gd=null) {
 	if (!isset($gd)) {
 	    $gd =& GdToolkitHelper::getGdFunctionality();
 	}
@@ -315,7 +315,7 @@ class GdToolkitHelper {
      * @return array GalleryStatus
      *	       array supported mime-types
      */
-    function discoverMimeTypes($gd=null) {
+    static function discoverMimeTypes($gd=null) {
 	if (!isset($gd)) {
 	    $gd =& GdToolkitHelper::getGdFunctionality();
 	}
@@ -363,7 +363,7 @@ class GdToolkitHelper {
      *
      * @return boolean
      */
-    function hasImageCreateTrueColor($gd=null) {
+    static function hasImageCreateTrueColor($gd=null) {
 	if (!isset($gd)) {
 	    $gd =& GdToolkitHelper::getGdFunctionality();
 	}
@@ -381,7 +381,7 @@ class GdToolkitHelper {
      * Factory to get a new GdFunctionality object.
      * @return GdFunctionality
      */
-    function &getGdFunctionality() {
+    static function &getGdFunctionality() {
 	static $gdFunctionality;
 	if (!isset($gdFunctionality)) {
 	    GalleryCoreApi::requireOnce('modules/gd/classes/GdFunctionality.class');

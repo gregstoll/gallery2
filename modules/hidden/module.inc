@@ -144,7 +144,7 @@ class HiddenModule extends GalleryModule /* and GalleryEventListener */ {
 		return $ret;
 	    }
 	    foreach ($items as $item) {
-		$ret = HiddenHelper::unHideItem($item);
+		$ret = HiddenHelper::unHideItemStatic($item);
 		if ($ret) {
 		    return $ret;
 		}
