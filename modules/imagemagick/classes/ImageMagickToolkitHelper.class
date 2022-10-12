@@ -249,32 +249,32 @@ class ImageMagickToolkitHelper {
 
 	$tests = array();
 	$tests[] = array('mime' => array('image/gif'), 'file' => 'test.gif',
-			 'expected' => '/(GIF.*PseudoClass|PseudoClass.*GIF|DirectClass.*GIF)/');
+			 'expected' => '/(GIF.*PseudoClass|PseudoClass.*GIF|DirectClass.*GIF|GIF)/');
 	$tests[] = array('mime' => array('image/jpeg', 'image/pjpeg'), 'file' => 'test.jpg',
-			 'expected' => '/(JPEG.*(Direct|Pseudo)Class|DirectClass.*JPEG)/');
+			 'expected' => '/(JPEG.*(Direct|Pseudo)Class|DirectClass.*JPEG|JPEG)/');
 	$tests[] = array('mime' => array('image/jp2', 'image/jpg2', 'image/jpx'),
 			 'file' => 'test.jp2',
-			 'expected' => '/(JP2.*(Pseudo|Direct)Class|(Pseudo|Direct)Class.*JP2)/');
+			 'expected' => '/(JP2.*(Pseudo|Direct)Class|(Pseudo|Direct)Class.*JP2|JP2)/');
 	$tests[] = array('mime' => array('image/png'), 'file' => 'test.png',
-			 'expected' => '/(PNG.*DirectClass|DirectClass.*PNG)/');
+			 'expected' => '/(PNG.*DirectClass|DirectClass.*PNG|PNG)/');
 	$tests[] = array('mime' => array('image/tiff'), 'file' => 'test.tif',
-			 'expected' => '/(TIFF.*(Pseudo|Direct)Class|(Pseudo|Direct)Class.*TIFF)/');
+			 'expected' => '/(TIFF.*(Pseudo|Direct)Class|(Pseudo|Direct)Class.*TIFF|TIFF)/');
 	$tests[] = array('mime' => array('image/svg+xml'), 'file' => 'test.svg',
-			 'expected' => '/(SVG.*DirectClass|DirectClass.*SVG)/');
+			 'expected' => '/(SVG.*DirectClass|DirectClass.*SVG|SVG)/');
 	$tests[] = array('mime' => array('image/bmp'), 'file' => 'test.bmp',
-			 'expected' => '/(BMP.*PseudoClass|PseudoClass.*BMP)/');
+			 'expected' => '/(BMP.*PseudoClass|PseudoClass.*BMP|BMP)/');
 	$tests[] = array('mime' => array('application/pdf'), 'file' => 'test.pdf',
-			 'expected' => '/(PDF.*(Pseudo|Direct)Class|PseudoClass.*PDF)/');
+			 'expected' => '/(PDF.*(Pseudo|Direct)Class|PseudoClass.*PDF|PDF)/');
 	$tests[] = array('mime' => array('application/postscript'), 'file' => 'test.eps',
-			 'expected' => '/(PS.*(Pseudo|Direct)Class|PseudoClass.*PS)/');
+			 'expected' => '/(PS.*(Pseudo|Direct)Class|PseudoClass.*PS|PS)/');
 	$tests[] = array('mime' => array('application/photoshop'), 'file' => 'test.psd',
-			 'expected' => '/(PSD.*(Pseudo|Direct)Class|PseudoClass.*PSD)/');
+			 'expected' => '/(PSD.*(Pseudo|Direct)Class|PseudoClass.*PSD|PSD)/');
 	$tests[] = array('mime' => array('image/x-photo-cd'), 'file' => 'truncated.pcd',
-			 'expected' => '/(PCD.*(Pseudo|Direct)Class|PseudoClass.*PCD)/');
+			 'expected' => '/(PCD.*(Pseudo|Direct)Class|PseudoClass.*PCD|PCD)/');
 	$tests[] = array('mime' => array('image/wmf'), 'file' => 'test.wmf',
-			 'expected' => '/(WMF.*(Pseudo|Direct)Class|(Pseudo|Direct)Class.*WMF)/');
+			 'expected' => '/(WMF.*(Pseudo|Direct)Class|(Pseudo|Direct)Class.*WMF|WMF)/');
 	$tests[] = array('mime' => array('image/tga'), 'file' => 'test.tga',
-	    'expected' => '/((TGA|ICB).*(Pseudo|Direct)Class|(Pseudo|Direct)Class.*(TGA|ICB))/');
+	    'expected' => '/((TGA|ICB).*(Pseudo|Direct)Class|(Pseudo|Direct)Class.*(TGA|ICB)|TGA|ICB)/');
 
 	$oldPwd = $platform->getcwd();
 	$platform->chdir($gallery->getConfig('data.gallery.tmp'));
@@ -398,7 +398,7 @@ class ImageMagickToolkitHelper {
 					 'message' => array_merge(
 					     array($module->translate('Problem executing binary:')),
 					     $results));
-		} else if (!preg_match('/(GIF.*PseudoClass|PseudoClass.*GIF|DirectClass.*GIF)/',
+		} else if (!preg_match('/(GIF.*PseudoClass|PseudoClass.*GIF|DirectClass.*GIF|GIF)/',
 				 implode(',', $results))) {
 		    $testArray[] = array('name' => 'identify',
 					 'success' => false,
