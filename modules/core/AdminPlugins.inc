@@ -111,14 +111,20 @@ class AdminPluginsView extends GalleryView {
 		    $entry['screenshot'] = $screenshot;
 		}
 
+        print "Processing plugin $pluginId<br>";
 		if ($entry['state'] == 'incompatible') {
+            print "Plugin $pluginId is incompatible<br>";
+            $requiredAPI = $type == 'theme' ? $plugin->getRequiredThemeApi() : $plugin->getRequiredModuleApi();
+            var_dump($requiredAPI);
+            print "requiredAPI is $requiredAPI <br>";
 		    $entry['api']['required']['plugin'] =
-			join('.', $type == 'theme' ?
-			     $plugin->getRequiredThemeApi() : $plugin->getRequiredModuleApi());
+                join('.', $type == 'theme' ?
+                     $plugin->getRequiredThemeApi() : $plugin->getRequiredModuleApi());
 		    $entry['api']['provided']['plugin'] = join('.', GalleryModule::getApiVersion());
 		    $entry['api']['required']['core'] = join('.', $plugin->getRequiredCoreApi());
 		    $entry['api']['provided']['core'] = join('.', GalleryCoreApi::getApiVersion());
 		}
+        print "Finished processing plugin $pluginId<br>";
 
 		if ($type == 'theme') {
 		    $plugins[] = array_merge($entry, $themeGroup);
