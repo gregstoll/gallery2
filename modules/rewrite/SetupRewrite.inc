@@ -36,7 +36,7 @@ class SetupRewriteController extends GalleryController {
     /**
      * @see GalleryController::handleRequest
      */
-    function handleRequest(&$form) {
+    function handleRequest($form) {
 	GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
 	global $gallery;
 	$platform =& $gallery->getPlatform();
