@@ -35,7 +35,7 @@ class GalleryPendingUserHelper {
      * @return array GalleryStatus a status code
      *               GalleryPendingUser a pending user
      */
-    function fetchPendingUserByUserName($userName) {
+    static function fetchPendingUserByUserName($userName) {
 	global $gallery;
 
 	$query = '
@@ -68,7 +68,7 @@ class GalleryPendingUserHelper {
      * @return array GalleryStatus a status code
      *               int number of pending users
      */
-    function fetchUserCount($substring=null) {
+    static function fetchUserCount($substring=null) {
 	global $gallery;
 	$data = array();
 	$query = '
@@ -100,7 +100,7 @@ class GalleryPendingUserHelper {
      * @return array GalleryStatus a status code
      *               array (id => array('userName'=>name, 'fullName'=>name, 'email'=>email), ...)
      */
-    function fetchUserData($count=null, $offset=null, $substring=null) {
+    static function fetchUserData($count=null, $offset=null, $substring=null) {
 	global $gallery;
 	$data = array();
 	$query = '
@@ -147,7 +147,7 @@ class GalleryPendingUserHelper {
      *                                        locale for the email.
      * @return GalleryStatus a status code
      */
-    function sendConfirmationEmail(&$pendingUser,
+    static function sendConfirmationEmail(&$pendingUser,
 	    $tplFile='ConfirmationEmail.tpl', $subjectParam='subject', $userIdForLocale=null) {
 	global $gallery;
 
@@ -219,7 +219,7 @@ class GalleryPendingUserHelper {
      * @param GalleryPendingUser $pendingUser
      * @return GalleryStatus a status code
      */
-    function sendAdminEmail(&$pendingUser) {
+    static function sendAdminEmail(&$pendingUser) {
 	global $gallery;
 
 	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'register');
@@ -321,7 +321,7 @@ class GalleryPendingUserHelper {
      * @param boolean $delete if true delete the GalleryPendingUser
      * @return GalleryStatus a status code
      */
-    function createGalleryUser(&$pendingUser, $delete=true) {
+    static function createGalleryUser(&$pendingUser, $delete=true) {
 	list ($ret, $user) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryUser');
 	if ($ret) {
 	    return $ret;
