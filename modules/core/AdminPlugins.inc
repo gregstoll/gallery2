@@ -114,6 +114,7 @@ class AdminPluginsView extends GalleryView {
         print "Processing plugin $pluginId<br>";
 		if ($entry['state'] == 'incompatible') {
             print "Plugin $pluginId is incompatible<br>";
+            print "Type is $type<br>";
             $requiredAPI = $type == 'theme' ? $plugin->getRequiredThemeApi() : $plugin->getRequiredModuleApi();
             var_dump($requiredAPI);
             print "requiredAPI is $requiredAPI <br>";
