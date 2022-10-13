@@ -54,7 +54,7 @@ class AdminFfmpegController extends GalleryController {
 		    if ($platform->file_exists($form['path']) && $platform->is_dir($form['path'])) {
 			$form['path'] = trim($form['path']);
 			if (!empty($form['path'])) {
-			    if ($form['path']{strlen($form['path'])-1} != $slash) {
+			    if ($form['path'][strlen($form['path'])-1] != $slash) {
 				$form['path'] .= $slash;
 			    }
 			}
