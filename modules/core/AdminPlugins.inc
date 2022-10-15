@@ -100,6 +100,13 @@ class AdminPluginsView extends GalleryView {
 		    ($platform->is_writeable("$g2Dir{$type}s/$pluginId") &&
 		     $platform->is_writeable("$g2Dir{$type}s/$pluginId/$type.inc")) ? 1 : 0;
 
+        if (is_null($entry['id'])) {
+            // This happens sometimes (it seems like $plugin-> methods
+            // return NULL for everything?) and I'm not sure why
+            // (see issue #49) but just skip this plugin and move on.
+            continue;
+        }
+
 		list ($ret, $entry['state']) =
 		    PluginCallbackView::getPluginState($type, $plugin, $status);
 		if ($ret) {
