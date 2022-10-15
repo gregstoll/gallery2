@@ -88,6 +88,11 @@ class AdminPluginsView extends GalleryView {
 		if ($ret) {
 		    return array($ret, null);
 		}
+        if (is_null($plugin)) {
+            // This happens sometimes and I'm not sure why (see issue #49)
+            // but just skip this plugin and move on.
+            continue;
+        }
 
 		$entry = array();
 		$entry['type'] = $type;
