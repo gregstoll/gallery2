@@ -112,7 +112,7 @@ class ModRewriteHelper {
     /**
      * @see RewriteParser::saveAccessList
      */
-    static function saveAccessList($accessList, $allowEmptyReferer) {
+    static function saveAccessList($parser, $accessList, $allowEmptyReferer) {
 	list ($ret, $code) = ModRewriteHelper::checkFile();
 	if ($ret) {
 	    return array($ret, null);
@@ -144,7 +144,7 @@ class ModRewriteHelper {
 	}
 
 	/* Save the new .htaccess */
-	list ($ret, $code) = $this->saveActiveRules();
+	list ($ret, $code) = $parser->saveActiveRules();
 	if ($ret) {
 	    return array($ret, null);
 	}
