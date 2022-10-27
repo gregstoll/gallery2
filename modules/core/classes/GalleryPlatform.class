@@ -1228,6 +1228,21 @@ class GalleryPlatform {
      * @param int $timestamp (optional)
      * @return string
      */
+    function date($format, $timestamp=null) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("date($format, $timestamp)");
+	}
+    return GalleryCoreApi::convertToUtf8(isset($timestamp) ? date($format, $timestamp) : date($format));
+    }
+
+    /**
+     * Format a local time/date according to locale settings.  Converts any text output from
+     * strftime tokens to UTF-8.
+     * @param string $format
+     * @param int $timestamp (optional)
+     * @return string
+     */
     function strftime($format, $timestamp=null) {
 	global $gallery;
 	if ($gallery->getDebug()) {
