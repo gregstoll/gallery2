@@ -368,12 +368,12 @@ class ItemEditItem extends ItemEditPlugin {
 	if ($originationTimestamp > 0) {
 	    $ItemEditItem['originationTimestamp'] = array(
 		'timestamp' => $originationTimestamp,
-		'Time_Hour' => $platform->strftime('%H', $originationTimestamp),
-		'Time_Minute' => $platform->strftime('%M', $originationTimestamp),
-		'Time_Second' => $platform->strftime('%S', $originationTimestamp),
-		'Date_Day' => ltrim($platform->strftime('%d', $originationTimestamp), '0'),
-		'Date_Month' => $platform->strftime('%m', $originationTimestamp),
-		'Date_Year' => $platform->strftime('%Y', $originationTimestamp),
+		'Time_Hour' => $platform->date('h', $originationTimestamp),
+		'Time_Minute' => $platform->date('i', $originationTimestamp),
+		'Time_Second' => $platform->date('s', $originationTimestamp),
+		'Date_Day' => $platform->date('j', $originationTimestamp),
+		'Date_Month' => $platform->date('m', $originationTimestamp),
+		'Date_Year' => $platform->date('Y', $originationTimestamp),
 	    );
 	}
 
