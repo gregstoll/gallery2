@@ -1228,11 +1228,28 @@ class GalleryPlatform {
      * @param int $timestamp (optional)
      * @return string
      */
+    function date($format, $timestamp=null) {
+	global $gallery;
+	if ($gallery->getDebug()) {
+	    $gallery->debug("date($format, $timestamp)");
+	}
+    return GalleryCoreApi::convertToUtf8(isset($timestamp) ? date($format, $timestamp) : date($format));
+    }
+
+    /**
+     * Format a local time/date according to locale settings.  Converts any text output from
+     * strftime tokens to UTF-8.
+     * @param string $format
+     * @param int $timestamp (optional)
+     * @return string
+     */
     function strftime($format, $timestamp=null) {
 	global $gallery;
 	if ($gallery->getDebug()) {
 	    $gallery->debug("strftime($format, $timestamp)");
 	}
+    GalleryCoreApi::requireOnce(
+        'modules/core/classes/helpers/php-8.1-strftime-modified.class');
 
 	$i = 0;
 	$newFormat = '';
@@ -1249,7 +1266,8 @@ class GalleryPlatform {
 	/* Call strftime and convert to UTF-8; escape % characters before sprintf */
 	$newFormat = str_replace(array('%', '&%%&'), array('%%', '%'),
 	    GalleryCoreApi::convertToUtf8(
-		isset($timestamp) ? strftime($newFormat, $timestamp) : strftime($newFormat)));
+		isset($timestamp) ? PHP81_BC\strftime_modified($newFormat, $timestamp) : PHP81_BC\strftime_modified($newFormat)));
+		//isset($timestamp) ? strftime($newFormat, $timestamp) : strftime($newFormat)));
 	return vsprintf($newFormat, $textPieces);
     }
 
