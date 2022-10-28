@@ -10,6 +10,12 @@
 
   /**
    * Got from https://packagist.org/packages/php81_bc/strftime
+   * This is pretty heavily modified from the original because using IntlDateFormatter requires
+   * the php_intl extension which I didn't want to require for Gallery.
+   * (see https://stackoverflow.com/questions/6242378/fatal-error-class-intldateformatter-not-found )
+   * So I commented out a bunch of stuff and replaced necessary things that should be good enough for
+   * Gallery's uses.
+   *
    * Locale-formatted strftime using IntlDateFormatter (PHP 8.1 compatible)
    * This provides a cross-platform alternative to strftime() for when it will be removed from PHP.
    * Note that output can be slightly different between libc sprintf and this function as it is using ICU.
