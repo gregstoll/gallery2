@@ -1,0 +1,417 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/Callbacks.inc');
+GalleryCoreApi::requireOnce('modules/core/classes/GallerySmarty.class');
+
+/**
+ * Test module callbacks
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class CallbacksTest extends GalleryTestCase {
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_callback = new CoreCallbacks();
+		$this->_smarty   = new CoreCallbacks();
+	}
+
+	public function testLoadLanguageSelector() {
+		global $gallery;
+
+		$supportedLanguages = GalleryCoreApi::getSupportedLanguages();
+
+		$ret = $this->_callback->callback(array(), $this->_smarty, 'LoadLanguageSelector');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$LanguageSelector = $this->_smarty->_tpl_vars['block']['core']['LanguageSelector'];
+		$language         = array_keys($supportedLanguages)[0];
+		$countryList      = array_values($supportedLanguages)[0];
+		$country          = array_keys($countryList)[0];
+		$countryData      = array_values($countryList)[0];
+
+		$this->assertEquals(
+			$countryData['description'],
+			$LanguageSelector['list'][$language . '_' . $country]
+		);
+
+		list($ret, $activeLanguageCode) = $gallery->getActiveLanguageCode();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($activeLanguageCode, $LanguageSelector['language']);
+	}
+
+	public function testShouldShowEmergencyEditItemLink1() {
+		$this->_smarty->_tpl_vars['theme']['params'] = array(
+			'sidebarBlocks' => array(),
+			'albumBlocks'   => array(),
+			'photoBlocks'   => array(),
+		);
+
+		$ret = $this->_callback->callback(
+			array(
+				'checkBlocks' => 'sidebar',
+				'permissions' => array(
+					'core_edit' => 1,
+				),
+			),
+			$this->_smarty,
+			'ShouldShowEmergencyEditItemLink'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			true,
+			$this->_smarty->_tpl_vars['block']['core']['ShouldShowEmergencyEditItemLink'],
+			'we should be showing the link'
+		);
+	}
+
+	public function testShouldShowEmergencyEditItemLink2() {
+		$this->_smarty->_tpl_vars['theme']['params'] = array(
+			'sidebarBlocks' => array(array('core.ItemLinks', array())),
+			'albumBlocks'   => array(),
+			'photoBlocks'   => array(),
+		);
+
+		$ret = $this->_callback->callback(
+			array(
+				'checkBlocks' => 'sidebar',
+				'permissions' => array(
+					'core_edit' => 1,
+				),
+			),
+			$this->_smarty,
+			'ShouldShowEmergencyEditItemLink'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			false,
+			$this->_smarty->_tpl_vars['block']['core']['ShouldShowEmergencyEditItemLink'],
+			'we should not be showing the link'
+		);
+	}
+
+	public function testShouldShowEmergencyEditItemLink3() {
+		$this->_smarty->_tpl_vars['theme']['params'] = array(
+			'sidebarBlocks' => array(),
+			'albumBlocks'   => array(array('core.ItemLinks', array())),
+			'photoBlocks'   => array(array('core.ItemLinks', array())),
+		);
+
+		$ret = $this->_callback->callback(
+			array(
+				'checkBlocks' => 'sidebar,album',
+				'permissions' => array(
+					'core_edit' => 1,
+				),
+			),
+			$this->_smarty,
+			'ShouldShowEmergencyEditItemLink'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			false,
+			$this->_smarty->_tpl_vars['block']['core']['ShouldShowEmergencyEditItemLink'],
+			'we should not be showing the link'
+		);
+	}
+
+	public function testShouldShowEmergencyEditItemLink4() {
+		$this->_smarty->_tpl_vars['theme']['params'] = array(
+			'sidebarBlocks' => array(),
+			'albumBlocks'   => array(array('core.ItemLinks', array())),
+			'photoBlocks'   => array(array('core.ItemLinks', array())),
+		);
+
+		$ret = $this->_callback->callback(
+			array(
+				'checkBlocks' => 'sidebar',
+				'permissions' => array(
+					'core_edit' => 1,
+				),
+			),
+			$this->_smarty,
+			'ShouldShowEmergencyEditItemLink'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			true,
+			$this->_smarty->_tpl_vars['block']['core']['ShouldShowEmergencyEditItemLink'],
+			'we should be showing the link'
+		);
+	}
+
+	public function testShouldShowEmergencyEditItemLinkNoPermissions() {
+		$this->_smarty->_tpl_vars['theme']['params'] = array(
+			'myBlocks'    => array(),
+			'photoBlocks' => array(),
+		);
+
+		$ret = $this->_callback->callback(
+			array(
+				'checkBlocks' => 'my',
+				'permissions' => array(),
+			),
+			$this->_smarty,
+			'ShouldShowEmergencyEditItemLink'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			false,
+			$this->_smarty->_tpl_vars['block']['core']['ShouldShowEmergencyEditItemLink'],
+			'we should not be showing the link'
+		);
+	}
+
+	public function _assertPeers($returnCount, $allCount, $thisIndex, $indexList, $msg) {
+		$this->assertTrue(
+			isset($this->_smarty->_tpl_vars['block']['core']['LoadPeers']),
+			$msg . ': set'
+		);
+
+		$data =& $this->_smarty->_tpl_vars['block']['core']['LoadPeers'];
+
+		$this->assertEquals(
+			array('peers', 'peerCount', 'thisPeerIndex', 'parent'),
+			array_keys($data),
+			$msg . ': data keys'
+		);
+		$this->assertEquals(
+			$returnCount,
+			count($data['peers']),
+			$msg . ': number of peers returned'
+		);
+		$this->assertEquals($allCount, $data['peerCount'], $msg . ': peer count');
+		$this->assertEquals($thisIndex, $data['thisPeerIndex'], $msg . ': peer index');
+		$this->assertEquals($this->_album->getId(), $data['parent']['id'], $msg . ': parent');
+
+		foreach ($indexList as $i => $peerIndex) {
+			$this->assertEquals(
+				$peerIndex,
+				$data['peers'][$i]['peerIndex'],
+				$msg . ": peerIndex $i"
+			);
+			$this->assertEquals(
+				$this->_items[$peerIndex - 1]->getId(),
+				$data['peers'][$i]['id'],
+				$msg . ": id $i"
+			);
+		}
+	}
+
+	public function testLoadPeers() {
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		for ($i = 0; $i < 11; $i++) {
+			list($ret, $this->_items[$i]) = $this->_createRandomDataItem($this->_album->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$this->_smarty->_tpl_vars = array();
+
+		$ret = $this->_callback->callback(
+			array(
+				'item'       => (array)$this->_items[5],
+				'windowSize' => 5,
+			),
+			$this->_smarty,
+			'LoadPeers'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_assertPeers(7, 11, 6, array(1, 4, 5, 6, 7, 8, 11), 'simple');
+
+		$this->_smarty->_tpl_vars = array();
+
+		$ret = $this->_callback->callback(
+			array(
+				'item'       => (array)$this->_items[4],
+				'windowSize' => 7,
+				'addEnds'    => false,
+			),
+			$this->_smarty,
+			'LoadPeers'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_assertPeers(7, 11, 5, array(2, 3, 4, 5, 6, 7, 8), 'no ends');
+
+		$this->_smarty->_tpl_vars = array();
+
+		$ret = $this->_callback->callback(
+			array(
+				'item'       => (array)$this->_items[2],
+				'windowSize' => 7,
+			),
+			$this->_smarty,
+			'LoadPeers'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_assertPeers(8, 11, 3, array(1, 2, 3, 4, 5, 6, 7, 11), 'front');
+
+		$this->_smarty->_tpl_vars = array();
+
+		$ret = $this->_callback->callback(
+			array(
+				'item'       => (array)$this->_items[9],
+				'windowSize' => 5,
+				'addEnds'    => false,
+			),
+			$this->_smarty,
+			'LoadPeers'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_assertPeers(5, 11, 10, array(7, 8, 9, 10, 11), 'end');
+
+		$this->_smarty->_tpl_vars = array();
+
+		$ret = $this->_callback->callback(
+			array(
+				'item'       => (array)$this->_items[7],
+				'windowSize' => 21,
+			),
+			$this->_smarty,
+			'LoadPeers'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_assertPeers(11, 11, 8, array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), 'both ends');
+
+		$this->_smarty->_tpl_vars = array();
+
+		$ret = $this->_callback->callback(
+			array(
+				'item'       => (array)$this->_items[6],
+				'windowSize' => 6,
+				'addEnds'    => false,
+			),
+			$this->_smarty,
+			'LoadPeers'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_assertPeers(6, 11, 7, array(5, 6, 7, 8, 9, 10), 'unbalanced');
+
+		$this->_smarty->_tpl_vars = array();
+
+		$ret = $this->_callback->callback(
+			array(
+				'item'       => (array)$this->_items[0],
+				'windowSize' => 4,
+				'addEnds'    => false,
+			),
+			$this->_smarty,
+			'LoadPeers'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_assertPeers(4, 11, 1, array(1, 2, 3, 4), 'unbalanced front');
+
+		$this->_smarty->_tpl_vars = array();
+
+		$ret = $this->_callback->callback(
+			array(
+				'item'       => (array)$this->_items[8],
+				'windowSize' => 8,
+			),
+			$this->_smarty,
+			'LoadPeers'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_assertPeers(9, 11, 9, array(1, 4, 5, 6, 7, 8, 9, 10, 11), 'unbalanced end');
+	}
+
+	public function testLoadValidationPlugins() {
+		$ret = $this->_callback->callback(array(), $this->_smarty, 'LoadValidationPlugins');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_array($this->_smarty->_tpl_vars['block']['core']['ValidationPlugins']));
+	}
+}

@@ -1,0 +1,495 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemAddChildren controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemAddFromBrowserTest extends ItemAddPluginTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core', 'ItemAddFromBrowser');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_rootAlbum) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_rootAlbum);
+
+		list($ret, $this->_lockIds) = GalleryCoreApi::acquireReadLock($this->_rootAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		$ret = GalleryCoreApi::releaseLocks($this->_lockIds);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testAddChildrenFromBrowser() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][addFromBrowser]', 1);
+
+		$baseDir = __DIR__ . '/../data/';
+		$files   = array('test1.gif', 'test1.jpg', 'test2.gif', 'test[3].gif');
+		$i       = 0;
+
+		foreach ($files as $file) {
+			$i++;
+			$fullPath = $baseDir . $file;
+
+			GalleryUtilities::putRequestVariable('form[name][' . $i . ']', $file);
+
+			list($ret, $mimeType) = GalleryCoreApi::getMimeType($fullPath);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			GalleryUtilities::putRequestVariable('form[type][' . $i . ']', $mimeType);
+			GalleryUtilities::putRequestVariable('form[tmp_name][' . $i . ']', $fullPath);
+			GalleryUtilities::putRequestVariable(
+				'form[size][' . $i . ']',
+				$platform->filesize($fullPath)
+			);
+			GalleryUtilities::putRequestVariable('form[error][' . $i . ']', 0);
+			GalleryUtilities::putRequestVariable(
+				'form[caption][' . $i . ']',
+				'this is a caption for ' . $file
+			);
+		}
+
+		GalleryUtilities::putRequestVariable('form[uploadBoxCount]', $i);
+		GalleryUtilities::putRequestVariable('form[set][title]', 'filename');
+		GalleryUtilities::putRequestVariable('form[set][summary]', 1);
+		GalleryUtilities::putRequestVariable('form[set][description]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_rootAlbum);
+
+		$this->assertEquals(array(), $results[0]);
+
+		// We do not know the ids, but we can verify everything else
+		$i = 0;
+
+		foreach ($files as $file) {
+			$this->assertEquals($file, $results[1]['addedFiles'][$i]['fileName']);
+			$this->assertTrue(isset($results[1]['addedFiles'][$i]['id']));
+
+			$ids[] = $results[1]['addedFiles'][$i]['id'];
+			$i++;
+		}
+
+		// Verify item attributes (like order weight)
+		list($ret, $itemIds) = GalleryCoreApi::fetchChildItemIds($this->_rootAlbum);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(4, count($itemIds), 'child count');
+
+		$seenWeights = array();
+
+		foreach ($ids as $id) {
+			list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($id);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(0, $viewCount);
+
+			list($ret, $orderWeight) = GalleryCoreApi::fetchItemOrderWeight($id);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertFalse(isset($seenWeights[$orderWeight]), 'Seen this weight before');
+
+			$seenWeights[$orderWeight] = 1;
+		}
+
+		list($ret, $items) = GalleryCoreApi::loadEntitiesById($ids, 'GalleryDataItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$i = 0;
+
+		foreach ($items as $item) {
+			$this->assertEquals(
+				$platform->legalizePathComponent($files[$i]),
+				$item->getPathComponent(),
+				'path component'
+			);
+
+			list($base, $extension) = GalleryUtilities::getFileNameComponents($files[$i]);
+
+			$this->assertEquals($base, $item->getTitle(), 'title');
+			$this->assertEquals(
+				'this is a caption for ' . $files[$i],
+				$item->getSummary(),
+				'summary'
+			);
+			$this->assertEquals(
+				'this is a caption for ' . $files[$i++],
+				$item->getDescription(),
+				'description'
+			);
+		}
+	}
+
+	public function testAddUnknownChildFromBrowser() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][addFromBrowser]', 1);
+		GalleryUtilities::putRequestVariable('form[name][1]', basename(__FILE__));
+		GalleryUtilities::putRequestVariable('form[type][1]', 'test/unknown-type');
+		GalleryUtilities::putRequestVariable('form[tmp_name][1]', __FILE__);
+		GalleryUtilities::putRequestVariable('form[size][1]', $platform->filesize(__FILE__));
+		GalleryUtilities::putRequestVariable('form[error][1]', 0);
+		GalleryUtilities::putRequestVariable('form[caption][1]', 'a caption');
+		GalleryUtilities::putRequestVariable('form[uploadBoxCount]', 1);
+		GalleryUtilities::putRequestVariable('form[set][title]', 'caption');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_rootAlbum);
+
+		$this->assertEquals(array(), $results[0]);
+
+		// We do not know the ids, but we can verify everything else
+		$this->assertEquals(basename(__FILE__), $results[1]['addedFiles'][0]['fileName']);
+		$this->assertTrue(isset($results[1]['addedFiles'][0]['id']), 'Id is not set');
+
+		// Verify item attributes
+		list($ret, $ids) = GalleryCoreApi::fetchChildItemIds($this->_rootAlbum);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(1, count($ids), 'child count');
+
+		list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($ids[0]);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, $viewCount);
+
+		list($ret, $item) = GalleryCoreApi::loadEntitiesById($ids[0], 'GalleryUnknownItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('a caption', $item->getTitle(), 'title');
+		$this->assertEquals('', $item->getSummary(), 'summary');
+		$this->assertEquals('', $item->getDescription(), 'description');
+	}
+
+	public function testAddWithEmptyTitle() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][addFromBrowser]', 1);
+		GalleryUtilities::putRequestVariable('form[name][1]', basename(__FILE__));
+		GalleryUtilities::putRequestVariable('form[type][1]', 'test/unknown-type');
+		GalleryUtilities::putRequestVariable('form[tmp_name][1]', __FILE__);
+		GalleryUtilities::putRequestVariable('form[size][1]', $platform->filesize(__FILE__));
+		GalleryUtilities::putRequestVariable('form[error][1]', 0);
+		GalleryUtilities::putRequestVariable('form[caption][1]', 'a caption');
+		GalleryUtilities::putRequestVariable('form[uploadBoxCount]', 1);
+		GalleryUtilities::putRequestVariable('form[set][title]', '');
+		GalleryUtilities::putRequestVariable('form[set][summary]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_rootAlbum);
+
+		$this->assertEquals(array(), $results[0]);
+
+		// We do not know the ids, but we can verify everything else
+		$this->assertEquals(basename(__FILE__), $results[1]['addedFiles'][0]['fileName']);
+		$this->assertTrue(isset($results[1]['addedFiles'][0]['id']), 'Id is not set');
+
+		// Verify item attributes
+		list($ret, $ids) = GalleryCoreApi::fetchChildItemIds($this->_rootAlbum);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(1, count($ids), 'child count');
+
+		list($ret, $item) = GalleryCoreApi::loadEntitiesById($ids[0], 'GalleryDataItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('', $item->getTitle(), 'title');
+		$this->assertEquals('a caption', $item->getSummary(), 'summary');
+		$this->assertEquals('', $item->getDescription(), 'description');
+	}
+
+	public function testAddWithSpaces() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+		$name     = basename(__FILE__);
+
+		GalleryUtilities::putRequestVariable('form[action][addFromBrowser]', 1);
+		GalleryUtilities::putRequestVariable('form[name][1]', " $name ");
+		GalleryUtilities::putRequestVariable('form[type][1]', 'test/unknown-type');
+		GalleryUtilities::putRequestVariable('form[tmp_name][1]', __FILE__);
+		GalleryUtilities::putRequestVariable('form[size][1]', $platform->filesize(__FILE__));
+		GalleryUtilities::putRequestVariable('form[error][1]', 0);
+		GalleryUtilities::putRequestVariable('form[caption][1]', 'a caption');
+		GalleryUtilities::putRequestVariable('form[uploadBoxCount]', 1);
+		GalleryUtilities::putRequestVariable('form[set][title]', 'caption');
+
+		$results = $this->handleRequest($this->_rootAlbum);
+
+		$this->assertEquals(array(), $results[0]);
+
+		// We do not know the ids, but we can verify everything else
+		$this->assertEquals(" $name ", $results[1]['addedFiles'][0]['fileName'], 'added file');
+		$this->assertTrue(isset($results[1]['addedFiles'][0]['id']), 'Id is not set');
+
+		list($ret, $ids) = GalleryCoreApi::fetchChildItemIds($this->_rootAlbum);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(1, count($ids), 'child count');
+
+		list($ret, $item) = GalleryCoreApi::loadEntitiesById($ids[0], 'GalleryDataItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($name, $item->getPathComponent(), 'path component');
+
+		list($ret, $path) = $item->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($platform->is_file($path), "file '$path'");
+		$this->assertEquals(
+			trim($name),
+			basename($path),
+			'file name: "' . basename($path) . '"'
+		);
+	}
+
+	public function testAddFromBrowserFail() {
+		GalleryUtilities::putRequestVariable('form[action][addFromBrowser]', 1);
+
+		$files = array(
+			1 => array('test1.gif', UPLOAD_ERR_INI_SIZE),
+			2 => array('test2.gif', UPLOAD_ERR_FORM_SIZE),
+		);
+
+		foreach ($files as $i => $data) {
+			GalleryUtilities::putRequestVariable("form[name][$i]", $data[0]);
+			GalleryUtilities::putRequestVariable("form[tmp_name][$i]", '');
+			GalleryUtilities::putRequestVariable("form[size][$i]", 0);
+			GalleryUtilities::putRequestVariable("form[error][$i]", $data[1]);
+		}
+
+		$results = $this->handleRequest($this->_rootAlbum);
+
+		$this->assertEquals(
+			array('form[error][upload][1]', 'form[error][upload][2]'),
+			$results[0],
+			'Failure'
+		);
+		$this->assertEquals($files[1][0], $results[1]['addedFiles'][0]['fileName'], 'Filename');
+
+		$this->assertEquals(
+			$this->_translate(
+				array(
+					'text' => 'Input file %s exceeds maximum permitted file size',
+					'arg1' => 'test1.gif',
+				)
+			),
+			$results[1]['addedFiles'][0]['warnings'][0],
+			'Warning'
+		);
+
+		$this->assertFalse(isset($results[1]['addedFiles'][0]['id']), 'id');
+		$this->assertEquals($files[2][0], $results[1]['addedFiles'][1]['fileName'], 'Filename');
+
+		$this->assertEquals(
+			$this->_translate(
+				array(
+					'text' => 'Input file %s exceeds file size specified in the form',
+					'arg1' => 'test2.gif',
+				)
+			),
+			$results[1]['addedFiles'][1]['warnings'][0],
+			'Warning'
+		);
+
+		$this->assertFalse(isset($results[1]['addedFiles'][1]['id']), 'id');
+	}
+
+	// One file upload fails and one succeeds
+	public function testAddFromBrowserMix() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		GalleryUtilities::putRequestVariable('form[action][addFromBrowser]', 1);
+
+		$files = array(
+			1 => 'test1.gif',
+			2 => 'test2.gif',
+		);
+
+		$fullPath = __DIR__ . '/../data/' . $files[2];
+
+		GalleryUtilities::putRequestVariable('form[name][1]', $files[1]);
+		GalleryUtilities::putRequestVariable('form[tmp_name][1]', '');
+		GalleryUtilities::putRequestVariable('form[size][1]', 0);
+		GalleryUtilities::putRequestVariable('form[error][1]', UPLOAD_ERR_INI_SIZE);
+		GalleryUtilities::putRequestVariable('form[name][2]', $files[2]);
+		GalleryUtilities::putRequestVariable('form[type][2]', 'file/test');
+		GalleryUtilities::putRequestVariable('form[tmp_name][2]', $fullPath);
+		GalleryUtilities::putRequestVariable(
+			'form[size][2]',
+			$platform->filesize($fullPath)
+		);
+		GalleryUtilities::putRequestVariable('form[error][2]', 0);
+		GalleryUtilities::putRequestVariable('form[caption][2]', 'this is a caption');
+		GalleryUtilities::putRequestVariable('form[set][title]', 'filename');
+		GalleryUtilities::putRequestVariable('form[set][summary]', 1);
+		GalleryUtilities::putRequestVariable('form[set][description]', 1);
+
+		$results = $this->handleRequest($this->_rootAlbum);
+
+		$this->assertEquals(array(), $results[0], 'Errors');
+		$this->assertEquals($files[1], $results[1]['addedFiles'][0]['fileName'], 'Filename');
+
+		$this->assertEquals(
+			$this->_translate(
+				array(
+					'text' => 'Input file %s exceeds maximum permitted file size',
+					'arg1' => 'test1.gif',
+				)
+			),
+			$results[1]['addedFiles'][0]['warnings'][0],
+			'Warning 1'
+		);
+
+		$this->assertFalse(isset($results[1]['addedFiles'][0]['id']), 'id');
+		$this->assertEquals($files[2], $results[1]['addedFiles'][1]['fileName'], 'Filename');
+		$this->assertTrue(empty($results[1]['addedFiles'][1]['warnings'][0]), 'Warning 2');
+		$this->assertFalse(empty($results[1]['addedFiles'][1]['id']), 'id');
+	}
+
+	public function testMaliciousMarkup() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		$ret = $this->_setMarkupType('html', true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][addFromBrowser]', 1);
+		GalleryUtilities::putRequestVariable('form[name][1]', basename(__FILE__));
+		GalleryUtilities::putRequestVariable('form[type][1]', 'test/unknown-type');
+		GalleryUtilities::putRequestVariable('form[tmp_name][1]', __FILE__);
+		GalleryUtilities::putRequestVariable('form[size][1]', $platform->filesize(__FILE__));
+		GalleryUtilities::putRequestVariable('form[error][1]', 0);
+		GalleryUtilities::putRequestVariable(
+			'form[caption][1]',
+			'a <script>alert("bad");</script> caption'
+		);
+
+		GalleryUtilities::putRequestVariable('form[uploadBoxCount]', 1);
+		GalleryUtilities::putRequestVariable('form[set][title]', 'caption');
+		GalleryUtilities::putRequestVariable('form[set][summary]', 1);
+		GalleryUtilities::putRequestVariable('form[set][description]', 1);
+
+		$results = $this->handleRequest($this->_rootAlbum);
+
+		$this->assertEquals(array(), $results[0]);
+
+		if (!isset($results[1]['addedFiles'][0]['id'])) {
+			$this->assertFalse(true, 'Id is not set');
+		} else {
+			list($ret, $item) = GalleryCoreApi::loadEntitiesById(
+				$results[1]['addedFiles'][0]['id'],
+				'GalleryDataItem'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals('a  caption', $item->getTitle(), 'title');
+			$this->assertEquals('a  caption', $item->getSummary(), 'summary');
+			$this->assertEquals('a  caption', $item->getDescription(), 'description');
+		}
+	}
+}

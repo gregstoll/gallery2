@@ -1,0 +1,196 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Lint check our localizations
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class LocalizationAuditTest extends CodeAuditTestCase {
+	public $_idMap = array();
+
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+
+		$this->_errorCount = 0;
+	}
+
+	/**
+	 * @see CodeAuditTestCase::shouldCheckFile
+	 */
+	public function shouldCheckFile($fileName) {
+		if (substr($fileName, -3) == '.po') {
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * @see CodeAuditTestCase::checkFile
+	 *
+	 * 1. Check for a sane Project-Id-Version field
+	 * 2. Check first msgid does not have #,fuzzy before it
+	 * 3. Check that the first line is "Id" svn keyword
+	 * 4. Check charset header is UTF-8
+	 * 5. Make sure translator hints and __TOKEN__ things are not translated
+	 */
+	public function checkFile($fileName, $buffer) {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+		$path     = substr($fileName, strlen(dirname(dirname(dirname(dirname($fileName))))) + 1);
+
+		// Grab Project-Id-Version, which we will check against this file's peers in finishScan()
+		preg_match('/Project-Id-Version:(.*).."/', $buffer, $matches);
+		$this->_idMap[dirname($fileName)][basename($fileName)] = trim($matches[1]);
+
+		// First line must be "# <dollar-sign>Id<dollar-sign>
+		$line = preg_replace("/\n.*/", '', $buffer);
+
+		if (!preg_match('/^# \$Id(: [^\$]*|)\$/', $line)) {
+			$line = preg_replace("/\n.*/", '', $buffer);
+			$this->assertFalse(
+				true,
+				$path . ': first line should be "# $" ."Id$" but was: ' . $line
+			);
+			$this->_errorCount++;
+		}
+
+		// Make sure that our first msgid is not marked fuzzy
+		$fuzzyPos = strpos($buffer, '#, fuzzy');
+		$msgIdPos = strpos($buffer, 'msgid');
+
+		if ($fuzzyPos !== false && $msgIdPos !== false && $fuzzyPos < $msgIdPos) {
+			$this->assertFalse(true, $path . ': first msgid is marked fuzzy!');
+			$this->_errorCount++;
+		}
+
+		// Make sure charset header specifies UTF-8
+		if (strpos($buffer, 'Content-Type: text/plain; charset=UTF-8') === false) {
+			$this->assertFalse(true, $path . ': does not specify UTF-8 charset');
+			$this->_errorCount++;
+		}
+
+		// Lookbehind assertions must be of a fixed length
+		if (GalleryUtilities::isA($platform, 'WinNtPlatform')) {
+			$newline = '\r\n';
+		} else {
+			$newline = '\n';
+		}
+
+		// Make sure __TOKEN__ things are not translated
+		preg_match_all(
+			'/(?<!^#, fuzzy' . $newline . ')^msgid ("(?:.(?!^msgstr))*__[A-Z]+__.*)^msgstr (.*)' .
+			'(?:\r?\n\r?\n|^$|\z)/Ums', // ^$ does not match an empty line on Windows
+			$buffer,
+			$matches,
+			PREG_SET_ORDER
+		);
+
+		foreach ($matches as $match) {
+			if (strlen($match[2]) < 5) {
+				// No translation for this string
+				continue;
+			}
+
+			preg_match_all('/__[A-Z]+__/', $match[1], $tokens);
+
+			foreach ($tokens[0] as $token) {
+				if (strpos($match[2], $token) === false) {
+					$this->assertFalse(
+						true,
+						$path . ': improper translation of ' . $token . ' token'
+					);
+					$this->_errorCount++;
+				}
+			}
+		}
+
+		if ($this->_errorCount > 10) {
+			$this->halt();
+		}
+	}
+
+	/**
+	 * @see CodeAuditTestCase::finishScan
+	 * Collate our Project-Id-Version info and make sure they are consistent in every localization.
+	 */
+	public function finishScan($halted) {
+		if (!$halted) {
+			foreach ($this->_idMap as $dir => $dirMap) {
+				$hash            = $flavors            = $wrongFormat            = array();
+				$max             = 0;
+				$probablyCorrect = '';
+
+				foreach ($dirMap as $localization => $projectIdVersion) {
+					if (!preg_match('/^(Gallery: .+) [\d\.]+$/', $projectIdVersion, $matches)) {
+						$wrongFormat[$projectIdVersion] = $localization;
+					} else {
+						$hash[$projectIdVersion][] = $localization;
+						$flavors[$matches[1]][]    = $localization;
+
+						if (count($hash[$projectIdVersion]) > $max) {
+							$probablyCorrect = $projectIdVersion;
+							$max             = count($hash[$projectIdVersion]);
+						}
+					}
+				}
+
+				$matchCount = count(array_keys($flavors));
+
+				if (!empty($wrongFormat) || $matchCount > 1) {
+					$poDir           = substr($dir, strlen(dirname(dirname(dirname($dir)))) + 1);
+					$domain          = basename(dirname($poDir));
+					$mismatches      = join(', ', array_merge(array_keys($wrongFormat), array_keys($hash)));
+					$probablyCorrect = empty($probablyCorrect) ? "Gallery: $domain" : $probablyCorrect;
+
+					$this->assertFalse(
+						true,
+						sprintf(
+							'%s: %d mismatches (%s) (probably should be: %s)',
+							$poDir,
+							count($wrongFormat),
+							$mismatches,
+							$probablyCorrect
+						)
+					);
+
+					$script[] = sprintf(
+						'perl -pi.bak -e \'s/(Project-Id-Version:).*(..")/$1%s$2/\' %s/*.po',
+						$probablyCorrect,
+						$poDir
+					);
+				}
+			}
+		}
+
+		if (isset($script)) {
+			$this->assertFalse(
+				true,
+				sprintf(
+					"Fix script:\n<pre>#!/bin/sh\n%s</pre>",
+					join("\n", $script)
+				)
+			);
+		}
+	}
+}

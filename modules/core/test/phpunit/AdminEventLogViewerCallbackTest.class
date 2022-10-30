@@ -1,0 +1,388 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/AdminEventLogViewerCallback.inc');
+
+/**
+ * Test AdminEventLogViewerCallback
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminEventLogViewerCallbackTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $adminGroupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Force the date time format to something bogus, then load it so that it is in the cache
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'format.datetime', 'FAKE_FMT');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $ignored) = GalleryCoreApi::fetchAllPluginParameters('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_languageCode) = $gallery->getActiveLanguageCode();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Force translated text to English to make comparisons easier.
+		$translator          =& $gallery->getTranslator();
+		$this->_languageCode = $translator->_languageCode;
+
+		list($ret, $languageCode) = $translator->init('en');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->_storage = new UnitTestStorage();
+		$this->_storage    =& $gallery->getStorage();
+		$this->_callback   = new AdminEventLogViewerCallbackView();
+
+		// This satisfies GalleryCoreApi::assertUserIsSiteAdministrator
+		$this->_storage->setReply(
+			'getMapEntry',
+			array(
+				'GalleryUserGroupMap',
+				array('userId'),
+				array(
+					'userId'  => $gallery->getActiveUserId(),
+					'groupId' => $adminGroupId,
+				),
+				array(
+					'limit' => array(
+						'count' => 1,
+					),
+				),
+			),
+			array(null, new UnitTestStorageSearchResults(array(array($gallery->getActiveUserId()))))
+		);
+
+		$this->_platform    = new UnitTestPlatform();
+		$gallery->_platform =& $this->_platform;
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$translator =& $gallery->getTranslator();
+
+		list($ret) = $translator->init($this->_languageCode);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$this->assertTrue($this->_storage->isComplete(), $this->_storage->getRemaining());
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGetRecords() {
+		GalleryUtilities::putRequestVariable('command', 'getRecords');
+		GalleryUtilities::putRequestVariable('pageNumber', '1');
+		GalleryUtilities::putRequestVariable('pageSize', '3');
+
+		$this->_storage->setReply(
+			'search',
+			array('SELECT COUNT(*) FROM [EventLogMap]', array(), array()),
+			array(null, new UnitTestStorageSearchResults(array(array(1))))
+		);
+
+		$this->_storage->setReply(
+			'getMapEntry',
+			array(
+				'EventLogMap',
+				array('id', 'timestamp', 'type', 'location', 'client', 'summary'),
+				array(),
+				array(
+					'limit' => array(
+						'count'  => 3,
+						'offset' => 0,
+					),
+					'orderBy' => array(
+						'timestamp' => ORDER_DESCENDING,
+					),
+				),
+			),
+			array(
+				null,
+				new UnitTestStorageSearchResults(
+					array(
+						array(1, 1234, 'TYPE', 'LOCATION', 'CLIENT', 'SUMMARY'),
+						array(2, 5678, 'TYPE', 'LOCATION', 'CLIENT', 'SUMMARY'),
+					)
+				),
+			)
+		);
+
+		$this->_platform->setReply('strftime', array('FAKE_FMT', 1234), 'DATE1');
+		$this->_platform->setReply('strftime', array('FAKE_FMT', 5678), 'DATE2');
+
+		ob_start();
+
+		$ret = $this->_callback->renderImmediate(array(), array());
+
+		$results = ob_get_contents();
+		ob_end_clean();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'{"records":['
+			. '{"id":1,"date":"DATE1","type":"TYPE","location":"LOCATION",'
+			. '"client":"CLIENT","summary":"SUMMARY"},'
+			. '{"id":2,"date":"DATE2","type":"TYPE","location":"LOCATION",'
+			. '"client":"CLIENT","summary":"SUMMARY"}],'
+			. '"pageMessage":"Page 1 of 1","totalPages":1}',
+			$results
+		);
+	}
+
+	public function testGetRecordsBogusInputs() {
+		GalleryUtilities::putRequestVariable('command', 'getRecords');
+		GalleryUtilities::putRequestVariable('pageNumber', 'cats');
+		GalleryUtilities::putRequestVariable('pageSize', 'dogs');
+
+		$this->_storage->setReply(
+			'search',
+			array('SELECT COUNT(*) FROM [EventLogMap]', array(), array()),
+			array(null, new UnitTestStorageSearchResults(array(array(1))))
+		);
+
+		$this->_storage->setReply(
+			'getMapEntry',
+			array(
+				'EventLogMap',
+				array('id', 'timestamp', 'type', 'location', 'client', 'summary'),
+				array(),
+				array(
+					'limit' => array(
+						'count'  => 10, // <-- default value
+						'offset' => 0,
+					),
+					'orderBy' => array(
+						'timestamp' => ORDER_DESCENDING,
+					),
+				),
+			),
+			array(
+				null,
+				new UnitTestStorageSearchResults(
+					array(
+						array(1, 1234, 'TYPE', 'LOCATION', 'CLIENT', 'SUMMARY'),
+						array(2, 5678, 'TYPE', 'LOCATION', 'CLIENT', 'SUMMARY'),
+					)
+				),
+			)
+		);
+
+		$this->_platform->setReply('strftime', array('FAKE_FMT', 1234), 'DATE1');
+		$this->_platform->setReply('strftime', array('FAKE_FMT', 5678), 'DATE2');
+
+		ob_start();
+
+		$ret = $this->_callback->renderImmediate(array(), array());
+
+		$results = ob_get_contents();
+		ob_end_clean();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'{"records":['
+			. '{"id":1,"date":"DATE1","type":"TYPE","location":"LOCATION",'
+			. '"client":"CLIENT","summary":"SUMMARY"},'
+			. '{"id":2,"date":"DATE2","type":"TYPE","location":"LOCATION",'
+			. '"client":"CLIENT","summary":"SUMMARY"}],'
+			. '"pageMessage":"Page 1 of 1","totalPages":1}',
+			$results
+		);
+	}
+
+	public function testGetRecordDetails() {
+		GalleryUtilities::putRequestVariable('command', 'getRecordDetails');
+		GalleryUtilities::putRequestVariable('id', '1');
+
+		$this->_storage->setReply(
+			'getMapEntry',
+			array(
+				'EventLogMap',
+				array(
+					'userId',
+					'type',
+					'summary',
+					'details',
+					'location',
+					'client',
+					'timestamp',
+					'referer',
+				),
+				array(
+					'id' => 1,
+				),
+				array(),
+			),
+			array(
+				null,
+				new UnitTestStorageSearchResults(
+					array(
+						array(
+							'USERID',
+							'TYPE',
+							'SUMMARY',
+							'DETAILS',
+							'LOCATION',
+							'CLIENT',
+							'DATE_FROM_DB',
+							'REFERER',
+						),
+					)
+				),
+			)
+		);
+
+		$this->_platform->setReply('strftime', array('FAKE_FMT', 'DATE_FROM_DB'), 'DATE');
+
+		ob_start();
+
+		$ret = $this->_callback->renderImmediate(array(), array());
+
+		$results = ob_get_contents();
+		ob_end_clean();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'{"id":1,"userId":"USERID","type":"TYPE","summary":"SUMMARY",'
+			. '"details":"DETAILS","location":"LOCATION","client":"CLIENT",'
+			. '"date":"DATE","referer":"REFERER"}',
+			$results
+		);
+	}
+
+	public function testGetRecordDetailsBogusId() {
+		// Use a non-numeric id
+		GalleryUtilities::putRequestVariable('command', 'getRecordDetails');
+		GalleryUtilities::putRequestVariable('id', 'bananas');
+
+		ob_start();
+
+		$ret = $this->_callback->renderImmediate(array(), array());
+
+		$results = ob_get_contents();
+		ob_end_clean();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		/*
+		 * Our JSON interpreter does not realize that we mean for this to be an object because it is
+		 * an empty array.  So it returns an encoding of a Javascript array instead of a
+		 * Javascript object.
+		 */
+		$this->assertEquals('[]', $results);
+	}
+
+	public function testGetRecordDetailsInvalidId() {
+		// Use an id that does not exist
+		GalleryUtilities::putRequestVariable('command', 'getRecordDetails');
+		GalleryUtilities::putRequestVariable('id', 123456789);
+
+		$this->_storage->setReply(
+			'getMapEntry',
+			array(
+				'EventLogMap',
+				array(
+					'userId',
+					'type',
+					'summary',
+					'details',
+					'location',
+					'client',
+					'timestamp',
+					'referer',
+				),
+				array(
+					'id' => 123456789,
+				),
+				array(),
+			),
+			array(null, new UnitTestStorageSearchResults(array()))
+		);
+
+		ob_start();
+
+		$ret = $this->_callback->renderImmediate(array(), array());
+
+		$results = ob_get_contents();
+		ob_end_clean();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		/*
+		 * Our JSON interpreter does not realize that we mean for this to be an object because it is
+		 * an empty array.  So it returns an encoding of a Javascript array instead of a
+		 * Javascript object.
+		 */
+		$this->assertEquals('[]', $results);
+	}
+}

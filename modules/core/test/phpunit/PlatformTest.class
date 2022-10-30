@@ -1,0 +1,1322 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test platform functionality.
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17961 $
+ */
+class PlatformTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addMimeType('xxx', 'test/test', false);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_platform   =& $gallery->getPlatform();
+		$this->_sourceFile = __DIR__ . '/../data/test1.gif';
+		$this->_destFile   = $gallery->getConfig('data.gallery.tmp') . 'test.dat';
+	}
+
+	public function tearDown() {
+		$ret = GalleryCoreApi::removeMimeType(
+			array(
+				'mimeType' => 'test/test',
+			)
+		);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		if (($pos = array_search('xxx', $this->_platform->_blacklistedFileExtensions)) !== false) {
+			array_splice($this->_platform->_blacklistedFileExtensions, $pos, 1);
+		}
+
+		return parent::tearDown();
+	}
+
+	public function testCopy() {
+		$this->assertTrue($this->_platform->copy($this->_sourceFile, $this->_destFile));
+		$this->assertTrue($this->_platform->unlink($this->_destFile));
+	}
+
+	public function testSymlink() {
+		if ($this->_platform->isSymlinkSupported()) {
+			$this->assertTrue($this->_platform->symlink($this->_sourceFile, $this->_destFile));
+			$this->assertTrue($this->_platform->unlink($this->_destFile));
+		}
+	}
+
+	public function testTempnam() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		if ($this->_platform->isSymlinkSupported()) {
+			$sourceDir = $dataBase = $gallery->getConfig('data.gallery.tmp');
+
+			foreach (array('platformTest', 'srcDir') as $subDir) {
+				$sourceDir .= "$subDir/";
+
+				$this->assertTrue(
+					mkdir($sourceDir, 0777),
+					'Failed to create test directory: ' . $subDir
+				);
+			}
+
+			$symlink = $dataBase . 'platformTest/data';
+
+			$this->assertTrue(symlink($sourceDir, $symlink), 'Failed to create test symlink');
+
+			$tempName = $platform->tempnam($symlink . '/', 'test');
+
+			$this->assertEquals($symlink, dirname($tempName), 'Directories do not match');
+			$this->assertTrue(unlink($tempName), 'Failed to delete temporary file');
+			$this->assertTrue(unlink($symlink), 'Failed to delete symlink');
+			$this->assertTrue(rmdir($sourceDir), 'Failed to delete test source directory');
+			$this->assertTrue(rmdir(dirname($sourceDir)), 'Failed to delete test directory');
+		}
+	}
+
+	public function testMoveUploadedFile() {
+		// XXX: How do we test this?  We do not have an uploaded file :-(
+		$this->assertFalse($this->_platform->move_uploaded_file($this->_sourceFile, $this->_destFile));
+	}
+
+	public function testFileExists() {
+		$this->assertTrue($this->_platform->file_exists($this->_sourceFile));
+		$this->assertFalse($this->_platform->file_exists($this->_destFile));
+	}
+
+	public function testIsLink() {
+		$this->assertFalse($this->_platform->is_link($this->_sourceFile));
+	}
+
+	public function testIsDir() {
+		$this->assertTrue($this->_platform->is_dir(__DIR__));
+		$this->assertFalse($this->_platform->is_dir(__FILE__));
+	}
+
+	public function testIsFile() {
+		$this->assertTrue($this->_platform->is_file(__FILE__));
+		$this->assertFalse($this->_platform->is_file('bogus-file-name'));
+	}
+
+	public function testIsWriteable() {
+		// On Win32, all files are writeable so the next assertion is not that useful!
+		// $this->assertFalse($this->_platform->is_writeable(__FILE__));
+		$this->assertTrue($this->_platform->copy($this->_sourceFile, $this->_destFile));
+		$this->assertTrue($this->_platform->is_writeable($this->_destFile));
+		$this->assertTrue($this->_platform->unlink($this->_destFile));
+	}
+
+	public function testIsReadable() {
+		$this->assertTrue($this->_platform->is_readable($this->_sourceFile));
+	}
+
+	public function testIsUploadedFile() {
+		$this->assertFalse($this->_platform->is_uploaded_file($this->_sourceFile));
+	}
+
+	public function testIsExecutable() {
+		if (GalleryUtilities::isA($this->_platform, 'WinNtPlatform')) {
+			$this->assertTrue($this->_platform->is_executable($this->_sourceFile));
+		} else {
+			$this->assertFalse($this->_platform->is_executable($this->_sourceFile));
+		}
+	}
+
+	public function testFilesize() {
+		$this->assertEquals(
+			1083,
+			$this->_platform->filesize($this->_sourceFile)
+		);
+	}
+
+	public function testFile() {
+		$lines = $this->_platform->file(__FILE__);
+
+		// --> Target Line <--
+		$this->assertEquals('// --> Target Line <--', trim($lines[__LINE__ - 2]));
+	}
+
+	public function testFopen() {
+		$fd = $this->_platform->fopen($this->_sourceFile, 'r');
+
+		$this->assertTrue($fd);
+
+		fclose($fd);
+	}
+
+	public function testOpendir() {
+		$dir = $this->_platform->opendir(__DIR__);
+
+		$this->assertTrue($dir);
+		$this->_platform->closedir($dir);
+	}
+
+	public function testReaddir() {
+		$dir   = $this->_platform->opendir(__DIR__);
+		$files = array();
+
+		while ($filename = $this->_platform->readdir($dir)) {
+			$files[$filename] = 1;
+		}
+
+		$this->_platform->closedir($dir);
+		$this->assertEquals(1, $files[basename(__FILE__)]);
+	}
+
+	public function testRename() {
+		$this->assertTrue($this->_platform->copy($this->_sourceFile, $this->_destFile));
+		$this->assertTrue(
+			$this->_platform->rename(
+				$this->_destFile,
+				$this->_destFile . '-new'
+			)
+		);
+		$this->assertTrue($this->_platform->unlink($this->_destFile . '-new'));
+	}
+
+	public function testStat() {
+		$this->assertTrue($this->_platform->stat($this->_sourceFile));
+	}
+
+	public function testUnlink() {
+		$this->assertTrue($this->_platform->copy($this->_sourceFile, $this->_destFile));
+		$this->assertTrue($this->_platform->unlink($this->_destFile));
+	}
+
+	public function testRmdir() {
+		$this->assertTrue($this->_platform->mkdir($this->_destFile));
+		$this->assertTrue($this->_platform->mkdir($this->_destFile . '/1'));
+
+		// XXX: this generates a PHP error that I cannot seem to turn off.
+		// $this->assertFalse($this->_platform->rmdir($this->_destFile));
+		$this->assertTrue($this->_platform->rmdir($this->_destFile . '/1'));
+		$this->assertTrue($this->_platform->rmdir($this->_destFile));
+	}
+
+	public function testRecursiveRmdir() {
+		$this->assertTrue($this->_platform->mkdir($this->_destFile));
+		$this->assertTrue($this->_platform->mkdir($this->_destFile . '/1'));
+		$this->assertTrue($this->_platform->mkdir($this->_destFile . '/1/2'));
+		$this->assertTrue($this->_platform->mkdir($this->_destFile . '/1/2/3'));
+		$this->assertTrue($this->_platform->recursiveRmdir($this->_destFile), 'remove');
+	}
+
+	public function testMkdir() {
+		$this->assertTrue($this->_platform->mkdir($this->_destFile), 'mkdir');
+		$this->assertTrue($this->_platform->recursiveRmdir($this->_destFile));
+	}
+
+	public function testIsLegalPathComponent() {
+		$this->assertTrue($this->_platform->isLegalPathComponent('TheQuickBrownFox'));
+		$this->assertFalse($this->_platform->isLegalPathComponent('The!QuickBrownFox'));
+	}
+
+	public function testLegalizePathComponent() {
+		$this->assertEquals(
+			'The_Quick_',
+			$this->_platform->legalizePathComponent('The!Quick$')
+		);
+	}
+
+	public function testLegalizePathComponentUnknownExtension() {
+		$this->assertEquals(
+			'test_zzz',
+			$this->_platform->legalizePathComponent('test.zzz')
+		);
+	}
+
+	public function testLegalizePathComponent3() {
+		$this->assertEquals(
+			'test_php.jpg',
+			$this->_platform->legalizePathComponent('test.php.jpg')
+		);
+	}
+
+	public function testLegalizePathComponentForDirectory() {
+		$this->assertEquals(
+			'test_.php.jpg_',
+			$this->_platform->legalizePathComponent('test!.php.jpg$', true)
+		);
+	}
+
+	public function testPathComponentLegalCharactersConserved() {
+		$this->assertTrue(
+			$this->_platform->isLegalPathComponent('TheQuickBrownFox')
+		);
+		$this->assertEquals(
+			'TheQuickBrownFox',
+			$this->_platform->legalizePathComponent('TheQuickBrownFox')
+		);
+	}
+
+	public function testPathComponentIllegalCharactersToUnderscores() {
+		$this->assertFalse(
+			$this->_platform->isLegalPathComponent('The Quick!Brown#Fox'),
+			'The Quick!Brown@Fox is legal path component'
+		);
+		$this->assertEquals(
+			'The Quick_Brown#Fox',
+			$this->_platform->legalizePathComponent('The Quick!Brown#Fox')
+		);
+	}
+
+	public function testPathComponentDotInFileBaseToUnderscore() {
+		$this->assertFalse(
+			$this->_platform->isLegalPathComponent('test.php.jpg'),
+			'test.php.jpg is legal pathcomponent'
+		);
+		$this->assertEquals(
+			'test_php.jpg',
+			$this->_platform->legalizePathComponent('test.php.jpg')
+		);
+	}
+
+	public function testPathComponentDotRecognizedExtensionConserved() {
+		$this->assertEquals(
+			true,
+			$this->_platform->isLegalPathComponent('test.jpg')
+		);
+		$this->assertEquals(
+			'test.jpg',
+			$this->_platform->legalizePathComponent('test.jpg')
+		);
+	}
+
+	public function testPathComponentDotUnrecognizedExtensionToUnderscore() {
+		$this->assertFalse(
+			$this->_platform->isLegalPathComponent('test.foo'),
+			'test.foo is legal pathcomponent'
+		);
+		$this->assertEquals(
+			'test_foo',
+			$this->_platform->legalizePathComponent('test.foo')
+		);
+	}
+
+	public function testPathComponentDotPhpExtensionToUnderscore() {
+		$this->assertFalse(
+			$this->_platform->isLegalPathComponent('test.php'),
+			'test.php is legal pathcomponent'
+		);
+		$this->assertEquals(
+			'test_php',
+			$this->_platform->legalizePathComponent('test.php')
+		);
+	}
+
+	public function testPathComponentDotUnderscoreToUnderscoreUnderscore() {
+		$this->assertFalse(
+			$this->_platform->isLegalPathComponent('._test'),
+			'._test is legal pathcomponent'
+		);
+		$this->assertEquals(
+			'__test',
+			$this->_platform->legalizePathComponent('._test')
+		);
+	}
+
+	public function testIsLegalPathComponentWithDotForDirectory() {
+		$this->assertEquals(
+			true,
+			$this->_platform->isLegalPathComponent('some._test', true)
+		);
+	}
+
+	public function testLegalizePathComponentWithBlacklistedExtension() {
+		$this->_platform->_blacklistedFileExtensions[] = 'xxx';
+
+		$this->assertEquals('test_xxx', $this->_platform->legalizePathComponent('test.xxx'));
+	}
+
+	public function testIsLegalPathComponentForAllowedExtension() {
+		$this->assertTrue($this->_platform->isLegalPathComponent('test.xxx'));
+		$this->assertTrue($this->_platform->isLegalPathComponent('test.XxX'), 'mixed case');
+	}
+
+	public function testIsLegalPathComponentForBlacklistedExtension() {
+		$this->_platform->_blacklistedFileExtensions[] = 'xxx';
+
+		$this->assertFalse($this->_platform->isLegalPathComponent('test.xxx'));
+		$this->assertFalse($this->_platform->isLegalPathComponent('test.XXX'), 'upper case');
+	}
+
+	/**
+	 * Make sure executing a bogus path fails.
+	 *
+	 * XXX: This is a pretty weak test.  It is hard to improve it without actually shipping a
+	 * known-good script though.
+	 */
+	public function testExec() {
+		$results = $this->_platform->exec(array(array('/bogus/path')));
+
+		$this->assertFalse($results[0], 'Execute Bogus Path');
+	}
+
+	/**
+	 * Verify bugfix: quotes around redirect file for stderr output, in case path has a space
+	 */
+	public function testExecWithSpaceInG2DataPath() {
+		global $gallery;
+
+		if (GalleryUtilities::isA($this->_platform, 'UnixPlatform')) {
+			$tmpDir = $gallery->getConfig('data.gallery.tmp') . '/dir with space';
+
+			if (!$this->_platform->mkdir($tmpDir)) {
+				$this->fail('failed to make temp dir');
+			} else {
+				$gallery->setConfig('data.gallery.tmp', $tmpDir);
+
+				list($success, $output, $stderr) = $this->_platform->exec(array(array('ls', '/bogus/path')));
+
+				$this->assertFalse($success, 'expected exec to return error');
+				$this->assertFalse(empty($stderr), 'expected some stderr output to be returned');
+				$this->_platform->rmdir($tmpDir);
+			}
+		}
+	}
+
+	/**
+	 * Make sure files are written with correct permissions by exec, copy, symlink,
+	 * atomicWrite; test chmod.
+	 */
+	public function testPermissions() {
+		if (GalleryUtilities::isA($this->_platform, 'UnixPlatform')) {
+			if ($this->_markPluginParametersForCleanup('module', 'core')) {
+				return;
+			}
+
+			$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'permissions.file', '600');
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->_platform->resetPlatform();
+			$this->_permissionTest(0600, 1, array('copy', 'atomicWrite', 'symlink'));
+
+			$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'permissions.file', '664');
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->_platform->resetPlatform();
+			$this->_permissionTest(0664, 2, array('copy', 'symlink', 'atomicWrite'));
+			$this->assertTrue($this->_platform->copy($this->_sourceFile, $this->_destFile), 'copy');
+
+			$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'permissions.file', '612');
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->_platform->resetPlatform();
+			$this->_permissionTest(0612, 3, array('chmod'));
+			$this->assertTrue($this->_platform->mkdir($this->_destFile), 'mkdir');
+
+			$ret = GalleryCoreApi::setPluginParameter(
+				'module',
+				'core',
+				'permissions.directory',
+				'751'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->_platform->resetPlatform();
+			$this->_permissionTest(0751, 4, array('chmod'));
+
+			// exec now uses a default umask of 022 -- exec'ers must chmod output files
+			$this->_permissionTest(0644, 5, array('exec'));
+			$this->_platform->resetPlatform();
+		}
+	}
+
+	public function _permissionTest($expectedPermissions, $testNumber, $tests) {
+		global $gallery;
+
+		foreach ($tests as $test) {
+			$stat = $debug = '';
+
+			switch ($test) {
+				case 'exec':
+					$gallery->startRecordingDebugSnippet();
+
+					$results = $this->_platform->exec(
+						array(array('echo', 'test', '>', $this->_destFile))
+					);
+
+					$debug = $gallery->stopRecordingDebugSnippet();
+
+					$this->assertTrue($results[0], "exec $testNumber $debug");
+
+					$stat = $this->_platform->stat($this->_destFile);
+
+					break;
+
+				case 'copy':
+					$this->assertTrue(
+						$this->_platform->copy($this->_sourceFile, $this->_destFile),
+						"copy $testNumber"
+					);
+
+					$stat = $this->_platform->stat($this->_destFile);
+
+					break;
+
+				case 'symlink':
+					if (!$this->_platform->isSymlinkSupported()) {
+						$this->assertTrue(false, 'symlink supported');
+
+						continue 2;
+					}
+
+					$this->assertTrue(
+						$this->_platform->symlink($this->_sourceFile, $this->_destFile),
+						"symlink $testNumber"
+					);
+
+					$stat = lstat($this->_destFile);
+
+					break;
+
+				case 'atomicWrite':
+					$this->assertTrue(
+						$this->_platform->atomicWrite($this->_destFile, 'test'),
+						"atomicWrite $testNumber"
+					);
+
+					$stat = $this->_platform->stat($this->_destFile);
+
+					break;
+
+				case 'chmod':
+					$this->assertTrue($this->_platform->chmod($this->_destFile), "chmod $testNumber");
+
+					// is_dir call in chmod() cached old perm
+					$this->_platform->clearstatcache();
+
+					$stat = $this->_platform->stat($this->_destFile);
+			}
+
+			$this->assertFalse(empty($stat), "$test stat $testNumber $debug");
+
+			if ($test == 'symlink') {
+				// On some systems symlinks always have 777 permissions
+				$this->assertTrue(
+					($stat[2] & 0777) == $expectedPermissions ||
+					($stat[2] & 0777) == 0777,
+					"$test permissions $testNumber (" . decoct($expectedPermissions) .
+					' != ' . decoct($stat[2] & 0777) . ' or 777)'
+				);
+			} else {
+				$this->assertEquals(
+					decoct($expectedPermissions),
+					decoct($stat[2] & 0777),
+					"$test permissions $testNumber"
+				);
+			}
+
+			if ($testNumber == 4) {
+				$this->assertTrue($this->_platform->rmdir($this->_destFile), "$test rmdir $testNumber");
+			} else {
+				$this->assertTrue(
+					$this->_platform->unlink($this->_destFile),
+					"$test unlink $testNumber"
+				);
+			}
+
+			$this->_platform->clearstatcache();
+		}
+	}
+
+	public function _setupChmodTest() {
+		$this->assertTrue($this->_platform->mkdir($this->_destFile), 'mkdir');
+		$this->assertTrue($this->_platform->mkdir($this->_destFile . '/1'), 'mkdir/1');
+		$this->assertTrue($this->_platform->copy($this->_sourceFile, $this->_destFile . '/1/2'), 'cp');
+		$this->assertTrue($this->_platform->mkdir($this->_destFile . '/1/3'), 'mkdir/1/3');
+		$this->assertTrue(
+			$this->_platform->copy($this->_sourceFile, $this->_destFile . '/1/3/4'),
+			'cp2'
+		);
+		$this->assertTrue($this->_platform->mkdir($this->_destFile . '/1/5'), 'mkdir/1/5');
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'permissions.directory', '734');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'permissions.file', '652');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		return null;
+	}
+
+	public function testRecursiveChmod1() {
+		// Set dir and file permissions by system prefs
+		$ret = $this->_setupChmodTest();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_platform->resetPlatform();
+		$this->assertTrue($this->_platform->recursiveChmod($this->_destFile), 'set perms');
+		$this->_platform->clearstatcache();
+
+		$expected  = GalleryUtilities::isA($this->_platform, 'WinNtPlatform') ? '777' : '734';
+		$expected2 = GalleryUtilities::isA($this->_platform, 'WinNtPlatform') ? '777' : '652';
+		$expected3 = GalleryUtilities::isA($this->_platform, 'WinNtPlatform') ? '666' : '652';
+		$stat      = $this->_platform->stat($this->_destFile);
+
+		$this->assertEquals($expected, decoct($stat[2] & 0777), 'perm0');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1');
+
+		$this->assertEquals($expected, decoct($stat[2] & 0777), 'perm1');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/2');
+
+		$this->assertEquals($expected3, decoct($stat[2] & 0777), 'perm2');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/3');
+
+		$this->assertEquals($expected, decoct($stat[2] & 0777), 'perm3');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/3/4');
+
+		$this->assertEquals($expected3, decoct($stat[2] & 0777), 'perm4');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/5');
+
+		$this->assertEquals($expected, decoct($stat[2] & 0777), 'perm5');
+		$this->assertTrue($this->_platform->recursiveRmdir($this->_destFile), 'remove');
+		$this->_platform->resetPlatform();
+	}
+
+	public function testRecursiveChmod2() {
+		// Set given dir permission, do not change file permissions
+		$ret = $this->_setupChmodTest();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$fileStat = $this->_platform->stat($this->_destFile . '/1/2');
+		$fileStat = decoct($fileStat[2]);
+
+		$this->_platform->resetPlatform();
+		$this->assertTrue($this->_platform->recursiveChmod($this->_destFile, 0711, -1), 'set perms');
+		$this->_platform->clearstatcache();
+
+		$expected = GalleryUtilities::isA($this->_platform, 'WinNtPlatform') ? '777' : '711';
+		$stat     = $this->_platform->stat($this->_destFile);
+
+		$this->assertEquals($expected, decoct($stat[2] & 0777), 'perm0');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1');
+
+		$this->assertEquals($expected, decoct($stat[2] & 0777), 'perm1');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/2');
+
+		$this->assertEquals($fileStat, decoct($stat[2]), 'file2 should be unchanged');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/3');
+
+		$this->assertEquals($expected, decoct($stat[2] & 0777), 'perm3');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/3/4');
+
+		$this->assertEquals($fileStat, decoct($stat[2]), 'file4 should be unchanged');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/5');
+
+		$this->assertEquals($expected, decoct($stat[2] & 0777), 'perm5');
+		$this->assertTrue($this->_platform->recursiveRmdir($this->_destFile), 'remove');
+		$this->_platform->resetPlatform();
+	}
+
+	public function testRecursiveChmod3() {
+		// Set given file permission, do not change dir permissions
+		$ret = $this->_setupChmodTest();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$dirStat = $this->_platform->stat($this->_destFile . '/1');
+		$dirStat = decoct($dirStat[2]);
+
+		$this->_platform->resetPlatform();
+		$this->assertTrue($this->_platform->recursiveChmod($this->_destFile, -1, 0640), 'set perms');
+		$this->_platform->clearstatcache();
+
+		$expected  = GalleryUtilities::isA($this->_platform, 'WinNtPlatform') ? '777' : '640';
+		$expected2 = GalleryUtilities::isA($this->_platform, 'WinNtPlatform') ? '666' : '640';
+		$stat      = $this->_platform->stat($this->_destFile);
+
+		$this->assertEquals($dirStat, decoct($stat[2]), 'dir0 should be unchanged');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1');
+
+		$this->assertEquals($dirStat, decoct($stat[2]), 'dir1 should be unchanged');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/2');
+
+		$this->assertEquals($expected2, decoct($stat[2] & 0777), 'perm2');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/3');
+
+		$this->assertEquals($dirStat, decoct($stat[2]), 'dir3 should be unchanged');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/3/4');
+
+		$this->assertEquals($expected2, decoct($stat[2] & 0777), 'perm4');
+
+		$stat = $this->_platform->stat($this->_destFile . '/1/5');
+
+		$this->assertEquals($dirStat, decoct($stat[2]), 'dir5 should be unchanged');
+		$this->assertTrue($this->_platform->recursiveRmdir($this->_destFile), 'remove');
+		$this->_platform->resetPlatform();
+	}
+
+	public function testGetDirectorySeparator() {
+		$file          = __FILE__;
+		$realSeparator = $file[strlen(__DIR__)];
+
+		$this->assertEquals($realSeparator, $this->_platform->getDirectorySeparator());
+	}
+
+	public function testGetLineEnding() {
+		if (GalleryUtilities::isA($this->_platform, 'UnixPlatform')) {
+			$realLineEnding = "\n";
+		} elseif (GalleryUtilities::isA($this->_platform, 'WinNtPlatform')) {
+			$realLineEnding = "\r\n";
+		}
+
+		$this->assertEquals(
+			$realLineEnding,
+			$this->_platform->getLineEnding(),
+			"Line Endings Do not Match"
+		);
+	}
+
+	public function testIsRestrictedByOpenBaseDir() {
+		global $gallery;
+
+		$isWin = GalleryUtilities::isA($this->_platform, 'WinNtPlatform');
+
+		$this->assertFalse($this->_platform->isRestrictedByOpenBaseDir(__FILE__), 'this file');
+
+		$gallery->_phpVm = new PlatformTestPhpVm(__DIR__, $this);
+
+		$this->assertFalse($this->_platform->isRestrictedByOpenBaseDir(__FILE__), 'simple case');
+
+		// Bad paths are still checked even though no realpath
+		$this->assertTrue(
+			!$this->_platform->isRestrictedByOpenBaseDir(__DIR__ . '/bogus/path'),
+			'bogus path "inside" valid dir'
+		);
+		$this->assertTrue(
+			$this->_platform->isRestrictedByOpenBaseDir(__DIR__ . '/../bogus/path'),
+			'bogus path using .. to get outside valid dir'
+		);
+
+		$gallery->_phpVm = new PlatformTestPhpVm('', $this);
+
+		$this->assertTrue(
+			!$this->_platform->isRestrictedByOpenBaseDir('/bogus/path'),
+			'bogus path with no restriction'
+		);
+
+		// Open_basedir with multiple entries
+		$platform = $isWin ? new PlatformTestOpenBaseDirWinNtPlatform() : new PlatformTestOpenBaseDirUnixPlatform();
+
+		$platform->setRealpathData(
+			array(
+				'C:\\Test'       => 'C:\\Test',
+				'C:\\Test\\file' => 'C:\\Test\\file',
+				'D:\\Fun\\'      => 'D:\\Fun',
+				'D:\\Fun\\file'  => 'D:\\Fun\\file',
+				'/test'          => '/test',
+				'/fun/'          => '/fun',
+				'/test/file'     => '/test/file',
+				'/fun/file'      => '/fun/file',
+				'c:\\TEST\\file' => 'C:\\Test\\file',
+				'/TEST/file'     => '/TEST/file',
+			)
+		);
+
+		$gallery->_phpVm = new PlatformTestPhpVm($isWin ? 'C:\\Test;D:\\Fun\\' : '/test:/fun/', $this);
+
+		$this->assertTrue(
+			!$platform->isRestrictedByOpenBaseDir($isWin ? 'C:\\Test\\file' : '/test/file'),
+			'first path'
+		);
+		$this->assertTrue(
+			!$platform->isRestrictedByOpenBaseDir($isWin ? 'D:\\Fun\\file' : '/fun/file'),
+			'second path'
+		);
+		$this->assertEquals(
+			!$isWin,
+			$platform->isRestrictedByOpenBaseDir($isWin ? 'c:\\TEST\\file' : '/TEST/file'),
+			'unix case sensitive, windows not'
+		);
+
+		// Symlinks are resolved in both given path and open_basedir list
+		if (!$isWin) {
+			$platform->setRealpathData(
+				array(
+					'/test/real'                  => '/test/real',
+					'/test/real/file'             => '/test/real/file',
+					'/test/link'                  => '/test/real',
+					'/test/link/file'             => '/test/real/file',
+					'/test/real/linktoetc/passwd' => '/etc/passwd',
+					'/test/link/linktoetc/passwd' => '/etc/passwd',
+				)
+			);
+
+			$gallery->_phpVm = new PlatformTestPhpVm('/test/real', $this);
+
+			$this->assertTrue(
+				!$platform->isRestrictedByOpenBaseDir('/test/link/file'),
+				'path with symlink, open_basedir has realpath'
+			);
+			$this->assertTrue(
+				$platform->isRestrictedByOpenBaseDir('/test/real/linktoetc/passwd'),
+				'symlink to outside, open_basedir has realpath'
+			);
+			$this->assertTrue(
+				$platform->isRestrictedByOpenBaseDir('/test/link/bogus/path'),
+				'invalid path with symlink, open_basedir has realpath'
+			);
+
+			$gallery->_phpVm = new PlatformTestPhpVm('/test/link', $this);
+
+			$this->assertTrue(
+				!$platform->isRestrictedByOpenBaseDir('/test/real/file'),
+				'realpath given, open_basedir has symlink'
+			);
+			$this->assertTrue(
+				$platform->isRestrictedByOpenBaseDir('/test/link/linktoetc/passwd'),
+				'symlink to outside, open_basedir has symlink'
+			);
+			$this->assertTrue(
+				$platform->isRestrictedByOpenBaseDir('/test/link/bogus/path'),
+				'invalid path with symlink, open_basedir has symlink'
+			);
+			$this->assertTrue(
+				!$platform->isRestrictedByOpenBaseDir('/test/real/bogus/path'),
+				'invalid path, open_basedir has symlink'
+			);
+		}
+
+		// Open_basedir entry can be a prefix and not a real dir
+		$platform->setRealpathData(
+			array(
+				'/tes'        => false,
+				'/test'       => '/test',
+				'/testfile'   => '/testfile',
+				'/test/file'  => '/test/file',
+				'/toast/file' => '/toast/file',
+				'/link/file'  => '/test/file',
+			)
+		);
+
+		$gallery->_phpVm = new PlatformTestPhpVm('/tes', $this);
+
+		$this->assertFalse($platform->isRestrictedByOpenBaseDir('/testfile'), 'file with prefix');
+		$this->assertFalse($platform->isRestrictedByOpenBaseDir('/test/file'), 'dir with prefix');
+		$this->assertTrue(
+			!$platform->isRestrictedByOpenBaseDir('/tes/bad/path'),
+			'given path can be invalid and match a prefix'
+		);
+
+		// though it would be restricted if /tes was a real dir? odd..
+		$this->assertTrue($platform->isRestrictedByOpenBaseDir('/toast/file'), 'not match prefix');
+
+		if (!$isWin) {
+			// Symlink expansion with prefix (realpath of given path must match prefix)
+			$this->assertTrue(
+				!$platform->isRestrictedByOpenBaseDir('/link/file'),
+				'link, realpath has prefix'
+			);
+
+			$platform->setRealpathData(
+				array(
+					'/lin'       => false,
+					'/link'      => '/test',
+					'/linnen'    => '/linnen',
+					'/linkfile'  => '/testfile',
+					'/link/file' => '/test/file',
+					'/lonk/file' => '/lonk/file',
+					'/link/fu'   => false,
+					'/link/fun'  => '/test/fun',
+					'/test/fun'  => '/test/fun',
+				)
+			);
+
+			$gallery->_phpVm = new PlatformTestPhpVm('/lin', $this);
+
+			$this->assertFalse($platform->isRestrictedByOpenBaseDir('/linnen'), 'nonlink with prefix');
+			$this->assertTrue($platform->isRestrictedByOpenBaseDir('/linkfile'), 'link with prefix');
+			$this->assertTrue($platform->isRestrictedByOpenBaseDir('/link/file'), 'dir with prefix');
+			$this->assertTrue($platform->isRestrictedByOpenBaseDir('/lonk/file'), 'not match prefix');
+
+			$gallery->_phpVm = new PlatformTestPhpVm('/link/fu', $this);
+
+			$this->assertTrue(
+				$platform->isRestrictedByOpenBaseDir('/test/fun'),
+				'realpath given, open_basedir has prefix with link parent'
+			);
+			$this->assertTrue(
+				$platform->isRestrictedByOpenBaseDir('/link/fun'),
+				'valid link path given, open_basedir has prefix with link parent'
+			);
+			$this->assertTrue(
+				!$platform->isRestrictedByOpenBaseDir('/link/fubar'),
+				'invalid link path given, open_basedir has prefix with link parent'
+			);
+		}
+
+		// Open_basedir with .
+		$gallery->_phpVm = new PlatformTestPhpVm('.', $this);
+
+		$this->assertTrue(
+			!$this->_platform->isRestrictedByOpenBaseDir(
+				__DIR__ . '/../../../../lib/tools/phpunit/index.php'
+			),
+			'dot basedir'
+		);
+
+		// Open_basedir with trailing slash
+		$s = $this->_platform->getDirectorySeparator();
+
+		$platform->setRealpathData(
+			array(
+				"${s}test${s}" => "${s}test",
+				"${s}testing"  => "${s}testing",
+			)
+		);
+
+		$gallery->_phpVm = new PlatformTestPhpVm("${s}test${s}", $this);
+
+		$this->assertFalse($platform->isRestrictedByOpenBaseDir("${s}test"), 'no trailing slash');
+		$this->assertTrue(
+			$platform->isRestrictedByOpenBaseDir("${s}testing"),
+			'should not match basedir with trailing slash'
+		);
+
+		// Invalid paths (realpath returns false, our code does relative path and .. handling)
+		$platform->setRealpathData(
+			array(
+				"${s}test" => "${s}test",
+			)
+		);
+
+		$gallery->_phpVm = new PlatformTestPhpVm("${s}test", $this);
+
+		$this->assertTrue(
+			!$platform->isRestrictedByOpenBaseDir("${s}test${s}bogus"),
+			'valid bogus path'
+		);
+		$this->assertTrue(
+			!$platform->isRestrictedByOpenBaseDir("${s}test${s}bogus${s}..${s}path"),
+			'single dotdot'
+		);
+		$this->assertTrue(
+			$platform->isRestrictedByOpenBaseDir("${s}test${s}bogus${s}..${s}..${s}path"),
+			'multiple dotdots'
+		);
+		$this->assertTrue(
+			$platform->isRestrictedByOpenBaseDir("${s}test${s}.."),
+			'dotdot at end'
+		);
+		$this->assertTrue(
+			!$platform->isRestrictedByOpenBaseDir("${s}.${s}test${s}bogus"),
+			'dot in valid bogus path'
+		);
+		$this->assertTrue(
+			!$platform->isRestrictedByOpenBaseDir("${s}.${s}test${s}.${s}bogus"),
+			'two dots in valid bogus path'
+		);
+		$platform->setCwd("${s}test");
+		$this->assertTrue(
+			!$platform->isRestrictedByOpenBaseDir('bogus'),
+			'valid relative path'
+		);
+		$this->assertTrue(
+			$platform->isRestrictedByOpenBaseDir("..${s}bogus"),
+			'invalid relative path'
+		);
+		$this->assertTrue(
+			!$platform->isRestrictedByOpenBaseDir("bogus${s}path${s}..${s}..${s}test"),
+			'valid relative path with two dotdots'
+		);
+	}
+
+	public function testIsRestrictedByOpenBaseDirForMatchAllOpenBaseDir() {
+		global $gallery;
+
+		$gallery->_phpVm = new PlatformTestPhpVm('/', $this);
+		$platform        = new PlatformTestOpenBaseDirUnixPlatform();
+
+		$platform->setRealpathData(
+			array(
+				'/test/file' => '/test/file',
+				'/'          => '/',
+			)
+		);
+
+		$this->assertFalse($platform->isRestrictedByOpenBaseDir('/'), '/ should be allowed');
+		$this->assertTrue(
+			!$platform->isRestrictedByOpenBaseDir('/test/file'),
+			'/test/file should be allowed'
+		);
+	}
+
+	/**
+	 * Try opening a socket to the current web server.
+	 */
+	public function testFsockopen() {
+		$fd = $this->_platform->fsockopen(
+			$_SERVER['SERVER_NAME'],
+			$_SERVER['SERVER_PORT'],
+			$errno,
+			$errstr,
+			30
+		);
+
+		$this->assertTrue($fd, 'File descriptor should not be null/false');
+
+		@$this->_platform->fclose($fd);
+	}
+
+	public function ignore_error_handler($errno, $errstr) {
+		return true;
+	}
+
+	/**
+	 * Try opening a socket to a bogus web server.
+	 */
+	public function testFsockopenBadHost() {
+		// We know this is going to bomb so bypass PHPunit is error handler
+		set_error_handler(array('PlatformTest', 'ignore_error_handler'));
+		$fd = @$this->_platform->fsockopen(
+			'www.BOGUSBOGUSBOGUSBOGUS.com',
+			$_SERVER['SERVER_PORT'],
+			$errno,
+			$errstr,
+			30
+		);
+
+		$this->assertFalse($fd, 'open socket to bogus web server');
+	}
+
+	/**
+	 * Verify that we can write a few bytes to a file.
+	 */
+	public function testOpenWriteAndClose() {
+		$fd = $this->_platform->fopen($this->_destFile, 'wb');
+
+		$this->assertTrue($fd, 'File descriptor should not be null');
+
+		$buf          = 'this is a test';
+		$bytesWritten = $this->_platform->fwrite($fd, $buf, strlen($buf));
+
+		$this->assertEquals(strlen($buf), $bytesWritten);
+		$this->assertTrue($this->_platform->fclose($fd), 'fclose');
+		$this->assertTrue($this->_platform->unlink($this->_destFile), 'unlink');
+	}
+
+	public function testOpenAndReadTillEof() {
+		$fd = $this->_platform->fopen($this->_sourceFile, 'rb');
+
+		$this->assertTrue($fd, 'File descriptor should not be null');
+
+		$buf = '';
+
+		while (!$this->_platform->feof($fd)) {
+			$buf .= $this->_platform->fread($fd, 512);
+		}
+
+		$this->assertTrue(1083, strlen($buf));
+		$this->assertTrue($this->_platform->fclose($fd));
+	}
+
+	public function testOpenMissingFile() {
+		// We know this is going to bomb so bypass PHPunit is error handler
+		set_error_handler(array('PlatformTest', 'ignore_error_handler'));
+
+		// And suppress warnings when we call fopen
+		$fd = @$this->_platform->fopen(sprintf('%s_BOGUS_BOGUS', __FILE__), 'rb');
+
+		$this->assertFalse($fd, 'Open Missing File');
+	}
+
+	public function testAtomicWrite() {
+		/*
+		 * We should test if our operations are really concurrent-safe, but we cannot do that
+		 * without having multiple processes accessing the same file, which is not possible in our
+		 * test-framework (yet)
+		 */
+		$testData1 = "this is a test\nmultiline\ntest";
+
+		$this->assertTrue(
+			$this->_platform->atomicWrite($this->_destFile, $testData1, 'wb'),
+			'write 1 failed'
+		);
+
+		$output = implode('', $this->_platform->file($this->_destFile));
+
+		$this->assertEquals($testData1, $output);
+
+		// Now write another text to the same file and see if it is ok
+		$testData2 = "this is a test\nmultiline\ntest\nmore\ntext";
+
+		$this->assertTrue(
+			$this->_platform->atomicWrite($this->_destFile, $testData2, 'wb'),
+			'write 2 failed'
+		);
+
+		$output = implode('', $this->_platform->file($this->_destFile));
+
+		$this->assertEquals($testData2, $output);
+		$this->assertTrue($this->_platform->unlink($this->_destFile), 'unlink');
+	}
+
+	public function testSplitPath() {
+		$this->assertEquals(
+			array('dir', 'path', 'file.txt'),
+			$this->_platform->splitPath('dir/path/file.txt'),
+			'relative'
+		);
+
+		if (GalleryUtilities::isA($this->_platform, 'WinNtPlatform')) {
+			$this->assertEquals(
+				array('c:\\', 'dir', 'path', 'file.txt'),
+				$this->_platform->splitPath('c:\dir\path\file.txt'),
+				'absolute'
+			);
+			$this->assertEquals(
+				array('D:\\', 'path', 'file.txt'),
+				$this->_platform->splitPath('D:\path/file.txt'),
+				'absolute2'
+			);
+			$this->assertEquals(
+				array('\\', 'test'),
+				$this->_platform->splitPath('\test'),
+				'absolute3'
+			);
+		} else {
+			$this->assertEquals(
+				array('/', 'dir', 'path', 'file.txt'),
+				$this->_platform->splitPath('/dir/path/file.txt'),
+				'absolute'
+			);
+		}
+	}
+
+	public function testChdir() {
+		global $gallery;
+
+		$tmpdir = $gallery->getConfig('data.gallery.tmp');
+		$oldCwd = $this->_platform->getcwd();
+
+		$this->assertTrue($oldCwd);
+
+		// Change working directory to g2data/tmp
+		$this->assertTrue($this->_platform->chdir($tmpdir));
+
+		$newCwd = $this->_platform->getcwd();
+
+		$this->assertEquals(realpath($tmpdir), $newCwd);
+
+		// Go back to original directory
+		$this->_platform->chdir($oldCwd);
+	}
+
+	public function testStrftime() {
+		$this->assertEquals('2005 03', $this->_platform->strftime('%Y %m', 1110101111));
+
+		// For windows we replace %e with %d and convert leading zeros to spaces
+		$this->assertEquals(' 6 11', $this->_platform->strftime('%e %S', 1110101111));
+
+		// Verify UTF-8 text in format string is not mangled (only % tokens convert to UTF-8)
+		$this->assertEquals(
+			"\xd0\x9d\xd0\xb5 2005 \xd0\xbd %\n03",
+			$this->_platform->strftime("\xd0\x9d\xd0\xb5 %Y \xd0\xbd %%\n%m", 1110101111)
+		);
+
+		// How to test that strftime output is converted to UTF-8?
+	}
+
+	public function testFileGetAndPutContents() {
+		$fileContents = $this->_platform->file_get_contents($this->_sourceFile);
+
+		$this->assertTrue(is_string($fileContents), 'contents not a string');
+
+		$this->assertTrue(false !== strpos($fileContents, 'GIF89'), 'invalid contents');
+
+		$this->assertTrue(1083, strlen($fileContents));
+
+		$success = $this->_platform->file_put_contents($this->_destFile, $fileContents);
+
+		$this->assertTrue($success, 'file_put_contents error');
+		$this->assertEquals(1083, $this->_platform->filesize($this->_destFile));
+		$this->assertTrue($this->_platform->unlink($this->_destFile), 'unlink');
+	}
+
+	public function testMailUsesUnixLineEndings() {
+		global $gallery;
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'smtp.host', null);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->_phpVm = new PlatformTestPhpVm(__DIR__, $this);
+		$platform        = new UnixPlatform();
+		$result          = $platform->mail(
+			'foo@example.com',
+			'subject',
+			"body line1\nline2\r\nline3\r\n",
+			"header line1\nline2\r\nline3\r\n"
+		);
+
+		$this->assertTrue($result);
+		$this->assertEquals("body line1\nline2\nline3\n", $this->_mail['body']);
+		$this->assertEquals("header line1\nline2\nline3\n", $this->_mail['headers']);
+	}
+}
+
+class PlatformTestPhpVm extends GalleryPhpVm {
+	public function __construct($iniVal, &$test) {
+		$this->_iniVal = $iniVal;
+		$this->_test   =& $test;
+	}
+
+	public function ini_get($varname) {
+		if ($varname == 'open_basedir') {
+			return $this->_iniVal;
+		}
+
+		return parent::ini_get($varname);
+	}
+
+	public function mail($to, $subject, $body, $additionalHeaders = null, $additionalParameters = null) {
+		$this->_test->_mail = array(
+			'to'      => $to,
+			'subj'    => $subject,
+			'body'    => $body,
+			'headers' => $additionalHeaders,
+			'params'  => $additionalParameters,
+		);
+
+		return true;
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPlatform/UnixPlatform.class');
+
+class PlatformTestOpenBaseDirUnixPlatform extends UnixPlatform {
+	public function setRealpathData($realpathData) {
+		$this->_realpathData = $realpathData;
+	}
+
+	public function setCwd($path) {
+		$this->_cwd = $path;
+	}
+
+	public function realpath($path) {
+		return isset($this->_realpathData[$path]) ? $this->_realpathData[$path] : false;
+	}
+
+	public function getcwd() {
+		return isset($this->_cwd) ? $this->_cwd : parent::getcwd();
+	}
+
+	public function getDirectorySeparator() {
+		return '/';
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPlatform/WinNtPlatform.class');
+
+class PlatformTestOpenBaseDirWinNtPlatform extends WinNtPlatform {
+	public function setRealpathData($realpathData) {
+		$this->_realpathData = $realpathData;
+	}
+
+	public function setCwd($path) {
+		$this->_cwd = $path;
+	}
+
+	public function realpath($path) {
+		return isset($this->_realpathData[$path]) ? $this->_realpathData[$path] : false;
+	}
+
+	public function getcwd() {
+		return isset($this->_cwd) ? $this->_cwd : parent::getcwd();
+	}
+
+	public function getDirectorySeparator() {
+		return '\\';
+	}
+}

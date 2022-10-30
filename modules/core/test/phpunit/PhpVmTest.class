@@ -1,0 +1,228 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPhpVm.class');
+
+/**
+ * Test the GalleryPhpVm.  These are passthrough functions so all we do is perform a smoke test to
+ * make sure that the basic arguments are getting passed through correctly.
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Jay Rossiter <cryptographite@users.sf.net>
+ * @version $Revision: 17953 $
+ */
+class PhpVmTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_phpVm = new GalleryPhpVm();
+	}
+
+	public function testMd5() {
+		$this->assertEquals(
+			md5('foobar'),
+			$this->_phpVm->md5('foobar'),
+			'PhpVm MD5 output does not match PHP output'
+		);
+	}
+
+	public function testFunctionExists() {
+		$this->assertEquals(
+			function_exists('testFunctionExists'),
+			$this->_phpVm->function_exists('testFunctionExists'),
+			'PhpVm function_exists output does not match PHP output'
+		);
+	}
+
+	public function testExtensionLoaded() {
+		$this->assertEquals(
+			extension_loaded('test'),
+			$this->_phpVm->extension_loaded('test'),
+			'PhpVm extension_loaded output does not match PHP output'
+		);
+	}
+
+	public function testIconv() {
+		if (function_exists('iconv')) {
+			$this->assertEquals(
+				iconv('ISO-8859-1', 'UTF-8', 'foo bar'),
+				$this->_phpVm->iconv('ISO-8859-1', 'UTF-8', 'foo bar')
+			);
+		}
+	}
+
+	public function testMbConvertEncoding() {
+		if (function_exists('mb_convert_encoding')) {
+			$this->assertEquals(
+				mb_convert_encoding('foo bar', 'ISO-8859-1', 'UTF8'),
+				$this->_phpVm->mb_convert_encoding('foo bar', 'ISO-8859-1', 'UTF8')
+			);
+		}
+	}
+
+	public function testRecodeString() {
+		if (function_exists('recode_string')) {
+			$this->assertEquals(
+				recode_string('ISO-8859-1..UTF8', 'foo bar'),
+				$this->_phpVm->recode_string('ISO-8859-1..UTF8', 'foo bar')
+			);
+		}
+	}
+
+	/*
+	 * header() can only be tested with an actual HTTP requests, that is why we added it
+	 * to the mock VM
+	 */
+	public function testHeader() {
+		global $gallery;
+
+		/*
+		 * This test also depends on the G2 Session code as we do an actual HTTP request and
+		 * verify that we received a cookie header. GallerySession uses the $phpVm->header()
+		 * function, thus this covers what we'd like to test (and a little more)
+		 */
+		$urlGenerator =& $gallery->getUrlGenerator();
+		$url          = $urlGenerator->generateUrl(
+			array(
+				'href' => 'main.php',
+			),
+			array(
+				'forceFullUrl' => true,
+			)
+		);
+
+		// For guests, we do not send cookies, thus prepare an existing session
+		GalleryCoreApi::requireOnce('modules/core/classes/GallerySession.class');
+
+		$session = new GallerySession();
+
+		$ret = $session->initEmpty(true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse(empty($session->_sessionId), 'persistent session preparation failed');
+
+		$url = GalleryUrlGenerator::appendParamsToUrl(
+			$url,
+			array(
+				$session->getKey() => $session->getId(),
+			)
+		);
+
+		list($success, $body, $response, $headers) = GalleryCoreApi::fetchWebPage($url);
+
+		$this->assertTrue($success, 'Could not retrieve G2 page');
+
+		if (!preg_match('{^HTTP/1\.\d 200 OK$}', $response)) {
+			$this->assertEquals($response, 'HTTP/1.1 200 OK', 'Could not retrieve G2 page');
+		}
+
+		$this->assertTrue(isset($headers['Set-Cookie']), 'Set-Cookie header not set');
+
+		if (isset($headers['Set-Cookie'])) {
+			$headers['Set-Cookie'] = is_array($headers['Set-Cookie']) ? $headers['Set-Cookie'] : array($headers['Set-Cookie']);
+			$grep                  = preg_grep('/' . SESSION_ID_PARAMETER . '/', $headers['Set-Cookie']);
+
+			$this->assertTrue(
+				!empty($grep),
+				'no G2 SessionId with a correct SID found in the cookie header'
+			);
+		} else {
+			$this->assertFalse(
+				true,
+				'no cookie header found in http response for url: ' . $url
+			);
+		}
+	}
+
+	// Check is only rudimentary, omit the optional parameters
+	public function testHeadersSent() {
+		global $gallery;
+
+		// When this unit test is executed, we already sent some data to the user agent
+		$phpVm = $gallery->getPhpVm();
+
+		$this->assertTrue(
+			$phpVm->headers_sent(),
+			'headers are sent at this point, but the vm ' .
+			'function does not think so'
+		);
+
+		// The other case, $phpVm->headers_sent() == false, is covered by testHeader()
+	}
+
+	public function testHeaderDetectsHeaderInjection() {
+		global $gallery;
+
+		$phpVm = $gallery->getPhpVm();
+
+		/*
+		 * If the header call would succeed, there would be a PHP warning about headers already
+		 * been sent.
+		 */
+		$crLf = chr(13) . chr(10);
+
+		$phpVm->header('X-Foo: foo' . urlencode($crLf) . 'bar');
+	}
+
+	// This setting cannot be changed during runtime
+	public function testGetMagicQuotesGpc() {
+		$this->assertEquals(
+			get_magic_quotes_gpc(),
+			$this->_phpVm->get_magic_quotes_gpc(),
+			'The Vm function does not return the correct value'
+		);
+	}
+
+	public function testTime() {
+		/*
+		 * there is an incredibly slim chance that this will fail.  If it does, we should improve
+		 * this test.
+		 */
+		$this->assertEquals(time(), $this->_phpVm->time());
+	}
+
+	public function testRand() {
+		$this->assertTrue(is_int(mt_rand()), 'is int');
+		$this->assertTrue(mt_rand() > 0, 'is positive');
+
+		for ($i = 0; $i < 50; $i++) {
+			$rand = mt_rand(1000, 1010);
+			$this->assertTrue($rand >= 1000 && $rand <= 1010, 'with minimum and maximum');
+		}
+	}
+
+	public function testCrc32() {
+		$this->assertEquals(crc32('test'), $this->_phpVm->crc32('test'));
+	}
+
+	public function testClassExists() {
+		$this->assertTrue($this->_phpVm->class_exists('PhpVmTest'));
+		$this->assertFalse($this->_phpVm->class_exists('ThisIsAClassThatCanNeverExist'));
+	}
+}

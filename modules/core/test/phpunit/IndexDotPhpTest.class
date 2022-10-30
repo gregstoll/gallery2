@@ -1,0 +1,104 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GallerySession.class');
+
+/**
+ * Test index.php functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Andy Staudacher <ast@gmx.ch>
+ * @version $Revision: 17952 $
+ */
+class IndexDotPhpTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	/**
+	 * Test if we redirect correctly to main.php
+	 */
+	public function testHttpRedirect() {
+		global $gallery;
+
+		$urlGenerator =& $gallery->getUrlGenerator();
+		$url          = $urlGenerator->getCurrentUrl();
+
+		// Strip off the /lib/tools/test/ part to get a valid G2 request uri
+		$baseUrl = preg_replace('|^(.*/)lib/tools/.*$|', '$1', $url);
+
+		// Request http://domain.com/path/  and for http://domain.com/path/index.php
+		$i = 0;
+
+		foreach (array(
+			$baseUrl,
+			$baseUrl . 'index.php',
+			$baseUrl . 'index.php?some=value&something=else',
+			$baseUrl . '?somepath',
+			$baseUrl . '//',
+		) as $url) {
+			// Trigger a set-cookie header by offering a session for pickup
+			$session = new GallerySession();
+
+			$ret = $session->initEmpty(true);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$url = GalleryUrlGenerator::appendParamsToUrl(
+				$url,
+				array(
+					$session->getKey() => $session->getId(),
+				)
+			);
+
+			$url .= ($i++ == 3) ? '#foo' : '';
+
+			// Make the HTTP request
+			list($success, $body, $response, $headers) = GalleryCoreApi::fetchWebPage($url);
+
+			$this->assertTrue($success, "Could not retrieve G2 page: $url");
+
+			if (!preg_match('{^HTTP/1\.\d 200 OK$}', $response)) {
+				$this->assertEquals(
+					$response,
+					'HTTP/1.1 200 OK',
+					"Could not retrieve G2 page: $url"
+				);
+			}
+
+			$this->assertTrue(isset($headers['Set-Cookie']), "Set-Cookie header not set: $url");
+
+			if (isset($headers['Set-Cookie'])) {
+				// Check if the G2 cookie is present
+				$headers['Set-Cookie'] = is_array($headers['Set-Cookie']) ? $headers['Set-Cookie'] : array($headers['Set-Cookie']);
+				$grep                  = preg_grep(
+					'/' . SESSION_ID_PARAMETER . '/',
+					$headers['Set-Cookie']
+				);
+
+				$this->assertTrue(
+					!empty($grep),
+					"G2 cookie not present in HTTP headers: $url." .
+					'The complete cookie headers are: ' . implode(', ', $headers['Set-Cookie'])
+				);
+			}
+		}
+	}
+}

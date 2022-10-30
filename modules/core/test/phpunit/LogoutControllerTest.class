@@ -1,0 +1,181 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Logout controller tests.
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 18040 $
+ */
+class LogoutControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.Logout');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_anonymousId) = GalleryCoreApi::getAnonymousUserId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Save the session
+		$this->_saveSession = $gallery->_session;
+		$this->_session     = new LogoutControllerTestSession();
+		$gallery->_session  =& $this->_session;
+
+		// TODO: Remove the following once we can disable httpauth's event handler for tests
+		unset($_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW'], $_SERVER['REMOTE_USER']);
+
+		GalleryUtilities::removeRequestVariable('authorization');
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		// Restore the session
+		$gallery->_session = $this->_saveSession;
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testLogout() {
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'status'   => array(),
+				'error'    => array(),
+				'redirect' => array(
+					'view' => GALLERY_DEFAULT_VIEW,
+				),
+			),
+			$results
+		);
+
+		$this->assertEquals(1, $this->_session->_resetCallCount, 'reset');
+		$this->assertEquals((int)$this->_anonymousId, $this->_session->getUserId(), 'userId');
+	}
+
+	public function testLogoutAlternateGuest() {
+		global $gallery;
+
+		$gallery->setConfig('anonymousUserId', $userId = $gallery->getActiveUserId());
+		$results                                       = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'status'   => array(),
+				'error'    => array(),
+				'redirect' => array(
+					'view' => GALLERY_DEFAULT_VIEW,
+				),
+			),
+			$results
+		);
+
+		$this->assertEquals(1, $this->_session->_resetCallCount);
+		$this->assertEquals($userId, $this->_session->getUserId(), 'userId');
+	}
+
+	public function testLogoutEventDelegate() {
+		$LogoutControllerTestEventListener = new LogoutControllerTestEventListener();
+
+		$ret = GalleryCoreApi::registerEventListener(
+			'Gallery::Logout',
+			$LogoutControllerTestEventListener
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'status'   => array(),
+				'error'    => array(),
+				'delegate' => array(
+					'view' => 'test.PhpUnit',
+				),
+			),
+			$results
+		);
+
+		$this->assertEquals(1, $this->_session->_resetCallCount);
+		$this->assertEquals((int)$this->_anonymousId, $this->_session->getUserId(), 'userId');
+	}
+}
+
+class LogoutControllerTestSession {
+	public $_resetCallCount = 0;
+	public $_userId;
+
+	public function reset() {
+		$this->_resetCallCount++;
+
+		return null;
+	}
+
+	public function isUsingCookies() {
+		return true;
+	}
+
+	public function setUserId($userId) {
+		$this->_userId = $userId;
+	}
+
+	public function getUserId() {
+		return $this->_userId;
+	}
+
+	public function put($key, $value) {}
+
+	public function exists($key) {
+		return false;
+	}
+}
+
+// extends GalleryEventListener
+class LogoutControllerTestEventListener {
+	public function handleEvent($event) {
+		return array(
+			null,
+			array(
+				'delegate' => array(
+					'view' => 'test.PhpUnit',
+				),
+			),
+		);
+	}
+}

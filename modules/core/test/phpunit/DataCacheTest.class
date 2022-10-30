@@ -1,0 +1,1302 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test DataCache functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class DataCacheTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		global $gallery;
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$acceleration['user']['type']       = 'full';
+		$acceleration['user']['expiration'] = 30;
+		$acceleration['guest']['type']      = 'none';
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'acceleration',
+			serialize($acceleration)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$session =& $gallery->getSession();
+
+		$session->remove('theme.guestPreviewMode');
+
+		unset($_SERVER['HTTP_PRAGMA'], $_SERVER['HTTP_CACHE_CONTROL']);
+	}
+
+	public function tearDown() {
+		$ret = GalleryCoreApi::removeAllMapEntries('GalleryCacheMap');
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testPutAndGet() {
+		$key   = 'test-key';
+		$value = 'test-value';
+
+		GalleryDataCache::put($key, $value);
+
+		$this->assertEquals($value, GalleryDataCache::get($key));
+	}
+
+	public function testContainsKey() {
+		$key   = 'test-key';
+		$value = 'test-value';
+
+		GalleryDataCache::put($key, $value);
+
+		$this->assertTrue(GalleryDataCache::containsKey($key));
+	}
+
+	public function testReset() {
+		$key   = 'test-key';
+		$value = 'test-value';
+
+		GalleryDataCache::put($key, $value);
+
+		$this->assertTrue(GalleryDataCache::containsKey($key), 'Could not put a var to GDC');
+
+		// Add a protected var
+		$pKey   = 'prot-test-key';
+		$pValue = 'prot-test-value';
+
+		GalleryDataCache::put($pKey, $pValue, true);
+
+		$this->assertTrue(GalleryDataCache::containsKey($pKey), 'Could not put a protected var to GDC');
+
+		GalleryDataCache::reset();
+
+		$this->assertFalse(GalleryDataCache::containsKey($key), 'Could not reset GDC');
+		$this->assertTrue(GalleryDataCache::containsKey($pKey), 'Reset GDC deleted a protected var');
+
+		GalleryDataCache::reset(true);
+
+		$this->assertTrue(
+			!GalleryDataCache::containsKey($pKey),
+			'Reset(true) did not delete protected vars'
+		);
+	}
+
+	public function testRemoveByPattern() {
+		GalleryDataCache::put('foo(1, 2, 3, 4)', 'baz');
+		GalleryDataCache::put('foo(2, 3, 4)', 'baz');
+		GalleryDataCache::put('bar(3, 4)', 'baz');
+		GalleryDataCache::put('bar(4)', 'baz');
+		GalleryDataCache::removeByPattern('foo\(2, ');
+		GalleryDataCache::removeByPattern('bar');
+
+		$this->assertTrue(GalleryDataCache::containsKey('foo(1, 2, 3, 4)', 'baz'));
+		$this->assertFalse(GalleryDataCache::containsKey('foo(2, 3, 4)', 'baz'));
+		$this->assertFalse(GalleryDataCache::containsKey('bar(3, 4)', 'baz'));
+		$this->assertFalse(GalleryDataCache::containsKey('bar(4)', 'baz'));
+	}
+
+	public function testGetCacheTuple() {
+		$this->assertEquals(array('0', '0'), GalleryDataCache::getCacheTuple(0));
+		$this->assertEquals(array('0', '0'), GalleryDataCache::getCacheTuple(1));
+		$this->assertEquals(array('0', '2'), GalleryDataCache::getCacheTuple(21));
+		$this->assertEquals(array('0', '9'), GalleryDataCache::getCacheTuple(99));
+		$this->assertEquals(array('7', '2'), GalleryDataCache::getCacheTuple(721));
+		$this->assertEquals(array('3', '4'), GalleryDataCache::getCacheTuple(3412312));
+		$this->assertEquals(array('0', '0'), GalleryDataCache::getCacheTuple('_all'));
+	}
+
+	public function testGetCachePath() {
+		global $gallery;
+
+		$gallery->setConfig('data.gallery.cache', '/data/cache/');
+
+		$cases                                      = array();
+		$cases['/data/cache/module/core/0/0/1.inc'] = array(
+			'type'   => 'module',
+			'id'     => 'core',
+			'itemId' => 1,
+		);
+
+		$cases['/data/cache/module/core/0/0/0.inc'] = array(
+			'type'   => 'module',
+			'id'     => 'core',
+			'itemId' => '../EVIL',
+		);
+
+		$cases['/data/cache/module/0/0/0/1.inc'] = array(
+			'type'   => 'module',
+			'id'     => '../EVIL',
+			'itemId' => 1,
+		);
+
+		// We use itemId to store keys like 'GalleryFactoryHelper_loadRegistry'
+		$cases['/data/cache/module/core/0/0/Legal_key.inc'] = array(
+			'type'   => 'module',
+			'id'     => 'core',
+			'itemId' => 'Legal_key',
+		);
+
+		$cases['/data/cache/theme/matrix'] = array(
+			'type' => 'theme',
+			'id'   => 'matrix',
+		);
+
+		$cases['/data/cache/theme/matrix/1/2/123.inc'] = array(
+			'type'   => 'theme',
+			'id'     => 'matrix',
+			'itemId' => 123,
+		);
+
+		$cases['/data/cache/theme/0/1/2/123.inc'] = array(
+			'type'   => 'theme',
+			'id'     => '../EVIL',
+			'itemId' => 123,
+		);
+
+		$cases['/data/cache/theme/matrix/0/0/0.inc'] = array(
+			'type'   => 'theme',
+			'id'     => 'matrix',
+			'itemId' => '../EVIL',
+		);
+
+		$cases['/data/cache/entity/7/2/725.inc'] = array(
+			'type'   => 'entity',
+			'itemId' => 725,
+		);
+
+		$cases['/data/cache/entity/0/0/0.inc'] = array(
+			'type'   => 'entity',
+			'itemId' => '../EVIL',
+		);
+
+		$cases['/data/cache/derivative/1/2/123.dat'] = array(
+			'type'   => 'derivative',
+			'itemId' => 123,
+		);
+
+		$cases['/data/cache/derivative/0/0/0.dat'] = array(
+			'type'   => 'derivative',
+			'itemId' => '../EVIL',
+		);
+
+		$cases['derivative/1/2/123.dat'] = array(
+			'type'   => 'derivative-relative',
+			'itemId' => 123,
+		);
+
+		$cases['derivative/0/0/0.dat'] = array(
+			'type'   => 'derivative-relative',
+			'itemId' => '../EVIL',
+		);
+
+		$cases['/data/cache/entity/1/2/123-fast.inc'] = array(
+			'type'   => 'fast-download',
+			'itemId' => 123,
+		);
+
+		$cases['/data/cache/entity/0/0/0-fast.inc'] = array(
+			'type'   => 'fast-download',
+			'itemId' => '../EVIL',
+		);
+
+		$cases['/data/cache/module/foo/1/2/123.dat'] = array(
+			'type'   => 'module-data',
+			'module' => 'foo',
+			'itemId' => 123,
+		);
+
+		$cases['/data/cache/module/foo/1/2/123_AZ_az.dat'] = array(
+			'type'   => 'module-data',
+			'module' => 'foo',
+			'itemId' => '123_AZ_az',
+		);
+
+		$cases['/data/cache/module/foo/0/0/___EVIL.dat'] = array(
+			'type'   => 'module-data',
+			'module' => 'foo',
+			'itemId' => '../EVIL',
+		);
+
+		$cases['/data/cache/module/0/1/2/123.dat'] = array(
+			'type'   => 'module-data',
+			'module' => '../EVIL',
+			'itemId' => 123,
+		);
+
+		$cases['/data/cache/module/foo/'] = array(
+			'type'   => 'module-data',
+			'module' => 'foo',
+		);
+
+		foreach ($cases as $expectedPath => $info) {
+			$this->assertEquals($expectedPath, GalleryDataCache::getCachePath($info));
+		}
+	}
+
+	public function testPutToDisk() {
+		global $gallery;
+
+		GalleryDataCache::setFileCachingEnabled(true);
+
+		$gallery->setConfig('data.gallery.cache', '/data/cache/');
+
+		$DataCacheTestPlatform = DataCacheTestPlatform::getMe();
+
+		$gallery->setPlatform($DataCacheTestPlatform);
+
+		$testdata = "testdata c:\foo\bar";
+		GalleryDataCache::putToDisk(
+			array(
+				'type'   => 'entity',
+				'itemId' => 1,
+			),
+			$testdata
+		);
+
+		$this->assertEquals(
+			'|' . serialize($testdata),
+			DataCacheTestPlatform::getMe()->getFileContents('/data/cache/entity/0/0/1.inc')
+		);
+		DataCacheTestPlatform::getMe()->reset();
+		GalleryDataCache::putToDisk(
+			array(
+				'type'   => 'entity',
+				'itemId' => 1,
+			),
+			$testdata,
+			array('required-class')
+		);
+
+		$this->assertEquals(
+			'required-class|' . serialize($testdata),
+			DataCacheTestPlatform::getMe()->getFileContents('/data/cache/entity/0/0/1.inc')
+		);
+		DataCacheTestPlatform::getMe()->reset();
+		GalleryDataCache::putToDisk(
+			array(
+				'type'   => 'entity',
+				'itemId' => 1,
+			),
+			$testdata,
+			array('required-class1', 'required-class2')
+		);
+
+		$this->assertEquals(
+			'required-class1,required-class2|' . serialize($testdata),
+			DataCacheTestPlatform::getMe()->getFileContents('/data/cache/entity/0/0/1.inc')
+		);
+		DataCacheTestPlatform::getMe()->reset();
+		GalleryDataCache::putToDisk(
+			array(
+				'type'   => 'entity',
+				'itemId' => 21,
+			),
+			$testdata
+		);
+
+		$this->assertEquals(
+			'|' . serialize($testdata),
+			DataCacheTestPlatform::getMe()->getFileContents('/data/cache/entity/0/2/21.inc')
+		);
+		DataCacheTestPlatform::getMe()->reset();
+
+		$testdata = '|test#with\'funky"chars? \\*&%$[]}{ end';
+		GalleryDataCache::putToDisk(
+			array(
+				'type'   => 'entity',
+				'itemId' => 721,
+			),
+			$testdata
+		);
+
+		$this->assertEquals(
+			'|' . serialize($testdata),
+			DataCacheTestPlatform::getMe()->getFileContents('/data/cache/entity/7/2/721.inc')
+		);
+		DataCacheTestPlatform::getMe()->reset();
+	}
+
+	public function testRemoveFromDisk() {
+		global $gallery;
+
+		GalleryDataCache::setFileCachingEnabled(true);
+
+		list($ret, $modulePluginStatus) = GalleryCoreApi::fetchPluginStatus('module');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $themePluginStatus) = GalleryCoreApi::fetchPluginStatus('theme');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->setConfig('data.gallery.cache', '/data/cache/');
+
+		$DataCacheTestPlatform = new DataCacheTestPlatform();
+
+		$gallery->setPlatform($DataCacheTestPlatform);
+
+		GalleryDataCache::removeFromDisk(
+			array(
+				'type'   => 'entity',
+				'itemId' => 1,
+			)
+		);
+
+		$this->assertTrue(
+			DataCacheTestPlatform::getMe()->wasFileDeleted('/data/cache/entity/0/0/1.inc'),
+			'file was not deleted'
+		);
+		DataCacheTestPlatform::getMe()->reset();
+		GalleryDataCache::removeFromDisk(
+			array(
+				'type'   => 'module',
+				'id'     => 'core',
+				'itemId' => 1,
+			)
+		);
+
+		$this->assertTrue(
+			DataCacheTestPlatform::getMe()->wasFileDeleted('/data/cache/module/core/0/0/1.inc'),
+			'file was not deleted'
+		);
+		DataCacheTestPlatform::getMe()->reset();
+		GalleryDataCache::removeFromDisk(
+			array(
+				'type' => 'module',
+				'id'   => 'core',
+			)
+		);
+
+		$this->assertTrue(
+			DataCacheTestPlatform::getMe()->wasDirDeleted('/data/cache/module/core'),
+			'dir was not deleted'
+		);
+		DataCacheTestPlatform::getMe()->reset();
+		GalleryDataCache::removeFromDisk(
+			array(
+				'type'   => 'module',
+				'itemId' => 1,
+			)
+		);
+
+		foreach (array_keys($modulePluginStatus) as $moduleId) {
+			$targetFile = '/data/cache/module/' . $moduleId . '/0/0/1.inc';
+
+			$this->assertTrue(
+				DataCacheTestPlatform::getMe()->wasFileDeleted($targetFile),
+				"$targetFile was not deleted"
+			);
+		}
+
+		DataCacheTestPlatform::getMe()->reset();
+		GalleryDataCache::removeFromDisk(
+			array(
+				'type'   => 'theme',
+				'itemId' => 1,
+			)
+		);
+
+		foreach (array_keys($themePluginStatus) as $themeId) {
+			$targetFile = '/data/cache/theme/' . $themeId . '/0/0/1.inc';
+
+			$this->assertTrue(
+				DataCacheTestPlatform::getMe()->wasFileDeleted($targetFile),
+				"$targetFile was not deleted"
+			);
+		}
+
+		DataCacheTestPlatform::getMe()->reset();
+	}
+
+	public function testGetFromDisk() {
+		global $gallery;
+
+		GalleryDataCache::setFileCachingEnabled(true);
+
+		$gallery->setConfig('data.gallery.cache', '/data/cache/');
+
+		$DataCacheTestPlatform_testGetFromDisk = new DataCacheTestPlatform_testGetFromDisk();
+
+		$gallery->setPlatform($DataCacheTestPlatform_testGetFromDisk);
+
+		/*
+		 * GalleryDataCache::getFromDisk uses include() and we do not have a
+		 * platform wrapper for that.  We cannot easily wrap that function
+		 * because we want to take advantage of the fact that include() shares
+		 * the lexical scope of the calling function, and wrapping it would
+		 * change that scope.  But we can at least partially exercise the
+		 * function and make sure it does not throw any errors.
+		 */
+		GalleryDataCache::getFromDisk(
+			array(
+				'type'   => 'entity',
+				'itemId' => 1,
+			)
+		);
+		GalleryDataCache::getFromDisk(
+			array(
+				'type'   => 'module',
+				'id'     => 'core',
+				'itemId' => 1,
+			)
+		);
+	}
+
+	public function testPutAndGetFromDisk() {
+		GalleryDataCache::setFileCachingEnabled(true);
+
+		// Put some content containing | and , and make sure it parses back ok
+		$cacheParams = array(
+			'type'   => 'module',
+			'itemId' => 'phpunit_DataCacheTest_testData',
+			'id'     => '_all',
+		);
+
+		$data = array(
+			'key'  => 'value,with|pipe',
+			'test' => 5,
+		);
+
+		GalleryDataCache::putToDisk($cacheParams, $data);
+
+		$readBack =& GalleryDataCache::getFromDisk($cacheParams);
+
+		$this->assertEquals($data, $readBack, 'no classes');
+
+		GalleryDataCache::removeFromDisk($cacheParams);
+
+		// Put content with multiple required classes and make sure all are read
+		$data = array(
+			'one' => array(
+				'2|two' => 3,
+			),
+			4.5   => 'six,7',
+		);
+
+		GalleryDataCache::putToDisk(
+			$cacheParams,
+			$data,
+			array(
+				'modules/core/test/data/DataCacheTest_1.class',
+				'modules/core/test/data/DataCacheTest_2.class',
+			)
+		);
+
+		$readBack =& GalleryDataCache::getFromDisk($cacheParams);
+
+		$this->assertEquals($data, $readBack, 'two required classes');
+
+		GalleryDataCache::removeFromDisk($cacheParams);
+
+		$this->assertTrue(class_exists('DataCacheTest_class1'), 'class1 should exist');
+		$this->assertTrue(class_exists('DataCacheTest_class2'), 'class2 should exist');
+	}
+
+	public function testCachePermission() {
+		global $gallery;
+
+		GalleryDataCache::remove('GalleryDataCache::cachePermissions::newEntries');
+		GalleryDataCache::cachePermissions(array('1', '2'), 'test.TestPermission');
+
+		$this->assertTrue(
+			GalleryDataCache::hasPermission('1', 'test.TestPermission'),
+			'1 should have permission test.TestPermission'
+		);
+		$this->assertTrue(
+			GalleryDataCache::hasPermission('2', 'test.TestPermission'),
+			'2 should have permission test.TestPermission'
+		);
+		$this->assertTrue(
+			!GalleryDataCache::hasPermission('3', 'test.TestPermission'),
+			'3 should not have permission test.TestPermission'
+		);
+		$this->assertTrue(
+			!GalleryDataCache::hasPermission('1', 'test.OtherPermission'),
+			'1 should not have permission test.OtherPermission'
+		);
+		GalleryDataCache::cachePermissions(array('3'), 'test.OtherPermission');
+
+		$this->assertTrue(
+			GalleryDataCache::hasPermission('1', 'test.TestPermission'),
+			'1 should still have permission test.TestPermission'
+		);
+		$this->assertTrue(
+			!GalleryDataCache::hasPermission('1', 'test.OtherPermission'),
+			'1 still should not have permission test.OtherPermission'
+		);
+		$this->assertTrue(
+			GalleryDataCache::hasPermission('3', 'test.OtherPermission'),
+			'3 should now have permission test.OtherPermission'
+		);
+		$this->assertTrue(
+			!GalleryDataCache::hasPermission('3', 'test.TestPermission'),
+			'3 should not have permission test.TestPermission'
+		);
+	}
+
+	public function testPutAndGetPageData() {
+		$value = '<html><head><title>foo</title><body>this is some content</body></html>';
+
+		$ret = GalleryDataCache::putPageData('test', 0, array('key'), $value);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = GalleryDataCache::getPageData('test', array('key'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($value, $result);
+	}
+
+	public function testRemovePageData() {
+		$ret = GalleryDataCache::putPageData('test', 0, array('key'), 'test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = GalleryDataCache::getPageData('test', array('key'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test', $result);
+
+		$ret = GalleryDataCache::removePageData(0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = GalleryDataCache::getPageData('test', array('key'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(null, $result);
+	}
+
+	public function testGetPageDataExpiredData() {
+		global $gallery;
+
+		$gallery->_phpVm = new DataCacheTestMockVm();
+
+		$gallery->_phpVm->setTime(100);
+
+		$ret = GalleryDataCache::putPageData('test', 0, array('key'), 'test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->_phpVm->setTime(time());
+
+		list($ret, $result) = GalleryDataCache::getPageData('test', array('key'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(null, $result);
+	}
+
+	public function testShouldCachePostRequest() {
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+
+		list($ret, $shouldCache) = GalleryDataCache::shouldCache('read', 'page');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($shouldCache, 'Should Cache');
+	}
+
+	public function testShouldCacheReadNoCache1() {
+		global $gallery;
+
+		$_SERVER['HTTP_PRAGMA']    = 'no-cache';
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+
+		list($ret, $shouldCache) = GalleryDataCache::shouldCache('read', 'page');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($shouldCache, 'Should Cache');
+	}
+
+	public function testShouldCacheReadNoCache2() {
+		global $gallery;
+
+		$_SERVER['HTTP_CACHE_CONTROL'] = 'no-cache';
+		$_SERVER['REQUEST_METHOD']     = 'POST';
+
+		list($ret, $shouldCache) = GalleryDataCache::shouldCache('read', 'page');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($shouldCache, 'Should Cache');
+	}
+
+	public function testShouldCacheReadUserOk() {
+		global $gallery;
+
+		$acceleration['user']['type'] = 'full';
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'acceleration',
+			serialize($acceleration)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $shouldCache) = GalleryDataCache::shouldCache('read', 'full');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($shouldCache, 'Should Cache');
+	}
+
+	public function testShouldCacheReadGuestOk() {
+		global $gallery;
+
+		$acceleration['user']['type']  = 'full';
+		$acceleration['guest']['type'] = 'full';
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'acceleration',
+			serialize($acceleration)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $shouldCache) = GalleryDataCache::shouldCache('read', 'full');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($shouldCache, 'Should Cache');
+	}
+
+	public function testShouldCacheReadUserNotOk() {
+		global $gallery;
+
+		// Make myself the anon user temporarily
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'id.anonymousUser',
+			$gallery->getActiveUserId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$acceleration['user']['type']  = 'none';
+		$acceleration['guest']['type'] = 'none';
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'acceleration',
+			serialize($acceleration)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $shouldCache) = GalleryDataCache::shouldCache('read', 'full');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($shouldCache, 'Should Cache');
+	}
+
+	public function testShouldCacheNone() {
+		global $gallery;
+
+		$acceleration['user']['type'] = 'none';
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'acceleration',
+			serialize($acceleration)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Use mock VM to enforce valid headers, so that the active browser does not interfere
+		$gallery->_phpVm = new DataCacheTestMockVm();
+
+		list($ret, $shouldCache) = GalleryDataCache::shouldCache('read', 'partial');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($shouldCache, 'Should Cache');
+	}
+
+	public function testGetExtraPageCacheKey() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		// Backup values
+		$isUsingCookies = $session->isUsingCookies();
+		$modeExif       = $session->get('exif.module.LoadExifInfo.mode');
+
+		// Set test environment
+		$ret = $gallery->setActiveLanguageCode('en');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$session->_isUsingCookies = false;
+
+		// Exif module
+		$session->remove('exif.module.LoadExifInfo.mode');
+
+		GalleryDataCache::put('G2_EMBED', 1);
+
+		list($ret, $extraKey) = GalleryDataCache::_getExtraPageCacheKey();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('0-en-1', $extraKey, 'embedded, cookieless, English, exif summary');
+
+		// Clean up
+		$session->_isUsingCookies = $isUsingCookies;
+
+		$session->put('exif.module.LoadExifInfo.mode', $modeExif);
+	}
+
+	public function testGetExtraPageCacheKeyForStandalone() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		// Backup values
+		$isUsingCookies = $session->isUsingCookies();
+		$modeExif       = $session->get('exif.module.LoadExifInfo.mode');
+
+		// Set test environment
+		$ret = $gallery->setActiveLanguageCode('fr');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$session->_isUsingCookies = true;
+
+		// Exif module
+		$session->put('exif.module.LoadExifInfo.mode', 'detailed');
+
+		list($ret, $extraKey) = GalleryDataCache::_getExtraPageCacheKey();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'1-fr-0-exifdetailed',
+			$extraKey,
+			'standalone, using cookies, French, exif detail'
+		);
+
+		// Clean up
+		$session->_isUsingCookies = $isUsingCookies;
+
+		$session->put('exif.module.LoadExifInfo.mode', $modeExif);
+	}
+
+	// Same test as userOk, but in guest preview mode
+	public function testShouldNotCacheGuestPreviewPages() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		$session->put('theme.guestPreviewMode', 1);
+
+		$acceleration['user']['type'] = 'full';
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'acceleration',
+			serialize($acceleration)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $shouldCache) = GalleryDataCache::shouldCache('read', 'full');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($shouldCache, 'Should Cache');
+		$session->remove('theme.guestPreviewMode');
+	}
+
+	public function testCleanPageDataCache() {
+		global $gallery;
+
+		$gallery->_phpVm = new DataCacheTestMockVm();
+
+		// We do not care about rand.
+		$gallery->_phpVm->setRand(1);
+
+		$activeUser   = $gallery->getActiveUser();
+		$acceleration = array(
+			'user' => array(
+				'type'       => 'full',
+				'expiration' => 30,
+			),
+			'guest' => array(
+				'type'       => 'full',
+				'expiration' => 30,
+			),
+		);
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'acceleration',
+			serialize($acceleration)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $anonymousUserId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $anonymousUser) = GalleryCoreApi::loadEntitiesById($anonymousUserId, 'GalleryUser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Initialize to language of active user, so we do not get a different cache key later.
+		$gallery->setActiveUser($anonymousUser);
+		$gallery->setActiveUser($activeUser);
+
+		// Clear the cache.
+		$ret = GalleryCoreApi::removeAllMapEntries('GalleryCacheMap');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Setup some cache entries.
+		$gallery->_phpVm->setTime(100);
+
+		$ret = GalleryDataCache::putPageData('first', 1, array('key'), 'test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = GalleryDataCache::getPageData('first', array('key'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test', $result, 'first');
+
+		// Clean on, 25 seconds after start, no rows should be cleaned.
+		$gallery->_phpVm->setTime(125);
+
+		$ret = GalleryDataCache::putPageData('second', 2, array('key'), 'test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = GalleryDataCache::getPageData('first', array('key'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test', $result, 'We cleaned to early.');
+
+		// Guest user cache, clean on, 35 seconds after start, no rows should be cleaned.
+		$gallery->setActiveUser($anonymousUser);
+		$gallery->_phpVm->setTime(135);
+
+		$ret = GalleryDataCache::putPageData('guest', 2, array('key'), 'test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Switch back to user and back in time check first entry.
+		$gallery->setActiveUser($activeUser);
+		$gallery->_phpVm->setTime(125);
+
+		list($ret, $result) = GalleryDataCache::getPageData('first', array('key'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test', $result, 'Guest cleaned user row!');
+
+		// Check if dice is set to 6 we do not clean.
+		$gallery->_phpVm->setRand(6);
+		$gallery->_phpVm->setTime(135);
+
+		$ret = GalleryDataCache::putPageData('third', 3, array('key'), 'test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->_phpVm->setTime(125);
+
+		list($ret, $result) = GalleryDataCache::getPageData('first', array('key'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test', $result, 'We cleaned first row while rand() returned 6.');
+
+		// Expire all user rows with this last call, guest untouched and this one.
+		$gallery->_phpVm->setTime(200);
+		$gallery->_phpVm->setRand(1);
+
+		$ret = GalleryDataCache::putPageData('fourth', 4, array('key'), 'test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Move treshold, making all rows valid again.
+		$acceleration = array(
+			'user' => array(
+				'type'       => 'full',
+				'expiration' => 200,
+			),
+			'guest' => array(
+				'type'       => 'full',
+				'expiration' => 200,
+			),
+		);
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'acceleration',
+			serialize($acceleration)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = GalleryDataCache::getPageData('first', array('key'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(null, $result, 'Cache entry should be obsolete.');
+
+		// Verify the number of rows that we should have in the DB.
+		$query = 'SELECT * FROM [GalleryCacheMap]';
+
+		list($ret, $results) = $gallery->search($query);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(5, (int)$results->resultCount(), 'Total cache entries.');
+
+		// Verify the number of rows that should be valid.
+		$query = '
+		SELECT
+		*
+		FROM
+		[GalleryCacheMap]
+		WHERE
+		[GalleryCacheMap::value] IS NOT NULL
+		';
+
+		list($ret, $results) = $gallery->search($query);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(2, (int)$results->resultCount(), 'remaining valid cache entries');
+	}
+
+	// Test persisting the template path map to disk and removing it
+	public function testSaveAndRemoveLocalUrlMap() {
+		global $gallery;
+
+		GalleryDataCache::setFileCachingEnabled(true);
+
+		$gallery->setConfig('data.gallery.cache', '/data/cache/');
+
+		$DataCacheTestPlatform = new DataCacheTestPlatform();
+
+		$gallery->setPlatform($DataCacheTestPlatform);
+
+		$platform =& $gallery->getPlatform();
+		$testdata = array(
+			'themes/test/theme.css'      => 'theme/test/theme.css',
+			'modules/testmodule/test.js' => 'modules/testmodule/local/test.js',
+		);
+
+		GalleryDataCache::putToDisk(
+			array(
+				'type' => 'local-url-map',
+			),
+			$testdata
+		);
+
+		$this->assertEquals(
+			'|' . serialize($testdata),
+			$platform->getFileContents('/data/cache/theme/_all/localUrlMap.txt'),
+			'The local url map was persisted to disk improperly'
+		);
+
+		GalleryDataCache::removeFromDisk(
+			array(
+				'type' => 'local-url-map',
+			)
+		);
+
+		$this->assertTrue(
+			$platform->wasFileDeleted('/data/cache/theme/_all/localUrlMap.txt'),
+			'The persisted copy of the local url map was not deleted from disk'
+		);
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPhpVm.class');
+
+/**
+ * Mock VM
+ */
+class DataCacheTestMockVm extends GalleryPhpVm {
+	public function setTime($time) {
+		$this->_time = $time;
+	}
+
+	public function time() {
+		return $this->_time;
+	}
+
+	public function setRand($rand) {
+		$this->_randValue = $rand;
+	}
+
+	public function rand($min = null, $max = null) {
+		if (isset($this->_randValue)) {
+			return $this->_randValue;
+		}
+
+		parent::rand($min, $max);
+	}
+}
+
+/**
+ * Mock platform
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class DataCacheTestPlatform_testGetFromDisk {
+	public function file_exists($path) {
+		return false;
+	}
+}
+
+/**
+ * Mock platform
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class DataCacheTestPlatform {
+	/**
+	 * Class Loader
+	 */
+	public static function getMe() {
+		static $instance;
+
+		if (!isset($instance)) {
+			$instance = new DataCacheTestPlatform();
+		}
+
+		return $instance;
+	}
+
+	public function __construct() {
+		$this->reset();
+	}
+
+	public function reset() {
+		$record =& $this->getRecord();
+		$record = array();
+	}
+
+	public function &getRecord() {
+		static $record;
+
+		if (!isset($record)) {
+			$record = array();
+		}
+
+		return $record;
+	}
+
+	public function file_get_contents($path) {
+		return $this->getFileContents($path);
+	}
+
+	public function getFileContents($path) {
+		$record =& $this->getRecord();
+
+		if (isset($record['contents'][$path])) {
+			return $record['contents'][$path];
+		}
+
+		return null;
+	}
+
+	public function wasFileDeleted($path) {
+		$record =& $this->getRecord();
+
+		return isset($record['deleted-file'][$path]);
+	}
+
+	public function wasDirDeleted($path) {
+		$record =& $this->getRecord();
+
+		return isset($record['deleted-dir'][$path]);
+	}
+
+	public function atomicWrite($filename, $data) {
+		$record                        =& $this->getRecord();
+		$record['contents'][$filename] = $data;
+
+		return strlen($data);
+	}
+
+	public function flock($handle, $type) {
+		// Ignore for now
+	}
+
+	public function unlink($filename) {
+		$record                            =& $this->getRecord();
+		$record['deleted-file'][$filename] = 1;
+	}
+
+	public function recursiveRmDir($dir) {
+		$record                      =& $this->getRecord();
+		$record['deleted-dir'][$dir] = 1;
+	}
+
+	public function file_exists($path) {
+		return true;
+	}
+
+	public function is_dir($path) {
+		return preg_match('{/(module|theme)/\w+$}', $path);
+	}
+}

@@ -1,0 +1,233 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * AdminRepository controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Jozef Selesi <selesi at gmail dot com>
+ * @version $Revision: 17580 $
+ */
+class AdminRepositoryControllerTest extends GalleryControllerTestCase {
+	public $_galleryTemplateAdapter;
+
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminRepository');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		global $gallery;
+
+		$this->_originalSession        = $gallery->_session;
+		$this->_galleryTemplateAdapter =& $gallery->getTemplateAdapter();
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$gallery->_templateAdapter =& $this->_galleryTemplateAdapter;
+		$gallery->_session         = $this->_originalSession;
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testUpdateIndex() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('form[action][update]', 1);
+
+		$mockAdapter               = new MockTemplateAdapter();
+		$gallery->_templateAdapter =& $mockAdapter;
+		$results                   = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'core.ProgressBar',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Assert that we have 1 callback in the queue
+		$this->assertEquals(1, $mockAdapter->getCallbackCount());
+
+		$callback = $mockAdapter->getCallback(0);
+
+		$this->assertEquals(array($this->_controller, 'updatePluginStatus'), $callback[0]);
+	}
+
+	public function testSaveRepositories() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('form[repositories][released]', 1);
+		GalleryUtilities::putRequestVariable(
+			'form[repositories][experimental]',
+			'<script>something malicious</script>'
+		);
+		GalleryUtilities::putRequestVariable('form[repositories][experimental]', 'experimental');
+		GalleryUtilities::putRequestVariable('form[repositories][community]', 'checked');
+		GalleryUtilities::putRequestVariable('form[repositories][something_else]', 1);
+		GalleryUtilities::putRequestVariable('form[action][update]', 1);
+
+		$this->_markPluginParametersForCleanup('module', 'core');
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'core.repositories',
+			serialize(array())
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$mockAdapter               = new MockTemplateAdapter();
+		$gallery->_templateAdapter =& $mockAdapter;
+		$results                   = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'core.ProgressBar',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $data) = GalleryCoreApi::getPluginParameter('module', 'core', 'core.repositories');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'released'     => 1,
+				'community'    => 1,
+				'experimental' => 1,
+			),
+			unserialize($data)
+		);
+	}
+
+	public function testUpgradeAllNoUpgradeAvailable() {
+		GalleryUtilities::putRequestVariable('form[action][upgradeAll]', 1);
+
+		$repository = new UnitTestRepository();
+
+		$repository->setReply('getAllUpgradeablePackages', array(), array(null, array()));
+
+		$this->_controller->_repositories['test'] = $repository;
+
+		// Test case when no upgradeable packages exist.
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminRepository',
+				),
+				'status'   => array(
+					'noUpgradeAvailable' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testUpgradeAll() {
+		GalleryUtilities::putRequestVariable('form[action][upgradeAll]', 1);
+
+		$packages = array(
+			'module' => array(
+				'testModule' => array(
+					'package1'   => 1,
+					'lang-en_US' => 1,
+				),
+			),
+		);
+
+		$repository = new UnitTestRepository();
+
+		$repository->setReply('getAllUpgradeablePackages', array(), array(null, $packages));
+
+		$this->_controller->_repositories['test'] = $repository;
+
+		// Test case when some packages are upgradeable.
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'core.ProgressBar',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		/*
+		 * We do not test the download process itself here, because it shares
+		 * the general download code path that is tested in testDownload.
+		 */
+	}
+}
+
+class AdminRepositoryControllerTestUrlGenerator {
+	public function generateUrl($params = array(), $options = array()) {
+		$buf = array();
+
+		foreach ($params as $key => $value) {
+			$buf[] = "$key=$value";
+		}
+
+		return implode(',', $buf);
+	}
+}
+
+class AdminRepositoryControllerTestSession extends GallerySession {
+	public $_testStatus;
+
+	public function putStatus($statusData) {
+		$this->_testStatus = $statusData;
+	}
+
+	public function getStatus($remove = true) {
+		return empty($this->_testStatus) ? false : array_pop($this->_testStatus);
+	}
+}

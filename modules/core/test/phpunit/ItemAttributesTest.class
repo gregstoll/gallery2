@@ -1,0 +1,1001 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test ItemAttribute functionality.
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemAttributesTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_saveSession = $gallery->_session;
+
+		// Clear response headers
+		$headers =& GalleryUtilities::_getResponseHeaders();
+		$headers = array();
+
+		list($ret, $this->_album) = $this->_createRandomAlbum(
+			$this->_getRootId(),
+			array(
+				'orderBy'        => 'id',
+				'orderDirection' => ORDER_ASCENDING,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		/*
+		 * The album inherits the permissions from the root album.  Thus, normalize the permissions
+		 * for the tests here.  Set it to core.view permission for everybody.
+		 */
+		$ret = GalleryCoreApi::removeItemPermissions($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $everybodyGroupId) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'core',
+			'id.everybodyGroup'
+		);
+
+		$everybodyGroupId = (int)$everybodyGroupId;
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addGroupPermission(
+			$this->_album->getId(),
+			$everybodyGroupId,
+			'core.view',
+			true
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify the permissions
+		list($ret, $compressedPerms) = GalleryCoreApi::fetchAllPermissionsForItem(
+			$this->_album->getId(),
+			true
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				array(
+					'groupId'    => $everybodyGroupId,
+					'permission' => 'core.view',
+				),
+			),
+			$compressedPerms,
+			'Failed to define initial permissions'
+		);
+
+		// Create additional test items
+		for ($i = 0; $i < 3; $i++) {
+			list($ret, $this->_items[$i]) = $this->_createRandomAlbum($this->_album->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$gallery->_session = $this->_saveSession;
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	/**
+	 * Update the view count and verify it.
+	 */
+	public function testSetItemViewCount() {
+		$ret = GalleryCoreApi::setItemViewCount($this->_items[0]->getId(), 999);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(999 == $viewCount, 'Set View Count');
+	}
+
+	/**
+	 * Update the view count and verify it.
+	 */
+	public function testIncrementItemViewCount() {
+		global $gallery;
+
+		$gallery->_phpVm   = new ItemAttributesTestPhpVm();
+		$gallery->_session = new ItemAttributesTestSession();
+
+		$ret = GalleryCoreApi::setItemViewCount($this->_items[0]->getId(), 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::incrementItemViewCount($this->_items[0]->getId(), 3);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(3, $viewCount);
+		$this->assertEquals(
+			array(),
+			GalleryUtilities::_getResponseHeaders(),
+			'No headers should be sent for logged in users'
+		);
+	}
+
+	/**
+	 * Verify that we do not increment the view count until a day after the last increment within
+	 * the same session.
+	 */
+	public function testDontIncrementItemViewCountTooOften() {
+		global $gallery;
+
+		$gallery->_phpVm   = new ItemAttributesTestPhpVm();
+		$gallery->_session = new ItemAttributesTestSession();
+
+		$ret = GalleryCoreApi::setItemViewCount($this->_items[0]->getId(), 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		for ($i = 0; $i < 8; $i++) {
+			$ret = GalleryCoreApi::incrementItemViewCount($this->_items[0]->getId(), 1);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(1, $viewCount);
+	}
+
+	/**
+	 * Verify that we do not increment the view count until a day after the last increment within
+	 * the same session.
+	 */
+	public function testIncrementItemViewCountThreshold() {
+		global $gallery;
+
+		$gallery->_phpVm   = new ItemAttributesTestPhpVm();
+		$gallery->_session = new ItemAttributesTestSession();
+		$session           =& $gallery->_session;
+
+		$ret = GalleryCoreApi::setItemViewCount($this->_items[0]->getId(), 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::incrementItemViewCount($this->_items[0]->getId(), 1);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Backdate our last viewed time by *almost* one day
+		$lastViewed                             =& $session->get('core.lastViewed');
+		$lastViewed[$this->_items[0]->getId()] -= 86398;
+
+		$ret = GalleryCoreApi::incrementItemViewCount($this->_items[0]->getId(), 1);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// No change; a full day has not elapsed
+		$this->assertEquals(1, $viewCount);
+
+		// Backdate it further over the day line
+		$lastViewed                             =& $session->get('core.lastViewed');
+		$lastViewed[$this->_items[0]->getId()] -= 4;
+
+		$ret = GalleryCoreApi::incrementItemViewCount($this->_items[0]->getId(), 1);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Now it changes
+		$this->assertEquals(2, $viewCount);
+	}
+
+	public function testIncrementItemViewCountGuestNoSessionIfModifiedNotSetIsSearchEngine() {
+		global $gallery;
+
+		$gallery->_phpVm   = new ItemAttributesTestPhpVm(false, array(), time());
+		$gallery->_session = new ItemAttributesTestSession(false, true);
+
+		$this->_becomeGuestUser();
+
+		unset($_SERVER['HTTP_IF_MODIFIED_SINCE']);
+
+		$ret = GalleryCoreApi::setItemViewCount($this->_items[0]->getId(), 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::incrementItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, $viewCount, 'first attempt, search engine -> do not increment');
+
+		// It only sets the header if it actually increments
+		$this->assertEquals(array(), GalleryUtilities::_getResponseHeaders());
+	}
+
+	public function testIncrementItemViewCountGuestNoSessionIfModifiedNotSetIsNotSearchEngine() {
+		global $gallery;
+
+		$now               = time();
+		$gallery->_phpVm   = new ItemAttributesTestPhpVm(false, array(), $now);
+		$gallery->_session = new ItemAttributesTestSession(false, false);
+
+		$this->_becomeGuestUser();
+
+		unset($_SERVER['HTTP_IF_MODIFIED_SINCE']);
+
+		$ret = GalleryCoreApi::setItemViewCount($this->_items[0]->getId(), 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::incrementItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(1, $viewCount, 'First attempt, not search engine -> increment');
+
+		$this->assertEquals(
+			array(
+				'last-modified' => 'Last-Modified: ' . GalleryUtilities::getHttpDate($now),
+				'expires'       => 'Expires: ' . GalleryUtilities::getHttpDate($now - 3600 * 24 * 7),
+			),
+			GalleryUtilities::_getResponseHeaders()
+		);
+	}
+
+	public function testIncrementItemViewCountGuestIfModifiedIsSet() {
+		global $gallery;
+
+		$gallery->_phpVm   = new ItemAttributesTestPhpVm();
+		$gallery->_session = new ItemAttributesTestSession(false);
+
+		$this->_becomeGuestUser();
+
+		$_SERVER['HTTP_IF_MODIFIED_SINCE'] = 'something';
+
+		$ret = GalleryCoreApi::setItemViewCount($this->_items[0]->getId(), 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::incrementItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, $viewCount);
+	}
+
+	public function testIncrementItemViewCountGuestIfModifiedIsSet2() {
+		global $gallery;
+
+		$gallery->_phpVm = new ItemAttributesTestPhpVm(
+			true,
+			array(
+				'If-Modified-Since' => 'something',
+			)
+		);
+
+		$gallery->_session = new ItemAttributesTestSession(false);
+
+		$this->_becomeGuestUser();
+
+		unset($_SERVER['HTTP_IF_MODIFIED_SINCE']);
+
+		$ret = GalleryCoreApi::setItemViewCount($this->_items[0]->getId(), 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::incrementItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, $viewCount);
+	}
+
+	public function testIncrementItemViewCountGuestIfModifiedIsSetNotGuest() {
+		global $gallery;
+
+		$gallery->_phpVm = new ItemAttributesTestPhpVm(
+			true,
+			array(
+				'If-Modified-Since' => 'something',
+			)
+		);
+
+		$gallery->_session                 = new ItemAttributesTestSession();
+		$asdminUserId                      = $gallery->getActiveUserId();
+		$_SERVER['HTTP_IF_MODIFIED_SINCE'] = 'foobar';
+
+		$ret = GalleryCoreApi::setItemViewCount($this->_items[0]->getId(), 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($asdminUserId, $gallery->getActiveUserId(), 'admin user id');
+
+		$ret = GalleryCoreApi::incrementItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $viewCount) = GalleryCoreApi::fetchItemViewCount($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(1, $viewCount, 'View count');
+	}
+
+	/**
+	 * Update the view count and verify it
+	 */
+	public function testSetOrderWeight() {
+		$ret = GalleryCoreApi::setItemOrderWeight($this->_items[0]->getId(), 123);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $orderWeight) = GalleryCoreApi::fetchItemOrderWeight($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(123, $orderWeight);
+	}
+
+	/**
+	 * Set the weights to something sequential then verify that we can find the next
+	 * higher or lower weight.
+	 */
+	public function testFetchNextItemWeight() {
+		for ($i = 0; $i < sizeof($this->_items); $i++) {
+			$ret = GalleryCoreApi::setItemOrderWeight($this->_items[$i]->getId(), $i);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		list($ret, $higher) = GalleryCoreApi::fetchNextItemWeight($this->_items[1]->getId(), HIGHER_WEIGHT);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($higher, 2);
+
+		list($ret, $lower) = GalleryCoreApi::fetchNextItemWeight($this->_items[1]->getId(), LOWER_WEIGHT);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($lower, 0);
+	}
+
+	/**
+	 * Fetch the min/max child weight.
+	 */
+	public function textFetchExtremeChildWeight() {
+		$this->assertTrue(false);
+
+		for ($i = 0; $i < sizeof($this->_items); $i++) {
+			$ret = GalleryCoreApi::setItemOrderWeight($this->_items[$i]->getId(), 100 + $i);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		list($ret, $max) = GalleryCoreApi::fetchMaxChildWeight($this->_album->getId(), HIGHER_WEIGHT);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($max, 102);
+
+		list($ret, $min) = GalleryCoreApi::fetchMaxChildWeight($this->_album->getId(), LOWER_WEIGHT);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($max, 100);
+	}
+
+	/**
+	 * Update the view count and verify it.
+	 */
+	public function testRebalanceOrderWeights() {
+		for ($i = 0; $i < sizeof($this->_items); $i++) {
+			$ret = GalleryCoreApi::setItemOrderWeight($this->_items[$i]->getId(), $i);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$ret = GalleryCoreApi::rebalanceChildOrderWeights($this->_album->getId(), 100);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$count = sizeof($this->_items);
+
+		for ($i = 0; $i < $count; $i++) {
+			list($ret, $weight) = GalleryCoreApi::fetchItemOrderWeight($this->_items[$i]->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(
+				($i + 1) * 100,
+				$weight,
+				sprintf(
+					'item %d of %d (id: %d) is not balanced correctly',
+					$i,
+					$count,
+					$this->_items[$i]->getId()
+				)
+			);
+		}
+	}
+
+	public function testFetchParentSequence() {
+		global $gallery;
+
+		list($ret, $album) = $this->_createRandomAlbum($this->_items[1]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($album->getId());
+
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_album->getId(),
+				$this->_items[1]->getId(),
+			),
+			$parentSequence,
+			'album parent sequence'
+		);
+
+		list($ret, $item) = $this->_createRandomDataItem($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_album->getId(),
+				$this->_items[1]->getId(),
+				$album->getId(),
+			),
+			$parentSequence,
+			'item parent sequence'
+		);
+
+		// Set virtual root
+		$gallery->setConfig('breadcrumbRootId', $this->_items[1]->getId());
+
+		list($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($item->getId(), true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_items[1]->getId(),
+				$album->getId(),
+			),
+			$parentSequence,
+			'virtual root parent sequence'
+		);
+
+		list($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_album->getId(),
+				$this->_items[1]->getId(),
+				$album->getId(),
+			),
+			$parentSequence,
+			'virtual root, forced full parent sequence'
+		);
+
+		// Used to have a bug in item creation with breadcrumbRootId set
+		list($ret, $item) = $this->_createRandomDataItem($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->setConfig('breadcrumbRootId', null);
+
+		list($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_album->getId(),
+				$this->_items[1]->getId(),
+				$album->getId(),
+			),
+			$parentSequence,
+			'item parent sequence, item created in multiroot'
+		);
+	}
+
+	public function testFetchItemizedDescendentCounts() {
+		list($ret, $album) = $this->_createRandomAlbum($this->_items[1]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		for ($i = 0; $i < 3; $i++) {
+			list($ret, $item[$i]) = $this->_createRandomDataItem($album->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		// Drop perms for one item and one album
+		$ret = GalleryCoreApi::removeItemPermissions($item[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify our counts
+		list($ret, $counts) = GalleryCoreApi::fetchItemizedDescendentCounts(
+			array(
+				$this->_album->getId(),
+				$album->getId(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_album->getId() => array(
+					'GalleryAlbumItem' => 3,
+					'GalleryDataItem'  => 2,
+				),
+				$album->getId() => array(
+					'GalleryAlbumItem' => 0,
+					'GalleryDataItem'  => 2,
+				),
+			),
+			$counts
+		);
+	}
+
+	public function testFetchDescendentCounts() {
+		list($ret, $album) = $this->_createRandomAlbum($this->_items[1]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		for ($i = 0; $i < 3; $i++) {
+			list($ret, $item[$i]) = $this->_createRandomDataItem($album->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		// Drop perms for one item and one album
+		$ret = GalleryCoreApi::removeItemPermissions($item[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify our counts
+		list($ret, $counts) = GalleryCoreApi::fetchDescendentCounts(
+			array($this->_album->getId(), $album->getId())
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_album->getId() => 5,
+				$album->getId()        => 2,
+			),
+			$counts
+		);
+	}
+
+	public function testFetchDescendentCountsSessionPermission() {
+		// Session based permissions should not apply when calculating cached descendent count
+		global $gallery;
+
+		$session                 =& $gallery->getSession();
+		$this->_saveSessionPerms = $session->get(GALLERY_PERMISSION_SESSION_KEY);
+		$itemId                  = $this->_items[1]->getId();
+
+		$ret = GalleryCoreApi::removeItemPermissions($itemId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addEntityPermission($itemId, $itemId, 'core.all');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$session->put(GALLERY_PERMISSION_SESSION_KEY, array($itemId));
+
+		list($ret, $counts) = GalleryCoreApi::fetchDescendentCounts(array($this->_album->getId()));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_album->getId() => 2,
+			),
+			$counts
+		);
+
+		if (isset($this->_saveSessionPerms)) {
+			$session->put(GALLERY_PERMISSION_SESSION_KEY, $this->_saveSessionPerms);
+		} else {
+			$session->remove(GALLERY_PERMISSION_SESSION_KEY);
+		}
+	}
+
+	public function testFetchDescendentCountsDifferentUser() {
+		global $gallery;
+
+		list($ret, $album) = $this->_createRandomAlbum($this->_items[1]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create a new target user
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+
+		for ($i = 0; $i < 3; $i++) {
+			list($ret, $item[$i]) = $this->_createRandomDataItem($album->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		// Drop perms for one item and one album
+		$ret = GalleryCoreApi::removeItemPermissions($item[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Add perms back for the active user, but not our target user
+		$ret = GalleryCoreApi::addUserPermission(
+			$item[0]->getId(),
+			$gallery->getActiveUserId(),
+			'core.view',
+			false
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_items[0]->getId(),
+			$gallery->getActiveUserId(),
+			'core.view',
+			false
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify that the target user cannot see the item (even though the active user can)
+		list($ret, $counts) = GalleryCoreApi::fetchDescendentCounts(
+			array($this->_album->getId(), $album->getId()),
+			$user->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_album->getId() => 5,
+				$album->getId()        => 2,
+			),
+			$counts
+		);
+	}
+}
+
+class ItemAttributesTestSession {
+	public $_userId;
+	public $_creationTime;
+
+	public function __construct($isPersistent = true, $isSearchEngineSession = false) {
+		$this->_creationTime          = time();
+		$this->_isPersistent          = $isPersistent;
+		$this->_isSearchEngineSession = $isSearchEngineSession;
+	}
+
+	public function getId(){
+		return SESSION_TEMP_ID;
+	}
+
+	public function put($key, $value) {
+		$this->_data[$key] = $value;
+	}
+
+	public function getCreationTime() {
+		return $this->_creationTime;
+	}
+
+	public function exists($key) {
+		if (!$this->_isPersistent) {
+			return false;
+		}
+
+		return isset($this->_data[$key]);
+	}
+
+	public function &get($key) {
+		return $this->_data[$key];
+	}
+
+	public function getUserId() {
+		return $this->_userId;
+	}
+
+	public function setUserId($userId) {
+		$this->_userId = $userId;
+	}
+
+	public function isPersistent() {
+		return $this->_isPersistent;
+	}
+
+	public function isSearchEngineSession() {
+		return $this->_isSearchEngineSession;
+	}
+}
+
+class ItemAttributesTestPhpVm extends GalleryPhpVm {
+	public function __construct($getAllHeadersExists = false, $headers = array(), $time = null) {
+		$this->_getAllHeadersExists = $getAllHeadersExists;
+		$this->_headers             = $headers;
+		$this->_time                = $time;
+	}
+
+	public function getallheaders() {
+		return $this->_headers;
+	}
+
+	public function function_exists($functionName) {
+		if ($functionName == 'getallheaders') {
+			return $this->_getAllHeadersExists;
+		}
+
+		return parent::function_exists($functionName);
+	}
+
+	public function header($header, $replace = null) {
+		// Avoid modifying actual header information
+	}
+
+	public function headers_sent() {
+		return GalleryUtilities::_getResponseHeaders() != array();
+	}
+
+	public function time() {
+		if (isset($this->_time)) {
+			return $this->_time;
+		}
+
+		return time();
+	}
+}

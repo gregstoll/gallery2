@@ -1,0 +1,386 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test mail functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Jay Rossiter <cryptopgraphite@users.sf.net>
+ * @version $Revision: 20940 $
+ */
+class MailHelperTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->templateFile = 'modules/core/test/data/MailHelperTest.tpl';
+
+		global $gallery;
+
+		$this->_originalPlatform =& $gallery->getPlatform();
+		$this->_dummyPlatform    = new MailHelperDummyPlatform($this->_originalPlatform);
+
+		$gallery->setPlatform($this->_dummyPlatform);
+
+		$this->_emailData = array(
+			'to'      => 'mailhelpertest@test.com',
+			'subject' => 'MailHelperTest subject',
+			'body'    => 'MailHelperTest test string',
+		);
+	}
+
+	public function testSendTemplatedEmailEmptyFromHeader() {
+		global $gallery;
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'smtp.from', '');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expectedData = $this->_emailData;
+
+		// Do not expect whitespace to be stripped from tpl, so expect 2 leading spaces in body
+		$expectedData['body']    = "Hello:\n  " . $expectedData['body'];
+		$expectedData['headers'] = array(
+			'Date: ELIDED',
+			'Content-Type: text/plain; charset="utf-8"',
+			'',
+		);
+
+		// Test that the from header is empty
+		$platform = $gallery->getPlatform();
+
+		$ret = $platform->sendEmail(
+			$this->templateFile,
+			$this->_emailData,
+			null,
+			$this->_emailData['to'],
+			$this->_emailData['subject']
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		/*
+		 * Normalize \r\n to \n in the body to eliminate variance on Windows.  Some
+		 * Windows installs will have \r\n, but some (eg Cygwin) will just have \n.
+		 */
+		$response         = $this->_dummyPlatform->getMailData();
+		$response['body'] = str_replace("\r\n", "\n", $response['body']);
+
+		$this->assertEquals($expectedData, $response);
+	}
+
+	public function testSendTemplatedEmailFromAddressSetByFunctionInput() {
+		global $gallery;
+
+		// Test that the from header is retrieved from function input
+		$platform = $gallery->getPlatform();
+
+		$ret = $platform->sendEmail(
+			$this->templateFile,
+			$this->_emailData,
+			'mailhelpertest1@test.com',
+			$this->_emailData['to'],
+			$this->_emailData['subject']
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$response = $this->_dummyPlatform->getMailData();
+
+		$this->assertEquals('From: mailhelpertest1@test.com', $response['headers'][1]);
+	}
+
+	public function testSendTemplatedEmailFromAddressSetByCoreSmtpParameter() {
+		global $gallery;
+
+		// Test that the from header is retrieved from the core.smtp.from field
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'smtp.from',
+			'mailhelpertest2@test.com'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$platform = $gallery->getPlatform();
+
+		$ret = $platform->sendEmail(
+			$this->templateFile,
+			$this->_emailData,
+			null,
+			$this->_emailData['to'],
+			$this->_emailData['subject']
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$response = $this->_dummyPlatform->getMailData();
+
+		$this->assertEquals('From: mailhelpertest2@test.com', $response['headers'][1]);
+	}
+
+	public function testSendTemplatedEmailFunctionInputOverridesCoreSmtpParameter() {
+		global $gallery;
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'smtp.from',
+			'mailhelpertest3_core_smtp@test.com'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Set the from address and update the test data
+		$from = 'mailhelpertest2@test.com';
+
+		// Test that the from header is preferred from the function over the core.smtp.from field
+		$platform = $gallery->getPlatform();
+
+		$ret = $platform->sendEmail(
+			$this->templateFile,
+			$this->_emailData,
+			'mailhelpertest3_function_input@test.com',
+			$this->_emailData['to'],
+			$this->_emailData['subject']
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$response = $this->_dummyPlatform->getMailData();
+
+		$this->assertEquals(
+			'From: mailhelpertest3_function_input@test.com',
+			$response['headers'][1]
+		);
+	}
+
+	public function testSendTemplatedEmailWithContentType() {
+		global $gallery;
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'smtp.from', '');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$platform = $gallery->getPlatform();
+
+		$ret = $platform->sendEmail(
+			$this->templateFile,
+			$this->_emailData,
+			null,
+			$this->_emailData['to'],
+			$this->_emailData['subject'],
+			"Content-Type: text/html\r\n"
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$response = $this->_dummyPlatform->getMailData();
+
+		$this->assertEquals(
+			'Content-Type: text/html',
+			$response['headers'][1],
+			print_r($response['headers'], true)
+		);
+	}
+
+	public function testSendTemplatedEmailExtendedCharactersInSubject() {
+		global $gallery;
+
+		$platform = $gallery->getPlatform();
+
+		$ret = $platform->sendEmail(
+			$this->templateFile,
+			$this->_emailData,
+			null,
+			$this->_emailData['to'],
+			"s\xc3\xa5 utrolig",
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$response = $this->_dummyPlatform->getMailData();
+		$this->assertEquals('=?utf-8?q?s=c3=a5 utrolig?=', $response['subject']);
+	}
+
+	public function testSendTemplatedEmailMultiRecipient() {
+		global $gallery;
+
+		$this->_emailData = array(
+			'to'      => 'mailhelpertest@test.com',
+			'subject' => 'MailHelperTest subject',
+			'body'    => 'MailHelperTest test string',
+			'headers' => '',
+		);
+
+		$multiTo  = 'test1@example.com,test2@example.com,test3@example.com,test4@example.com';
+		$platform = $gallery->getPlatform();
+
+		$ret = $platform->sendEmail(
+			$this->templateFile,
+			$this->_emailData,
+			null,
+			$multiTo,
+			$this->_emailData['subject']
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(4, $this->_dummyPlatform->getMailedCount(), 'MailedCount incorrect');
+	}
+}
+
+/**
+ * Dummy GalleryPlatform for MailHelperTest
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class MailHelperDummyPlatform {
+	public function __construct($platform) {
+		$this->_platform         = $platform;
+		$_REQUEST['mailedCount'] = 0;
+	}
+
+	public function mail($to, $subject, $body, $headers = null) {
+		// Normalize the date field in the headers to avoid having to worry about exact seconds
+		$headers              = preg_replace("/Date:.*?\r\n/", "Date: ELIDED\r\n", $headers);
+		$_REQUEST['maildata'] = array(
+			'to'      => $to,
+			'subject' => $subject,
+			'body'    => trim($body),
+			'headers' => explode("\r\n", $headers),
+		);
+
+		$_REQUEST['mailedCount']++;
+
+		return true;
+	}
+
+	public function getMailedCount() {
+		return $_REQUEST['mailedCount'];
+	}
+
+	public function getMailData() {
+		return $_REQUEST['maildata'];
+	}
+
+	public function realpath($file) {
+		return $this->_platform->realpath($file);
+	}
+
+	public function getDirectorySeparator() {
+		return $this->_platform->getDirectorySeparator();
+	}
+
+	public function file_exists($filename) {
+		return $this->_platform->file_exists($filename);
+	}
+
+	public function is_dir($filename) {
+		return $this->_platform->is_dir($filename);
+	}
+
+	public function is_writeable($filename) {
+		return $this->_platform->is_writeable($filename);
+	}
+
+	public function is_readable($filename) {
+		return $this->_platform->is_readable($filename);
+	}
+
+	public function stat($filename) {
+		return $this->_platform->stat($filename);
+	}
+
+	public function mkdir($path) {
+		return $this->_platform->mkdir($path);
+	}
+
+	public function fopen($filename, $mode, $use_include_path = 0) {
+		return $this->_platform->fopen($filename, $mode, $use_include_path);
+	}
+
+	public function recursiveRmdir($dirname) {
+		return $this->_platform->recursiveRmdir($dirname);
+	}
+
+	public function fclose($handle) {
+		return $this->_platform->fclose($handle);
+	}
+
+	public function flock($handle, $operation, &$wouldblock) {
+		return $this->_platform->flock($handle, $operation, $wouldblock);
+	}
+
+	public function sendEmail(
+		$file,
+		$body,
+		$from,
+		$to,
+		$subject,
+		$headers = null
+	) {
+		return $this->_platform->sendEmail(
+			$file,
+			$body,
+			$from,
+			$to,
+			$subject,
+			$headers
+		);
+	}
+}

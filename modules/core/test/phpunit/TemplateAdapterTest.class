@@ -1,0 +1,1078 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+// Define FORCE_GZIP for PHP environments without the zlib extension
+if (!defined('FORCE_GZIP')) {
+	define('FORCE_GZIP', 'FORCE_GZIP');
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplateAdapter.class');
+
+/**
+ * Test Gallery Template Adapter functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Jesse Mullan
+ * @version $Revision: 20957 $
+ */
+class TemplateAdapterTest extends GalleryTestCase {
+	public function GalleryTemplateAdapterTest($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function _setupAdapterWithMocks() {
+		global $gallery;
+
+		$this->_mockUrlGenerator = new TemplateAdapterMockUrlGenerator();
+
+		$gallery->setUrlGenerator($this->_mockUrlGenerator);
+
+		$this->_mockSmarty              = new TemplateAdapterMockSmarty();
+		$this->_templateAdapter         = new GalleryTemplateAdapter();
+		$this->_templateAdapter->_theme = new TemplateAdapterMockTheme();
+	}
+
+	public function testLinkId1() {
+		$test = array(
+			'urlParams' => array(),
+		);
+
+		$result = GalleryTemplateAdapter::linkId($test);
+
+		$this->assertEquals('gbAdminLink gbLink', $result);
+	}
+
+	public function testLinkId2() {
+		$test = array(
+			'urlParams' => array(
+				'view' => 'core.:ItemAdmin',
+			),
+		);
+
+		$result = GalleryTemplateAdapter::linkId($test);
+
+		$this->assertEquals('gbAdminLink gbLink-core_ItemAdmin', $result);
+	}
+
+	public function testLinkId3() {
+		$test = array(
+			'urlParams' => array(
+				'view' => '.;-_monkey',
+			),
+		);
+
+		$result = GalleryTemplateAdapter::linkId($test);
+
+		$this->assertEquals('gbAdminLink gbLink-monkey', $result);
+	}
+
+	public function testLinkId4() {
+		$test = array(
+			'urlParams' => array(
+				'controller' => 'core.Monkey',
+				'view'       => 'core.Pirate',
+				'subView'    => 'core.Ninja',
+			),
+		);
+
+		$result = GalleryTemplateAdapter::linkId($test);
+
+		$this->assertEquals('gbAdminLink gbLink-core_Monkey-core_Pirate-core_Ninja', $result);
+	}
+
+	public function testLinkId5() {
+		$test = array(
+			'view' => 'core.Pirate',
+		);
+
+		$result = GalleryTemplateAdapter::linkId($test);
+
+		$this->assertEquals('gbAdminLink gbLink-core_Pirate', $result);
+	}
+
+	public function testLinkId6() {
+		$test = array(
+			'view'      => 'core.Pirate',
+			'urlParams' => array(
+				'controller' => 'core.Monkey',
+				'view'       => 'core.Pirate',
+				'subView'    => 'core.Ninja',
+			),
+		);
+
+		$result = GalleryTemplateAdapter::linkId($test);
+
+		$this->assertEquals('gbAdminLink gbLink-core_Monkey-core_Pirate-core_Ninja', $result);
+	}
+
+	public function testSafeCssName1() {
+		$string = 'core.ItemAdmin';
+		$result = GalleryTemplateAdapter::_safeCssName($string);
+
+		$this->assertEquals('core_ItemAdmin', $result);
+	}
+
+	public function testSafeCssName2() {
+		$string = 'core..ItemAdmin';
+		$result = GalleryTemplateAdapter::_safeCssName($string);
+
+		$this->assertEquals('core_ItemAdmin', $result);
+	}
+
+	public function testSafeCssName3() {
+		$string = '.;-_monkey';
+		$result = GalleryTemplateAdapter::_safeCssName($string);
+
+		$this->assertEquals('-monkey', $result);
+	}
+
+	public function testForceFullUrlOn() {
+		$this->_setupAdapterWithMocks();
+
+		$this->_templateAdapter->url(
+			array(
+				'arg1'         => 'foo=bar',
+				'forceFullUrl' => 'anything',
+			),
+			$this->_mockSmarty
+		);
+
+		$this->assertEquals(
+			array(
+				array(
+					'foo' => 'bar',
+				),
+				array(
+					'forceFullUrl' => 'anything',
+				),
+			),
+			$this->_mockUrlGenerator->_calls
+		);
+	}
+
+	public function testForceFullUrlOff() {
+		$this->_setupAdapterWithMocks();
+
+		$this->_templateAdapter->url(
+			array(
+				'arg1' => 'foo=bar',
+			),
+			$this->_mockSmarty
+		);
+
+		$this->assertEquals(
+			array(
+				array(
+					'foo' => 'bar',
+				),
+				array(),
+			),
+			$this->_mockUrlGenerator->_calls
+		);
+	}
+
+	public function testUrlParamsAndArgs() {
+		$this->_setupAdapterWithMocks();
+
+		$this->_templateAdapter->url(
+			array(
+				'params' => array(
+					'view' => 'fun.View',
+				),
+				'arg1'   => 'foo=bar',
+			),
+			$this->_mockSmarty
+		);
+
+		$this->assertEquals(
+			array(
+				array(
+					'view' => 'fun.View',
+					'foo'  => 'bar',
+				),
+				array(),
+			),
+			$this->_mockUrlGenerator->_calls
+		);
+	}
+
+	public function testUrlOptionsAndBulkOptions() {
+		$this->_setupAdapterWithMocks();
+
+		$this->_templateAdapter->url(
+			array(
+				'options' => array(
+					'foo' => 'foo',
+					'bar' => 'bar',
+				),
+				'foo'     => 'bar',
+			),
+			$this->_mockSmarty
+		);
+
+		$this->assertEquals(
+			array(
+				array(),
+				array(
+					'foo' => 'bar',
+					'bar' => 'bar',
+				),
+			),
+			$this->_mockUrlGenerator->_calls
+		);
+	}
+
+	public function testChangeInDescendents() {
+		$test = array(
+			'module'    => 'pirate',
+			'text'      => 'ninja',
+			'l10Domain' => 'modules_foo',
+		);
+
+		$this->_setupAdapterWithMocks();
+
+		$result = GalleryTemplateAdapter::changeInDescendents($test, $this->_mockSmarty);
+
+		$this->assertEquals(
+			'<input type="checkbox" id="pirate_ChangeInDescendents" ' .
+			'name="g2_form[changeInDescendents][pirate]"/> <label ' .
+			'for="pirate_ChangeInDescendents"> ninja</label>',
+			$result
+		);
+	}
+
+	// Make sure viewL10domain does not get ignored
+	public function testTextViewL10domain() {
+		global $gallery;
+
+		$gallery->_translator = new TemplateAdapterMockTranslator();
+
+		$this->_setupAdapterWithMocks();
+
+		$this->_mockSmarty->_tpl_vars['l10Domain']     = 'modules_testfail';
+		$this->_mockSmarty->_tpl_vars['viewL10domain'] = 'modules_testpass';
+		$translated                                    = $this->_templateAdapter->text(
+			array(
+				'text' => 'Test failed',
+			),
+			$this->_mockSmarty
+		);
+		$this->assertEquals('Test passed', $translated);
+	}
+
+	public function testTextNotForJavaScript() {
+		$this->_setupAdapterWithMocks();
+
+		$this->_mockSmarty->_tpl_vars['l10Domain'] = 'modules_foo';
+		$translated                                = $this->_templateAdapter->text(
+			array(
+				'text' => "Text with a single ' quote",
+			),
+			$this->_mockSmarty
+		);
+		$this->assertEquals("Text with a single ' quote", $translated);
+	}
+
+	public function testTextForJavaScript() {
+		$this->_setupAdapterWithMocks();
+
+		$this->_mockSmarty->_tpl_vars['l10Domain'] = 'modules_foo';
+		$translated                                = $this->_templateAdapter->text(
+			array(
+				'text'          => "Text with a single ' quote",
+				'forJavascript' => true,
+			),
+			$this->_mockSmarty
+		);
+		$this->assertEquals("Text with a single \\' quote", $translated, 'single quote');
+
+		$translated = $this->_templateAdapter->text(
+			array(
+				'text'          => 'Text with a double " quote',
+				'forJavascript' => true,
+			),
+			$this->_mockSmarty
+		);
+		$this->assertEquals('Text with a double \\" quote', $translated, 'double quote');
+
+		$translated = $this->_templateAdapter->text(
+			array(
+				'text'          => 'Text with a %s backslash',
+				'arg1'          => '\\',
+				'forJavascript' => true,
+			),
+			$this->_mockSmarty
+		);
+		$this->assertEquals('Text with a \\\\ backslash', $translated, 'backslash in arg1');
+	}
+
+	public function testTextPostSprintf() {
+		global $gallery;
+
+		$gallery->_translator = new TemplateAdapterMockTranslator();
+
+		$this->_setupAdapterWithMocks();
+
+		$this->_mockSmarty->_tpl_vars['l10Domain'] = 'modules_foo';
+		$translated                                = $this->_templateAdapter->text(
+			array(
+				'text'            => 'Test %s',
+				'arg1'            => 'FOO',
+				'postSprintfArg1' => 'foo',
+			),
+			$this->_mockSmarty
+		);
+		$this->assertEquals('bar', $translated);
+
+		$translated = $this->_templateAdapter->text(
+			array(
+				'text'            => 'Test %s',
+				'arg1'            => 'FUN',
+				'postSprintfArg1' => 'fun',
+			),
+			$this->_mockSmarty
+		);
+		$this->assertEquals('TEST FUN', $translated);
+	}
+
+	public function testThemeUrls() {
+		$this->_setupAdapterWithMocks();
+
+		$results = $this->_templateAdapter->theme(
+			array(
+				'url' => 'foo.css',
+			),
+			$this->_mockSmarty
+		);
+
+		$this->assertEquals(
+			array(
+				array(
+					'href' => 'themes/mock/foo.css',
+				),
+				array(),
+			),
+			$results,
+			'Theme URLs'
+		);
+	}
+
+	public function testThemeUrlsWithOverride() {
+		global $gallery;
+
+		$this->_setupAdapterWithMocks();
+
+		$base         = dirname(dirname(__DIR__)) . '/../../';
+		$mockPlatform = new UnitTestPlatform();
+
+		$mockPlatform->setReply('file_exists', array($base . 'themes/mock/local/foo.css'), 1);
+		$mockPlatform->setReply('is_readable', array($base . 'themes/mock/local/foo.css'), 1);
+
+		$gallery->_platform =& $mockPlatform;
+		$results            = $this->_templateAdapter->theme(
+			array(
+				'url' => 'foo.css',
+			),
+			$this->_mockSmarty
+		);
+
+		$this->assertEquals(
+			array(
+				array(
+					'href' => 'themes/mock/local/foo.css',
+				),
+				array(),
+			),
+			$results,
+			'Theme URLs With Override'
+		);
+	}
+
+	public function testThemeUrlsWithOverrideSubdir() {
+		global $gallery;
+
+		$this->_setupAdapterWithMocks();
+
+		$base         = dirname(dirname(__DIR__)) . '/../../';
+		$mockPlatform = new UnitTestPlatform();
+
+		$mockPlatform->setReply(
+			'file_exists',
+			array($base . 'themes/mock/templates/local/foo.css'),
+			1
+		);
+		$mockPlatform->setReply(
+			'is_readable',
+			array($base . 'themes/mock/templates/local/foo.css'),
+			1
+		);
+
+		$gallery->_platform =& $mockPlatform;
+		$results            = $this->_templateAdapter->theme(
+			array(
+				'url' => 'templates/foo.css',
+			),
+			$this->_mockSmarty
+		);
+
+		$this->assertEquals(
+			array(
+				array(
+					'href' => 'themes/mock/templates/local/foo.css',
+				),
+				array(),
+			),
+			$results,
+			'Theme URLs With Override Subdir'
+		);
+	}
+
+	public function testAutoCompleteIncludesAuthToken() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		$this->_setupAdapterWithMocks();
+
+		$url                          = 'http://example.com/main.php?foo=bar';
+		$this->_mockSmarty->_tpl_vars = 1;
+
+		$this->_templateAdapter->autoComplete(
+			array(
+				'element' => 'giFormUsername',
+			),
+			$url,
+			$this->_mockSmarty
+		);
+
+		$expectedUrl = $url . '&g2_authToken=' . $session->getAuthToken();
+
+		$this->assertEquals(
+			array(
+				'smarty_include_tpl_file' => 'gallery:modules/core/templates/AutoComplete.tpl',
+				'smarty_include_vars'     => array(
+					'element'   => 'giFormUsername',
+					'url'       => $expectedUrl,
+					'callCount' => 1,
+				),
+			),
+			$this->_mockSmarty->_includes[0]
+		);
+	}
+
+	public function testCombineJavascriptFiles() {
+		global $gallery;
+
+		$gallery->_phpVm        = new UnitTestPhpVm();
+		$gallery->_platform     = new UnitTestPlatform();
+		$gallery->_urlGenerator = new UnitTestUrlGenerator();
+
+		GalleryDataCache::setFileCachingEnabled(true);
+
+		$gallery->setConfig('data.gallery.cache', '/cache/');
+
+		$base = GalleryCoreApi::getCodeBasePath();
+
+		$gallery->_platform->setReply('file_exists', array($base . 'path/file1.js'), true);
+
+		$gallery->_platform->setReply(
+			'stat',
+			array($base . 'path/file1.js'),
+			array(
+				7 => 7,
+				9 => 9,
+			)
+		);
+
+		$gallery->_platform->setReply('file_exists', array($base . 'path/file2.txt'), true);
+
+		$gallery->_platform->setReply(
+			'stat',
+			array($base . 'path/file2.txt'),
+			array(
+				7 => 7,
+				9 => 9,
+			)
+		);
+
+		$gallery->_phpVm->setReply('md5', array('path/file1.js 7 9,path/file2.txt 7 9,'), 'MD5KEY');
+		$gallery->_platform->setReply(
+			'file_exists',
+			array('/cache/module/_all/0/0/CombinedJavascript_MD5KEY.inc'),
+			false
+		);
+		$gallery->_platform->setReply('file_get_contents', array($base . 'path/file1.js'), 'ONE');
+		$gallery->_phpVm->setReply('function_exists', array('gzencode'), true);
+		$gallery->_platform->setReply('file_get_contents', array($base . 'path/file2.txt'), 'TWO');
+		$gallery->_platform->setReply('file_exists', array('/cache/module/_all/0/0'), true);
+		$gallery->_platform->setReply('is_dir', array('/cache/module/_all/0/0'), true);
+		$gallery->_platform->setReply(
+			'atomicWrite',
+			array('/cache/module/_all/0/0/CombinedJavascript_MD5KEY.inc', '|s:6:"ONETWO";'),
+			true
+		);
+
+		$gallery->_platform->setReply('file_exists', array('/cache/module/_all/0/0'), true);
+		$gallery->_platform->setReply('is_dir', array('/cache/module/_all/0/0'), true);
+		$gallery->_phpVm->setReply('gzencode', array('ONETWO', 9, FORCE_GZIP), 'gzencode(ONETWO)');
+		$gallery->_platform->setReply(
+			'atomicWrite',
+			array(
+				'/cache/module/_all/0/0/CombinedJavascript_gzip_MD5KEY.inc',
+				'|s:16:"gzencode(ONETWO)";',
+			),
+			true
+		);
+
+		$templateAdapter = new GalleryTemplateAdapter();
+
+		$templateAdapter->_combineJavascriptFiles(
+			array('path/file1.js', 'path/file2.txt', 'main.php?foo=bar'),
+			$output
+		);
+
+		$this->assertEquals(
+			array(
+				'<script type="text/javascript" ' .
+				'src="http://gallery2|view=core.CombinedJavascript|key=MD5KEY'
+				. '|forceDirect:1|forceFullUrl:1"></script>',
+				'<script type="text/javascript" '
+				. 'src="http://gallery2|href=main.php?foo=bar"></script>',
+			),
+			$output
+		);
+
+		$this->assertTrue($gallery->_phpVm->isComplete());
+		$this->assertTrue($gallery->_platform->isComplete());
+	}
+
+	public function testCombineJavascriptFilesWithDynamic() {
+		global $gallery;
+
+		$gallery->_phpVm        = new UnitTestPhpVm();
+		$gallery->_platform     = new UnitTestPlatform();
+		$gallery->_urlGenerator = new UnitTestUrlGenerator();
+
+		GalleryDataCache::setFileCachingEnabled(true);
+
+		$gallery->setConfig('data.gallery.cache', '/cache/');
+		$this->_buildPlatformResponses('path/file1.js', 'MD5KEY', 'ONE');
+		$this->_buildPlatformResponses('path/file2.txt', 'MD5KEY2', 'FOUR');
+
+		$templateAdapter = new GalleryTemplateAdapter();
+
+		$templateAdapter->_combineJavascriptFiles(
+			array('path/file1.js', 'main.php?foo=bar', 'path/file2.txt'),
+			$output
+		);
+
+		$expected = array('');
+
+		$this->assertEquals(
+			array(
+				'<script type="text/javascript" '
+				. 'src="http://gallery2|view=core.CombinedJavascript|key=MD5KEY'
+				. '|forceDirect:1|forceFullUrl:1"></script>',
+				'<script type="text/javascript" '
+				. 'src="http://gallery2|href=main.php?foo=bar"></script>',
+				'<script type="text/javascript" '
+				. 'src="http://gallery2|view=core.CombinedJavascript|key=MD5KEY2'
+				. '|forceDirect:1|forceFullUrl:1"></script>',
+			),
+			$output
+		);
+
+		$this->assertTrue($gallery->_phpVm->isComplete());
+		$this->assertTrue($gallery->_platform->isComplete());
+	}
+
+	public function testCombineJavascriptFilesUseYuiUtilities() {
+		global $gallery;
+
+		$gallery->_phpVm        = new UnitTestPhpVm();
+		$gallery->_platform     = new UnitTestPlatform();
+		$gallery->_urlGenerator = new UnitTestUrlGenerator();
+
+		GalleryDataCache::setFileCachingEnabled(true);
+
+		$gallery->setConfig('data.gallery.cache', '/cache/');
+		$this->_buildPlatformResponses('lib/yui/utilities.js', 'MD5KEY', 'THREE');
+
+		$templateAdapter = new GalleryTemplateAdapter();
+
+		$templateAdapter->_combineJavascriptFiles(
+			array('lib/yui/yahoo-dom-event.js', 'lib/yui/utilities.js'),
+			$output
+		);
+
+		$expected = array('');
+
+		$this->assertEquals(
+			array(
+				'<script type="text/javascript" '
+				. 'src="http://gallery2|view=core.CombinedJavascript|key=MD5KEY'
+				. '|forceDirect:1|forceFullUrl:1"></script>',
+			),
+			$output
+		);
+
+		$this->assertTrue($gallery->_phpVm->isComplete());
+		$this->assertTrue($gallery->_platform->isComplete());
+	}
+
+	public function _buildPlatformResponses($filename, $md5Key, $content) {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+		$base     = GalleryCoreApi::getCodeBasePath();
+
+		$platform->setReply('file_exists', array($base . $filename), true);
+
+		$platform->setReply(
+			'stat',
+			array($base . $filename),
+			array(
+				7 => 7,
+				9 => 9,
+			)
+		);
+
+		$gallery->_phpVm->setReply('md5', array($filename . ' 7 9,'), $md5Key);
+		$platform->setReply(
+			'file_exists',
+			array('/cache/module/_all/0/0/CombinedJavascript_' . $md5Key . '.inc'),
+			false
+		);
+		$platform->setReply('file_get_contents', array($base . $filename), $content);
+		$gallery->_phpVm->setReply('function_exists', array('gzencode'), false);
+		$platform->setReply('file_exists', array('/cache/module/_all/0/0'), true);
+		$platform->setReply('is_dir', array('/cache/module/_all/0/0'), true);
+
+		$length = strlen($content);
+
+		$platform->setReply(
+			'atomicWrite',
+			array(
+				'/cache/module/_all/0/0/CombinedJavascript_' . $md5Key . '.inc',
+				'|s:' . $length
+				. ':"' . $content . '";',
+			),
+			true
+		);
+	}
+
+	public function testItemLink() {
+		$this->_setupAdapterWithMocks();
+		$this->assertEquals('[missing link]', $this->_templateAdapter->itemLink(array()));
+
+		$link = array(
+			'params'  => array(
+				'view' => 'test.View',
+			),
+			'options' => array(),
+			'text'    => 'test link',
+		);
+
+		$expected = '<a href="Array" class="gbAdminLink gbLink-test_View">test link</a>';
+		$actual   = $this->_templateAdapter->itemLink(
+			array(
+				'link' => $link,
+			)
+		);
+
+		$this->assertTrue(
+			true,
+			$expected . ' == ' . $actual,
+			'Item Link'
+		);
+
+		$this->assertEquals(
+			array($link['params'], $link['options']),
+			$this->_mockUrlGenerator->_calls
+		);
+	}
+
+	public function testItemLinkWithScript() {
+		$this->_setupAdapterWithMocks();
+
+		$link = array(
+			'params'  => array(
+				'view' => 'test.View',
+			),
+			'options' => array(
+				'forceFullUrl' => true,
+			),
+			'text'    => 'Test Link',
+			'script'  => 'alert(\'hi\')',
+			'attrs'   => 'title="fun"',
+		);
+
+		$expected = '<a href="Array" onclick="alert(\'hi\');return false" title="fun" '
+		. 'target="_blank">test link</a>';
+		$actual   = $this->_templateAdapter->itemLink(
+			array(
+				'link'      => $link,
+				'lowercase' => true,
+				'class'     => null,
+				'target'    => '_blank',
+			)
+		);
+
+		$this->assertTrue(
+			true,
+			$expected . ' == ' . $actual,
+			'Item Link with Script'
+		);
+
+		$this->assertEquals(
+			array($link['params'], $link['options']),
+			$this->_mockUrlGenerator->_calls
+		);
+	}
+
+	public function testItemLinkAsSelectOption() {
+		$this->_setupAdapterWithMocks();
+
+		$link = array(
+			'params'  => array(
+				'view' => 'test.View',
+			),
+			'options' => array(),
+			'text'    => 'Test link',
+		);
+
+		$this->assertEquals(
+			'<option value="window.location=\'Array\'">Test link</option>',
+			$this->_templateAdapter->itemLink(
+				array(
+					'link' => $link,
+					'type' => 'option',
+				)
+			)
+		);
+
+		$this->assertEquals(
+			array($link['params'], $link['options']),
+			$this->_mockUrlGenerator->_calls
+		);
+	}
+
+	public function testItemLinkOverrideTextClassAndAddAttribute() {
+		$this->_setupAdapterWithMocks();
+
+		$link = array(
+			'params'  => array(
+				'view' => 'test.View',
+			),
+			'options' => array(),
+			'text'    => 'Test link',
+		);
+
+		$expected = '<a href="Array" title="Some Title" class="">Text Override</a>';
+		$actual   = $this->_templateAdapter->itemLink(
+			array(
+				'link'  => $link,
+				'text'  => 'Text Override',
+				'title' => 'Some Title',
+				'class' => '',
+			)
+		);
+
+		$this->assertTrue(
+			true,
+			$expected . ' == ' . $actual,
+			'Override Class and Add Attrib'
+		);
+
+		$this->assertEquals(
+			array($link['params'], $link['options']),
+			$this->_mockUrlGenerator->_calls
+		);
+	}
+
+	// With compile check, i.e., just checking tpl file
+	public function testMissingBlockWithCompileCheck() {
+		$this->_setupAdapterWithMocks();
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_mockSmarty->_tpl_vars['l10Domain'] = 'modules_foo';
+		$params                                    = array(
+			'type' => 'core.Bogus',
+		);
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'smarty.compile_check', true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_templateAdapter->block($params, $this->_mockSmarty);
+
+		$this->assertEquals(
+			array(
+				'smarty_include_tpl_file' => 'gallery:modules/core/templates/blocks/Missing.tpl',
+				'smarty_include_vars'     => array(
+					'type'      => 'core.Bogus',
+					'class'     => 'block-core-Missing',
+					'l10Domain' => 'modules_core',
+				),
+			),
+			$this->_mockSmarty->_includes[0]
+		);
+	}
+
+	// Without compile check, i.e., happy if compiled template exists
+	public function testMissingBlockNoCompileCheckTplCached() {
+		global $gallery;
+
+		$this->_setupAdapterWithMocks();
+
+		$mockPlatform = new UnitTestPlatform();
+
+		$mockPlatform->setReply(
+			'file_exists',
+			array('gallery:modules/core/templates/blocks/Bogus.tpl'),
+			1
+		);
+
+		$gallery->_platform =& $mockPlatform;
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_mockSmarty->_tpl_vars['l10Domain'] = 'modules_foo';
+		$params                                    = array(
+			'type' => 'core.Bogus',
+		);
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'smarty.compile_check', false);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_templateAdapter->block($params, $this->_mockSmarty);
+
+		$this->assertEquals(
+			array(
+				'smarty_include_tpl_file' => 'gallery:modules/core/templates/blocks/Bogus.tpl',
+				'smarty_include_vars'     => array(
+					'type'      => 'core.Bogus',
+					'class'     => 'block-core-Bogus',
+					'l10Domain' => 'modules_core',
+				),
+			),
+			$this->_mockSmarty->_includes[0]
+		);
+	}
+
+	// Without compile check; no compiled template and no tpl
+	public function testMissingBlockNoCompileCheck() {
+		global $gallery;
+
+		$this->_setupAdapterWithMocks();
+
+		$mockPlatform = new UnitTestPlatform();
+
+		$mockPlatform->setReply(
+			'file_exists',
+			array('gallery:modules/core/templates/blocks/Bogus.tpl'),
+			0
+		);
+
+		$gallery->_platform =& $mockPlatform;
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_mockSmarty->_tpl_vars['l10Domain'] = 'modules_foo';
+		$params                                    = array(
+			'type' => 'core.Bogus',
+		);
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'smarty.compile_check', false);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_templateAdapter->block($params, $this->_mockSmarty);
+
+		$this->assertEquals(
+			array(
+				'smarty_include_tpl_file' => 'gallery:modules/core/templates/blocks/Missing.tpl',
+				'smarty_include_vars'     => array(
+					'type'      => 'core.Bogus',
+					'class'     => 'block-core-Missing',
+					'l10Domain' => 'modules_core',
+				),
+			),
+			$this->_mockSmarty->_includes[0]
+		);
+	}
+
+	public function testHeadContentFromTemplate() {
+		// Use a real GalleryTemplate / smarty instance to test the whole loop
+		GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+
+		$template = new GalleryTemplate(GalleryCoreApi::getCodeBasePath());
+
+		$template->title('My Test Page');
+		$template->meta('test1', 'value 1');
+		$template->meta('test2', 'value 2', true);
+		$template->style('/test.css');
+
+		$template->link(
+			array(
+				'attr1' => 'value1',
+				'attr2' => 'value2',
+			)
+		);
+
+		$template->javascript('http://test.com/test.js?foo');
+		$template->setVariable(
+			'theme',
+			array(
+				'pageType' => 'album',
+			)
+		);
+
+		$expected = array(
+			'',
+			'<title>My Test Page</title>',
+			'<link rel="stylesheet" type="text/css" href="/test.css"/>',
+			'<link attr1="value1" attr2="value2"/>',
+			'<script type="text/javascript" src="http://test.com/test.js?foo"></script>',
+			'<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>',
+			'<meta name="test1" content="value 1"/>',
+			'<meta http-equiv="test2" content="value 2"/>',
+		);
+
+		$templateAdapter = new GalleryTemplateAdapter();
+		$output          = $templateAdapter->head(array(), $template->_smarty);
+
+		$this->assertEquals(implode("\n", $expected), $output);
+	}
+
+	public function testHeadContentFromTemplateNoCombinedJavascript() {
+		// Use a real GalleryTemplate / smarty instance to test the whole loop
+		GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+
+		$template = new GalleryTemplate(GalleryCoreApi::getCodeBasePath());
+
+		$template->title('My Test Page');
+		$template->meta('test1', 'value 1');
+		$template->meta('test2', 'value 2', true);
+		$template->style('/test.css');
+
+		$template->link(
+			array(
+				'attr1' => 'value1',
+				'attr2' => 'value2',
+			)
+		);
+
+		$template->javascript('http://test.com/test.js?foo');
+		$template->javascript('http://test.com/test2.js?foo');
+		$template->setVariable(
+			'theme',
+			array(
+				'pageType' => 'error',
+			)
+		);
+
+		$expected = array(
+			'',
+			'<title>My Test Page</title>',
+			'<link rel="stylesheet" type="text/css" href="/test.css"/>',
+			'<link attr1="value1" attr2="value2"/>',
+			'<script type="text/javascript" src="http://test.com/test.js?foo"></script>',
+			'<script type="text/javascript" src="http://test.com/test2.js?foo"></script>',
+			'<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>',
+			'<meta name="test1" content="value 1"/>',
+			'<meta http-equiv="test2" content="value 2"/>',
+		);
+
+		$templateAdapter = new GalleryTemplateAdapter();
+		$output          = $templateAdapter->head(array(), $template->_smarty);
+
+		$this->assertEquals(implode("\n", $expected), $output);
+	}
+}
+
+class TemplateAdapterMockTheme {
+	public function getId() {
+		return 'mock';
+	}
+}
+
+class TemplateAdapterMockSmarty {
+	public $_includes = array();
+
+	public function _smarty_include($params) {
+		$this->_includes[] = $params;
+	}
+
+	public function template_exists($path) {
+		return strpos($path, 'Bogus') === false;
+	}
+
+	public function _get_compile_path($path) {
+		return $path;
+	}
+}
+
+class TemplateAdapterMockUrlGenerator {
+	public $_calls;
+
+	public function generateUrl($params = array(), $options = array()) {
+		$this->_calls = array($params, $options);
+
+		return $this->_calls;
+	}
+}
+
+class TemplateAdapterMockTranslator {
+	public function translateDomain($domain, $params) {
+		$result = null;
+
+		if ($domain == 'modules_testpass' && $params['text'] == 'Test failed') {
+			$result = 'Test passed';
+		} elseif ($domain == 'modules_foo' && $params === 'Test foo') {
+			$result = 'bar';
+		} elseif ($domain == 'modules_foo' && $params === 'Test fun') {
+			$result = $params;
+		} elseif ($domain == 'modules_foo' && $params['text'] == 'Test %s') {
+			$result = sprintf('TEST %s', $params['arg1']);
+		}
+
+		return array(null, $result);
+	}
+}

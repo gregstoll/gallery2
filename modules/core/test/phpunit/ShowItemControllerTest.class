@@ -1,0 +1,131 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ShowItem controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ShowItemControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.ShowItem');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Bend the rules
+		$this->_saveSession = $gallery->_session;
+		$gallery->_session  = new GallerySession();
+
+		$ret = $gallery->_session->initEmpty();
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		// Restore our session
+		$gallery->_session = $this->_saveSession;
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testTurnOnGuestPreviewMode() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		$session->put('theme.guestPreviewMode', 0);
+
+		GalleryUtilities::putRequestVariable('guestPreviewMode', '1');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'return' => 1,
+				'status' => array(),
+				'error'  => array(),
+			),
+			$results
+		);
+
+		$this->assertEquals(1, $session->get('theme.guestPreviewMode'));
+	}
+
+	public function testTurnOffGuestPreviewMode() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		$session->put('theme.guestPreviewMode', 1);
+
+		GalleryUtilities::putRequestVariable('guestPreviewMode', '0');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'return' => 1,
+				'status' => array(),
+				'error'  => array(),
+			),
+			$results
+		);
+
+		$this->assertEquals(0, $session->get('theme.guestPreviewMode'));
+	}
+
+	public function testIgnoreGuestPreviewMode() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		$session->put('theme.guestPreviewMode', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'return' => 1,
+				'status' => array(),
+				'error'  => array(),
+			),
+			$results
+		);
+
+		$this->assertEquals(1, $session->get('theme.guestPreviewMode'));
+	}
+}

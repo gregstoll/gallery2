@@ -1,0 +1,162 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/BuildDerivativesTask.class');
+
+/**
+ * Test the BuildDerivatives maintenance task functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class BuildDerivativesTaskTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_task = new BuildDerivativesTask();
+	}
+
+	public function tearDown() {
+		// Task turns off warnings for MSSQL database; turn back on to restore original state
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		if (GalleryUtilities::isA($storage, 'MSSqlStorage')) {
+			$ret = $storage->execute('SET ANSI_WARNINGS ON');
+
+			if ($ret) {
+				$this->failWithStatus($ret);
+			}
+		}
+
+		return parent::tearDown();
+	}
+
+	public function testQueries() {
+		global $gallery;
+
+		list($ret, $noDerivativeItem) = $this->_createRandomDataItem($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($noDerivativeItem);
+
+		list($ret, $brokenDerivativeItem) = $this->_createRandomDataItem($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($brokenDerivativeItem);
+
+		list($ret, $derivative) = $this->_createDerivative(
+			$brokenDerivativeItem,
+			$brokenDerivativeItem->getId(),
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+			'test-operation|150',
+			'test/file',
+			array(
+				'isBroken' => true,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Mock storage returns no ids, so this just tests the queries run ok
+		$gallery->_storage         = new BuildDerivativesTaskTestStorage($gallery->getStorage());
+		$mockStorage               =& $gallery->_storage;
+		$gallery->_templateAdapter = new MockTemplateAdapter();
+		$mockAdapter               =& $gallery->_templateAdapter;
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $success, $details) = $this->_task->run();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($success);
+
+		$this->assertEquals(
+			array(
+				$module->translate(
+					array(
+						'text' => 'Checked %d items',
+						'arg1' => 0,
+					)
+				),
+			),
+			$details
+		);
+
+		$searches = $mockStorage->getSearches();
+
+		$this->assertEquals(2, count($searches), 'query count');
+		$this->assertTrue($searches[0] > 0, 'query 1 should have at least one result');
+		$this->assertTrue($searches[1] > 0, 'query 2 should have at least one result');
+	}
+}
+
+class BuildDerivativesTaskTestStorage {
+	public function __construct($storage) {
+		$this->_storage  = $storage;
+		$this->_searches = array();
+	}
+
+	public function search($query, $data = array(), $optional = array()) {
+		list($ret, $results) = $this->_storage->search($query, $data, $optional);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		$this->_searches[] = $results->resultCount();
+
+		// Return no results so task does not actually act on any derivatives
+		$rs = new ADORecordSet(0);
+
+		$rs->Init();
+
+		return array(null, new GallerySearchResults($rs));
+	}
+
+	public function getSearches() {
+		return $this->_searches;
+	}
+}

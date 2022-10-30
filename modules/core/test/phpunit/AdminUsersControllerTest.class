@@ -1,0 +1,281 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * AdminUsers controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminUsersControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminUsers');
+	}
+
+	public function testFilterClear() {
+		GalleryUtilities::putRequestVariable('form[action][filterClear]', 1);
+		GalleryUtilities::putRequestVariable('form[list][filter]', 'foo');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(null, GalleryUtilities::getRequestVariables('form[list][filter]'));
+	}
+
+	public function testCreate() {
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminCreateUser',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testEditFromText() {
+		// Normal
+		list($ret, $user) = $this->_createUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+
+		GalleryUtilities::putRequestVariable('form[action][editFromText]', 1);
+		GalleryUtilities::putRequestVariable('form[text][userName]', $user->getUserName());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditUser',
+					'userId'  => $user->getId(),
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Missing user name
+		GalleryUtilities::putRequestVariable('form[action][editFromText]', 1);
+		GalleryUtilities::removeRequestVariable('form[text][userName]');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][noUserSpecified]'),
+			),
+			$results
+		);
+
+		// Invalid user name
+		GalleryUtilities::putRequestVariable('form[action][editFromText]', 1);
+		GalleryUtilities::putRequestVariable(
+			'form[text][userName]',
+			'some-invalid-user-name-' . mt_rand()
+		);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][noSuchUser]'),
+			),
+			$results
+		);
+	}
+
+	public function testDeleteFromText() {
+		// Normal
+		list($ret, $user) = $this->_createUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+
+		GalleryUtilities::putRequestVariable('form[action][deleteFromText]', 1);
+		GalleryUtilities::putRequestVariable('form[text][userName]', $user->getUserName());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminDeleteUser',
+					'userId'  => $user->getId(),
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Missing user name
+		GalleryUtilities::putRequestVariable('form[action][deleteFromText]', 1);
+		GalleryUtilities::removeRequestVariable('form[text][userName]');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][noUserSpecified]'),
+			),
+			$results
+		);
+
+		// Invalid user name
+		GalleryUtilities::putRequestVariable('form[action][deleteFromText]', 1);
+		GalleryUtilities::putRequestVariable(
+			'form[text][userName]',
+			'some-invalid-user-name-' . mt_rand()
+		);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][noSuchUser]'),
+			),
+			$results
+		);
+	}
+
+	public function testDeleteAnonymous() {
+		global $gallery;
+
+		list($ret, $anonymousUserId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $anonymousUser) = GalleryCoreApi::loadEntitiesById($anonymousUserId, 'GalleryUser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][deleteFromText]', 1);
+		GalleryUtilities::putRequestVariable('form[text][userName]', $anonymousUser->getUserName());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][cantDeleteAnonymous]'),
+			),
+			$results
+		);
+	}
+
+	public function testDeleteSelf() {
+		global $gallery;
+
+		$self = $gallery->getActiveUser();
+
+		GalleryUtilities::putRequestVariable('form[action][deleteFromText]', 1);
+		GalleryUtilities::putRequestVariable('form[text][userName]', $self->getUserName());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][cantDeleteSelf]'),
+			),
+			$results
+		);
+	}
+
+	public function _createUser($fields = array()) {
+		global $gallery;
+
+		list($ret, $user) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryUser');
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		if (!isset($user)) {
+			return array(
+				GalleryCoreApi::error(ERROR_MISSING_OBJECT),
+				null,
+			);
+		}
+
+		$ret = $user->create('testuser-' . mt_rand());
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		$ret = $user->save();
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		return array(null, $user);
+	}
+}

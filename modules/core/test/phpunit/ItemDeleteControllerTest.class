@@ -1,0 +1,351 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemDelete controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemDeleteControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.ItemDelete');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// create an album to hold all of the test items
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+	}
+
+	/**
+	 * Create a random album and verify that we can delete it.
+	 */
+	public function testDeleteItem() {
+		global $gallery;
+
+		// Create a random album
+		list($ret, $album) = $this->_createRandomAlbum($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('itemId', $album->getParentId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$album->getId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'   => 'core.ShowItem',
+					'itemId' => $album->getParentId(),
+				),
+				'status'   => array(
+					'deleted' => array(
+						'count' => 1,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Make sure the album is actually gone
+		$ret = $this->_verifyMissing($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testDeleteNextPageOutOfRange() {
+		global $gallery;
+
+		// create random items
+		$items = array();
+
+		for ($i = 0; $i < 5; $i++) {
+			if (($i % 2) == 0) {
+				list($ret, $items[$i]) = $this->_createRandomAlbum($this->_album->getId());
+			} else {
+				list($ret, $items[$i]) = $this->_createRandomDataItem($this->_album->getId());
+			}
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$selectedIds = array();
+
+		foreach ($items as $item) {
+			$selectedIds[$item->getId()] = 1;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+		GalleryUtilities::putRequestVariable('form[selectedIds]', $selectedIds);
+		GalleryUtilities::putRequestVariable('form[numPerPage]', 3);
+		GalleryUtilities::putRequestVariable('page', 3);
+		GalleryUtilities::putRequestVariable('form[action][next]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$results = GalleryUtilities::strArrToIntArr($results);
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemDelete',
+					'itemId'  => $this->_album->getId(),
+					'page'    => 2,
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results,
+			'Delete Next Page Out Of Range'
+		);
+	}
+
+	public function testDeletePreviousPageOutOfRange() {
+		global $gallery;
+
+		// create random items
+		$items = array();
+
+		for ($i = 0; $i < 5; $i++) {
+			if (($i % 2) == 0) {
+				list($ret, $items[$i]) = $this->_createRandomAlbum($this->_album->getId());
+			} else {
+				list($ret, $items[$i]) = $this->_createRandomDataItem($this->_album->getId());
+			}
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$selectedIds = array();
+
+		foreach ($items as $item) {
+			$selectedIds[$item->getId()] = 1;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+		GalleryUtilities::putRequestVariable('form[selectedIds]', $selectedIds);
+		GalleryUtilities::putRequestVariable('page', -1);
+		GalleryUtilities::putRequestVariable('form[action][previous]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemDelete',
+					'itemId'  => $this->_album->getId(),
+					'page'    => 1,
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Create a random album and verify that we can delete multiple items
+	 */
+	public function testDeleteMultipleItems() {
+		global $gallery;
+
+		// create random items
+		$items = array();
+
+		for ($i = 0; $i < 5; $i++) {
+			if (($i % 2) == 0) {
+				list($ret, $items[$i]) = $this->_createRandomAlbum($this->_album->getId());
+			} else {
+				list($ret, $items[$i]) = $this->_createRandomDataItem($this->_album->getId());
+			}
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$selectedIds = array();
+
+		foreach ($items as $item) {
+			$selectedIds[$item->getId()] = 1;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+		GalleryUtilities::putRequestVariable('form[selectedIds]', $selectedIds);
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'   => 'core.ShowItem',
+					'itemId' => $this->_album->getId(),
+				),
+				'status'   => array(
+					'deleted' => array(
+						'count' => 5,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// make sure they are really missing
+		foreach ($items as $item) {
+			$ret = $this->_verifyMissing($item->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+	}
+
+	/**
+	 * try to delete a bunch of items some of which we do not have permission
+	 * to do so
+	 */
+	public function testDeleteMultipleItemsWithoutPermission() {
+		global $gallery;
+
+		// create random items
+		$items = array();
+
+		for ($i = 0; $i < 10; $i++) {
+			if (($i % 2) == 0) {
+				list($ret, $items[$i]) = $this->_createRandomAlbum($this->_album->getId());
+			} else {
+				list($ret, $items[$i]) = $this->_createRandomDataItem($this->_album->getId());
+			}
+
+			if ($ret) {
+				return $ret;
+			}
+
+			// remove permissions for some
+			if (($i % 3) == 0) {
+				$ret = GalleryCoreApi::removeItemPermissions($items[$i]->getId());
+
+				if ($ret) {
+					return $ret;
+				}
+
+				$ret = GalleryCoreApi::addUserPermission(
+					$items[$i]->getId(),
+					$gallery->getActiveUserId(),
+					'core.view'
+				);
+
+				if ($ret) {
+					return $ret;
+				}
+			}
+		}
+
+		$selectedIds = array();
+
+		foreach ($items as $item) {
+			$selectedIds[$item->getId()] = 1;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+		GalleryUtilities::putRequestVariable('form[selectedIds]', $selectedIds);
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest(ERROR_PERMISSION_DENIED);
+	}
+
+	/**
+	 * Test deleting the root album We should get a bad parameter error
+	 */
+	public function testDeleteRootAlbum() {
+		global $gallery;
+
+		// Use invalid inputs
+		GalleryUtilities::putRequestVariable('itemId', $this->_getRootId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$this->_getRootId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+	}
+
+	/**
+	 * Test deleting a random item that does not exist.  We should get a
+	 * permission denied (since the permission check happens before we even
+	 * verify that it is a valid item to prevent information leakage)
+	 */
+	public function testDeleteBogusItem() {
+		list($ret, $bogusId) = $this->_getUnusedId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Use invalid inputs
+		GalleryUtilities::putRequestVariable('itemId', $this->_getRootId());
+		GalleryUtilities::putRequestVariable('form[selectedIds]', array($bogusId));
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest(ERROR_MISSING_OBJECT);
+	}
+}

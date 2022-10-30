@@ -1,0 +1,1214 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryPluginHelper_medium.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryView.class');
+
+/**
+ * Test GalleryView functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Ernesto Baschny <ernst@baschny.de>
+ * @version $Revision: 17957 $
+ */
+class ViewTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ViewTestModule = new ViewTestModule();
+		GalleryPluginHelper_medium::setPluginInstance(
+			'module',
+			'viewtest',
+			$ViewTestModule
+		);
+	}
+
+	public function testLoadViewSuccess() {
+		list($ret, $view) = GalleryView::loadView('core.ShowItem');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testLoadViewFail() {
+		list($ret, $view) = GalleryView::loadView('viewtest.SomeRandomView');
+
+		if ($ret && $ret->getErrorCode() & ERROR_PERMISSION_DENIED) {
+			// this is what we expect
+		} else {
+			$this->assertTrue(false, 'The view of a deactivated module should not load.');
+		}
+	}
+
+	public function testGetConfigurationView() {
+		/*
+		 * We can load the config view even though the module is deactivated
+		 * because we are an admin.
+		 */
+		list($ret, $view) = GalleryView::loadView('viewtest.ViewTestConfig');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGetItem() {
+		global $gallery;
+
+		list($ret, $view) = GalleryView::loadView('core.ShowItemError');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($album);
+
+		GalleryUtilities::putRequestVariable('itemId', $album->getId());
+
+		list($ret, $item, $wasSpecified) = $view->getItem();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($wasSpecified, 'itemId specified');
+		$this->assertEquals($album->getId(), $item->getId(), 'itemId');
+
+		GalleryUtilities::removeRequestVariable('itemId');
+
+		list($ret, $item, $wasSpecified) = $view->getItem();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($wasSpecified, 'not specified');
+		$this->assertEquals($this->_getRootId(), $item->getId(), 'root album by default');
+
+		// ShowItem view returns wasSpecified==true even when root album selected by default
+		list($ret, $view) = GalleryView::loadView('core.ShowItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $item, $wasSpecified) = $view->getItem();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($wasSpecified, 'ShowItem specified');
+		$this->assertEquals($this->_getRootId(), $item->getId(), 'ShowItem root album by default');
+
+		// Override default album
+		$gallery->setConfig('defaultAlbumId', $album->getId());
+
+		GalleryUtilities::removeRequestVariable('itemId');
+
+		list($ret, $item) = $view->getItem();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($album->getId(), $item->getId(), 'Alternate default album');
+	}
+
+	public function testGetItemOnlyReturnsItems() {
+		global $gallery;
+
+		list($ret, $view) = GalleryView::loadView('core.ShowItemError');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $gallery->getActiveUserId());
+
+		list($ret, $item, $wasSpecified) = $view->getItem();
+
+		$this->assertTrue($ret, 'getItem() should return an error if the itemId is the id of a user.');
+		$this->assertTrue($ret->getErrorCode() & ERROR_MISSING_OBJECT, 'ERROR_MISSING_OBJECT');
+	}
+
+	public function testGetItemRequiresViewPermission() {
+		global $gallery;
+
+		list($ret, $view) = GalleryView::loadView('core.ShowItemError');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($album);
+
+		GalleryUtilities::putRequestVariable('itemId', $album->getId());
+
+		$ret = GalleryCoreApi::removeItemPermissions($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $item, $wasSpecified) = $view->getItem();
+
+		if ($ret) {
+			if (!($ret->getErrorCode() & ERROR_MISSING_OBJECT)) {
+				$this->fail('Wrong error code, expected ERROR_MISSING_OBJECT');
+
+				return $ret;
+			}
+		} else {
+			$this->fail('Expected ERROR_MISSING_OBJECT, no error returned');
+		}
+
+		// No permission check
+		list($ret, $item, $wasSpecified) = $view->getItem(false);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($wasSpecified, 'no permissions check, itemId specified');
+		$this->assertEquals($album->getId(), $item->getId(), 'no permission check, itemId');
+
+		// Prepare test with permission
+		$ret = GalleryCoreApi::addUserPermission(
+			$album->getId(),
+			$gallery->getActiveUserId(),
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $item, $wasSpecified) = $view->getItem();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($wasSpecified, 'with permissions, itemId specified');
+		$this->assertEquals($album->getId(), $item->getId(), 'with permission, itemId');
+	}
+
+	public function testLoadThemeAndParametersDefaultTheme() {
+		list($ret, $view, $itemId) = $this->_prepareForLoadThemeAndParameters();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Make sure it uses the default params / settings
+		GalleryUtilities::removeRequestVariable('itemId');
+
+		list($ret, $theme, $params, $item) = $view->loadThemeAndParameters();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $defaultAlbumId) = GalleryCoreApi::getDefaultAlbumId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $defaultAlbum) = GalleryCoreApi::loadEntitiesById($defaultAlbumId, 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $expectedThemeId) = GalleryCoreApi::fetchThemeId($defaultAlbum);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $paramValue) = GalleryCoreApi::getPluginParameter(
+			'theme',
+			$expectedThemeId,
+			'_version',
+			$defaultAlbumId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (!isset($paramValue)) {
+			list($ret, $paramValue) = GalleryCoreApi::getPluginParameter('theme', $expectedThemeId, '_version');
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		if (isset($theme)) {
+			$this->assertEquals($expectedThemeId, $theme->getId());
+		} else {
+			$this->fail('No theme instance returned');
+		}
+
+		if (isset($item)) {
+			$this->assertEquals($defaultAlbumId, $item->getId(), 'item id');
+		} else {
+			$this->fail('No item instance returned');
+		}
+
+		if (isset($params['_version'])) {
+			$this->assertEquals($paramValue, $params['_version'], 'param value');
+		} else {
+			$this->assertEquals(
+				array(
+					'_version' => $paramValue,
+				),
+				$params,
+				'No param value returned'
+			);
+		}
+	}
+
+	public function testLoadThemeAndParametersForAlbumItem() {
+		list($ret, $view, $itemId) = $this->_prepareForLoadThemeAndParameters(false, 'viewtestthemeid1');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $theme, $params, $item) = $view->loadThemeAndParameters();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (isset($theme)) {
+			$this->assertEquals('viewtestthemeid1', $theme->getId());
+		} else {
+			$this->fail('No theme instance returned');
+		}
+
+		if (isset($item)) {
+			$this->assertEquals($itemId, $item->getId(), 'item id');
+		} else {
+			$this->fail('No item instance returned');
+		}
+
+		$this->assertEquals(
+			array(
+				'testParam' => 'per album value',
+			),
+			$params,
+			'theme params'
+		);
+	}
+
+	public function testLoadThemeAndParametersForDataItem() {
+		list($ret, $view, $itemId) = $this->_prepareForLoadThemeAndParameters(true, 'viewtestthemeid1');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $theme, $params, $item) = $view->loadThemeAndParameters();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (isset($theme)) {
+			$this->assertEquals('viewtestthemeid1', $theme->getId());
+		} else {
+			$this->fail('No theme instance returned');
+		}
+
+		if (isset($item)) {
+			$this->assertEquals($itemId, $item->getId(), 'item id');
+		} else {
+			$this->fail('No item instance returned');
+		}
+
+		$this->assertEquals(
+			array(
+				'testParam' => 'per album value',
+			),
+			$params,
+			'theme params'
+		);
+	}
+
+	public function testLoadThemeAndParametersOverrideByEventListener() {
+		list($ret, $view, $itemId) = $this->_prepareForLoadThemeAndParameters();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$listener = new ViewTestEventListener($this, 'viewtestthemeid1', null, $itemId);
+
+		$this->_registerTestEventListener('Gallery::LoadThemeAndParameters', $listener);
+
+		list($ret, $theme, $params, $item) = $view->loadThemeAndParameters();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (isset($theme)) {
+			$this->assertEquals('viewtestthemeid1', $theme->getId());
+		} else {
+			$this->fail('No theme instance returned');
+		}
+
+		if (isset($item)) {
+			$this->assertEquals($itemId, $item->getId(), 'item id');
+		} else {
+			$this->fail('No item instance returned');
+		}
+
+		$this->assertEquals(
+			array(
+				'testParam' => 'per album value',
+			),
+			$params,
+			'theme params'
+		);
+	}
+
+	public function testLoadThemeAndParametersOverrideByEventListenerIncludingParams() {
+		list($ret, $view, $itemId) = $this->_prepareForLoadThemeAndParameters(true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$themeParams = array(
+			'foo' => 1,
+			'bar' => 2,
+		);
+
+		$listener = new ViewTestEventListener($this, 'viewtestthemeid1', $themeParams, $itemId);
+
+		$this->_registerTestEventListener('Gallery::LoadThemeAndParameters', $listener);
+
+		list($ret, $theme, $params, $item) = $view->loadThemeAndParameters();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (isset($theme)) {
+			$this->assertEquals('viewtestthemeid1', $theme->getId());
+		} else {
+			$this->fail('No theme instance returned');
+		}
+
+		if (isset($item)) {
+			$this->assertEquals($itemId, $item->getId(), 'item id');
+		} else {
+			$this->fail('No item instance returned');
+		}
+
+		$this->assertEquals($themeParams, $params, 'theme params');
+	}
+
+	public function testLoadThemeAndParametersOverrideByEventListenerWithInactiveTheme() {
+		list($ret, $view, $itemId) = $this->_prepareForLoadThemeAndParameters(true, 'viewtestthemeid1');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$themeParams = array(
+			'foo' => 1,
+			'bar' => 2,
+		);
+
+		$listener = new ViewTestEventListener($this, 'viewtestthemeid2', $themeParams, $itemId);
+
+		$this->_registerTestEventListener('Gallery::LoadThemeAndParameters', $listener);
+
+		list($ret, $theme, $params, $item) = $view->loadThemeAndParameters();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (isset($theme)) {
+			$this->assertEquals('viewtestthemeid1', $theme->getId());
+		} else {
+			$this->fail('No theme instance returned');
+		}
+
+		if (isset($item)) {
+			$this->assertEquals($itemId, $item->getId(), 'item id');
+		} else {
+			$this->fail('No item instance returned');
+		}
+
+		$this->assertEquals(
+			array(
+				'testParam' => 'per album value',
+			),
+			$params,
+			'theme params'
+		);
+	}
+
+	public function testLoadThemeAndParametersOverrideByEventListenerWithBogusTheme() {
+		list($ret, $view, $itemId) = $this->_prepareForLoadThemeAndParameters(true, 'viewtestthemeid1');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$themeParams = array(
+			'foo' => 1,
+			'bar' => 2,
+		);
+
+		$listener = new ViewTestEventListener($this, 'bogustesttheme', $themeParams, $itemId);
+
+		$this->_registerTestEventListener('Gallery::LoadThemeAndParameters', $listener);
+
+		list($ret, $theme, $params, $item) = $view->loadThemeAndParameters();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (isset($theme)) {
+			$this->assertEquals('viewtestthemeid1', $theme->getId());
+		} else {
+			$this->fail('No theme instance returned');
+		}
+
+		if (isset($item)) {
+			$this->assertEquals($itemId, $item->getId(), 'item id');
+		} else {
+			$this->fail('No item instance returned');
+		}
+
+		$this->assertEquals(
+			array(
+				'testParam' => 'per album value',
+			),
+			$params,
+			'theme params'
+		);
+	}
+
+	public function _prepareForLoadThemeAndParameters($forDataItem = false, $themeId = null) {
+		global $gallery;
+
+		$ViewTestThemeId1Theme = new ViewTestThemeId1Theme();
+		GalleryPluginHelper_medium::setPluginInstance(
+			'theme',
+			'Viewtestthemeid1',
+			$ViewTestThemeId1Theme
+		);
+
+		$ViewTestThemeId2Theme = new ViewTestThemeId2Theme();
+		GalleryPluginHelper_medium::setPluginInstance(
+			'theme',
+			'viewtestthemeid2',
+			$ViewTestThemeId2Theme
+		);
+
+		list($ret, $album) = $this->_createRandomAlbum(
+			$this->_getRootId(),
+			array(
+				'theme' => $themeId,
+			)
+		);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		$this->_markForCleanup($album);
+
+		$itemId = $album->getId();
+
+		if ($forDataItem) {
+			list($ret, $dataItem) = $this->_createRandomDataItem($album->getId());
+
+			if ($ret) {
+				return array($ret, null, null);
+			}
+
+			$itemId = $dataItem->getId();
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $itemId);
+
+		list($ret, $view) = GalleryView::loadView('core.ShowItem');
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		$gallery->setCurrentView('test.test');
+
+		return array(null, $view, $itemId);
+	}
+
+	public function testLoadThemeForItemPostsEvent() {
+		/*
+		 * loadThemeForItem is a public method used e.g. in GalleryTemplate.
+		 * Verify that the loadThemeAndParameters is posted here.
+		 */
+		$ret = $this->_registerEventListener('Gallery::LoadThemeAndParameters');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $view, $itemId) = $this->_prepareForLoadThemeAndParameters();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $theme) = $view->loadThemeForItem();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEventFired(
+			'Gallery::LoadThemeAndParameters',
+			null,
+			array(
+				'viewType' => VIEW_TYPE_SHOW_ITEM,
+				'viewName' => 'test.test',
+			)
+		);
+	}
+
+	public function testDoLoadTemplateAddsNoCacheNoIndexHeadersForAdminView() {
+		global $gallery;
+
+		$gallery->_phpVm = new UnitTestPhpVm();
+
+		$gallery->_phpVm->setReply('time', array(), strtotime('Sun, 16 Mar 2008 21:00:00 GMT'));
+		$gallery->_phpVm->setReply('headers_sent', array(), false);
+		$gallery->_phpVm->setReply('header', array('Cache-Control: no-cache', ''), true);
+		$gallery->_phpVm->setReply('header', array('Pragma: no-cache', ''), true);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Sun, 09 Mar 2008 21:00:00 GMT', ''),
+			true
+		);
+
+		$template = new GalleryTemplate(GalleryCoreApi::getCodeBasePath());
+		$view     = new ViewTestAdminView();
+
+		list($ret, $results, $theme) = $view->doLoadTemplate($template);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$head = $template->getVariable('head');
+
+		$this->assertEquals(
+			array(
+				array(
+					'name'        => 'robots',
+					'content'     => 'noindex',
+					'isHttpEquiv' => false,
+				),
+				array(
+					'name'        => 'Cache-Control',
+					'content'     => 'no-cache',
+					'isHttpEquiv' => true,
+				),
+				array(
+					'name'        => 'Pragma',
+					'content'     => 'no-cache',
+					'isHttpEquiv' => true,
+				),
+				array(
+					'name'        => 'Expires',
+					'content'     => 'Sun, 09 Mar 2008 21:00:00 GMT',
+					'isHttpEquiv' => true,
+				),
+			),
+			$head['meta']
+		);
+
+		$this->assertTrue($gallery->_phpVm->isComplete(), $gallery->_phpVm->getRemaining());
+	}
+
+	public function testDoLoadTemplateDoesNotAddNoIndexDirectiveForNonAdminView() {
+		global $gallery;
+
+		$gallery->_phpVm = new UnitTestPhpVm();
+
+		$gallery->_phpVm->setReply('time', array(), strtotime('Sun, 16 Mar 2008 21:00:00 GMT'));
+		$gallery->_phpVm->setReply('headers_sent', array(), false);
+		$gallery->_phpVm->setReply('header', array('Cache-Control: no-cache', ''), true);
+		$gallery->_phpVm->setReply('header', array('Pragma: no-cache', ''), true);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Sun, 09 Mar 2008 21:00:00 GMT', ''),
+			true
+		);
+
+		$template = new GalleryTemplate(GalleryCoreApi::getCodeBasePath());
+
+		$template->setVariable(
+			'head',
+			array(
+				'meta' => array(),
+			)
+		);
+
+		// Config view is Module View with no itemId defined
+		$view = new ViewTestConfigView();
+
+		list($ret, $results, $theme) = $view->doLoadTemplate($template);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$head = $template->getVariable('head');
+
+		$this->assertEquals(
+			array(
+				array(
+					'name'        => 'Cache-Control',
+					'content'     => 'no-cache',
+					'isHttpEquiv' => true,
+				),
+				array(
+					'name'        => 'Pragma',
+					'content'     => 'no-cache',
+					'isHttpEquiv' => true,
+				),
+				array(
+					'name'        => 'Expires',
+					'content'     => 'Sun, 09 Mar 2008 21:00:00 GMT',
+					'isHttpEquiv' => true,
+				),
+			),
+			$head['meta']
+		);
+
+		$this->assertTrue($gallery->_phpVm->isComplete(), $gallery->_phpVm->getRemaining());
+	}
+
+	public function testDoLoadTemplateDoesNotAddNoCacheForPublicView() {
+		global $gallery;
+
+		$gallery->_phpVm = new UnitTestPhpVm();
+
+		$gallery->_phpVm->setReply('time', array(), strtotime('Sun, 16 Mar 2008 21:00:00 GMT'));
+
+		// Optional md5 call if authToken needs to be created and placed in session
+		$gallery->_phpVm->setReply(
+			'md5',
+			array(
+				'fuzzy' => '{.*}',
+			),
+			'12345',
+			true
+		);
+
+		list($ret, $item) = $this->_createRandomDataItem($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($item);
+
+		$itemId = $item->getId();
+
+		list($ret, $anonymousUserId) = GalleryCoreApi::getAnonymousUserId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserPermission($itemId, $anonymousUserId, 'core.view');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $itemId);
+
+		$template = new GalleryTemplate(GalleryCoreApi::getCodeBasePath());
+
+		$template->setVariable(
+			'head',
+			array(
+				'meta' => array(),
+			)
+		);
+
+		$view = new ViewTestItemView();
+
+		list($ret, $results, $theme) = $view->doLoadTemplate($template);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$head = $template->getVariable('head');
+
+		$this->assertEquals(array(), $head['meta']);
+		$this->assertTrue($gallery->_phpVm->isComplete(), $gallery->_phpVm->getRemaining());
+	}
+
+	public function testDoLoadTemplateAddsNoCacheForPrivateView() {
+		global $gallery;
+
+		$gallery->_phpVm = new UnitTestPhpVm();
+
+		$gallery->_phpVm->setReply('time', array(), strtotime('Sun, 16 Mar 2008 21:00:00 GMT'));
+		$gallery->_phpVm->setReply('time', array(), strtotime('Sun, 16 Mar 2008 21:00:00 GMT'));
+		$gallery->_phpVm->setReply('headers_sent', array(), false);
+		$gallery->_phpVm->setReply('header', array('Cache-Control: no-cache', ''), true);
+		$gallery->_phpVm->setReply('header', array('Pragma: no-cache', ''), true);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Sun, 09 Mar 2008 21:00:00 GMT', ''),
+			true
+		);
+
+		// Optional md5 call if authToken needs to be created and placed in session
+		$gallery->_phpVm->setReply(
+			'md5',
+			array(
+				'fuzzy' => '{.*}',
+			),
+			'12345',
+			true
+		);
+
+		list($ret, $item) = $this->_createRandomDataItem($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($item);
+
+		$itemId = $item->getId();
+
+		list($ret, $anonymousUserId) = GalleryCoreApi::getAnonymousUserId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($itemId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $itemId);
+
+		$template = new GalleryTemplate(GalleryCoreApi::getCodeBasePath());
+
+		$template->setVariable(
+			'head',
+			array(
+				'meta' => array(),
+			)
+		);
+
+		$view = new ViewTestItemView();
+
+		list($ret, $results, $theme) = $view->doLoadTemplate($template);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$head = $template->getVariable('head');
+
+		$this->assertEquals(
+			array(
+				array(
+					'name'        => 'Cache-Control',
+					'content'     => 'no-cache',
+					'isHttpEquiv' => true,
+				),
+				array(
+					'name'        => 'Pragma',
+					'content'     => 'no-cache',
+					'isHttpEquiv' => true,
+				),
+				array(
+					'name'        => 'Expires',
+					'content'     => 'Sun, 09 Mar 2008 21:00:00 GMT',
+					'isHttpEquiv' => true,
+				),
+			),
+			$head['meta']
+		);
+
+		$this->assertTrue($gallery->_phpVm->isComplete(), $gallery->_phpVm->getRemaining());
+	}
+
+	public function testLoadViewWithoutAutoCacheControlDoesNotAdd() {
+		global $gallery;
+
+		$gallery->_phpVm = new UnitTestPhpVm();
+
+		$gallery->_phpVm->setReply('time', array(), strtotime('Sun, 16 Mar 2008 21:00:00 GMT'));
+
+		// Optional md5 call if authToken needs to be created and placed in session
+		$gallery->_phpVm->setReply(
+			'md5',
+			array(
+				'fuzzy' => '{.*}',
+			),
+			'12345',
+			true
+		);
+
+		list($ret, $item) = $this->_createRandomDataItem($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($item);
+
+		$itemId = $item->getId();
+
+		list($ret, $everybodyGroupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.everybodyGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeGroupPermission($itemId, $everybodyGroupId, 'core.view');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $itemId);
+
+		$template = new GalleryTemplate(GalleryCoreApi::getCodeBasePath());
+
+		$template->setVariable(
+			'head',
+			array(
+				'meta' => array(),
+			)
+		);
+
+		// This view overrides default cache control functionality
+		$view = new ViewTestNoAutoCacheControlItemView();
+
+		list($ret, $results, $theme) = $view->doLoadTemplate($template);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$head = $template->getVariable('head');
+
+		$this->assertEquals(array(), $head['meta']);
+		$this->assertTrue($gallery->_phpVm->isComplete(), $gallery->_phpVm->getRemaining());
+	}
+
+	public function testPermissionCheckForGuest() {
+		$galleryView = new GalleryView();
+
+		$ret = $this->_becomeGuestUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $results) = $galleryView->_permissionCheck(GalleryCoreApi::error(ERROR_PERMISSION_DENIED));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserLogin',
+					'return'  => true,
+				),
+			),
+			$results,
+			'Unexpected result'
+		);
+	}
+
+	public function testPermissionCheckForRegisteredUser() {
+		global $gallery;
+
+		$galleryView = new GalleryView();
+
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+		$gallery->setActiveUser($user);
+
+		list($ret, $results) = $galleryView->_permissionCheck(GalleryCoreApi::error(ERROR_PERMISSION_DENIED));
+
+		$this->assertErrorEquals(ERROR_PERMISSION_DENIED, $ret, true);
+	}
+
+	public function testPermissionCheckAuthTimeoutExpired() {
+		$galleryView = new GalleryView();
+
+		list($ret, $results) = $galleryView->_permissionCheck(GalleryCoreApi::error(ERROR_PERMISSION_DENIED));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserLogin',
+					'return'  => true,
+				),
+			),
+			$results,
+			'Unexpected result'
+		);
+	}
+
+	public function testPermissionCheckHasPermission() {
+		$galleryView = new GalleryView();
+
+		list($ret, $results) = $galleryView->_permissionCheck(null);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(null, $results, 'Results should be null');
+	}
+
+	public function testPermissionCheckErrorMissingObjectForGuest() {
+		$galleryView = new GalleryView();
+
+		$ret = $this->_becomeGuestUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $results) = $galleryView->_permissionCheck(GalleryCoreApi::error(ERROR_MISSING_OBJECT));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserLogin',
+					'return'  => true,
+				),
+			),
+			$results,
+			'Unexpected result'
+		);
+	}
+
+	public function testPermissionCheckErrorMissingObjectForRegisteredUser() {
+		global $gallery;
+
+		$galleryView = new GalleryView();
+
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+		$gallery->setActiveUser($user);
+
+		list($ret, $results) = $galleryView->_permissionCheck(GalleryCoreApi::error(ERROR_MISSING_OBJECT));
+
+		$this->assertErrorEquals(ERROR_MISSING_OBJECT | ERROR_PERMISSION_DENIED, $ret, true);
+	}
+
+	public function testPermissionCheckErrorMissingObjectForAdmin() {
+		$galleryView = new GalleryView();
+
+		list($ret, $results) = $galleryView->_permissionCheck(GalleryCoreApi::error(ERROR_MISSING_OBJECT));
+
+		$this->assertErrorEquals(ERROR_MISSING_OBJECT, $ret, true);
+		$this->assertEquals(null, $results, 'view results');
+	}
+
+	public function testPermissionCheckOtherError() {
+		$galleryView = new GalleryView();
+
+		list($ret, $results) = $galleryView->_permissionCheck(GalleryCoreApi::error(ERROR_STORAGE_FAILURE));
+
+		$this->assertErrorEquals(ERROR_STORAGE_FAILURE, $ret, true);
+		$this->assertEquals(null, $results, 'Results should be null');
+	}
+}
+
+class ViewTestModule {
+	public function isActive() {
+		return array(null, false);
+	}
+
+	public function getConfigurationView() {
+		return 'viewtest.ViewTestConfig';
+	}
+}
+
+class ViewTestConfigView extends GalleryView {}
+
+class ViewTestAdminView extends GalleryView {
+	public function getViewType() {
+		return VIEW_TYPE_ADMIN;
+	}
+}
+
+class ViewTestItemView extends GalleryView {
+	public function getViewType() {
+		return VIEW_TYPE_SHOW_ITEM;
+	}
+}
+
+class ViewTestNoAutoCacheControlItemView extends GalleryView {
+	public function getViewType() {
+		return VIEW_TYPE_SHOW_ITEM;
+	}
+
+	public function autoCacheControl() {
+		return false;
+	}
+}
+
+class ViewTestThemeId1Theme {
+	public function isActive() {
+		return array(null, true);
+	}
+
+	public function getId() {
+		return 'viewtestthemeid1';
+	}
+
+	public function fetchParameters($itemId = 0) {
+		return array(
+			null,
+			array(
+				'testParam' => $itemId ? 'per album value' : 'default value',
+			),
+		);
+	}
+}
+
+class ViewTestThemeId2Theme {
+	public function isActive() {
+		return array(null, false);
+	}
+
+	public function getId() {
+		return 'viewtestthemeid2';
+	}
+
+	public function fetchParameters($itemId = 0) {
+		return array(null, array());
+	}
+}
+
+class ViewTestEventListener {
+	public function __construct($testCase, $themeId, $params, $itemId) {
+		$this->_themeId  = $themeId;
+		$this->_params   = $params;
+		$this->_testCase = $testCase;
+		$this->_itemId   = $itemId;
+	}
+
+	public function handleEvent($event) {
+		$data = $event->getData();
+
+		$this->_testCase->assertEquals(
+			array(
+				'viewType' => VIEW_TYPE_SHOW_ITEM,
+				'viewName' => 'test.test',
+			),
+			$data,
+			'event data'
+		);
+
+		$entity = $event->getEntity();
+
+		if (isset($entity)) {
+			$this->_testCase->assertEquals($this->_itemId, $entity->getId(), 'item id in event');
+		} else {
+			$this->_testCase->fail('event is missing an item reference');
+		}
+
+		return array(
+			null,
+			array(
+				'themeId' => $this->_themeId,
+				'params'  => $this->_params,
+			),
+		);
+	}
+}

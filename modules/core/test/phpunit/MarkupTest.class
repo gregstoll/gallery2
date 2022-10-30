@@ -1,0 +1,345 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('lib/smarty_plugins/modifier.markup.php');
+
+/**
+ * Test Markup functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class MarkupTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_bbcode = new GalleryBbcodeMarkupParser();
+		$this->_html   = new GalleryHtmlMarkupParser();
+		$this->_none   = new GalleryNoMarkupParser();
+	}
+
+	public function testBold() {
+		$results = $this->_bbcode->parse('[b]one[/b]&lt;b&gt;two&lt;/b&gt;');
+
+		$this->assertEquals('<b>one</b>&lt;b&gt;two&lt;/b&gt;', $results);
+	}
+
+	public function testBold2() {
+		$results = $this->_none->parse('[b]one[/b]&lt;b&gt;two&lt;/b&gt;');
+
+		$this->assertEquals('[b]one[/b]&lt;b&gt;two&lt;/b&gt;', $results);
+	}
+
+	public function testBold3() {
+		$results = $this->_html->parse('[b]one[/b]&lt;b&gt;two&lt;/b&gt;');
+
+		$this->assertEquals('[b]one[/b]<b>two</b>', $results);
+	}
+
+	public function testItalic() {
+		$results = $this->_bbcode->parse('[i]italic[/i]');
+
+		$this->assertEquals('<i>italic</i>', $results);
+	}
+
+	public function testMalformedCode() {
+		$results = $this->_bbcode->parse('[b][i]foo[/b][/i]');
+
+		$this->assertEquals('<b><i>foo</i></b>[/i]', $results);
+	}
+
+	public function testList() {
+		$results = $this->_bbcode->parse('[list][*]one[*]two[*]three[/list]');
+
+		$this->assertEquals("<ul><li>one</li>\n<li>two</li>\n<li>three</li>\n</ul>", $results);
+	}
+
+	public function testLineBreaks() {
+		$results = $this->_bbcode->parse("foo\r\nbar\rbaz\n");
+
+		$this->assertEquals("foo<br />\nbar<br />\nbaz<br />\n", $results);
+	}
+
+	public function testHtmlSpecialChars() {
+		$results = $this->_bbcode->parse(
+			'&lt;script language=&quot;javascript&quot;' .
+			'&gt;evil!&lt;/script&gt;'
+		);
+
+		$this->assertEquals(
+			'&lt;script language=&quot;javascript&quot;&gt;evil!&lt;/script&gt;',
+			$results
+		);
+	}
+
+	public function testLineEndings() {
+		$results = $this->_bbcode->parse("foo\nbar\nbaz\n");
+
+		$this->assertEquals("foo<br />\nbar<br />\nbaz<br />\n", $results);
+	}
+
+	public function testStripLastLineBreak() {
+		$results = $this->_bbcode->parse("[list][*]one\ntwo\n[*]three[*]four\n[/list]");
+
+		$this->assertEquals(
+			"<ul><li>one<br />\ntwo<br /></li>\n<li>three</li>" .
+			"\n<li>four<br /></li>\n</ul>",
+			$results
+		);
+	}
+
+	public function testImageUrl() {
+		$results = $this->_bbcode->parse('[img]http://example.com/foo.gif[/img]');
+		$this->assertEquals('<img src="http://example.com/foo.gif" alt=""/>', $results);
+	}
+
+	public function testImagePath() {
+		$results = $this->_bbcode->parse('[img]/path/foo.gif[/img]');
+		$this->assertEquals('<img src="/path/foo.gif" alt=""/>', $results);
+	}
+
+	public function testImageEntity() {
+		// Our input should be properly escaped, so bbcode does not need to entitize things
+		$results = $this->_bbcode->parse('[img]http://image.com/get?id=123&amp;size=small[/img]');
+		$this->assertEquals(
+			'<img src="http://image.com/get?id=123&amp;size=small" alt=""/>',
+			$results
+		);
+	}
+
+	public function testImageSize() {
+		$results = $this->_bbcode->parse('[img width=50 height=15]/images/foo.png[/img]');
+		$this->assertEquals('<img src="/images/foo.png" alt="" width="50" height="15"/>', $results);
+	}
+
+	public function testJavascriptInImage() {
+		$results = $this->_bbcode->parse('[img]javascript:alert()[/img]');
+
+		$this->assertEquals('[img]javascript:alert()[/img]', $results);
+	}
+
+	public function testUrl1() {
+		$results = $this->_bbcode->parse('[url]http://example.com/a.html[/url]');
+		$this->assertEquals(
+			'<a href="http://example.com/a.html" rel="nofollow">' .
+				'http://example.com/a.html</a>',
+			$results
+		);
+	}
+
+	public function testUrl2() {
+		$results = $this->_bbcode->parse('[url=http://example.com/a.html]content[/url]');
+		$this->assertEquals(
+			'<a href="http://example.com/a.html" rel="nofollow">' .
+			'content</a>',
+			$results
+		);
+	}
+
+	public function testUrl3() {
+		// Seems kind of silly that we add rel="nofollow" to mailto: urls, but it does not hurt
+		$results = $this->_bbcode->parse('[url=mailto:monkey@fruit.com]content[/url]');
+
+		$this->assertEquals(
+			'<a href="mailto:monkey@fruit.com" rel="nofollow">content</a>',
+			$results
+		);
+	}
+
+	public function testUrl4() {
+		$results = $this->_bbcode->parse('[url=https://example.com/secure.html]content[/url]');
+		$this->assertEquals(
+			'<a href="https://example.com/secure.html" rel="nofollow">' .
+			'content</a>',
+			$results
+		);
+	}
+
+	public function testUrl5() {
+		$results = $this->_bbcode->parse('[url=ftp://example.com/]content[/url]');
+		$this->assertEquals('<a href="ftp://example.com/" rel="nofollow">content</a>', $results);
+	}
+
+	public function testUrl6() {
+		$results = $this->_bbcode->parse('[url=bogus://example.com]content[/url]');
+		$this->assertEquals('[url=bogus://example.com]content[/url]', $results);
+	}
+
+	public function testUrl7() {
+		$results = $this->_bbcode->parse('[url=/path/file.php]content[/url]');
+		$this->assertEquals('<a href="/path/file.php" rel="nofollow">content</a>', $results);
+	}
+
+	public function testUrl8() {
+		$results = $this->_bbcode->parse('[url=javascript:alert()]content[/url]');
+		$this->assertEquals('[url=javascript:alert()]content[/url]', $results);
+		$results = $this->_bbcode->parse('[url]javascript:alert()[/url]');
+
+		$this->assertEquals('[url]javascript:alert()[/url]', $results);
+	}
+
+	public function testColor1() {
+		$results = $this->_bbcode->parse('[color=#123456]content[/color]');
+		$this->assertEquals('<font color="#123456">content</font>', $results);
+	}
+
+	public function testColor2() {
+		$results = $this->_bbcode->parse('[color=green]content[/color]');
+		$this->assertEquals('<font color="green">content</font>', $results);
+	}
+
+	/*
+	 * Regression test. This sequence led to an "uninitialized string offset error"
+	 * in earlier bbcode implementations.
+	 */
+	public function testHeavyNesting() {
+		$results = $this->_bbcode->parse(
+			'[url=http://a.cc/blah.jpg\[url]\]\[[\]' .
+			'[/url][/url][url=[[[[]\]\][\[][[[[]\]\][\[[/url]'
+		);
+
+		$this->assertEquals(
+			'<a href="http://a.cc/blah.jpg\[url" rel="nofollow">\]\[[\]</a>' .
+			'[/url][url=[[[[]\]\][\[][[[[]\]\][\[[/url]',
+			$results
+		);
+	}
+
+	public function testJavascript() {
+		$results = $this->_bbcode->parse('[url=javascript:alert(\'hi\')]content[/url]');
+		$this->assertEquals('[url=javascript:alert(\'hi\')]content[/url]', $results);
+	}
+
+	public function testUnicodeCharacters() {
+		$results = $this->_bbcode->parse(
+			'[url=https://example.com/secure.html]' .
+			"Elemente hinzuf\xfcgen[/url] Seitenverh\xe4ltnis"
+		);
+
+		$this->assertEquals(
+			'<a href="https://example.com/secure.html" rel="nofollow">' .
+			"Elemente hinzuf\xfcgen</a> Seitenverh\xe4ltnis",
+			$results
+		);
+	}
+
+	public function testNonBbcodeMarkers() {
+		$results = $this->_bbcode->parse('[url=http://foo] [go] [/url]');
+		$this->assertEquals('<a href="http://foo" rel="nofollow"> [go] </a>', $results);
+	}
+
+	public function testMarkupNone() {
+		$ret = $this->_setMarkupType('none', true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'&lt;b&gt; [i] &amp;oacute;',
+			smarty_modifier_markup('&lt;b&gt; [i] &amp;oacute;')
+		);
+
+		$this->assertEquals(
+			'&lt;b&gt; [i] &amp;oacute;',
+			smarty_modifier_markup('&lt;b&gt; [i] &amp;oacute;', 'strip'),
+			'strip'
+		);
+	}
+
+	public function testMarkupBbcode() {
+		$ret = $this->_setMarkupType('bbcode', true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Bbcode processor adds closing </i> tag too
+		$this->assertEquals(
+			'&lt;b&gt; <i> &amp;oacute;</i>',
+			smarty_modifier_markup('&lt;b&gt; [i] &amp;oacute;')
+		);
+
+		$this->assertEquals(
+			'&lt;b&gt;  &amp;oacute;',
+			smarty_modifier_markup('&lt;b&gt; [i] &amp;oacute;', 'strip'),
+			'strip'
+		);
+	}
+
+	public function testMarkupHtml() {
+		$ret = $this->_setMarkupType('html', true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// GalleryUtilities::htmlSafe fixes the missing </b>
+		$this->assertEquals(
+			'<b> [i] &oacute;</b>',
+			smarty_modifier_markup('&lt;b&gt; [i] &amp;oacute;')
+		);
+
+		$this->assertEquals(
+			' [i] &oacute;',
+			smarty_modifier_markup('&lt;b&gt; [i] &amp;oacute;', 'strip'),
+			'strip'
+		);
+
+		$this->assertEquals(
+			'&lt;b&gt; [i] &amp;oacute;',
+			smarty_modifier_markup('&lt;b&gt; [i] &amp;oacute;', 'none'),
+			'override'
+		);
+
+		$this->assertEquals(
+			'&lt;b&gt;  &amp;oacute;',
+			smarty_modifier_markup('&lt;b&gt; [i] &amp;oacute;', 'bbcode', 'strip'),
+			'override+strip'
+		);
+
+		$this->assertEquals(
+			'&lt;b&gt;  &amp;oacute;',
+			smarty_modifier_markup('&lt;b&gt; [i] &amp;oacute;', 'strip', 'bbcode'),
+			'strip+override'
+		);
+	}
+
+	public function testMarkupHtmlEmptyData() {
+		// Guard against http://bugs.php.net/bug.php?id=22014
+		$this->assertEquals(null, $this->_html->parse(null));
+		$this->assertEquals('', $this->_html->parse(''));
+	}
+
+	public function testMarkupHtmlSanitizesXss() {
+		$this->assertEquals(
+			'good good good',
+			$this->_html->parse('good<script>evil</script> good<body onload=alert("evil")> good')
+		);
+	}
+}

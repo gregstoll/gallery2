@@ -1,0 +1,515 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemEditPhoto controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemEditPhotoPluginTest extends ItemEditPluginTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core', 'ItemEditPhoto');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		// Register a dummy toolkit
+		$path = 'modules/core/test/phpunit/ItemEditPhotoPluginTest.class';
+
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'GalleryToolkit',
+			'ItemEditPhotoPluginTestToolkit',
+			'ItemEditPhotoPluginTestToolkit',
+			$path,
+			'coreTest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markToolkitForCleanup('ItemEditPhotoPluginTestToolkit');
+
+		// Register operations that we can perform on our mock data items
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemEditPhotoPluginTestToolkit',
+			array('test/file'),
+			'scale',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+			),
+			'test-description'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemEditPhotoPluginTestToolkit',
+			array('test/file'),
+			'convert-to-image/jpeg',
+			array(),
+			'test-description',
+			'image/jpeg'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemEditPhotoPluginTestToolkit',
+			array('test/file'),
+			'rotate',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+			),
+			'test-description'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemEditPhotoPluginTestToolkit',
+			array('test/file'),
+			'thumbnail',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+			),
+			'test-description',
+			''
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemEditPhotoPluginTestToolkit',
+			array('test/file'),
+			'resize',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+			),
+			'test-description',
+			''
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_item) = $this->_createRandomDataItem($this->_album->getId(), 'test/file');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_unused = null;
+	}
+
+	public function testEditResizes() {
+		list($ret, $derivative[0]) = $this->_createDerivative(
+			$this->_item,
+			$this->_item->getId(),
+			DERIVATIVE_TYPE_IMAGE_PREFERRED,
+			'rotate|90'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $derivative[1]) = $this->_createDerivative(
+			$this->_item,
+			$derivative[0]->getId(),
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+			'thumbnail|200'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $derivative[2]) = $this->_createDerivative(
+			$this->_item,
+			$derivative[0]->getId(),
+			DERIVATIVE_TYPE_IMAGE_RESIZE,
+			'scale|500,500;convert-to-image/jpeg',
+			'test/file',
+			array(
+				'postFilterOperations' => 'test-operation|0',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		for ($i = 0; $i < 3; $i++) {
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][active]', 1);
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][width]', 250 * ($i + 1));
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][height]', 250 * ($i + 1));
+		}
+
+		GalleryUtilities::putRequestVariable('form[resizes][2][width]', '50%');
+		GalleryUtilities::putRequestVariable('form[resizes][2][height]', 600);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_unused);
+
+		$this->assertEquals(
+			array(array(), $this->_translate('Changes saved successfully')),
+			$results
+		);
+
+		// Examine the resizes and make sure they line up
+		list($ret, $resizeTable) = GalleryCoreApi::fetchResizesByItemIds(array($this->_item->getId()));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (empty($resizeTable[$this->_item->getId()])) {
+			$this->assertFalse(true, 'no resizes!');
+		} else {
+			$resizeTable = $resizeTable[$this->_item->getId()];
+
+			$this->assertEquals(3, count($resizeTable), 'resize count');
+
+			for ($i = 0; $i < 3; $i++) {
+				$resize = $resizeTable[$i];
+
+				if (!isset($resize)) {
+					continue;
+				}
+
+				$this->assertEquals(
+					$derivative[0]->getId(),
+					$resize->getDerivativeSourceId(),
+					'Derivative Source id'
+				);
+
+				$expectedOperations  = ($i < 2) ? ('scale|' . ($i ? 250 : 500) . ',' . ($i ? 250 : 500)) : 'scale|50%,600';
+				$expectedOperations .= ';convert-to-image/jpeg';
+
+				$this->assertEquals($expectedOperations, $resize->getDerivativeOperations(), $i);
+
+				// check that postfilteroperations are maintained and added to new resizes..
+				$this->assertEquals(
+					'test-operation|0',
+					$resize->getPostFilterOperations(),
+					"postfilter $i"
+				);
+			}
+
+			// Verify we reuse existing derivatives when possible
+			$this->assertEquals($derivative[2]->getId(), $resizeTable[0]->getId(), 'derivative id');
+		}
+	}
+
+	public function testEditResizesMissing() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		for ($i = 0; $i < 3; $i++) {
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][active]', 1);
+		}
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest($this->_item, $this->_unused);
+
+		$this->assertEquals(
+			array(
+				array(
+					'form[error][resizes][0][size][missing]',
+					'form[error][resizes][1][size][missing]',
+					'form[error][resizes][2][size][missing]',
+				),
+				null,
+			),
+			$results
+		);
+	}
+
+	public function testEditResizesInvalid() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		for ($i = 0; $i < 3; $i++) {
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][active]', 1);
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][width]', 'x' . mt_rand());
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][height]', 100);
+		}
+
+		GalleryUtilities::putRequestVariable('form[resizes][2][width]', 100);
+		GalleryUtilities::putRequestVariable('form[resizes][2][height]', 'x' . mt_rand());
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest($this->_item, $this->_unused);
+
+		$this->assertEquals(
+			array(
+				array(
+					'form[error][resizes][0][size][invalid]',
+					'form[error][resizes][1][size][invalid]',
+					'form[error][resizes][2][size][invalid]',
+				),
+				null,
+			),
+			$results
+		);
+	}
+
+	public function testEditResizesNoDerivative() {
+		$itemId = $this->_item->getId();
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		for ($i = 0; $i < 3; $i++) {
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][active]', 1);
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][width]', 100 * ($i + 1));
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][height]', 100 * ($i + 1));
+		}
+
+		GalleryUtilities::putRequestVariable('form[resizes][2][height]', 600);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_unused);
+
+		$this->assertEquals(
+			array(array(), $this->_translate('Changes saved successfully')),
+			$results
+		);
+
+		// Examine the resizes and make sure they line up
+		list($ret, $resizeTable) = GalleryCoreApi::fetchResizesByItemIds(array($itemId));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $preferred) = GalleryCoreApi::fetchPreferredSource($this->_item);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (!empty($resizeTable[$itemId])) {
+			$this->assertEquals(3, sizeof($resizeTable[$this->_item->getId()]));
+
+			for ($i = 0; $i < 3; $i++) {
+				$this->assertEquals(
+					$itemId,
+					$resizeTable[$itemId][$i]->
+					getDerivativeSourceId(),
+					'Derivative Source id'
+				);
+
+				$expectedOperations  = ($i < 2) ? ('scale|' . 100 * ($i + 1) . ',' . 100 * ($i + 1)) : 'scale|300,600';
+				$expectedOperations .= ';convert-to-image/jpeg';
+
+				$this->assertEquals(
+					$expectedOperations,
+					$resizeTable[$itemId][$i]->getDerivativeOperations()
+				);
+			}
+		}
+	}
+
+	public function testEditResizesRaw() {
+		/*
+		 * Test the situation when the original file is "raw" - cannot be resized or
+		 * rotated; however prefered can
+		 */
+		$itemId = $this->_item->getId();
+
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemEditPhotoPluginTestToolkit',
+			array('test/blob'),
+			'convert-to-image/jpeg',
+			array(),
+			'test-description',
+			'image/jpeg'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_blob) = $this->_createRandomDataItem($this->_album->getId(), 'test/blob');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $derivative[0]) = $this->_createDerivative(
+			$this->_item,
+			$itemId,
+			DERIVATIVE_TYPE_IMAGE_PREFERRED,
+			'convert-to-image/jpeg'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		for ($i = 0; $i < 3; $i++) {
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][active]', 1);
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][width]', 100 * ($i + 1));
+			GalleryUtilities::putRequestVariable('form[resizes][' . $i . '][height]', 100 * ($i + 1));
+		}
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_unused);
+
+		$this->assertEquals(
+			array(array(), $this->_translate('Changes saved successfully')),
+			$results
+		);
+
+		list($ret, $resizeTable) = GalleryCoreApi::fetchDerivativesByItemIds(
+			array($this->_item->getId())
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($resizeTable[$itemId], 'no derivative');
+
+		$preferredId = $resizeTable[$itemId][0]->getId();
+
+		// check that the derivatives are from the preferred source, not from the original
+		$this->assertEquals(4, sizeof($resizeTable[$itemId]));
+
+		for ($i = 1; $i < 4; $i++) {
+			$this->assertEquals(
+				$preferredId,
+				$resizeTable[$itemId][$i]->
+				getDerivativeSourceId(),
+				'Derivative Source id'
+			);
+			$this->assertEquals(
+				'scale|' . 100 * $i . ',' . 100 * $i . ';convert-to-image/jpeg',
+				$resizeTable[$itemId][$i]->
+				getDerivativeOperations(),
+				'Derivative Source id'
+			);
+		}
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+
+/**
+ * Test toolkit
+ */
+class ItemEditPhotoPluginTestToolkit extends GalleryToolkit {
+	/**
+	 * @see GalleryToolkit::performOperation
+	 * Dummy operation
+	 */
+	public function performOperation(
+		$mimeType,
+		$operationName,
+		$sourceFilename,
+		$destFilename,
+		$parameters,
+		$context = array()
+	) {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		if ($sourceFilename != $destFilename) {
+			$platform->copy($sourceFilename, $destFilename);
+		}
+
+		$fd = $platform->fopen($destFilename, 'a');
+
+		$platform->fwrite($fd, $operationName);
+		$platform->fclose($fd);
+
+		return array(null, $mimeType, $context);
+	}
+
+	/**
+	 * @see GalleryToolkit::mergeOperations
+	 * Dummy operation
+	 */
+	public function mergeOperations($operation1, $args1, $operation2, $args2) {
+		// Do something stupid, but predictable
+		return array(
+			null,
+			$operation1 . '+' . $operation2,
+			array_merge($args1, array('+'), $args2),
+		);
+	}
+}
