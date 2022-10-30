@@ -62,6 +62,10 @@ class RewriteHelper {
 	    if ($platform->file_exists(GalleryCoreApi::getCodeBasePath($path))) {
 		GalleryCoreApi::requireOnce($path);
 	    }
+        // TODO - not sure about casing stuff here
+        if ($rewriteParserId == 'modrewrite') {
+            $rewriteParserId = 'ModRewrite';
+        }
 	    $class = $rewriteParserId . 'Parser';
 	    $rewriteParser = new $class();
 	}

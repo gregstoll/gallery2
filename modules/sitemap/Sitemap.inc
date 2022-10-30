@@ -147,7 +147,7 @@ class SitemapView extends GalleryView {
 		$loc = $urlGenerator->generateUrl(
 		    array('view' => 'core.ShowItem', 'itemId' => $result[0]),
 		    array('forceSessionId' => false, 'forceFullUrl' => true));
-		$lastmod = gmstrftime('%Y-%m-%dT%H:%M:%S+00:00', $result[1]);
+		$lastmod = gmdate('Y\-m\-d\TH\:i\:s\+\0\0\:\0\0', $result[1]);
 		$changefreq = 'never';
 		foreach ($frequencyTable as $comparison => $value) {
 		    if ($result[2] <= $comparison) {

@@ -224,7 +224,7 @@ class WatermarkImage extends GalleryEntity {
      * @param string $targetName the desired name of the new item
      * @return GalleryStatus a status code
      */
-    function create($inputFileName, $mimeType, $targetName=null) {
+    function create($inputFileName=null, $mimeType=null, $targetName=null) {
 	GalleryCoreApi::requireOnce('modules/watermark/classes/WatermarkHelper.class');
 	global $gallery;
 	$platform =& $gallery->getPlatform();
@@ -330,7 +330,7 @@ class WatermarkImage extends GalleryEntity {
     /**
      * @see GalleryEntity::save
      */
-    function save($postEvent=true) {
+    function save($postEvent=true, $setAclId=false) {
 	return parent::save($postEvent, 0);
     }
 

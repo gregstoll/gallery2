@@ -246,7 +246,7 @@ class RssMapHelper {
      * @return array GalleryStatus a status code
      *               boolean true if allowed
      */
-    function canConfigureFeed($item, $params, $userId, $assert=false) {
+    static function canConfigureFeed($item, $params, $userId, $assert=false) {
 	static $isAdmin;
 	if (!isset($isAdmin[$userId])) {
 	    list ($ret, $isAdmin[$userId]) = GalleryCoreApi::isUserInSiteAdminGroup($userId);

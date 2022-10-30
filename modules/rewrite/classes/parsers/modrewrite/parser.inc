@@ -63,7 +63,7 @@ class ModRewriteParser extends RewriteParser {
     function saveAccessList($accessList, $allowEmptyReferer) {
 	GalleryCoreApi::requireOnce(
 	    'modules/rewrite/classes/parsers/modrewrite/ModRewriteHelper.class');
-	return ModRewriteHelper::saveAccessList($accessList, $allowEmptyReferer);
+	return ModRewriteHelper::saveAccessList($this, $accessList, $allowEmptyReferer);
     }
 
     /**
