@@ -906,9 +906,9 @@ class Gallery {
 	$weekdays = array('1' => 'Mon', '2' => 'Tue', '3' => 'Wed',
 			  '4' => 'Thu', '5' => 'Fri', '6' => 'Sat',
 			  '0' => 'Sun');
-	$dow = $weekdays[gmstrftime('%w', $time)];
-	$month = $months[gmstrftime('%m', $time)];
-	$out = gmstrftime('%%s, %d %%s %Y %H:%M:%S GMT', $time);
+	$dow = $weekdays[gmdate('w', $time)];
+	$month = $months[gmdate('m', $time)];
+	$out = gmdate('\%\s\,\ d\ \%\s\ Y\ H\:i\:s\ \G\M\T', $time);
 	return sprintf($out, $dow, $month);
     }
 

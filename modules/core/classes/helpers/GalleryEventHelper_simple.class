@@ -75,7 +75,7 @@ class GalleryEventHelper_simple {
 
 	    foreach ($moduleStatus as $moduleId => $status) {
 		if (empty($status['active']) || !in_array('registerEventListeners',
-			explode('|', $status['callbacks']))) {
+			explode('|', is_null($status['callbacks']) ? "" : $status['callbacks']))) {
 		    continue;
 		}
 

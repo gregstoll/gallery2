@@ -40,7 +40,7 @@ class WatermarkHelper {
      * @return array GalleryStatus a status code
      *               array of itemId=>watermark
      */
-    function fetchWatermarks($count=null, $offset=null, $substring=null) {
+    static function fetchWatermarks($count=null, $offset=null, $substring=null) {
 	global $gallery;
 
 	list ($ret, $aclIds) =
@@ -116,7 +116,7 @@ class WatermarkHelper {
      * @return array GalleryStatus a status code
      *               array of itemIds
      */
-    function fetchWatermarkIdsByOwnerId($ownerId) {
+    static function fetchWatermarkIdsByOwnerId($ownerId) {
 	global $gallery;
 
 	$query = '
@@ -148,7 +148,7 @@ class WatermarkHelper {
      * @return array GalleryStatus a status code
      *               array (int GalleryItem id, ...)
      */
-    function fetchWatermarkedItemIds($watermark) {
+    static function fetchWatermarkedItemIds($watermark) {
 	global $gallery;
 
 	$query = '
@@ -185,7 +185,7 @@ class WatermarkHelper {
      * @return array GalleryStatus a status object
      *               boolean true if deleted
      */
-    function deleteWatermarkImageById($itemId, $forceDelete=false) {
+    static function deleteWatermarkImageById($itemId, $forceDelete=false) {
 	global $gallery;
 
 	list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId, 'WatermarkImage');
@@ -279,7 +279,7 @@ class WatermarkHelper {
      * @param array $whichDerivatives an array of DERIVATIVE_TYPE_IMAGE_XXX => true/false
      * @return GalleryStatus a status code
      */
-    function watermarkItem($watermark, $item, $xPercent, $yPercent, $whichDerivatives) {
+    static function watermarkItem($watermark, $item, $xPercent, $yPercent, $whichDerivatives) {
 	list ($ret, $derivativeTable) =
 	    GalleryCoreApi::fetchDerivativesByItemIds(array($item->getId()));
 	if ($ret) {
@@ -436,7 +436,7 @@ class WatermarkHelper {
      * @return string mime type
      * @deprecated After the next major API bump remove this module and call the core api directly
      */
-    function determineMimeType(&$form) {
+    static function determineMimeType(&$form) {
 	/* Get the mime type. */
 	return GalleryCoreApi::getMimeType($form['tmp_name'][1], $form['type'][1]);
     }
@@ -449,7 +449,7 @@ class WatermarkHelper {
      * @return array GalleryStatus a status code
      *               WatermarkImage
      */
-    function createWatermarkImage(&$form, $isPublic=false) {
+    static function createWatermarkImage(&$form, $isPublic=false) {
 	global $gallery;
 
 	list ($ret, $item) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'WatermarkImage');
@@ -512,7 +512,7 @@ class WatermarkHelper {
      * @return array GalleryStatus a status code
      *               array controller results
      */
-    function handleEditRequest($form, $view, $subViewSuccess, $subViewError) {
+    static function handleEditRequest($form, $view, $subViewSuccess, $subViewError) {
 	global $gallery;
 	$status = $error = array();
 	$itemId = GalleryUtilities::getRequestVariables('watermarkId');
@@ -671,7 +671,7 @@ class WatermarkHelper {
      * @param string $pageName page name
      * @return GalleryStatus a status code
      */
-    function loadEditTemplate(&$template, &$form, $formName, $pageName) {
+    static function loadEditTemplate(&$template, &$form, $formName, $pageName) {
 	$itemId = GalleryUtilities::getRequestVariables('watermarkId');
 
 	list ($ret, $canView) =

@@ -294,6 +294,7 @@ class FfmpegToolkitHelper {
 		    do {
 			list ($capabilities, $types) =
 			    preg_split('/\s+/', $resultLine, -1, PREG_SPLIT_NO_EMPTY);
+            if (!is_null($types)) {
 			foreach (explode(',', $types) as $type) {
 			    if (isset($relevantTypes[$type])) {
 				list ($ret, $mime) = GalleryCoreApi::convertExtensionToMime(
@@ -310,6 +311,7 @@ class FfmpegToolkitHelper {
 				}
 			    }
 			}
+            }
 
 			$resultLine = $results[$i++];
 		    } while (!empty($resultLine));
