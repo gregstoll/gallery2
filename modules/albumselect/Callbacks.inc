@@ -186,7 +186,7 @@ class AlbumSelectCallbacks {
 		    }
 		}
 
-        $dataToCache = array($treeList, $titles, $titlesForJs, $links));
+        $dataToCache = array($treeList, $titles, $titlesForJs, $links);
 		GalleryDataCache::putToDisk($cachePathInfo, $dataToCache);
 	    }
 
