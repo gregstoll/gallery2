@@ -85,7 +85,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      * )
      * @return GalleryStatus a status object
      */
-    function init($initParams=array()) {
+    static function init($initParams=array()) {
 	/* GDC as static var replacement for better testability */
 	static $firstCacheKey = 'GalleryEmbed::initFirstPass';
 	static $secondCacheKey = 'GalleryEmbed::initSecondPass';
@@ -142,7 +142,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      *
      * @return GalleryStatus a status object
      */
-    function done() {
+    static function done() {
 	global $gallery;
 	global $gallerySetErrorHandler;
 
@@ -212,7 +212,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
 
 	if (!empty($activeUserId)) {
 	    list ($ret, $results) = GalleryCoreApi::getMapEntry(
-		'ExternalIdMap', array('entityId'), array('externalId' => $activeUserId, 
+		'ExternalIdMap', array('entityId'), array('externalId' => $activeUserId,
 							  'entityType' => 'GalleryUser'));
 	    if ($ret) {
 		return $ret;
@@ -971,7 +971,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      * @param string $blockName The name of the requested block
      * @param array $params (optional) Block parameters
      * @return array GalleryStatus A status code,
-     *               string HTML content: the block HTML, 
+     *               string HTML content: the block HTML,
      *               string head HTML to be inserted into the <head> section
      * @since 1.4
      */
@@ -1016,7 +1016,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
 		return array($ret, null, null);
 	    }
 
-	    /* Default theme variables */	    
+	    /* Default theme variables */
 	    GalleryCoreApi::requireOnce('modules/core/classes/GalleryView.class');
 	    $ret = GalleryView::setStandardTemplateVariables($template);
 	    if ($ret) {
@@ -1079,9 +1079,9 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      *     - the g2Uri and the embedUri.
      * You can get the embed.php path with your g2Uri by fetching
      * http://example.com/gallery2/embed.php?getEmbedPath=1 via fsockopen.
-     * @static 
+     * @static
      */
-    function getEmbedPathByHttpRequest() {
+    static function getEmbedPathByHttpRequest() {
 	global $gallery;
 
 	if (!class_exists('GalleryCoreApi')) {
@@ -1114,7 +1114,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
 		    $phpVm->header('X-G2-EMBED-PATH: ' . GALLERY_CONFIG_DIR . '/embed.php');
 		} else {
 		    /* Fallback if G2 isn't installed yet */
-		    $phpVm->header('X-G2-EMBED-PATH: ' 
+		    $phpVm->header('X-G2-EMBED-PATH: '
 					. GalleryCoreApi::getCodeBasePath('embed.php'));
 		}
 	    }
