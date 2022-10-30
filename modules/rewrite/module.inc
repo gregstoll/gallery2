@@ -29,7 +29,7 @@
  */
 class RewriteModule extends GalleryModule {
 
-    function RewriteModule() {
+    function __construct() {
 	global $gallery;
 	$this->setId('rewrite');
 	$this->setName($gallery->i18n('URL Rewrite'));
