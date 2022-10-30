@@ -64,7 +64,7 @@ class ItemEditPluginTestCase extends GalleryTestCase {
 			$GalleryStatus     = GalleryStatus::getMe();
 			$expectedErrorCode = implode(
 				' | ',
-				$GalleryStatus->getErrorCodeConstants(
+				GalleryStatus::getErrorCodeConstants(
 					$errorCode
 				)
 			);
@@ -72,7 +72,7 @@ class ItemEditPluginTestCase extends GalleryTestCase {
 			if ($ret) {
 				$actualErrorCode = implode(
 					' | ',
-					$GalleryStatus->getErrorCodeConstants(
+					GalleryStatus::getErrorCodeConstants(
 						$ret->getErrorCode()
 					)
 				);

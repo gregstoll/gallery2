@@ -80,15 +80,13 @@ class ItemEditOptionTestCase extends GalleryTestCase {
 
 		if (isset($errorCode)) {
 			if (!$ret || ($ret->getErrorCode() & $errorCode) != $errorCode) {
-				$GalleryStatus = GalleryStatus::getMe();
-
 				$this->fail(
 					sprintf(
 						'Expected error code (%s) but received (%s)',
-						implode(' | ', $GalleryStatus->getErrorCodeConstants($errorCode)),
+						implode(' | ', GalleryStatus::getErrorCodeConstants($errorCode)),
 						$ret ? implode(
 							' | ',
-							$GalleryStatus->getErrorCodeConstants($ret->getErrorCode())
+							GalleryStatus::getErrorCodeConstants($ret->getErrorCode())
 						) : 'success'
 					)
 				);

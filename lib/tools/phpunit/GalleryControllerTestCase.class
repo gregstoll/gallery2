@@ -35,7 +35,7 @@ class GalleryControllerTestCase extends GalleryTestCase {
 		parent::__construct($methodName);
 		GalleryCoreApi::requireOnce('modules/core/classes/GalleryController.class');
 
-		list($ret, $this->_controller) = GalleryController::getMe()->loadController($controllerName);
+		list($ret, $this->_controller) = GalleryController::loadController($controllerName);
 
 		if ($ret) {
 			$this->fail($ret->getAsHtml());
@@ -61,8 +61,6 @@ class GalleryControllerTestCase extends GalleryTestCase {
 		list($ret, $results) = $this->_controller->handleRequest($form);
 
 		if (isset($errorCode)) {
-			$GalleryStatus = GalleryStatus::getMe();
-
 			if ($ret) {
 				if (($ret->getErrorCode() & $errorCode) != $errorCode) {
 					$this->fail(
@@ -70,13 +68,13 @@ class GalleryControllerTestCase extends GalleryTestCase {
 							'Expected error code (%s) but received (%s)',
 							implode(
 								' | ',
-								$GalleryStatus->getErrorCodeConstants(
+								GalleryStatus::getErrorCodeConstants(
 									$errorCode
 								)
 							),
 							implode(
 								' | ',
-								$GalleryStatus->getErrorCodeConstants(
+								GalleryStatus::getErrorCodeConstants(
 									$ret->getErrorCode()
 								)
 							)
@@ -89,7 +87,7 @@ class GalleryControllerTestCase extends GalleryTestCase {
 						'Expected error code (%s) but test was successful',
 						implode(
 							' | ',
-							$GalleryStatus->getErrorCodeConstants(
+							GalleryStatus::getErrorCodeConstants(
 								$errorCode
 							)
 						)

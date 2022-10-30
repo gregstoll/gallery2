@@ -1008,7 +1008,7 @@ class GalleryTestCase extends TestCase {
 	/**
 	 * Compare iteratively
 	 */
-	public function DeepCompare($obj1, $obj2, $context = null) {
+	static public function DeepCompare($obj1, $obj2, $context = null) {
 		$obj1Type = gettype($obj1);
 		$obj2Type = gettype($obj2);
 
@@ -1104,7 +1104,7 @@ class GalleryTestCase extends TestCase {
 					$prefixString = null;
 				}
 
-				$err = $this->DeepCompare($obj1[$key1], $obj2[$key2], $prefixString . $key1);
+				$err = GalleryTestCase::DeepCompare($obj1[$key1], $obj2[$key2], $prefixString . $key1);
 
 				if (isset($err)) {
 					return $err;
@@ -1188,7 +1188,7 @@ class GalleryTestCase extends TestCase {
 			'authToken' => $session->getAuthToken(),
 		);
 
-		$url = GalleryUrlGenerator::getMe()->appendParamsToUrl($url, $authToken);
+		$url = GalleryUrlGenerator::appendParamsToUrl($url, $authToken);
 
 		if (!$htmlEntities) {
 			$url = str_replace('&amp;', '&', $url);
@@ -1419,13 +1419,11 @@ class GalleryTestCase extends TestCase {
 	 * @param string $message (optional) Message to be shown on failure
 	 */
 	public function assertErrorEquals($errorCode, $ret, $exactMatch = false, $message = null) {
-		$GalleryStatus = GalleryStatus::getMe();
-
 		if (!$ret) {
 			$this->fail(
 				sprintf(
 					'Failed to get error %s%s',
-					join(', ', $GalleryStatus->getErrorCodeConstants($errorCode)),
+					join(', ', GalleryStatus::getErrorCodeConstants($errorCode)),
 					$message ? '<br/>' . $message : ''
 				)
 			);
@@ -1439,8 +1437,8 @@ class GalleryTestCase extends TestCase {
 			$this->fail(
 				sprintf(
 					'Expected error %s, received %s<br>%s%s',
-					join(', ', $GalleryStatus->getErrorCodeConstants($errorCode)),
-					join(', ', $GalleryStatus->getErrorCodeConstants($ret->getErrorCode())),
+					join(', ', GalleryStatus::getErrorCodeConstants($errorCode)),
+					join(', ', GalleryStatus::getErrorCodeConstants($ret->getErrorCode())),
 					$ret->getAsHtml(),
 					$message ? '<br/>' . $message : ''
 				)
