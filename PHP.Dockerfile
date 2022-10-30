@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
 		libjpeg62-turbo-dev \
 		libpng-dev \
 		vim \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+		imagemagick\
+		libjpeg-turbo-progs \
+	&& docker-php-ext-configure gd --with-freetype --with-jpeg \
 	&& docker-php-ext-install -j$(nproc) gd
-
-RUN apt-get install -y libjpeg-progs imagemagick-6
