@@ -1,0 +1,357 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Unit test storage.  This is a mock storage that the unit tests can use to simulate
+ * the exact conditions that they want from the storage in order to exercise the code.
+ *
+ * Use setReply() to tell it what function calls to expect.  Provide it with an array of
+ * input parameters to expect, exact values by default or use an array key starting with
+ * 'fuzzy' to match the parameter to a regular expression.
+ * It will expect to receive calls in that specific order and play them back.
+ *
+ * In setUp() call:
+ *
+ *  $this->_storage = new UnitTestStorage();
+ *  $gallery->_storage = $this->_storage;
+ *
+ * In tearDown() call:
+ *
+ *
+ *
+ *  $this->assertTrue($this->_storage->isComplete(), $this->_storage->getRemaining());
+ *
+ *
+ *
+ * The check in tearDown() verifies that all expected calls were received.
+ *
+ * @package Gallery
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class UnitTestStorage extends MockObject {
+	public $_extras;
+	public $_lockSystem;
+
+	public function __construct() {
+		parent::__construct();
+
+		list($ret, $this->_lockSystem) = GalleryCoreApi::getPluginParameter('module', 'core', 'lock.system');
+
+		if ($ret) {
+			/*
+			 * It is a pita for the caller to have to handle this, so just print it out, which
+			 * should raise enough of a red flag.
+			 */
+			echo $ret->getAsHtml();
+		}
+	}
+
+	public function setReply($function, $inputs, $outputs, $optional = false) {
+		if ($this->_lockSystem != 'database'
+			&& in_array($function, array('acquireReadLock', 'acquireWriteLock', 'releaseLocks'))
+		) {
+			return;
+		}
+
+		if ($function == 'search') {
+			$inputs[0] = trim(preg_replace('/\s+/', ' ', $inputs[0]));
+		}
+
+		parent::setReply($function, $inputs, $outputs, $optional);
+	}
+
+	public function isComplete() {
+		return parent::isComplete()
+		&& !empty($this->_extras) ? $this->_extras->isComplete() : true;
+	}
+
+	public function getRemaining() {
+		return parent::getRemaining()
+		. (!empty($this->_extras) ? $this->_extras->getRemaining() : '');
+	}
+
+	public function getType() {
+		return $this->_makeReply('getType', array());
+	}
+
+	public function getAdoDbType() {
+		return $this->_makeReply('getAdoDbType', array());
+	}
+
+	public function isTransactional() {
+		return $this->_makeReply('isTransactional', array());
+	}
+
+	public function loadEntities($ids) {
+		return $this->_makeReply('loadEntities', array($ids));
+	}
+
+	public function saveEntity(&$entity) {
+		return $this->_makeReply('saveEntity', array(&$entity));
+	}
+
+	public function deleteEntity(&$entity) {
+		return $this->_makeReply('deleteEntity', array(&$entity));
+	}
+
+	public function newEntity(&$entity) {
+		return $this->_makeReply('newEntity', array(&$entity));
+	}
+
+	public function getUniqueId($sequence = DATABASE_SEQUENCE_ID) {
+		return $this->_makeReply('getUniqueId', array($sequence));
+	}
+
+	public function refreshEntity($entity) {
+		return $this->_makeReply('refreshEntity', array($entity));
+	}
+
+	public function acquireReadLock($entityIds, $timeout) {
+		return $this->_makeReply('acquireReadLock', array($entityIds, $timeout));
+	}
+
+	public function acquireWriteLock($entityIds, $timeout) {
+		return $this->_makeReply('acquireWriteLock', array($entityIds, $timeout));
+	}
+
+	public function refreshLocks($lockIds, $freshUntil) {
+		return $this->_makeReply('refreshLocks', array($lockIds, $freshUntil));
+	}
+
+	public function releaseLocks($lockIds) {
+		return $this->_makeReply('releaseLocks', array($lockIds));
+	}
+
+	public function removeIdsFromLock($lock, $ids) {
+		return $this->_makeReply('removeIdsFromLock', array($lock, $ids));
+	}
+
+	public function moveIdsBetweenLocks($relock, $newLockId, $lockType) {
+		return $this->_makeReply('moveIdsBetweenLocks', array($relock, $newLockId, $lockType));
+	}
+
+	public function newLockId() {
+		return $this->_makeReply('newLockId', array());
+	}
+
+	public function search($query, $data = array(), $optional = array()) {
+		$query = trim(preg_replace('/\s+/', ' ', $query));
+
+		return $this->_makeReply('search', array($query, $data, $optional));
+	}
+
+	public function execute($statement, $data = array()) {
+		return $this->_makeReply('execute', array($statement, $data));
+	}
+
+	public function addMapEntry($mapName, $entry, $useNonTransactionalConnection = false) {
+		return $this->_makeReply(
+			'addMapEntry',
+			array($mapName, $entry, $useNonTransactionalConnection)
+		);
+	}
+
+	public function removeMapEntry($mapName, $entry) {
+		return $this->_makeReply('removeMapEntry', array($mapName, $entry));
+	}
+
+	public function removeAllMapEntries($mapName, $useNonTransactionalConnection = false) {
+		return $this->_makeReply(
+			'removeAllMapEntries',
+			array($mapName, $useNonTransactionalConnection)
+		);
+	}
+
+	public function getMapEntry($mapName, $select, $match = array(), $optional = array()) {
+		return $this->_makeReply(
+			'getMapEntry',
+			array($mapName, $select, $match, $optional)
+		);
+	}
+
+	public function updateMapEntry($mapName, $match, $change, $useNonTransactionalConnection = false) {
+		return $this->_makeReply(
+			'updateMapEntry',
+			array($mapName, $match, $change, $useNonTransactionalConnection)
+		);
+	}
+
+	public function configureStore($moduleId, $upgradeInfo = array()) {
+		return $this->_makeReply('configureStore', array($moduleId, $upgradeInfo));
+	}
+
+	public function configureStoreCleanup($moduleId) {
+		return $this->_makeReply('configureStoreCleanup', array($moduleId));
+	}
+
+	public function unconfigureStore($moduleId) {
+		return $this->_makeReply('unconfigureStore', array($moduleId));
+	}
+
+	public function cleanStore() {
+		return $this->_makeReply('cleanStore', array());
+	}
+
+	public function beginTransaction() {
+		return $this->_makeReply('beginTransaction', array());
+	}
+
+	public function commitTransaction() {
+		return $this->_makeReply('commitTransaction', array());
+	}
+
+	public function checkPoint() {
+		return $this->_makeReply('checkPoint', array());
+	}
+
+	public function rollbackTransaction() {
+		return $this->_makeReply('rollbackTransaction', array());
+	}
+
+	public function convertIntToBits($intVal) {
+		return $this->_makeReply('convertIntToBits', array($intVal));
+	}
+
+	public function convertBitsToInt($bitsVal) {
+		return $this->_makeReply('convertBitsToInt', array($bitsVal));
+	}
+
+	public function getFunctionSql($functionName, $args) {
+		return $this->_makeReply('getFunctionSql', array($functionName, $args));
+	}
+
+	public function extractClasses($query) {
+		return $this->_makeReply('extractClasses', array($query));
+	}
+
+	public function getProfilingHtml() {
+		return $this->_makeReply('getProfilingHtml', array());
+	}
+
+	public function isInstalled() {
+		return $this->_makeReply('isInstalled', array());
+	}
+
+	public function optimize($tableNames = null) {
+		return $this->_makeReply('optimize', array($tableNames));
+	}
+
+	public function getAffectedRows($useNonTransactionalConnection = false) {
+		return $this->_makeReply('getAffectedRows', array($useNonTransactionalConnection));
+	}
+
+	public function describeEntity($entityName, $tryAllModules = false) {
+		return $this->_makeReply('describeEntity', array($entityName, $tryAllModules));
+	}
+
+	public function describeMap($mapName, $tryAllModules = false) {
+		return $this->_makeReply('describeMap', array($mapName, $tryAllModules));
+	}
+
+	public function encodeBlob($blob) {
+		return $this->_makeReply('encodeBlob', array($blob));
+	}
+
+	public function decodeBlob($blob) {
+		return $this->_makeReply('decodeBlob', array($blob));
+	}
+
+	public function setDebug($debug) {
+		return $this->_makeReply('setDebug', array($debug));
+	}
+
+	public function _translateTableName($tableName) {
+		return $this->_makeReply('_translateTableName', array($tableName));
+	}
+
+	public function _translateColumnName($tableName) {
+		return $this->_makeReply('_translateColumnName', array($tableName));
+	}
+
+	public function _normalizeValue($value, $memberData, $fromDb = false) {
+		return $this->_makeReply('_normalizeValue', array($value, $memberData, $fromDb));
+	}
+
+	public function validateConnection() {
+		return $this->_makeReply('validateConnection', array());
+	}
+
+	public function &_getExtras() {
+		if (!isset($this->_extras)) {
+			$this->_extras = new UnitTestStorageExtras();
+		}
+
+		return $this->_extras;
+	}
+
+	public function setExtrasReply($function, $inputs, $outputs, $optional = false) {
+		if (!isset($this->_extras)) {
+			$this->_extras = new UnitTestStorageExtras();
+		}
+
+		$this->_extras->setReply($function, $inputs, $outputs, $optional);
+	}
+}
+
+class UnitTestStorageExtras extends MockObject {
+	public function dropSequence($table) {
+		return $this->_makeReply('dropSequence', array($table));
+	}
+
+	public function createSequence($table, $startId = 1) {
+		return $this->_makeReply('createSequence', array($table, $startId));
+	}
+
+	public function _executeSql($buffer) {
+		return $this->_makeReply('_executeSql', array($buffer));
+	}
+
+	public function _updateSchemaTableInfo(
+		$tableNameInSchema,
+		$tableSql,
+		$moduleId,
+		$type = null,
+		$info = null
+	) {
+		return $this->_makeReply(
+			'_updateSchemaTableInfo',
+			array($tableNameInSchema, $tableSql, $moduleId, $type, $info)
+		);
+	}
+}
+
+class UnitTestStorageSearchResults {
+	public $_data;
+	public $_count;
+
+	public function __construct($data) {
+		$this->_data  = $data;
+		$this->_count = count($this->_data);
+	}
+
+	public function resultCount() {
+		return $this->_count;
+	}
+
+	public function nextResult() {
+		return count($this->_data) > 0 ? array_shift($this->_data) : false;
+	}
+}

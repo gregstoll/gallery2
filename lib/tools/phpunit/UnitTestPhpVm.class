@@ -1,0 +1,156 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Unit test GalleryPhpVm.  This is a mock GalleryPhpVm that the unit tests can use to simulate
+ * the exact conditions that they want from the php vm in order to exercise the code.
+ *
+ * Use setReply() to tell it what function calls to expect.  Provide it with an array of
+ * input parameters to expect, exact values by default or use an array key starting with
+ * 'fuzzy' to match the parameter to a regular expression.
+ * It will expect to receive calls in that specific order and play them back.
+ *
+ * In setUp() call:
+ *
+ *  $this->_phpVm = new UnitTestPhpVm();
+ *  $gallery->_phpVm = $this->_phpVm;
+ *
+ * In tearDown() call:
+ *
+ *
+ *  $this->assertTrue($this->_phpVm->isComplete(), $this->_phpVm->getRemaining());
+ *
+ *
+ * The check in tearDown() verifies that all expected calls were received.
+ *
+ * @package Gallery
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class UnitTestPhpVm extends MockObject {
+	public function function_exists($functionName) {
+		return $this->_makeReply('function_exists', array($functionName));
+	}
+
+	public function extension_loaded($name) {
+		return $this->_makeReply('extension_loaded', array($name));
+	}
+
+	public function iconv($inCharset, $outCharset, $string) {
+		return $this->_makeReply('iconv', array($inCharset, $outCharset, $string));
+	}
+
+	public function mb_convert_encoding($string, $outCharset, $inCharset) {
+		return $this->_makeReply('mb_convert_encoding', array($string, $outCharset, $inCharset));
+	}
+
+	public function recode_string($request, $string) {
+		return $this->_makeReply('recode_string', array($request, $string));
+	}
+
+	public function md5($string) {
+		return $this->_makeReply('md5', array($string));
+	}
+
+	public function crc32($string) {
+		return $this->_makeReply('crc32', array($string));
+	}
+
+	public function nl_langinfo($item) {
+		return $this->_makeReply('nl_langinfo', array($item));
+	}
+
+	public function setlocale($category, $locale) {
+		return $this->_makeReply('setlocale', array($category, $locale));
+	}
+
+	public function header($string, $replace = null) {
+		return $this->_makeReply('header', array($string, $replace));
+	}
+
+	public function headers_sent() {
+		return $this->_makeReply('headers_sent', array());
+	}
+
+	public function get_magic_quotes_gpc() {
+		return $this->_makeReply('get_magic_quotes_gpc', array());
+	}
+
+	public function ini_get($varname) {
+		return $this->_makeReply('ini_get', array($varname));
+	}
+
+	public function ini_set($varname, $newvalue) {
+		return $this->_makeReply('ini_set', array($varname, $newvalue));
+	}
+
+	public function time() {
+		return $this->_makeReply('time', array());
+	}
+
+	public function exit_($status = null) {
+		return $this->_makeReply('exit_', array($status));
+	}
+
+	public function rand($min = null, $max = null) {
+		return $this->_makeReply('rand', array($min, $max));
+	}
+
+	public function getAllHeaders() {
+		return $this->_makeReply('getAllHeaders', array());
+	}
+
+	public function mail(
+		$to,
+		$subject,
+		$message,
+		$additionalHeaders = null,
+		$additionalParameters = null
+	) {
+		return $this->_makeReply(
+			'mail',
+			array($to, $subject, $message, $additionalHeaders, $additionalParameters)
+		);
+	}
+
+	public function gzinflate($data, $length = null) {
+		return $this->_makeReply('gzinflate', array($data, $length));
+	}
+
+	public function class_exists($class_name) {
+		return $this->_makeReply('class_exists', array($class_name));
+	}
+
+	public function gzencode($data, $level = null, $encodingMode = null) {
+		return $this->_makeReply('gzencode', array($data, $level, $encodingMode));
+	}
+
+	public function gethostbyname($hostname) {
+		return $this->_makeReply('gethostbyname', array($hostname));
+	}
+
+	public function defined($name) {
+		return $this->_makeReply('defined', array($name));
+	}
+
+	public function date($format, $timestamp = null) {
+		return $this->_makeReply('date', array($format, $timestamp));
+	}
+}

@@ -1,0 +1,166 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Unit test repository.  This is a mock repository that the unit tests can use to simulate
+ * the exact conditions that they want from the repository in order to exercise the code.
+ *
+ * Use setReply() to tell it what function calls to expect.  Provide it with an array of
+ * input parameters to expect, exact values by default or use an array key starting with
+ * 'fuzzy' to match the parameter to a regular expression.
+ * It will expect to receive calls in that specific order and play them back.
+ *
+ * In tearDown() or at the end of the test, call:
+ *
+ *
+ *  $this->assertTrue($repository->isComplete(), $repository->getRemaining());
+ *
+ * This check verifies that all expected calls were received.
+ *
+ * @package Gallery
+ * @subpackage PHPUnit
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17582 $
+ */
+class UnitTestRepository extends MockObject {
+	public function init($source) {
+		return $this->_makeReply('init', array($source));
+	}
+
+	public function isCoreUpgradeAvailable() {
+		return $this->_makeReply('isCoreUpgradeAvailable', array());
+	}
+
+	public function getPluginUpgradeInfo($pluginType, $pluginId, $forBasePackageUpgrade = true) {
+		return $this->_makeReply(
+			'getPluginUpgradeInfo',
+			array($pluginType, $pluginId, $forBasePackageUpgrade)
+		);
+	}
+
+	public function getRepositoryPluginList($pluginType, $showAllPlugins = false, $coreApis = null) {
+		return $this->_makeReply(
+			'getRepositoryPluginList',
+			array($pluginType, $showAllPlugins, $coreApis)
+		);
+	}
+
+	public function comparePluginListEntries($plugin1, $plugin2) {
+		return $this->_makeReply('comparePluginListEntries', array($plugin1, $plugin2));
+	}
+
+	public function getAllUpgradeablePackages() {
+		return $this->_makeReply('getAllUpgradeablePackages', array());
+	}
+
+	public function getUpgradeableLanguagePackages($upgradeableLanguages) {
+		return $this->_makeReply('getUpgradeableLanguagePackages', array($upgradeableLanguages));
+	}
+
+	public function updatePackageMetaData(
+		$pluginType,
+		$pluginId,
+		$packageName,
+		$packageVersion,
+		$packageBuild,
+		$locked
+	) {
+		return $this->_makeReply(
+			'updatePackageMetaData',
+			array($pluginType, $pluginId, $packageName, $packageVersion, $packageBuild, $locked)
+		);
+	}
+
+	public function createPluginsDirectory() {
+		return $this->_makeReply('createPluginsDirectory', array());
+	}
+
+	public function getDownloadFileList($pluginData) {
+		return $this->_makeReply('getDownloadFileList', array($pluginData));
+	}
+
+	public function downloadAndUnpack($pluginType, $pluginId, $packageName, $relativePackageUrl) {
+		return $this->_makeReply(
+			'downloadAndUnpack',
+			array($pluginType, $pluginId, $packageName, $relativePackageUrl)
+		);
+	}
+
+	public function downloadPackagesForPlugin($pluginType, $pluginId, $pluginDownloadData, &$callback) {
+		return $this->_makeReply(
+			'downloadPackagesForPlugin',
+			array($pluginType, $pluginId, $pluginDownloadData, $callback)
+		);
+	}
+
+	public function preVerifyPackage($packageName, $descriptor) {
+		return $this->_makeReply('preVerifyPackage', array($packageName, $descriptor));
+	}
+
+	public function verifyPackageIntegrity($packageName, $descriptor) {
+		return $this->_makeReply('verifyPackageIntegrity', array($packageName, $descriptor));
+	}
+
+	public function scanPlugin($pluginType, $pluginId) {
+		return $this->_makeReply('scanPlugin', array($pluginType, $pluginId));
+	}
+
+	public function translateRepositoryName($source) {
+		return $this->_makeReply('translateRepositoryName', array($source));
+	}
+
+	public function localIndexExists() {
+		return $this->_makeReply('localIndexExists', array());
+	}
+
+	public function downloadIndex() {
+		return $this->_makeReply('downloadIndex', array());
+	}
+
+	public function pluginExistsInIndex($pluginType, $pluginId) {
+		return $this->_makeReply('pluginExistsInIndex', array($pluginType, $pluginId));
+	}
+
+	public function getIndexMetaData() {
+		return $this->_makeReply('getIndexMetaData', array());
+	}
+
+	public function getPackageVersionAndBuild($pluginType, $pluginId, $packageName) {
+		return $this->_makeReply(
+			'getPackageVersionAndBuild',
+			array($pluginType, $pluginId, $packageName)
+		);
+	}
+
+	public function getPluginName($pluginType, $pluginId) {
+		return $this->_makeReply('getPluginName', array($pluginType, $pluginId));
+	}
+
+	public function getLanguagePackageFiles($locales) {
+		return $this->_makeReply('getLanguagePackageFiles', array($locales));
+	}
+
+	public function downloadAndUnpackPackages($filesToDownload, &$callback) {
+		return $this->_makeReply('downloadAndUnpackPackages', array($filesToDownload, $callback));
+	}
+
+	public function removeObsoleteFiles($pluginType, $pluginId) {
+		return $this->_makeReply('removeObsoleteFiles', array($pluginType, $pluginId));
+	}
+}

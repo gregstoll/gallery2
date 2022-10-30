@@ -1,0 +1,287 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Unit test platform.  This is a mock platform that the unit tests can use to simulate
+ * the exact conditions that they want from the platform in order to exercise the code.
+ *
+ * Use setReply() to tell it what function calls to expect.  Provide it with an array of
+ * input parameters to expect, exact values by default or use an array key starting with
+ * 'fuzzy' to match the parameter to a regular expression.
+ * It will expect to receive calls in that specific order and play them back.
+ *
+ * In setUp() call:
+ *
+ *  $this->_platform = new UnitTestPlatform();
+ *
+ *  $gallery->setPlatform($this->_platform);
+ *
+ * In tearDown() call:
+ *
+ *
+ *  $this->assertTrue($this->_platform->isComplete(), $this->_platform->getRemaining());
+ *
+ * The check in tearDown() verifies that all expected calls were received.
+ *
+ * @package Gallery
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 18157 $
+ */
+class UnitTestPlatform extends MockObject {
+	public function __construct() {
+		parent::__construct();
+	}
+
+	public function copy($source, $dest) {
+		return $this->_makeReply('copy', array($source, $dest));
+	}
+
+	public function symlink($source, $dest) {
+		return $this->_makeReply('symlink', array($source, $dest));
+	}
+
+	public function move_uploaded_file($filename, $newFilename = null) {
+		return $this->_makeReply('move_uploaded_file', array($filename, $newFilename));
+	}
+
+	public function tempnam($dir, $prefix) {
+		return $this->_makeReply('tempnam', array($dir, $prefix));
+	}
+
+	public function file_exists($filename) {
+		return $this->_makeReply('file_exists', array($filename));
+	}
+
+	public function is_link($filename) {
+		return $this->_makeReply('is_link', array($filename));
+	}
+
+	public function is_dir($filename) {
+		return $this->_makeReply('is_dir', array($filename));
+	}
+
+	public function is_file($filename) {
+		return $this->_makeReply('is_file', array($filename));
+	}
+
+	public function is_writeable($filename) {
+		return $this->_makeReply('is_writeable', array($filename));
+	}
+
+	public function is_readable($filename) {
+		return $this->_makeReply('is_readable', array($filename));
+	}
+
+	public function is_uploaded_file($filename) {
+		return $this->_makeReply('is_uploaded_file', array($filename));
+	}
+
+	public function is_executable($filename) {
+		return $this->_makeReply('is_executable', array($filename));
+	}
+
+	public function filesize($filename) {
+		return $this->_makeReply('filesize', array($filename));
+	}
+
+	public function clearstatcache() {
+		return $this->_makeReply('clearstatcache', array());
+	}
+
+	public function file($filename, $use_include_path = false) {
+		return $this->_makeReply('file', array($filename, $use_include_path));
+	}
+
+	public function readfile($filename, $use_include_path = false) {
+		return $this->_makeReply('readfile', array($filename, $use_include_path));
+	}
+
+	public function file_get_contents($filename) {
+		return $this->_makeReply('file_get_contents', array($filename));
+	}
+
+	public function fopen($filename, $mode, $use_include_path = 0) {
+		return $this->_makeReply('fopen', array($filename, $mode, $use_include_path));
+	}
+
+	public function flock($handle, $operation, &$wouldblock) {
+		return $this->_makeReply('flock', array($handle, $operation, &$wouldblock));
+	}
+
+	public function atomicWrite($filename, $data) {
+		return $this->_makeReply('atomicWrite', array($filename, $data));
+	}
+
+	public function opendir($path) {
+		return $this->_makeReply('opendir', array($path));
+	}
+
+	public function readdir($resource) {
+		return $this->_makeReply('readdir', array($resource));
+	}
+
+	public function closedir($resource) {
+		return $this->_makeReply('closedir', array($resource));
+	}
+
+	public function rename($oldname, $newname) {
+		return $this->_makeReply('rename', array($oldname, $newname));
+	}
+
+	public function stat($filename) {
+		return $this->_makeReply('stat', array($filename));
+	}
+
+	public function getimagesize($filename) {
+		return $this->_makeReply('getimagesize', array($filename));
+	}
+
+	public function unlink($filename) {
+		return $this->_makeReply('unlink', array($filename));
+	}
+
+	public function rmdir($filename) {
+		return $this->_makeReply('rmdir', array($filename));
+	}
+
+	public function recursiveRmdir($dirname) {
+		return $this->_makeReply('recursiveRmdir', array($dirname));
+	}
+
+	public function mkdir($path, $stringPerms = '755') {
+		return $this->_makeReply('mkdir', array($path, $stringPerms));
+	}
+
+	public function isLegalPathComponent($component, $forDirectory = false) {
+		return $this->_makeReply('isLegalPathComponent', array($component, $forDirectory));
+	}
+
+	public function getLegalPathCharacters() {
+		return $this->_makeReply('getLegalPathCharacters', array());
+	}
+
+	public function legalizePathComponent($component, $forDirectory = false) {
+		return $this->_makeReply('legalizePathComponent', array($component, $forDirectory));
+	}
+
+	public function exec($cmdArray) {
+		return $this->_makeReply('exec', array($cmdArray));
+	}
+
+	public function getDirectorySeparator() {
+		return $this->_makeReply('getDirectorySeparator', array());
+	}
+
+	public function isRestrictedByOpenBaseDir($path) {
+		return $this->_makeReply('isRestrictedByOpenBaseDir', array($path));
+	}
+
+	public function fsockopen($target, $port, &$errno, &$errstr, $timeout) {
+		return $this->_makeReply('fsockopen', array($target, $port, &$errno, &$errstr, $timeout));
+	}
+
+	public function fwrite($handle, $string, $length = null) {
+		return $this->_makeReply('fwrite', array($handle, $string, $length));
+	}
+
+	public function file_put_contents($path, $contents) {
+		return $this->_makeReply('file_put_contents', array($path, $contents));
+	}
+
+	public function fclose($handle) {
+		return $this->_makeReply('fclose', array($handle));
+	}
+
+	public function fflush($handle) {
+		return $this->_makeReply('fflush', array($handle));
+	}
+
+	public function feof($handle) {
+		return $this->_makeReply('feof', array($handle));
+	}
+
+	public function fread($handle, $length) {
+		return $this->_makeReply('fread', array($handle, $length));
+	}
+
+	public function fseek($handle, $offset, $whence = SEEK_SET) {
+		return $this->_makeReply('fseek', array($handle, $offset, $whence));
+	}
+
+	public function ftruncate($handle, $size) {
+		return $this->_makeReply('ftruncate', array($handle, $size));
+	}
+
+	public function fgets($handle, $length = 0) {
+		return $this->_makeReply('fgets', array($handle, $length));
+	}
+
+	public function realpath($file) {
+		return $this->_makeReply('realpath', array($file));
+	}
+
+	public function touch($file, $time = null, $atime = null) {
+		return $this->_makeReply('touch', array($file, $time, $atime));
+	}
+
+	public function mail($to, $subject, $body, $headers = null) {
+		return $this->_makeReply('mail', array($to, $subject, $body, $headers));
+	}
+
+	public function splitPath($path) {
+		return $this->_makeReply('splitPath', array($path));
+	}
+
+	public function isSymlinkSupported() {
+		return $this->_makeReply('isSymlinkSupported', array());
+	}
+
+	public function getLineEnding() {
+		return $this->_makeReply('getLineEnding', array());
+	}
+
+	public function chdir($path) {
+		return $this->_makeReply('chdir', array($path));
+	}
+
+	public function getcwd() {
+		return $this->_makeReply('getcwd', array());
+	}
+
+	public function chmod($path, $mode = null) {
+		return $this->_makeReply('chmod', array($path, $mode));
+	}
+
+	public function recursiveChmod($path, $dirMode = null, $fileMode = null) {
+		return $this->_makeReply('recursiveChmod', array($path, $dirMode, $fileMode));
+	}
+
+	public function recursiveFixDirPermissions($path) {
+		return $this->_makeReply('recursiveFixDirPermissions', array($path));
+	}
+
+	public function strftime($format, $timestamp = null) {
+		return $this->_makeReply('strftime', array($format, $timestamp));
+	}
+
+	public function glob($pattern, $flags = null) {
+		return $this->_makeReply('glob', array($pattern, $flags));
+	}
+}
