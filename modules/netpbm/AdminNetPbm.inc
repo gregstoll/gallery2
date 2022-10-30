@@ -192,7 +192,7 @@ class AdminNetPbmView extends GalleryView {
 	foreach (array('path', 'jheadPath') as $key) {
 	    $form[$key] = trim($form[$key]);
 	    if (!empty($form[$key])) {
-		if ($form[$key]{strlen($form[$key])-1} != $slash) {
+		if ($form[$key][strlen($form[$key])-1] != $slash) {
 		    $form[$key] .= $slash;
 		}
 	    }

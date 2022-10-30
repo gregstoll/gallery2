@@ -30,7 +30,7 @@ class ArchiveUploadSiteAdminController extends GalleryController {
     /**
      * @see GalleryController::handleRequest
      */
-    function handleRequest(&$form) {
+    function handleRequest($form) {
 	global $gallery;
 
 	$ret = GalleryCoreApi::assertUserIsSiteAdministrator();
