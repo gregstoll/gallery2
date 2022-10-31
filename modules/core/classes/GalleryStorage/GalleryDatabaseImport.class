@@ -374,11 +374,13 @@ class GalleryDatabaseImport extends GalleryImportElement {
  * @private
  */
 class _GalleryExportTag extends GalleryImportElement {
-    function _GalleryExportTag($parent, $attributes) {
-	parent::GalleryImportElement($parent);
-	$this->writeVersions($attributes['core-version'], $attributes['gallery-version']);
-	$this->updateStatus(0, $attributes['tables']);
-    }
+
+	public function __construct($parent, $attributes)
+	{
+		parent::__construct($parent);
+		$this->writeVersions($attributes['core-version'], $attributes['gallery-version']);
+		$this->updateStatus(0, $attributes['tables']);
+	}
 
     /**
      * Write a new copy of the versions.dat file based on the versions contained in the import file.
