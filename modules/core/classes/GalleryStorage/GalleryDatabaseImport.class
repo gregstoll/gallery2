@@ -428,8 +428,8 @@ class _GalleryPluginTag extends GalleryImportElement {
     /** Variable to hold the module id */
     var $_id;
 
-    function _GalleryPluginTag($parent, $attributes) {
-	parent::GalleryImportElement($parent);
+    function __construct($parent, $attributes) {
+	parent::__construct($parent);
 	$this->_id = $attributes['id'];
     }
 
@@ -458,8 +458,8 @@ class _GallerySequenceTag extends GalleryImportElement {
     /** The starting value. */
     var $_startValue;
 
-    function _GallerySequenceTag($parent, $attributes) {
-	parent::GalleryImportElement($parent);
+    public function __construct($parent, $attributes) {
+	parent::__construct($parent);
 	$this->_sequenceName = $attributes['name'];
 	$this->_startValue = $attributes['start-value'];
     }
@@ -494,8 +494,8 @@ class _GalleryTableTag extends GalleryImportElement {
     /** Variable to hold the table name */
     var $_name;
 
-    function _GalleryTableTag($parent, $attributes) {
-    	parent::GalleryImportElement($parent);
+    function __construct($parent, $attributes) {
+    	parent::__construct($parent);
 	$this->_name = $attributes['name'];
     }
 
@@ -536,8 +536,8 @@ class _GalleryTableDefinitionTag extends GalleryImportElement {
     /** Holds the table type */
     var $_tableType = null;
 
-    function _GalleryTableDefinitionTag($parent, $tableName, $attributes) {
-	parent::GalleryImportElement($parent);
+    function __construct($parent, $tableName, $attributes) {
+	parent::__construct($parent);
 	$this->_name = $tableName;
 	$this->_moduleId = $attributes['module-id'];
     }
@@ -634,8 +634,8 @@ class _GalleryTableInfoTag extends GalleryImportElement {
     /** Holds the table type */
     var $_tableType = null;
 
-    function _GalleryTableInfoTag($parent, $attributes) {
-	parent::GalleryImportElement($parent);
+    function __construct($parent, $attributes) {
+	parent::__construct($parent);
 	$this->_tableInfo = '';
 	$this->_tableType = $attributes['type'];
     }
@@ -662,8 +662,8 @@ class _GalleryDataTag extends GalleryImportElement {
     /** Row counter so we can provide feedback to the user. */
     var $_rowCounter;
 
-    function _GalleryDataTag($parent, $tableName, $attributes) {
-	parent::GalleryImportElement($parent);
+    function __construct($parent, $tableName, $attributes) {
+	parent::__construct($parent);
 
 	list ($this->_tableName) = $this->_storage->_translateTableName($tableName);
 	$this->_rowCounter = 0;
@@ -713,8 +713,8 @@ class _GalleryFieldDefinitionTag extends GalleryImportElement {
     /** Name of the column */
     var $_translatedName = "";
 
-    function _GalleryFieldDefinitionTag($parent, $attributes) {
-	parent::GalleryImportElement($parent);
+    function __construct($parent, $attributes) {
+	parent::__construct($parent);
 	$colName = GalleryUtilities::strToLower($attributes['name']);
 	$this->_translatedName = $this->_storage->_translateColumnName($colName);
 	$this->_fieldDefinition['type'] = $attributes['type'];
@@ -744,8 +744,8 @@ class _GalleryRowTag extends GalleryImportElement {
     /** Holds the generated insert for this table */
     var $_currentSql;
 
-    function _GalleryRowTag($parent, $tableName, $fields, $attributes) {
-	parent::GalleryImportElement($parent);
+    function __construct($parent, $tableName, $fields, $attributes) {
+	parent::__construct($parent);
 	$this->_fields = $fields;
 	$this->_fieldNames = array_keys($fields);
 	$this->_currentSql = 'INSERT INTO ' . $tableName . ' (' . implode(', ', $this->_fieldNames)
@@ -803,8 +803,8 @@ class _GalleryFieldValueTag extends GalleryImportElement {
     /** Temporary storage for the null field value indicator */
     var $_memberData;
 
-    function _GalleryFieldValueTag($parent, $memberData, $attributes) {
-	parent::GalleryImportElement($parent);
+    function __construct($parent, $memberData, $attributes) {
+	parent::__construct($parent);
 	$this->_fieldData = '';
 	$this->_isFieldNull = !empty($attributes['null']);
 	$this->_memberData = $memberData;
@@ -892,7 +892,7 @@ class GalleryXmlProcessor {
      * @param array $attributes The attributes that were present on the xml element.
      * @access private
      */
-    function _processStartElement(&$parser, $tag, $attributes) {
+    function _processStartElement($parser, $tag, $attributes) {
     	$topItem =& $this->_elementStack[count($this->_elementStack) - 1];
 	$newChild = $topItem->_processStartElement($tag, $attributes);
 	if (isset($newChild)) {
@@ -910,7 +910,7 @@ class GalleryXmlProcessor {
      * @param string $cdata A buffer of data that represents the body of the xml element
      * @access private
      */
-    function _processCData(&$parser, $cdata) {
+    function _processCData($parser, $cdata) {
 	$topItem =& $this->_elementStack[count($this->_elementStack) - 1];
 	$topItem->_processCData($cdata);
     }
@@ -921,7 +921,7 @@ class GalleryXmlProcessor {
      * @param string $tag The name of the tage being processed
      * @access private
      */
-    function _processEndElement(&$parser, $tag) {
+    function _processEndElement($parser, $tag) {
 	$topItem = array_pop($this->_elementStack);
 	$topItem->_processEndElement($tag);
 	$newTopItem =& $this->_elementStack[count($this->_elementStack) - 1];
