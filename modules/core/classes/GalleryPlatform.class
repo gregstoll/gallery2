@@ -253,8 +253,8 @@ class GalleryPlatform {
 	if ($gallery->getDebug()) {
 	    $gallery->debug("is_executable($filename)");
 	}
-
-	return is_executable($filename);
+	$perms = fileperms($filename) & 0x0049;
+	return !empty($perms);
     }
 
     /**
