@@ -1,0 +1,96 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This is a very simple abstract controller used by the repository tools.
+ * It also loads views and sets their variables.
+ * @package RepositoryTools
+ * @subpackage Classes
+ * @author Jozef Selesi <selesi at gmail dot com>
+ * @version $Revision: 17580 $
+ */
+class RepositoryControllerAndView {
+	/**
+	 * Template object used for displaying page contents.
+	 *
+	 * @var object
+	 * @access private
+	 */
+	public $_template;
+
+	/**
+	 * Initializes the Smarty template system.
+	 */
+	public function init() {
+		GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+
+		$this->_template = new GalleryTemplate(__DIR__ . '/../../../..');
+
+		// Set the translation domain
+		$this->_template->setVariable('l10Domain', 'lib_repository');
+	}
+
+	/**
+	 * Checks if the specified template exists in repository/templates/ and includes it.
+	 * Include any data used by the template as an array in the second parameter.
+	 *
+	 * @param string $view name of the template file to load, without the extension
+	 * @param array $data template data
+	 * @return GalleryStatus a status code
+	 */
+	public function showView($view, $data) {
+		global $gallery;
+
+		$quiet = GalleryUtilities::getRequestVariables('quiet');
+
+		if ($quiet) {
+			return null;
+		}
+
+		// Calculate template file name and verify that it exists.
+		$viewFileRelative = $gallery->getConfig('repository.templates') . $view . '.tpl';
+		$viewFile         = __DIR__ . '/../../../../' . $viewFileRelative;
+		$platform         =& $gallery->getPlatform();
+
+		if (!$platform->file_exists($viewFile)) {
+			return GalleryCoreApi::error(
+				ERROR_BAD_PATH,
+				__FILE__,
+				__LINE__,
+				"Invalid path: $viewFile"
+			);
+		}
+
+		// Set the Smarty variables from the data array.
+		foreach ($data as $key => $value) {
+			$this->_template->setVariable($key, $value);
+		}
+
+		// Send template to the browser.
+		list($ret, $templateContents) = $this->_template->fetch('gallery:' . $viewFileRelative);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		echo $templateContents;
+
+		return null;
+	}
+}

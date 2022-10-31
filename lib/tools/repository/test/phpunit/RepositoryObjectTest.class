@@ -1,0 +1,165 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * @version $Revision: 17580 $
+ * @package RepositoryTools
+ * @subpackage PHPUnit
+ * @author Jozef Selesi <selesi at gmail dot com>
+ */
+GalleryCoreApi::requireOnce('lib/tools/repository/classes/RepositoryObject.class');
+GalleryCoreApi::requireOnce('lib/tools/repository/classes/RepositoryDescriptor.class');
+GalleryCoreApi::requireOnce('lib/tools/repository/test/phpunit/RepositoryTestTemplate.class');
+
+/**
+ * Test RepositoryObject functionality
+ *
+ * @package RepositoryTools
+ * @subpackage PHPUnit
+ */
+class RepositoryObjectTest extends GalleryTestCase {
+	public function testOutputDir() {
+		global $gallery;
+
+		$object   = new RepositoryObject();
+		$platform = new UnitTestPlatform();
+
+		// Test an invalid directory.
+		$platform->setReply('is_dir', array('invalidDirectory'), false);
+
+		// Test setting a valid directory.
+		$platform->setReply('is_dir', array('validDirectory'), true);
+		$platform->setReply('realpath', array('validDirectory'), 'validDirectory');
+		$gallery->setPlatform($platform);
+
+		$ret = $object->setOutputDir('invalidDirectory');
+
+		$this->assertTrue($ret, 'Output directory set to non-existent directory.');
+
+		$ret = $object->setOutputDir('validDirectory');
+
+		$this->assertFalse($ret, 'Error returned on a valid directory.');
+
+		// Output directory should always end with a directory separator.
+		$this->assertTrue(
+			preg_match('/\/$/', $object->getOutputDir()),
+			'Directory separator not appended to output directory path.'
+		);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testWriteToDisk() {
+		global $gallery;
+
+		$outputPath                = 'outputDirectory/output.file';
+		$processedTemplateContents = 'Some contents used for testing.';
+		$templateVariableContents  = 'Some template variable contents.';
+		$object                    = new RepositoryObject();
+
+		$object->setOutputFile('output.file');
+
+		$object->_outputDir = 'outputDirectory/';
+		$platform           = new UnitTestPlatform();
+
+		$platform->setReply('file_exists', array($outputPath), true);
+		$platform->setReply('file_exists', array($outputPath), false);
+		$platform->setReply(
+			'file_put_contents',
+			array($outputPath, $templateVariableContents),
+			true
+		);
+		$platform->setReply('file_exists', array($outputPath), false);
+		$platform->setReply(
+			'file_put_contents',
+			array($outputPath, $processedTemplateContents),
+			true
+		);
+		$gallery->setPlatform($platform);
+
+		// Test that an existing file is not overwritten by default.
+		$ret = $object->writeToDisk();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($object->wasFileWritten(), 'Existing file overwritten.');
+
+		// Test overwriting an existing file with a template variable contents.
+		$object->setTemplate(new RepositoryTestTemplate('', $templateVariableContents));
+
+		$ret = $object->writeToDisk(true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($object->wasFileWritten(), 'Existing file not overwritten.');
+
+		// Test overwriting an existing file with a processed template.
+		$object->setTemplate(new RepositoryTestTemplate($processedTemplateContents));
+		$object->setTemplateFile('test.tpl');
+
+		$ret = $object->writeToDisk(true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($object->wasFileWritten(), 'Existing file not overwritten.');
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testFilterManifestForBasePackage() {
+		$manifest = implode(
+			"\n",
+			array(
+				'# $' . 'Revision: 15342 $',
+				'# File crc32 crc32(crlf) size size(crlf)  or  R File',
+				'modules/foo/MANIFEST	DATA',
+				'modules/foo/classes/FooHelper.class	DATA',
+				'modules/foo/classes/po/LanguageRelatedFoo.class	DATA',
+				'modules/foo/locale/ab/foo.mo	DATA',
+				'modules/foo/module.inc	DATA',
+				'modules/foo/po/GNUmakefile	DATA',
+				'modules/foo/po/ab.po	DATA',
+				'modules/foo/templates/test/foo.tpl	DATA',
+				'modules/foo/test/data/test.dat	DATA',
+				'modules/foo/test/phpunit/test.class	DATA',
+				'R	modules/foo/deleted_file.inc	DATA',
+			)
+		);
+
+		$descriptor  = new RepositoryDescriptor();
+		$newManifest = $descriptor->filterManifestForBasePackage($manifest);
+
+		$this->assertEquals(
+			array(
+				'# $' . 'Revision: 15342 $',
+				'# File crc32 crc32(crlf) size size(crlf)  or  R File',
+				'modules/foo/MANIFEST	DATA',
+				'modules/foo/classes/FooHelper.class	DATA',
+				'modules/foo/classes/po/LanguageRelatedFoo.class	DATA',
+				'modules/foo/module.inc	DATA',
+				'modules/foo/templates/test/foo.tpl	DATA',
+			),
+			explode("\n", $newManifest)
+		);
+	}
+}
