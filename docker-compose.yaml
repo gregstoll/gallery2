@@ -3,7 +3,7 @@ services:
   web:
     image: nginx:latest
     ports:
-      - "8000:8000"
+      - "10000:8000"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/nginx.conf
       - .:/app
@@ -11,10 +11,12 @@ services:
       - php
   php:
     ports:
-      - "9000:9000"
+      - "11000:9000"
     build:
       context: .
       dockerfile: PHP.Dockerfile
+    environment:
+      PHP_IDE_CONFIG: "serverName=docker"
     volumes:
       - .:/app
       - gallery2-data:/gallery2-data
@@ -31,7 +33,7 @@ services:
     volumes:
       - mysqldata:/var/lib/mysql
     ports:
-      - 3306:3306
+      - "13306:3306"
 volumes:
   mysqldata: {}
   gallery2-data: {}
