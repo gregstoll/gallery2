@@ -190,15 +190,6 @@ class PhpVmTest extends GalleryTestCase {
 		$phpVm->header('X-Foo: foo' . urlencode($crLf) . 'bar');
 	}
 
-	// This setting cannot be changed during runtime
-	public function testGetMagicQuotesGpc() {
-		$this->assertEquals(
-			get_magic_quotes_gpc(),
-			$this->_phpVm->get_magic_quotes_gpc(),
-			'The Vm function does not return the correct value'
-		);
-	}
-
 	public function testTime() {
 		/*
 		 * there is an incredibly slim chance that this will fail.  If it does, we should improve

@@ -460,7 +460,7 @@ class ItemEditThemeControllerTestTheme {
 		return null;
 	}
 
-	public function &getMap() {
+	public static function &getMap() {
 		static $map;
 
 		if (!isset($map)) {
@@ -474,8 +474,8 @@ class ItemEditThemeControllerTestTheme {
 		return null;
 	}
 
-	public function reset() {
-		$map =& $this->getMap();
+	static public function reset() {
+		$map =& self::getMap();
 		$map = array();
 	}
 
