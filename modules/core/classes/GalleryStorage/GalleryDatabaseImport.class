@@ -26,8 +26,8 @@
 GalleryCoreApi::requireOnce('modules/core/classes/GalleryTheme.class');
 
 /**
- * This class provides basic methods for importing Gallery information from an exported Gallery 
- * file.  It provides additional error handling and status reporting not provided by the 
+ * This class provides basic methods for importing Gallery information from an exported Gallery
+ * file.  It provides additional error handling and status reporting not provided by the
  * GalleryXmlHandler.
  */
 class GalleryImportElement extends GalleryXmlHandler {
@@ -323,7 +323,7 @@ class GalleryDatabaseImport extends GalleryImportElement {
 	    }
 
 	    $xmlParser = new GalleryXmlProcessor($this);
-	    
+
 	    /* Process the file until complete or errors occur. */
 	    while (empty($this->_errors)
 		   && $data = $platform->fread($handle, $this->_fileReadChunkSize)) {
@@ -334,7 +334,7 @@ class GalleryDatabaseImport extends GalleryImportElement {
 		 * special characters.
 		 */
 		if (!$xmlParser->xmlParse($data, $platform->feof($handle))) {
-		    return array($xmlParser->getParserError(), null); 
+		    return array($xmlParser->getParserError(), null);
 		}
 		$this->updateStatus();
 	    }
@@ -455,7 +455,7 @@ class _GallerySequenceTag extends GalleryImportElement {
     var $_sequenceName;
     /** The starting value. */
     var $_startValue;
-    
+
     function _GallerySequenceTag($parent, $attributes) {
 	parent::GalleryImportElement($parent);
 	$this->_sequenceName = $attributes['name'];
@@ -527,7 +527,7 @@ class _GalleryTableDefinitionTag extends GalleryImportElement {
 
     /** Holds the generated insert for this table */
     var $_currentSql = '';
-    
+
     /** Holds the table description information */
     var $_tableInfo = null;
 
@@ -571,7 +571,7 @@ class _GalleryTableDefinitionTag extends GalleryImportElement {
 	    $this->setError($ret);
 	    return null;
 	}
-	
+
 	/* Only need to decode if the data is in a CDATA section, which these fields are */
 	$sql = $this->_decodeHtmlSpecialChars($this->_currentSql);
 	$info = $this->_decodeHtmlSpecialChars($this->_tableInfo);
@@ -709,8 +709,8 @@ class _GalleryFieldDefinitionTag extends GalleryImportElement {
     var $_fieldDefinition = array();
 
     /** Name of the column */
-    var $_translatedName = array();
-    
+    var $_translatedName = "";
+
     function _GalleryFieldDefinitionTag($parent, $attributes) {
 	parent::GalleryImportElement($parent);
 	$colName = GalleryUtilities::strToLower($attributes['name']);
@@ -746,7 +746,7 @@ class _GalleryRowTag extends GalleryImportElement {
 	parent::GalleryImportElement($parent);
 	$this->_fields = $fields;
 	$this->_fieldNames = array_keys($fields);
-	$this->_currentSql = 'INSERT INTO ' . $tableName . ' (' . implode(', ', $this->_fieldNames) 
+	$this->_currentSql = 'INSERT INTO ' . $tableName . ' (' . implode(', ', $this->_fieldNames)
 		   . ') VALUES (' . GalleryUtilities::makeMarkers(count($this->_fieldNames)) . ')';
 	$this->_rowData = array();
 	$this->_fieldIndex = 0;
@@ -829,7 +829,7 @@ class _GalleryFieldValueTag extends GalleryImportElement {
 }
 
 /**
- * GalleryXmlProcessor provides a simple xml processor. It doesn't support anything fancy like 
+ * GalleryXmlProcessor provides a simple xml processor. It doesn't support anything fancy like
  * namespaces and such.
  * @package GalleryCore
  * @subpackage Storage
@@ -845,7 +845,7 @@ class GalleryXmlProcessor {
      * a reference to the PHP supplied XML parser.
      */
     var $_xmlParser;
-    
+
     function __construct($rootElement) {
 	$this->_elementStack[] = $rootElement;
 
@@ -875,14 +875,14 @@ class GalleryXmlProcessor {
     function release() {
 	xml_parser_free($this->_xmlParser);
     }
-    
-    function getParserError() { 
+
+    function getParserError() {
 	return GalleryCoreApi::error(ERROR_STORAGE_FAILURE, __FILE__, __LINE__,
 				     sprintf('XML error: %s at line %d',
 					   xml_error_string(xml_get_error_code($this->_xmlParser)),
 					   xml_get_current_line_number($this->_xmlParser)));
     }
-    
+
     /**
      * XML Callback to process start elements. Called by the PHP Xml parser
      * @param object $parser A reference to the php parser
@@ -894,7 +894,7 @@ class GalleryXmlProcessor {
     	$topItem =& $this->_elementStack[count($this->_elementStack) - 1];
 	$newChild = $topItem->_processStartElement($tag, $attributes);
 	if (isset($newChild)) {
-	    
+
 	    $this->_elementStack[] = $newChild;
 	} else {
 	    /* Put a dummy entry on the stack */
@@ -928,8 +928,8 @@ class GalleryXmlProcessor {
 }
 
 /**
- * Base Import Element. This class provides the basic methods that content handlers need to 
- * implement.  It can't just be an interface or flagged as abstract, because it is used as a 
+ * Base Import Element. This class provides the basic methods that content handlers need to
+ * implement.  It can't just be an interface or flagged as abstract, because it is used as a
  * place holder, the the content handler doesn't supply a new class on start element.
  */
 class GalleryXmlHandler {

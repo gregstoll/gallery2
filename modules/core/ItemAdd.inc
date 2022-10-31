@@ -46,6 +46,19 @@ class ItemAddController extends GalleryController {
     }
 
     /**
+     * Class Loader
+     */
+    public static function getMe()
+    {
+	static $instance;
+
+	if (!isset($instance)) {
+		$instance = new ItemAddController();
+	}
+
+	return $instance;
+    }
+    /**
      * @see GalleryController::handleRequest
      */
     function handleRequest($form) {
