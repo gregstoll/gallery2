@@ -1132,11 +1132,11 @@ class MockGalleryStatus {
 		return $instance;
 	}
 
-	public function putInSession() {
+	static public function putInSession() {
 		$_GET['putInSession'] = 1;
 	}
 
-	public function wasPutInSession() {
+	static public function wasPutInSession() {
 		return !empty($_GET['putInSession']);
 	}
 }
@@ -1170,7 +1170,8 @@ class PluginCallbackWithFakeHandler extends PluginCallbackView {
 	}
 
 	public function setReply($call, $reply) {
-		$this->_replies[$call][] = $reply;
+		$instance = PluginCallbackWithFakeHandler::getMe();
+		$instance->_replies[$call][] = $reply;
 	}
 
 	static public function getPluginStates() {
