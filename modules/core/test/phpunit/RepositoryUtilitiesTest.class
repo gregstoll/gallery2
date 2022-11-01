@@ -389,7 +389,7 @@ class RepositoryUtilitiesTest extends GalleryTestCase {
 		);
 
 		foreach ($testCases as $case) {
-			$providedApis = null === $case['providedApis'] ? null : array(
+			$providedApis = (null === $case['providedApis']) ? null : array(
 				'core'   => explode('.', $case['providedApis']['core']),
 				'module' => explode('.', $case['providedApis']['module']),
 				'theme'  => explode('.', $case['providedApis']['theme']),
@@ -406,13 +406,11 @@ class RepositoryUtilitiesTest extends GalleryTestCase {
 				$case['isCompatible'],
 				$isCompatible,
 				sprintf(
-					'Type: %s; Required: %sc, %sp; Provided: %sc, %sm, %st',
+					'Type: %s; Required: %sc, %sp; Provided: %s',
 					$case['pluginType'],
 					$case['requiredCoreApi'],
 					$case['requiredPluginApi'],
-					$case['providedApis']['core'],
-					$case['providedApis']['module'],
-					$case['providedApis']['theme']
+					print_r($case['providedApis'], true),
 				)
 			);
 		}
