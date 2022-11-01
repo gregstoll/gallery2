@@ -675,17 +675,21 @@ class GalleryTemplateAdapter {
 	unset($params['lowercase']);
 	unset($params['text']);
 
+	$generateUrl = $urlGenerator->generateUrl($link['params'], $link['options']);
+	if (is_array($generateUrl)){
+		$generateUrl = "Array";
+	}
 	if ($type == 'option') {
-	    $tag = '<option value="' . (isset($link['script']) ? $link['script']
+		$tag = '<option value="' . (isset($link['script']) ? $link['script']
 		: ('window.location=\''
-		   . $urlGenerator->generateUrl($link['params'], $link['options']) . '\'')) . '"';
+		   . $generateUrl . '\'')) . '"';
 	    $endTag = '</option>';
 	} else {
-	    if (!array_key_exists('class', $params)) {
-		/* Use default classes */
-		$params['class'] = $this->linkId(array('urlParams' => $link['params']));
-	    }
-	    $tag = '<a href="' . $urlGenerator->generateUrl($link['params'], $link['options']) . '"'
+		if (!array_key_exists('class', $params)) {
+			/* Use default classes */
+			$params['class'] = $this->linkId(array('urlParams' => $link['params']));
+		}
+		$tag = '<a href="' . $generateUrl . '"'
 		. (isset($link['script']) ? ' onclick="' . $link['script'] . ';return false"' : '')
 		. (isset($link['attrs']) ? ' ' . $link['attrs'] : '');
 	    $endTag = '</a>';
