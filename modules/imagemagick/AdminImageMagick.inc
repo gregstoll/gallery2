@@ -51,7 +51,7 @@ class AdminImageMagickController extends GalleryController {
 		$slash = $platform->getDirectorySeparator();
 		$form['path'] = trim($form['path']);
 		if (!empty($form['path'])) {
-		    if ($form['path']{strlen($form['path'])-1} != $slash) {
+		    if ($form['path'][strlen($form['path'])-1] != $slash) {
 			$form['path'] .= $slash;
 		    }
 		}
@@ -209,7 +209,7 @@ class AdminImageMagickView extends GalleryView {
 	$slash = $platform->getDirectorySeparator();
 	$form['path'] = trim($form['path']);
 	if (!empty($form['path'])) {
-	    if ($form['path']{strlen($form['path'])-1} != $slash) {
+	    if ($form['path'][strlen($form['path'])-1] != $slash) {
 		$form['path'] .= $slash;
 	    }
 	}
