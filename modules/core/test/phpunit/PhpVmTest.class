@@ -139,7 +139,7 @@ class PhpVmTest extends GalleryTestCase {
 		$this->assertTrue($success, 'Could not retrieve G2 page');
 
 		if (!preg_match('{^HTTP/1\.\d 200 OK$}', $response)) {
-			$this->assertEquals($response, 'HTTP/1.1 200 OK', 'Could not retrieve G2 page');
+			$this->assertEquals(expected: 'HTTP/1.1 200 OK', actual: $response, message: 'Could not retrieve G2 page');
 		}
 
 		$this->assertTrue(isset($headers['Set-Cookie']), 'Set-Cookie header not set');
@@ -153,8 +153,8 @@ class PhpVmTest extends GalleryTestCase {
 				'no G2 SessionId with a correct SID found in the cookie header'
 			);
 		} else {
-			$this->assertFalse(
-				true,
+			$this->assertTrue(
+				false,
 				'no cookie header found in http response for url: ' . $url
 			);
 		}
