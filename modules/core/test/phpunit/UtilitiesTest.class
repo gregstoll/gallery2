@@ -2120,7 +2120,7 @@ class UtilitiesTest extends GalleryTestCase {
 		$this->assertEquals(array(), $created);
 	}
 
-	public function testRoundToString() {
+	public function testRoundToStringWithLocale() {
 		$this->assertEquals('12', GalleryUtilities::roundToString(12.34), 'no decimal');
 		$this->assertEquals('12.34', GalleryUtilities::roundToString(12.3432, 2), 'decimal');
 
@@ -2134,9 +2134,7 @@ class UtilitiesTest extends GalleryTestCase {
 			}
 		}
 
-		if (empty($newLocale)) {
-			return $this->assertFalse(true, 'Unable to select German locale');
-		}
+		$this->assertTrue(!empty($newLocale), 'Unable to select German locale');
 
 		$this->assertEquals('12', GalleryUtilities::roundToString(12.34), 'no decimal german');
 		$this->assertEquals('12.34', GalleryUtilities::roundToString(12.3432, 2), 'decimal german');
@@ -2144,7 +2142,7 @@ class UtilitiesTest extends GalleryTestCase {
 		setlocale(LC_ALL, $currentLocale);
 	}
 
-	public function testCastToFloat() {
+	public function testCastToFloatWithLocale() {
 		$this->assertEquals(12.34, GalleryUtilities::castToFloat(12.34), 'no cast');
 		$this->assertEquals(12.34, GalleryUtilities::castToFloat('12.34'), 'string');
 
@@ -2158,9 +2156,7 @@ class UtilitiesTest extends GalleryTestCase {
 			}
 		}
 
-		if (empty($newLocale)) {
-			return $this->assertFalse(true, 'Unable to select German locale');
-		}
+		$this->assertTrue(!empty($newLocale), 'Unable to select German locale');
 
 		$this->assertEquals(12.34, GalleryUtilities::castToFloat(12.34), 'no cast german');
 		$this->assertEquals(12.34, GalleryUtilities::castToFloat('12.34'), 'string german');
