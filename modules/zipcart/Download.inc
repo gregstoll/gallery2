@@ -57,29 +57,14 @@ class DownloadView extends GalleryView {
 		@apache_setenv('no-gzip', '1');
 	    }
 
-	    /* preg i modifier is affected by locale */
-	    $sendMultipart = !preg_match('{[Mm][Ss][Ii][Ee] |[Ss][Aa][Ff][Aa][Rr][Ii]}',
-					 GalleryUtilities::getServerVar('HTTP_USER_AGENT'));
-	    if ($sendMultipart) {
 		/* Send multipart reply: zip + html-to-reload */
-		$phpVm->header('Content-Type: multipart/mixed; boundary=G2ZipCart');
-		print "--G2ZipCart\nContent-Type: application/zip\n";
-		print "Content-Disposition: inline; filename=\"G2cart.zip\"\n";
-
+        // TODO - this doesn't work for reload
+		//$phpVm->header("Refresh: 3;");
+		$phpVm->header("Content-Type: application/zip");
+		$phpVm->header("Content-Disposition: attachment; filename=\"G2cart.zip\"");
 		if ($size > 0) {
-		    print "Content-Length: " . $size . "\n";
+		    $phpVm->header("Content-Length: " . $size);
 		}
-		print "\n";
-	    } else {
-		/* Poor IE6 doesn't know multipart.. just send zip */
-		/* Safari doesn't get filename in multipart and may even crash */
-		$phpVm->header('Content-Type: application/zip');
-		$phpVm->header('Content-Disposition: inline; filename="G2cart.zip"');
-		if ($size > 0) {
-		    $phpVm->header("Content-Length: $size");
-		}
-	    }
-
 	    if ($fd = $platform->fopen($file, 'rb')) {
 		while (true) {
 		    $data = $platform->fread($fd, 65535);
@@ -94,12 +79,6 @@ class DownloadView extends GalleryView {
 
 	    @$platform->unlink($file);
 	    @$platform->unlink(substr($file, 0, -4));   /* Remove file created by tempnam() too */
-
-	    if ($sendMultipart) {
-		print "\n--G2ZipCart\nContent-Type: text/html\nPragma: No-cache\n\n";
-		print "<html><body onload=\"location.reload()\"></body></html>\n\n";
-		print "--G2ZipCart--\n";
-	    }
 	} else {
 	    /* On reload return to View Cart */
 	    $urlGenerator =& $gallery->getUrlGenerator();

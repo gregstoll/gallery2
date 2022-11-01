@@ -52,7 +52,7 @@ class AdminNetPbmController extends GalleryController {
 		$slash = $platform->getDirectorySeparator();
 		$form['path'] = trim($form['path']);
 		if (!empty($form['path'])) {
-		    if ($form['path']{strlen($form['path'])-1} != $slash) {
+		    if ($form['path'][strlen($form['path'])-1] != $slash) {
 			$form['path'] .= $slash;
 		    }
 		}
@@ -192,7 +192,7 @@ class AdminNetPbmView extends GalleryView {
 	foreach (array('path', 'jheadPath') as $key) {
 	    $form[$key] = trim($form[$key]);
 	    if (!empty($form[$key])) {
-		if ($form[$key]{strlen($form[$key])-1} != $slash) {
+		if ($form[$key][strlen($form[$key])-1] != $slash) {
 		    $form[$key] .= $slash;
 		}
 	    }
