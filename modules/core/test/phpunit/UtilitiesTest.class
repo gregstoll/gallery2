@@ -2017,7 +2017,7 @@ class UtilitiesTest extends GalleryTestCase {
 				foreach ($tC['er'] as $eR) {
 					if (isset($_COOKIE[$eR['key']])) {
 						// Check value
-						$expectedValue = $addSlashes ? addslashes($eR['val']) : $eR['val'];
+						$expectedValue = $eR['val'];
 
 						$this->assertEquals(
 							$expectedValue,
@@ -2026,8 +2026,8 @@ class UtilitiesTest extends GalleryTestCase {
 								$eR['key'] . ' for test case: ' . $debugInfo
 						);
 					} else {
-						$this->assertFalse(
-							true,
+						$this->assertTrue(
+							false,
 							$addSlashesInfo . 'key ' . $eR['key']
 								. ' missing for test case: ' . $debugInfo
 						);
