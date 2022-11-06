@@ -233,9 +233,12 @@ class UserRecoverPasswordController extends GalleryController {
      * @access private
      */
     function _generateAuthString() {
-        GalleryCoreApi::requireOnce('lib/joomla/crypt.php');
+	global $gallery;
+	$phpVm = $gallery->getPhpVm();
+	GalleryCoreApi::requireOnce('lib/joomla/crypt.php');
         $j = new JCrypt();
-        return md5($j->genRandomBytes(32));
+
+        return $phpVm->md5($j->genRandomBytes(32));
     }
 }
 
