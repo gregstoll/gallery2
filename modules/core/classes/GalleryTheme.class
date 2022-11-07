@@ -1792,7 +1792,11 @@ class GalleryTheme extends GalleryPlugin {
 	    }
 
 	    if (empty($sourceImage['width'])) {
-		$fullSizeDimensions = $sourceImage['itemTypeName'][0];
+		    if (empty($sourceImage)) {
+			    $fullSizeDimensions = "";
+		    } else {
+			    $fullSizeDimensions = $sourceImage['itemTypeName'][0];
+		    }
 	    } else {
 		$fullSizeDimensions = $core->translate(
 		    array('text' => '%dx%d',
