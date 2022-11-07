@@ -480,7 +480,7 @@ class GalleryTestResult extends TestResult {
 			}
 		} else {
 			$elapsed              = sprintf('%2.4f', $test->elapsed());
-			$this->_totalElapsed += $elapsed;
+			$this->_totalElapsed += (float) $elapsed;
 
 			if ($test->failed()) {
 				$class    = 'Failure';
