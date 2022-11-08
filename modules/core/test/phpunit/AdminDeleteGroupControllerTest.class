@@ -1,0 +1,208 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * AdminDeleteGroup controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminDeleteGroupControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminDeleteGroup');
+	}
+
+	public function testCancel() {
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminGroups',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Create and delete a group
+	 */
+	public function testDeleteGroup() {
+		// Create a group that we can delete
+		list($ret, $group) = $this->_createGroup();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$groupId = $group->getId();
+
+		// Assign a permission using this group
+		list($ret, $album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($album);
+
+		$ret = GalleryCoreApi::addGroupPermission($album->getId(), $groupId, 'core.view');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('groupId', $groupId);
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminGroups',
+				),
+				'status'   => array(
+					'deletedGroup' => $group->getGroupName(),
+				),
+				'error'    => array(),
+			),
+			$results,
+			'Failed to delete group'
+		);
+
+		// Verify the group is gone
+		list($ret, $group) = $group->refresh();
+
+		if ($ret && $ret->getErrorCode() & ERROR_MISSING_OBJECT) {
+			// This is correct -- we expect it to be gone
+		} else {
+			$this->assertFalse(true, 'The group was deleted');
+
+			// Clean up
+			$this->_deleteGroup($group);
+		}
+
+		// Verify the permissions are cleaned up
+		list($ret, $perms) = GalleryCoreApi::fetchAllPermissionsForItem($album->getId(), true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		foreach ($perms as $perm) {
+			if (isset($perm['groupId']) && $perm['groupId'] == $groupId) {
+				$this->assertFalse(true, 'Album still has permission for deleted group');
+			}
+		}
+	}
+
+	// Try to delete the all users group (this will fail)
+	public function testDeleteAllUsersGroup() {
+		list($ret, $groupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.allUserGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('groupId', $groupId);
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+
+		$this->assertEquals(null, $results);
+	}
+
+	// Try to delete the everybody group (this will fail)
+	public function testDeleteEverybodyGroup() {
+		list($ret, $groupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.everybodyGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('groupId', $groupId);
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+
+		$this->assertEquals(null, $results);
+	}
+
+	// Try to delete the site admin group (this will fail)
+	public function testDeleteSiteAdminsGroup() {
+		list($ret, $groupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('groupId', $groupId);
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+
+		$this->assertEquals(null, $results);
+	}
+
+	public function _createGroup() {
+		list($ret, $group) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryGroup');
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		if (!isset($group)) {
+			return array(
+				GalleryCoreApi::error(ERROR_MISSING_OBJECT),
+				null,
+			);
+		}
+
+		$ret = $group->create('testgroup-' . mt_rand());
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		$ret = $group->save();
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		return array(null, $group);
+	}
+
+	public function _deleteGroup($group) {
+		$ret = GalleryCoreApi::deleteEntityById($group->getId(), 'GalleryGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+}

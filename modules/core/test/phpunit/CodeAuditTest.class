@@ -1,0 +1,523 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Scan through all of our source code and verify that we are not doing anything "bad".
+ * Checks for style guidelines too.
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 20940 $
+ */
+class CodeAuditTest extends CodeAuditTestCase {
+	public function __construct($methodName) {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		parent::__construct($methodName);
+
+		$this->_exception['endphp']       = array();
+		$this->_exception['preamble']     = '{(?:/TestCase/|templates/blocks/blocks.inc|(?:install|upgrade)/index.php|' .
+		'data/Sample(?:Descriptors|Index).inc|DataCacheTest_\d+.class|getid3/lib/getid3|' .
+		'Php43IllegalFunctions.inc|GdFunctionMatrix.inc|frame.inc|iconpack.inc)}';
+		$this->_exception['superglobals'] = array(
+			'FILES' => array(
+				'modules/core/classes/GalleryUtilities.class' => 1,
+			),
+			'POST' => array(
+				'modules/core/classes/GalleryUtilities.class' => 1,
+			),
+			'GET' => array(
+				'modules/core/classes/GalleryUtilities.class' => 1,
+				'modules/core/ShowItem.inc'                   => 1,
+				'main.php'                                    => 1,
+				'modules/core/classes/Gallery.class'          => 1,
+			),
+			'COOKIE' => array(
+				'modules/core/classes/GallerySession.class'   => 1,
+				'modules/core/classes/GalleryUtilities.class' => 1,
+			),
+			'SERVER' => array(
+				'modules/core/classes/GalleryUtilities.class' => 1,
+				'modules/rewrite/data/path_info/index.php'    => 1,
+				'main.php'                                    => 1,
+			),
+		);
+
+		$this->_exception['returns'] = array(
+			'install/steps/SystemChecksStep.class' => array(
+				'SystemChecksStep::CheckManifest' => 1,
+			),
+			'upgrade/steps/SystemChecksStep.class' => array(
+				'SystemChecksStep::CheckManifest' => 1,
+			),
+			'modules/netpbm/classes/NetPbmToolkit.class' => array(
+				'NetPbmToolkit::_extractCommands' => 1,
+			),
+			'modules/nokiaupload/classes/ImageUploadHelper.class' => array(
+				'ImageUploadHelper::getRSCapabilities' => 1,
+			),
+			'modules/fotokasten/test/phpunit/PrintPhotosControllerTest.class' => array(
+				'FotokastenTestSoapClient::call' => 1,
+			),
+			'modules/core/classes/FlockLockSystem.class' => array(
+				'FlockLockSystem::_acquireLock' => 1,
+			),
+			'main.php' => array(
+				'::_GalleryMain_doRedirect' => 1,
+			),
+		);
+
+		$this->_exception['errorHandler'] = array(
+			'init.inc'                                => 1,
+			'main.php'                                => 1,
+			'modules/core/classes/GalleryEmbed.class' => 1,
+		);
+
+		$this->_exception['longLineCount'] = array(
+			'modules/core/test/phpunit/Php43IllegalFunctions.inc' => 1,
+			'modules/gd/test/phpunit/GdFunctionMatrix.inc'        => 600,
+		);
+
+		$this->_longLineFiles = array();
+		$this->_errorCount    = 0;
+		$this->_lineEnding    = $platform->getLineEnding();
+
+		/* Windows CVS appends a CRLF after ?>, so allow for it */
+		$this->_phpEndFile = '/\?>(' . $this->_lineEnding . ')?$/';
+
+		// Use top comment of this file itself as our canonical preamble
+		$this->_preamble = $this->getPreamble(file(__FILE__));
+
+		// Turn the preamble into a pattern that we can use to match
+		$pattern                = implode('NEWLINE PLACEHOLDER', $this->_preamble);
+		$pattern                = str_replace('?', '\?', $pattern);
+		$pattern                = str_replace('*', '\*', $pattern);
+		$pattern                = str_replace('(', '\(', $pattern);
+		$pattern                = str_replace(')', '\)', $pattern);
+		$pattern                = str_replace('/', '\/', $pattern);
+		$this->_preamblePattern = str_replace('NEWLINE PLACEHOLDER', '(:?\r\n|\n|\r)', $pattern);
+	}
+
+	/**
+	 * @see CodeAuditTestCase::shouldCheckFile
+	 */
+	public function shouldCheckFile($fileName) {
+		$base1 = basename($fileName);
+
+		if ($base1 == 'GNUmakefile.inc') {
+			return false;
+		}
+
+		$dir1  = dirname($fileName);
+		$base2 = basename($dir1);
+		$dir2  = dirname($dir1);
+		$base3 = basename($dir2);
+
+		// Skip generated Maps / Entities files
+		if ($base2 == 'classes' && in_array($base1, array('Entities.inc', 'Maps.inc'))) {
+			return false;
+		}
+
+		$dir3  = dirname($dir2);
+		$base4 = basename($dir3);
+
+		// Skip known embedded 3rd party libs
+		if (($base4 == 'lib' && $base3 == 'exifer')
+			|| ($base3 == 'lib' && $base2 == 'exifer')
+		) {
+			return false;
+		}
+
+		if (($base3 == 'lib' && $base2 == 'JPEG')
+			|| ($base2 == 'lib' && $base1 == 'nusoap.inc')
+		) {
+			return false;
+		}
+
+		if ($base3 == 'lib' && $base2 == 'getid3') {
+			return false;
+		}
+
+		$dir4  = dirname($dir3);
+		$base5 = basename($dir4);
+
+		if (($base4 == 'lib' && $base3 == 'HTTP')
+			|| ($base5 == 'lib' && $base4 == 'HTTP')
+		) {
+			return false;
+		}
+
+		return parent::shouldCheckFile($fileName);
+	}
+
+	/**
+	 * @see CodeAuditTestCase::checkFile
+	 */
+	public function checkFile($fileName, $buffer) {
+		$fileName          = substr($fileName, strlen($this->_baseDir) + 1);
+		$lines             = preg_split("/(\r\n|\n)/", $buffer);
+		$checkSuperglobals = !preg_match('{/test/phpunit|^install/|^upgrade/}', $fileName);
+		$checkEntityType   = $fileName != 'modules/core/test/phpunit/EntityTest.class';
+		$currentFunction   = null;
+		$currentClass      = null;
+		$longLineTable     = $returnTable     = array();
+
+		if ($this->_lineEnding == "\n" && strpos($buffer, "\r\n") !== false) {
+			$this->_errorCount++;
+			$this->assertFalse(true, sprintf('%s has Windows line endings', $fileName));
+		}
+
+		if (substr($fileName, -4) == '.tpl' || substr($fileName, -3) == '.po') {
+			// For tpl and po files only perform newlines check
+			return;
+		}
+
+		$this->checkPreamble($fileName, $buffer, $lines);
+
+		/*
+		 * Check for loadEntitiesById and deleteEntityById calls that omit the entity-type parameter
+		 * which will be required after the next major core API bump.
+		 */
+		if ($checkEntityType) {
+			foreach (array('loadEntitiesById', 'deleteEntityById') as $function) {
+				$calls = $this->getFunctionCalls($buffer, array('GalleryCoreApi', $function), $fileName);
+
+				foreach ($calls as $call) {
+					$params = $this->getFunctionParameters($call);
+
+					$this->assertTrue(
+						count($params) == 2,
+						sprintf(
+							'File %s: %s() call without entityType parameter',
+							$fileName,
+							$function
+						)
+					);
+				}
+			}
+		}
+
+		for ($i = 0; $i < count($lines); $i++) {
+			if (preg_match('/^\s*class (\S+)/', $lines[$i], $matches)) {
+				$currentClass = $matches[1];
+			}
+
+			if (preg_match('/^\s*function (\S+)\(/', $lines[$i], $matches)) {
+				$currentFunction = $currentClass . '::' . $matches[1];
+			}
+
+			if (preg_match('/^\s*return (.*)/', $lines[$i])) {
+				if (!isset($currentFunction)) {
+					$this->_errorCount++;
+					$this->assertFalse(
+						true,
+						"Return outside of a function on line $i in $fileName"
+					);
+				}
+
+				$return = '';
+				$j      = $i;
+
+				do {
+					$return .= trim($lines[$j++]);
+				} while ($j < count($lines) && strpos($return, ';') === false);
+				$returnTable[$currentFunction][] = preg_replace('/^return\s+/', '', $return);
+			}
+
+			// Check that Session, UrlGenerator and Platform are always accessed by-reference
+			if (preg_match_all(
+				'/= *\$gallery->get(Session|UrlGenerator|Platform)/',
+				$lines[$i],
+				$matches
+			)
+			) {
+				foreach (array_unique($matches[1]) as $item) {
+					$this->_errorCount++;
+					$this->fail(
+						sprintf(
+							'%s gets %s by value instead of by reference on line %d',
+							$fileName,
+							$item,
+							$i + 1
+						)
+					);
+				}
+			}
+
+			/*
+			 * Verify that all access to superglobal variables from the browser
+			 * is properly filtered through the framework so that we do not get remote exploits.
+			 */
+			if ($checkSuperglobals && preg_match_all(
+				'/\$_(REQUEST|POST|GET|SESSION|FILES|SERVER|COOKIE)/',
+				$lines[$i],
+				$matches
+			)
+			) {
+				foreach (array_unique($matches[1]) as $item) {
+					if (isset($this->_exception['superglobals'][$item][$fileName])) {
+						continue;
+					}
+
+					// It is ok if it is inside a debug statement
+					if (preg_match("/gallery->debug(|_r)\(.*$item.*\)/", $lines[$i])) {
+						continue;
+					}
+
+					$this->_errorCount++;
+					$this->fail(
+						sprintf(
+							'%s uses the %s superglobal instead of ' .
+							'its helper on line %d',
+							$fileName,
+							$item,
+							$i + 1
+						)
+					);
+				}
+			}
+
+			// Check that we do not mess with PHP error handler (allowed in tests).
+			if (preg_match('/((?:set|restore)_error_handler)\s*\(/', $lines[$i], $matches)
+				&& strpos($fileName, '/test/phpunit/') === false
+				&& !isset($this->_exception['errorHandler'][$fileName])
+			) {
+				$this->_errorCount++;
+				$this->fail(sprintf('%s calls %s on line %d', $fileName, $matches[1], $i + 1));
+			}
+
+			/*
+			 * Check for lines wider than 100 characters.
+			 * Do a simple tab->8spaces conversion.. good enough for this check.
+			 */
+			$line = str_replace("\t", '        ', $lines[$i]);
+
+			if (strlen($line) > 100) {
+				$longLineTable[] = array($fileName, $i + 1);
+			}
+		}
+
+		// Examine the return table for discrepancies
+		$returnMismatch = array();
+
+		foreach ($returnTable as $function => $returns) {
+			if (isset($this->_exception['returns'][$fileName][$function])) {
+				continue;
+			}
+
+			if (count($returns) < 2) {
+				continue;
+			}
+
+			for ($i = 0; $i < count($returns); $i++) {
+				if (preg_match('/^array(:?_keys)?\s*\(/', $returns[$i])) {
+					/*
+					 * Determine the number of elements in returned arrays:
+					 * 1. Strip off the enclosing array()
+					 * 2. Collapse anything inside any remaining parens and quotes
+					 * 3. Count the commas
+					 * 4. Count the => tokens and subtract N-1 commas
+					 *
+					 * Step 4 covers the case where we return a bare associative array, eg:
+					 *    return array('a' => 1, 'b' => 2, 'c' => 3);
+					 *    return array('d' => 1, 'e' => 2);
+					 * these match, even though they have a different number of commas
+					 */
+					$tmp     = $returnTable[$function][$i];
+					$tmp     = preg_replace('/array\((.*)\)/', '$1', $tmp);
+					$tmp     = preg_replace('/\'[^\']*\'/', '', $tmp);
+					$tmp     = preg_replace('/"[^\']*"/', '', $tmp);
+					$runaway = 0;
+
+					while (strpos($tmp, ')') !== false) {
+						$tmp = preg_replace('/\([^\(\)]*\)/', '', $tmp);
+
+						if ($runaway++ > 10) {
+							break;
+						}
+					}
+
+					$commaCount  = substr_count($tmp, ',');
+					$assignCount = substr_count($tmp, '=>');
+
+					if ($assignCount > 0) {
+						$commaCount -= ($assignCount - 1);
+					}
+
+					$finalCount                 = "array($commaCount)";
+					$returnCount[$function][$i] = array($finalCount, $tmp);
+				} elseif (preg_match('/^GalleryCoreApi::error\(.*\)/', $returns[$i])) {
+					$returnCount[$function][$i] = array('scalar', $returns[$i]);
+				} elseif (preg_match('/\w\s*\(.*\)/', $returns[$i])) {
+					$returnCount[$function][$i] = array('function', $returns[$i]);
+				} else {
+					$returnCount[$function][$i] = array('scalar', $returns[$i]);
+				}
+			}
+
+			// Find the first non-function and compare it to every other non-function
+			$compare = false;
+
+			for ($i = 0; $i < count($returnCount[$function]); $i++) {
+				if ($returnCount[$function][$i][0] != 'function') {
+					$compare = $i;
+
+					break;
+				}
+			}
+
+			if ($compare !== false) {
+				for ($i = 0; $i < count($returnCount[$function]); $i++) {
+					if ($returnCount[$function][$i][0] != 'function'
+						&& $returnCount[$function][$i][0] != $returnCount[$function][$compare][0]
+					) {
+						$returnMismatch[$function] = 1;
+					}
+				}
+			}
+		}
+
+		foreach (array_keys($returnMismatch) as $function) {
+			$returns = '';
+
+			for ($i = 0; $i < count($returnTable[$function]); $i++) {
+				$returns .= sprintf(
+					"[%s] return %s%s\n",
+					$returnCount[$function][$i][0],
+					$returnTable[$function][$i],
+					false ? '' : // set to false to see the transformed return
+					' --> ' . $returnCount[$function][$i][1]
+				);
+			}
+
+			$this->assertFalse(
+				true,
+				sprintf(
+					'Mismatched returns in %s %s()<pre>%s</pre>',
+					$fileName,
+					$function,
+					$returns
+				)
+			);
+		}
+
+		/*
+		 * Check that php files end with ?>
+		 * As noted in the constructor, Windows CVS will append a CRLF to
+		 * the end of the file, so we allow for that.
+		 */
+		if (!isset($this->_exception['endphp'][basename($fileName)])
+			&& !preg_match($this->_phpEndFile, $buffer)
+		) {
+			$this->_errorCount++;
+			$this->assertFalse(true, $fileName . ' does not end with ?&gt;');
+		}
+
+		if (!empty($longLineTable)
+			&& (!isset($this->_exception['longLineCount'][$fileName])
+			|| count($longLineTable) > $this->_exception['longLineCount'][$fileName])
+		) {
+			$this->_longLineFiles = array_merge($this->_longLineFiles, $longLineTable);
+
+			// debug
+			// printf("%s: %d<br/>", $fileName, $longLineCount);
+		}
+
+		if ($this->_errorCount > 10) {
+			$this->halt();
+		}
+	}
+
+	public function checkPreamble($fileName, $buffer, $lines) {
+		if (preg_match($this->_exception['preamble'], $fileName)) {
+			return;
+		}
+
+		if (preg_match('/^' . $this->_preamblePattern . '/', $buffer)) {
+			return;
+		}
+
+		$this->_errorCount++;
+		$errorReported = false;
+
+		for ($i = 0; $i < count($this->_preamble); $i++) {
+			$expected = $this->_preamble[$i];
+
+			if (strcmp($expected, $lines[$i])) {
+				$this->assertFalse(
+					true,
+					"Preamble mismatch in $fileName on line " . ($i + 1) . ':<br/>'
+					. "Expected: [$expected]<br/>"
+					. "Received: [$lines[$i]]<br/>"
+				);
+
+				$errorReported = true;
+			}
+		}
+
+		if (!$errorReported) {
+			$this->assertFalse(true, "Unknown preamble mismatch in $fileName");
+		}
+	}
+
+	public function getPreamble($lines) {
+		$copy = array();
+
+		for ($i = 0; $i < count($lines); $i++) {
+			$copy[] = rtrim($lines[$i]);
+
+			if (!strncmp($lines[$i], ' */', 3)) {
+				return $copy;
+			}
+		}
+
+		return $copy;
+	}
+
+	/**
+	 * @see CodeAuditTestCase::testCodeAudit
+	 */
+	public function testCodeAudit() {
+		parent::testCodeAudit();
+
+		// Check result of longLineCount
+		if (!$this->_shouldHalt) {
+			if (count($this->_longLineFiles)) {
+				$this->assertFalse(
+					true,
+					'Found too many lines longer than 100 characters ('
+					. count($this->_longLineFiles) . ')',
+					'Long Lines'
+				);
+
+				foreach ($this->_longLineFiles as $entry) {
+					list($fileName, $lineNr) = $entry;
+
+					$this->assertFalse(
+						true,
+						'File: ' . $fileName . ', line number: ' . $lineNr
+					);
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,332 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test CombinedJavascript functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17714 $
+ */
+class CombinedJavascriptTest extends GalleryImmediateViewTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.CombinedJavascript');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->_phpVm    = new UnitTestPhpVm();
+		$gallery->_platform = new UnitTestPlatform();
+		$gallery->_storage  = new UnitTestStorage();
+		$this->_view        = new CombinedJavascriptView();
+		unset($_SERVER['HTTP_IF_MODIFIED_SINCE']);
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$this->assertTrue($gallery->_phpVm->isComplete(), $gallery->_phpVm->getRemaining());
+		$this->assertTrue($gallery->_platform->isComplete(), $gallery->_platform->getRemaining());
+		$this->assertTrue($gallery->_storage->isComplete(), $gallery->_storage->getRemaining());
+
+		return parent::tearDown();
+	}
+
+	public function testIfModifiedSinceFromServerVars() {
+		global $gallery;
+
+		$_SERVER['HTTP_IF_MODIFIED_SINCE'] = 'Anything';
+
+		$gallery->_phpVm->setReply('header', array('HTTP/1.0 304 Not Modified', null), null);
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('', $results);
+	}
+
+	public function testIfModifiedSinceFromGetAllHeadersWithCapitalLetters() {
+		global $gallery;
+
+		$gallery->_phpVm->setReply('function_exists', array('getallheaders'), true);
+
+		$gallery->_phpVm->setReply(
+			'getAllHeaders',
+			array(),
+			array(
+				'If-Modified-Since' => 'Anything',
+			)
+		);
+
+		$gallery->_phpVm->setReply('header', array('HTTP/1.0 304 Not Modified', null), null);
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('', $results);
+	}
+
+	public function testIfModifiedSinceFromGetAllHeadersWithLowerCaseLetters() {
+		global $gallery;
+
+		$gallery->_phpVm->setReply('function_exists', array('getallheaders'), true);
+
+		$gallery->_phpVm->setReply(
+			'getAllHeaders',
+			array(),
+			array(
+				'If-modified-since' => 'Anything',
+			)
+		);
+
+		$gallery->_phpVm->setReply('header', array('HTTP/1.0 304 Not Modified', null), null);
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('', $results);
+	}
+
+	public function testInvalidKey() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('key', 'bogus');
+
+		$gallery->_phpVm->setReply('function_exists', array('getallheaders'), false);
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('', $results);
+	}
+
+	public function testMaliciousKey() {
+		global $gallery;
+
+		unset($_SERVER['HTTP_ACCEPT_ENCODING']);
+
+		GalleryUtilities::putRequestVariable('key', '/../sensitive_file');
+
+		$gallery->_phpVm->setReply('function_exists', array('getallheaders'), false);
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('', $results);
+	}
+
+	public function _prepareToReadFromDiskCache($file, $contents) {
+		global $gallery;
+
+		GalleryDataCache::setFileCachingEnabled(true);
+
+		$path = $gallery->getConfig('data.gallery.cache') . $file;
+
+		$gallery->_platform->setReply('file_exists', array($path), true);
+		$gallery->_platform->setReply('file_get_contents', array($path), $contents);
+	}
+
+	public function testGzipAccepted() {
+		global $gallery;
+
+		$_SERVER['HTTP_ACCEPT_ENCODING'] = 'gzip,and,other,stuff';
+
+		GalleryUtilities::putRequestVariable('key', '123');
+
+		$gallery->_phpVm->setReply('function_exists', array('getallheaders'), false);
+		$gallery->_phpVm->setReply('function_exists', array('apache_setenv'), false);
+		$gallery->_phpVm->setReply('header', array('Content-Encoding: gzip', null), null);
+
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Cache-Control: private, x-gzip-ok="public"', null),
+			null
+		);
+
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-type: text/javascript; charset=UTF-8', null),
+			null
+		);
+
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Last-Modified: Thu, 01 Jan 1970 00:00:01 GMT', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Tue, 19 Jan 2038 03:14:07 GMT', null),
+			null
+		);
+		$this->_prepareToReadFromDiskCache(
+			'module/_all/0/0/CombinedJavascript_gzip_123.inc',
+			'|' . serialize('gzipped data')
+		);
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('gzipped data', $results);
+	}
+
+	public function testGzipNotAccepted() {
+		global $gallery;
+
+		$_SERVER['HTTP_ACCEPT_ENCODING'] = 'something_that_doesnt_include_compression';
+
+		GalleryUtilities::putRequestVariable('key', '123');
+
+		$gallery->_phpVm->setReply('function_exists', array('getallheaders'), false);
+		$gallery->_phpVm->setReply('header', array('Cache-Control: public', null), null);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-type: text/javascript; charset=UTF-8', null),
+			null
+		);
+
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Last-Modified: Thu, 01 Jan 1970 00:00:01 GMT', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Tue, 19 Jan 2038 03:14:07 GMT', null),
+			null
+		);
+		$this->_prepareToReadFromDiskCache(
+			'module/_all/0/0/CombinedJavascript_123.inc',
+			'|' . serialize('regular data')
+		);
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('regular data', $results);
+	}
+
+	public function testMissingGzipAndRegularData() {
+		global $gallery;
+
+		$_SERVER['HTTP_ACCEPT_ENCODING'] = 'gzip,and,other,stuff';
+
+		GalleryUtilities::putRequestVariable('key', '123');
+
+		$gallery->_phpVm->setReply('function_exists', array('getallheaders'), false);
+		$gallery->_phpVm->setReply('time', array(), 12345);
+		$this->_prepareToReadFromDiskCache('module/_all/0/0/CombinedJavascript_gzip_123.inc', null);
+		$this->_prepareToReadFromDiskCache('module/_all/0/0/CombinedJavascript_123.inc', null);
+
+		// Adding a log entry
+		$gallery->_storage->setReply('getUniqueId', array('SequenceEventLog'), array(null, 1));
+		$gallery->_storage->setReply('updateMapEntry', '*', null);
+		$gallery->_storage->setReply('getAffectedRows', array(true), array(null, 1));
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('', $results);
+	}
+
+	// Regression test. See bug 2021019
+	public function testAutoCacheControlDoesNotConflict() {
+		global $gallery;
+
+		/*
+		 * Go through the complete life cycle of the view under the control of a mock VM for this
+		 * test. (Verify all header() calls, including those from loadView())
+		 */
+		GalleryCoreApi::requireOnce('modules/core/classes/GalleryView.class');
+
+		list($ret, $this->_view) = GalleryView::loadView(
+			'core.CombinedJavascript'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$_SERVER['HTTP_ACCEPT_ENCODING'] = 'something_that_doesnt_include_compression';
+
+		GalleryUtilities::putRequestVariable('key', '123');
+
+		$gallery->_phpVm->setReply('function_exists', array('getallheaders'), false);
+		$gallery->_phpVm->setReply('header', array('Cache-Control: public', null), null);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-type: text/javascript; charset=UTF-8', null),
+			null
+		);
+
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Last-Modified: Thu, 01 Jan 1970 00:00:01 GMT', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Tue, 19 Jan 2038 03:14:07 GMT', null),
+			null
+		);
+		$this->_prepareToReadFromDiskCache(
+			'module/_all/0/0/CombinedJavascript_123.inc',
+			'|' . serialize('regular data')
+		);
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('regular data', $results);
+	}
+}

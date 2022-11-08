@@ -1,0 +1,547 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test CoreModule functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class CoreModuleTest extends GalleryTestCase {
+	public $_module;
+
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_module) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_parentAlbum) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_parentAlbum);
+
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_parentAlbum->getId(),
+			$gallery->getActiveUserId(),
+			'core.all'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGetItemAdminViews() {
+		global $gallery;
+
+		$albumId = $this->_parentAlbum->getId();
+
+		GalleryUtilities::putRequestVariable('itemId', $albumId);
+
+		list($ret, $content) = $this->_module->getItemAdminViews($this->_parentAlbum);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$albumTitle = $this->_parentAlbum->getTitle();
+
+		GalleryCoreApi::requireOnce('lib/smarty/plugins/modifier.escape.php');
+
+		$albumTitle = smarty_modifier_escape(
+			GalleryUtilities::markup(
+				$albumTitle,
+				'strip'
+			),
+			'javascript',
+			'UTF-8'
+		);
+
+		$urlGenerator =& $gallery->getUrlGenerator();
+		$url          = $urlGenerator->generateUrl(
+			array(
+				'controller' => 'core.ItemDeleteSingle',
+				'itemId'     => $albumId,
+				'pageId'     => $albumId,
+			)
+		);
+
+		$this->assertEquals(
+			array(
+				array(
+					'name' => $this->_module->_translate(
+						array(
+							'text' => 'Edit %s',
+							'arg1' => $this->_module->translate('Album'),
+						),
+						'Album'
+					),
+					'view' => 'core.ItemEdit',
+				),
+				array(
+					'name' => $this->_module->translate('Edit Permissions'),
+					'view' => 'core.ItemPermissions',
+				),
+				array(
+					'name'   => $this->_module->_translate(
+						array(
+							'text' => 'Delete %s',
+							'arg1' => $this->_module->translate('Album'),
+						),
+						'Album'
+					),
+					'view'   => 'core.ItemDeleteSingle',
+					'script' => 'core_confirmDelete(\'' . $url . '\', \'\', \''
+						. $albumTitle . '\');return false',
+				),
+				array(
+					'name' => $this->_module->_translate(
+						array(
+							'text' => 'Move %s',
+							'arg1' => $this->_module->translate('Album'),
+						),
+						'Album'
+					),
+					'view' => 'core.ItemMoveSingle',
+				),
+				array(
+					'name' => $this->_module->translate('Add Items'),
+					'view' => 'core.ItemAdd',
+				),
+				array(
+					'name' => $this->_module->translate('Add Album'),
+					'view' => 'core.ItemAddAlbum',
+				),
+			),
+			$content,
+			'empty album'
+		);
+
+		list($ret) = $this->_createRandomDataItem($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $content) = $this->_module->getItemAdminViews($this->_parentAlbum);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				array(
+					'name' => $this->_module->translate('Edit Captions'),
+					'view' => 'core.ItemEditCaptions',
+				),
+				array(
+					'name' => $this->_module->_translate(
+						array(
+							'text' => 'Edit %s',
+							'arg1' => $this->_module->translate('Album'),
+						),
+						'Album'
+					),
+					'view' => 'core.ItemEdit',
+				),
+				array(
+					'name' => $this->_module->translate('Edit Permissions'),
+					'view' => 'core.ItemPermissions',
+				),
+				array(
+					'name'   => $this->_module->_translate(
+						array(
+							'text' => 'Delete %s',
+							'arg1' => $this->_module->translate('Album'),
+						),
+						'Album'
+					),
+					'view'   => 'core.ItemDeleteSingle',
+					'script' => 'core_confirmDelete(\'' . $url . '\', \'\', \''
+						 . $albumTitle . '\');return false',
+				),
+				array(
+					'name' => $this->_module->_translate(
+						array(
+							'text' => 'Move %s',
+							'arg1' => $this->_module->translate('Album'),
+						),
+						'Album'
+					),
+					'view' => 'core.ItemMoveSingle',
+				),
+				array(
+					'name' => $this->_module->translate('Delete Items'),
+					'view' => 'core.ItemDelete',
+				),
+				array(
+					'name' => $this->_module->translate('Add Items'),
+					'view' => 'core.ItemAdd',
+				),
+				array(
+					'name' => $this->_module->translate('Add Album'),
+					'view' => 'core.ItemAddAlbum',
+				),
+			),
+			$content,
+			'nonempty album'
+		);
+	}
+
+	public function testGetConfigurationView() {
+		$content = $this->_module->getConfigurationView();
+
+		$this->assertEquals(null, $content);
+	}
+
+	public function testGetSystemLinks() {
+		global $gallery;
+
+		list($ret, $content) = $this->_module->getSystemLinks();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'SiteAdmin' => array(
+					'text'   => $this->_module->translate('Site Admin'),
+					'params' => array(
+						'view'   => 'core.SiteAdmin',
+						'return' => 1,
+					),
+				),
+				'YourAccount' => array(
+					'text'   => $this->_module->translate('Your Account'),
+					'params' => array(
+						'view'    => 'core.UserAdmin',
+						'subView' => 'core.UserPreferences',
+						'return'  => 1,
+					),
+				),
+				'Logout' => array(
+					'text'   => $this->_module->translate('Logout'),
+					'params' => array(
+						'controller' => 'core.Logout',
+						'return'     => 1,
+					),
+				),
+			),
+			$content,
+			'Admin User'
+		);
+
+		list($ret, $this->_user1) = $this->_createUser(
+			array(
+				'hashedPassword' => GalleryUtilities::md5Salt('TestPassword'),
+				'email'          => 'test2@email.com',
+				'fullName'       => 'Test User 2',
+				'language'       => 'te',
+				'locked'         => 0,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_user1);
+		$gallery->setActiveUser($this->_user1);
+
+		list($ret, $content) = $this->_module->getSystemLinks();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'YourAccount' => array(
+					'text'   => $this->_module->translate('Your Account'),
+					'params' => array(
+						'view'    => 'core.UserAdmin',
+						'subView' => 'core.UserPreferences',
+						'return'  => 1,
+					),
+				),
+				'Logout' => array(
+					'text'   => $this->_module->translate('Logout'),
+					'params' => array(
+						'controller' => 'core.Logout',
+						'return'     => 1,
+					),
+				),
+			),
+			$content,
+			'Normal User'
+		);
+
+		list($ret, $this->_user2) = $this->_createUser(
+			array(
+				'hashedPassword' => GalleryUtilities::md5Salt('TestPassword'),
+				'email'          => 'test2@email.com',
+				'fullName'       => 'Test User 2',
+				'language'       => 'te',
+				'locked'         => 1,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_user2);
+		$gallery->setActiveUser($this->_user2);
+
+		list($ret, $content) = $this->_module->getSystemLinks();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'YourAccount' => array(
+					'text'   => $this->_module->translate('Your Account'),
+					'params' => array(
+						'view'    => 'core.UserAdmin',
+						'subView' => 'core.UserPreferences',
+						'return'  => 1,
+					),
+				),
+				'Logout' => array(
+					'text'   => $this->_module->translate('Logout'),
+					'params' => array(
+						'controller' => 'core.Logout',
+						'return'     => 1,
+					),
+				),
+			),
+			$content,
+			'Locked User'
+		);
+	}
+
+	public function testSetModuleParameter() {
+		$key   = 'test-key';
+		$value = mt_rand();
+
+		$ret = $this->_module->setParameter($key, $value);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $newValue) = $this->_module->getParameter($key);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Clean up
+		$ret = GalleryCoreApi::removePluginParameter('module', 'core', $key);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($value, (int)$newValue);
+	}
+
+	public function testGetInstalledVersionsFromCache() {
+		GalleryDataCache::put('CoreModule::installedVersions', 'Test version string');
+
+		$versions = $this->_module->getInstalledVersions();
+
+		$this->assertEquals(
+			'Test version string',
+			$versions,
+			'Unexpected value from getInstalled Versions'
+		);
+	}
+
+	public function testGetInstalledVersionsNoCacheOrVersionFile() {
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$platform =& $gallery->getPlatform();
+
+		GalleryDataCache::remove('CoreModule::installedVersions');
+
+		$versionFile = $gallery->getConfig('data.gallery.version');
+
+		$platform->setReply('file_exists', array($versionFile), false);
+
+		$versions = $this->_module->getInstalledVersions();
+
+		$this->assertEquals(
+			array(
+				'core'    => 0,
+				'gallery' => 0,
+			),
+			$versions,
+			'Returned non zero versions'
+		);
+
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testGetInstalledVersions() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		GalleryDataCache::remove('CoreModule::installedVersions');
+
+		$versionFile         = $gallery->getConfig('data.gallery.version');
+		$versionArray        = $platform->file($versionFile);
+		$expected['core']    = rtrim($versionArray[0]);
+		$expected['gallery'] = rtrim($versionArray[1]);
+		$versions            = $this->_module->getInstalledVersions();
+
+		$this->assertEquals($expected, $versions, 'Unexpected value from getInstalled Versions');
+	}
+
+	public function testGetInstalledVersions2LinesReturned() {
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$platform =& $gallery->getPlatform();
+
+		GalleryDataCache::remove('CoreModule::installedVersions');
+
+		$gallery->setConfig('mode.maintenance', 'TEST-VALUE');
+
+		$versionFile = $gallery->getConfig('data.gallery.version');
+
+		$platform->setReply('file_exists', array($versionFile), true);
+		$platform->setReply(
+			'file',
+			array($versionFile, false),
+			array(
+				$this->_module->getVersion() . "\n",
+				$this->_module->getGalleryVersion(),
+			)
+		);
+
+		$unused = $this->_module->getInstalledVersions();
+
+		$this->assertEquals(
+			'TEST-VALUE',
+			$gallery->getConfig('mode.maintenance'),
+			'Config:mode.maintenance should not have been overwritten.'
+		);
+	}
+
+	public function testGetInstalledVersionsSetsMaintenanceModeFromFile() {
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$platform =& $gallery->getPlatform();
+
+		GalleryDataCache::remove('CoreModule::installedVersions');
+
+		$gallery->setConfig('mode.maintenance', 'TEST-VALUE');
+
+		$versionFile = $gallery->getConfig('data.gallery.version');
+
+		$platform->setReply('file_exists', array($versionFile), true);
+		$platform->setReply(
+			'file',
+			array($versionFile, false),
+			array(
+				$this->_module->getVersion() . "\n",
+				$this->_module->getGalleryVersion() . "\n",
+				'maintenance-mode',
+			)
+		);
+
+		$unused = $this->_module->getInstalledVersions();
+
+		$this->assertEquals(
+			true,
+			$gallery->getConfig('mode.maintenance'),
+			'Config:mode.maintenance has not been overwritten.'
+		);
+	}
+
+	public function testGetInstalledVersionsSetsMaintenanceModeFromFileWithAbsoluteUrl() {
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$platform =& $gallery->getPlatform();
+
+		GalleryDataCache::remove('CoreModule::installedVersions');
+
+		$gallery->setConfig('mode.maintenance', 'TEST-VALUE');
+
+		$versionFile = $gallery->getConfig('data.gallery.version');
+
+		$platform->setReply('file_exists', array($versionFile), true);
+		$platform->setReply(
+			'file',
+			array($versionFile, false),
+			array(
+				$this->_module->getVersion() . "\n",
+				$this->_module->getGalleryVersion() . "\n",
+				'maintenance-mode:http://g2.com/maintenance.html',
+			)
+		);
+
+		$unused = $this->_module->getInstalledVersions();
+
+		$this->assertEquals(
+			'http://g2.com/maintenance.html',
+			$gallery->getConfig('mode.maintenance'),
+			'Config:mode.maintenance has not been overwritten.'
+		);
+	}
+}

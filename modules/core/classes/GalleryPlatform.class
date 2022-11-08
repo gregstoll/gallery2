@@ -253,8 +253,8 @@ class GalleryPlatform {
 	if ($gallery->getDebug()) {
 	    $gallery->debug("is_executable($filename)");
 	}
-
-	return is_executable($filename);
+	$perms = fileperms($filename) & 0x0049;
+	return !empty($perms);
     }
 
     /**
@@ -770,7 +770,9 @@ class GalleryPlatform {
 	if ($gallery->getDebug()) {
 	    $gallery->debug("fsockopen($target, $port, $errno, $errstr, $timeout)");
 	}
-
+	if (str_contains($target, ':')){
+		list($target, $port) = preg_split(':', $target);
+	}
 	return fsockopen($target, $port, $errno, $errstr, $timeout);
     }
 
@@ -965,7 +967,7 @@ class GalleryPlatform {
 	} else {
 	    touch($file);
 	}
-	
+
 	if (empty($exists)) {
 	    $this->chmod($file);
 	}

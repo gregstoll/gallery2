@@ -1,0 +1,119 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Scan through all of our source code and verify that we are not using anything that is not
+ * PHP 4.3 compatible
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class Php43CompatibilityTest extends CodeAuditTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+
+		include __DIR__ . '/Php43IllegalFunctions.inc';
+
+		$this->_illegalRegexp                                            = $illegalFunctionsRegexp . 'i';
+		$this->_exceptions['file_put_contents']['GalleryPlatform.class'] = 1;
+		$this->_exceptions['memory_get_usage']['GalleryTemplateAdapter.class']     = 1;
+		$this->_exceptions['mysqli_get_server_info']['GalleryStorage.class']       = 1;
+		$this->_exceptions['mysqli_get_client_info']['GalleryStorage.class']       = 1;
+		$this->_exceptions['pg_version']['PostgreSqlStorage.class']                = 1;
+		$this->_exceptions['oci_server_version']['OracleStorage.class']            = 1;
+		$this->_exceptions['imagesavealpha']['GdFunctionality.class']              = 1;
+		$this->_exceptions['imagesavealpha']['GdToolkit.class']                    = 1;
+		$this->_exceptions['imagesavealpha']['TestGdFunctionality.class']          = 1;
+		$this->_exceptions['imagecolorallocatealpha']['GdFunctionality.class']     = 1;
+		$this->_exceptions['imagecolorallocatealpha']['GdToolkit.class']           = 1;
+		$this->_exceptions['imagecolorallocatealpha']['TestGdFunctionality.class'] = 1;
+	}
+
+	/**
+	 * @see CodeAuditTestCase::shouldCheckFile
+	 */
+	public function shouldCheckFile($fileName) {
+		// Skip files we do not care about
+		if ($fileName == 'Php43IllegalFunctions.inc'
+			|| substr($fileName, -10) == 'Test.class'
+			|| substr($fileName, -4) == '.tpl'
+			|| !parent::shouldCheckFile($fileName)
+		) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * @see CodeAuditTestCase::checkFile
+	 */
+	public function checkFile($fileName, $buffer) {
+		// Quick check
+		$longCheckRequired = false;
+
+		if (preg_match_all($this->_illegalRegexp, $buffer, $matches)) {
+			foreach (array_unique($matches[0]) as $keyword) {
+				// Remove trailing open paren matched by the pattern, and any spaces
+				$keyword = trim(substr($keyword, 0, -1));
+
+				if (!isset($this->_exceptions[$keyword][basename($fileName)])) {
+					$longCheckRequired = true;
+				}
+			}
+		}
+
+		if (!$longCheckRequired) {
+			return;
+		}
+
+		// Long check
+		$lines = explode("\n", $buffer);
+
+		for ($i = 0; $i < sizeof($lines); $i++) {
+			if (preg_match_all($this->_illegalRegexp, $lines[$i], $matches)) {
+				foreach (array_unique($matches[0]) as $keyword) {
+					// Remove trailing open paren matched by the pattern, and any spaces
+					$keyword = trim(substr($keyword, 0, -1));
+
+					if (!isset($this->_exceptions[$keyword])
+						|| !isset($this->_exceptions[$keyword][basename($fileName)])
+					) {
+						// Allow $platform->{keyword} calls
+						$line = str_replace('$platform->' . $keyword, '', $lines[$i]);
+
+						if (strpos($line, $keyword) !== false) {
+							$this->assertFalse(
+								true,
+								sprintf(
+									'%s contains illegal keyword <b>%s</b> ' .
+									'on line <b>%d</b>',
+									basename($fileName),
+									$keyword,
+									$i + 1
+								)
+							);
+						}
+					}
+				}
+			}
+		}
+	}
+}

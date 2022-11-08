@@ -1,0 +1,259 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('lib/tools/phpunit/ItemAddOptionTestCase.class');
+
+/**
+ * CreateThumbnailOption tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class CreateThumbnailOptionTest extends ItemAddOptionTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core', 'CreateThumbnailOption');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		// Register a dummy toolkit
+		$path = 'modules/core/test/phpunit/CreateThumbnailOptionTest.class';
+
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'GalleryToolkit',
+			'CreateThumbnailOptionTestToolkit',
+			'CreateThumbnailOptionTestToolkit',
+			$path,
+			'coreTest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markToolkitForCleanup('CreateThumbnailOptionTestToolkit');
+
+		// Register operations that we can perform on our mock data items
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'CreateThumbnailOptionTestToolkit',
+			array('test/file'),
+			'thumbnail',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+			),
+			'test-description',
+			''
+		);
+
+		$this->_items = array();
+
+		list($ret, $this->_items[0]) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'test/file'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_itemThumbnail = array();
+
+		list($ret, $this->_itemThumbnail[0]) = $this->_createDerivative(
+			$this->_items[0],
+			$this->_items[0]->getId(),
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+			'thumbnail|200'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_noWarnings = array();
+		$this->_noErrors   = array();
+	}
+
+	public function testCreateThumbnail() {
+		$form['CreateThumbnailOption']['createThumbnail'] = 1;
+
+		list($errors, $warnings) = $this->_handleRequestAfterAdd($form, $this->_items);
+
+		$this->assertEquals($warnings, $this->_noWarnings);
+		$this->assertEquals($errors, $this->_noErrors);
+
+		list($ret, $isCurrent) = $this->_itemThumbnail[0]->isCacheCurrent();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($isCurrent, 'Thumbnail was not created!');
+		$this->assertFalse($this->_itemThumbnail[0]->getIsBroken(), 'Thumbnail is broken!');
+
+		// Check if the derivative was saved by checking
+		$this->assertTrue(
+			!$this->_itemThumbnail[0]->isModified(),
+			'Thumbnail still modified, should be saved'
+		);
+	}
+
+	public function testDontCreateThumbnail() {
+		$form = array();
+
+		list($errors, $warnings) = $this->_handleRequestAfterAdd($form, $this->_items);
+
+		$this->assertEquals($warnings, $this->_noWarnings);
+		$this->assertEquals($errors, $this->_noErrors);
+
+		list($ret, $isCurrent) = $this->_itemThumbnail[0]->isCacheCurrent();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($isCurrent, 'Thumbnail was created, but not requested!');
+	}
+
+	public function testCreateMultipleThumbnails() {
+		$totalTestItems = 3;
+
+		for ($j = 1; $j < $totalTestItems; $j++) {
+			list($ret, $this->_items[$j]) = $this->_createRandomDataItem(
+				$this->_album->getId(),
+				'test/file'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			list($ret, $this->_itemThumbnail[$j]) = $this->_createDerivative(
+				$this->_items[$j],
+				$this->_items[$j]->getId(),
+				DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+				'thumbnail|200'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$form['CreateThumbnailOption']['createThumbnail'] = 1;
+
+		list($errors, $warnings) = $this->_handleRequestAfterAdd($form, $this->_items);
+
+		$this->assertEquals($warnings, $this->_noWarnings);
+		$this->assertEquals($errors, $this->_noErrors);
+
+		for ($j = 0; $j < $totalTestItems; $j++) {
+			list($ret, $isCurrent) = $this->_itemThumbnail[$j]->isCacheCurrent();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertTrue($isCurrent, "Thumbnail $j was not created!");
+		}
+	}
+
+	// This would not do anything, but should not have any errors either.
+	public function testCreateWithNoThumbnail() {
+		$form['CreateThumbnailOption']['createThumbnail'] = 1;
+
+		list($errors, $warnings) = $this->_handleRequestAfterAdd($form, $this->_items);
+
+		$this->assertEquals($warnings, $this->_noWarnings);
+		$this->assertEquals($errors, $this->_noErrors);
+	}
+
+	// This would not do anything, but should not have any errors either.
+	public function testCreateMultipleWithNoThumbnail() {
+		$totalTestItems = 3;
+
+		for ($j = 1; $j < $totalTestItems; $j++) {
+			list($ret, $this->_items[$j]) = $this->_createRandomDataItem(
+				$this->_album->getId(),
+				'test/file'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$form['CreateThumbnailOption']['createThumbnail'] = 1;
+
+		list($errors, $warnings) = $this->_handleRequestAfterAdd($form, $this->_items);
+
+		$this->assertEquals($warnings, $this->_noWarnings);
+		$this->assertEquals($errors, $this->_noErrors);
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+
+/**
+ * Dummy test toolkit
+ */
+class CreateThumbnailOptionTestToolkit extends GalleryToolkit {
+	/**
+	 * @see GalleryToolkit::performOperation
+	 * Dummy operation
+	 */
+	public function performOperation(
+		$mimeType,
+		$operationName,
+		$sourceFilename,
+		$destFilename,
+		$parameters,
+		$context = array()
+	) {
+		global $gallery;
+
+		if ($sourceFilename != $destFilename) {
+			$platform =& $gallery->getPlatform();
+
+			$platform->copy($sourceFilename, $destFilename);
+		}
+
+		return array(null, $mimeType, $context);
+	}
+}

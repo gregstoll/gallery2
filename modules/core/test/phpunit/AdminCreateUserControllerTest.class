@@ -1,0 +1,229 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * AdminCreateUser controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminCreateUserControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminCreateUser');
+	}
+
+	public function testCancel() {
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testCreateUser() {
+		$userName = 'user-' . mt_rand();
+
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $userName);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'email');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+		GalleryUtilities::putRequestVariable('form[password1]', 'password');
+		GalleryUtilities::putRequestVariable('form[password2]', 'password');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'createdUser' => $userName,
+				),
+				'error'    => array(),
+			),
+			$results,
+			'Failed to create user'
+		);
+
+		list($ret, $user) = GalleryCoreApi::fetchUserByUserName($userName);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+		$this->assertTrue($user->isCorrectPassword('password'), 'check password');
+	}
+
+	public function testCreateEntityPassword() {
+		$userName = 'user-' . mt_rand();
+
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $userName);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'email');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+		GalleryUtilities::putRequestVariable('form[password1]', 'pass&word');
+		GalleryUtilities::putRequestVariable('form[password2]', 'pass&word');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'createdUser' => $userName,
+				),
+				'error'    => array(),
+			),
+			$results,
+			'Failed to create user'
+		);
+
+		list($ret, $user) = GalleryCoreApi::fetchUserByUserName($userName);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+		$this->assertTrue($user->isCorrectPassword('pass&word'), 'check password');
+	}
+
+	public function testMissingInputs() {
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+
+		// Create one user
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminCreateUser',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][userName][missing]',
+					'form[error][email][missing]',
+					'form[error][password1][missing]',
+					'form[error][password2][missing]',
+				),
+			),
+			$results
+		);
+	}
+
+	public function testPasswordMismatch() {
+		$userName = 'user-' . mt_rand();
+
+		// Create one user
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $userName);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'email');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+		GalleryUtilities::putRequestVariable('form[password1]', 'passwordRight');
+		GalleryUtilities::putRequestVariable('form[password2]', 'passwordWrong');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminCreateUser',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][password2][mismatch]'),
+			),
+			$results
+		);
+	}
+
+	public function testCreateDuplicateUser() {
+		$userName = 'user-' . mt_rand();
+
+		// Create one user
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $userName);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'email');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+		GalleryUtilities::putRequestVariable('form[password1]', 'password');
+		GalleryUtilities::putRequestVariable('form[password2]', 'password');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'createdUser' => $userName,
+				),
+				'error'    => array(),
+			),
+			$results,
+			'Failed to create user'
+		);
+
+		// Create a second user with the same name
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminCreateUser',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][userName][exists]'),
+			),
+			$results
+		);
+
+		list($ret, $user) = GalleryCoreApi::fetchUserByUserName($userName);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+	}
+}

@@ -1,0 +1,317 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemEditMovie controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemEditMoviePluginTest extends ItemEditPluginTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core', 'ItemEditMovie');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Cache this data to lighten the load on our dummy toolkit
+		GalleryCoreApi::fetchPluginStatus('module');
+
+		$Platform                        = $gallery->getPlatform();
+		$ItemEditMoviePluginTestPlatform = new ItemEditMoviePluginTestPlatform($Platform);
+
+		$gallery->setPlatform($ItemEditMoviePluginTestPlatform);
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		list($ret, $this->_item) = $this->_createRandomDataItem($this->_album->getId(), 'video/x-msvideo');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_preferred = null;
+	}
+
+	public function testChangeSize() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[width]', 123);
+		GalleryUtilities::putRequestVariable('form[height]', 456);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_preferred);
+
+		$this->assertEquals(
+			array(
+				array(),
+				$this->_translate('Changes saved successfully'),
+			),
+			$results
+		);
+
+		// Verify that the preferred is gone
+		list($ret, $this->_item) = $this->_item->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(123, $this->_item->getWidth());
+		$this->assertEquals(456, $this->_item->getHeight());
+	}
+
+	public function testChangeSizeMissingValues() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[width]', '');
+		GalleryUtilities::putRequestVariable('form[height]', '');
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_preferred);
+
+		$this->assertEquals(
+			array(
+				array(),
+				$this->_translate('Changes saved successfully'),
+			),
+			$results
+		);
+
+		// Reload the item
+		list($ret, $this->_item) = $this->_item->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, $this->_item->getWidth());
+		$this->assertEquals(0, $this->_item->getHeight());
+	}
+
+	public function testChangeSizeInvalidValues() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[width]', -123);
+		GalleryUtilities::putRequestVariable('form[height]', -456);
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_preferred);
+
+		$this->assertEquals(
+			array(
+				array(
+					'form[error][width][invalid]',
+					'form[error][height][invalid]',
+				),
+				null,
+			),
+			$results
+		);
+	}
+
+	public function testInvalidSerialNumber() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[width]', 123);
+		GalleryUtilities::putRequestVariable('form[height]', 456);
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		// use Invalid serial number
+		GalleryUtilities::putRequestVariable('form[serialNumber]', -1);
+
+		$results = $this->handleRequest($this->_item, $this->_preferred, ERROR_OBSOLETE_DATA);
+	}
+}
+
+/**
+ * ItemEditMovie controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class ItemEditMoviePluginTestPlatform {
+	public function __construct($originalPlatform) {
+		$this->_platform = $originalPlatform;
+	}
+
+	public function file_exists($path) {
+		return $this->_platform->file_exists($path);
+	}
+
+	public function is_dir($path) {
+		return $this->_platform->is_dir($path);
+	}
+
+	public function is_writeable($path) {
+		return $this->_platform->is_writeable($path);
+	}
+
+	public function legalizePathComponent($pathComponent) {
+		return $this->_platform->legalizePathComponent($pathComponent);
+	}
+
+	public function mkdir($path) {
+		return $this->_platform->mkdir($path);
+	}
+
+	public function is_uploaded_file($path) {
+		return $this->_platform->is_uploaded_file($path);
+	}
+
+	public function copy($from, $to) {
+		return $this->_platform->copy($from, $to);
+	}
+
+	public function filesize($path) {
+		return $this->_platform->filesize($path);
+	}
+
+	public function fflush($handle) {
+		return fflush($handle);
+	}
+
+	public function exec($args) {
+		/*
+		 * Check for: (this is a Windows example, but we have to account for Unix also)
+		 * [0] => C:\apps\ffmpeg\ffmpeg.exe
+		 * [1] => -i
+		 * [2] => c:/Program Files/Apache Group/Apache2/htdocs/gallerydata\albums\  ...
+		 *        ... albumtest22617/test-4224_dat
+		 * [3] => -vstats
+		 */
+		if (sizeof($args[0]) == 4
+			&& preg_match('/ffmpeg/', $args[0][0])
+			&& $args[0][1] == '-i'
+			&& $this->_platform->file_exists($args[0][2])
+			&& $args[0][3] == '-vstats'
+		) {
+			$results  = array();
+			$stderr[] = sprintf('Input #0, avi, from \'%s\':', $args[0][2]);
+			$stderr[] = 'Duration: 00:00:04.0, bitrate: 329 kb/s';
+			$stderr[] = 'Stream #0.0: Video: mjpeg, 160x120, 15.00 fps';
+			$stderr[] = 'Stream #0.1: Audio: pcm_u8, 8000 Hz, mono, 64 kb/s';
+
+			return array(1, $results, $stderr);
+		}
+
+		return array(0, null, null);
+	}
+
+	public function getDirectorySeparator() {
+		return $this->_platform->getDirectorySeparator();
+	}
+
+	public function fopen($filename, $modes) {
+		// Pass lock requests
+		if (preg_match("|\blocks\b|", $filename)) {
+			return fopen($filename, $modes);
+		}
+
+		echo "Unexpected fopen($filename, $modes)";
+
+		return null;
+	}
+
+	public function opendir($path) {
+		return opendir($path);
+	}
+
+	public function readdir($handle) {
+		return readdir($handle);
+	}
+
+	public function closedir($handle) {
+		return closedir($handle);
+	}
+
+	public function rmdir($path) {
+		return rmdir($path);
+	}
+
+	public function fwrite($handle, $string) {
+		return fwrite($handle, $string);
+	}
+
+	public function recursiveRmdir($dirname) {
+		global $gallery;
+
+		if ($gallery->getDebug()) {
+			$gallery->debug("recursiveRmdir($dirname)");
+		}
+
+		if (!($fd = $this->opendir($dirname))) {
+			return false;
+		}
+
+		while (($filename = $this->readdir($fd)) !== false) {
+			if (!strcmp($filename, '.') || !strcmp($filename, '..')) {
+				continue;
+			}
+
+			$path = "$dirname/$filename";
+
+			if ($this->is_dir($path)) {
+				$ret = $this->recursiveRmdir($path);
+			} else {
+				$ret = $this->unlink($path);
+			}
+
+			if ($ret == false) {
+				return false;
+			}
+		}
+
+		closedir($fd);
+
+		return $this->rmdir($dirname);
+	}
+
+	public function unlink($path) {
+		// needed to release locks
+		return unlink($path);
+	}
+
+	public function realpath($file) {
+		return realpath($file);
+	}
+
+	public function flock($handle, $operation, &$wouldblock) {
+		// Pass lock requests
+		return flock($handle, $operation, $wouldblock);
+	}
+
+	public function fclose($handle) {
+		return fclose($handle);
+	}
+}

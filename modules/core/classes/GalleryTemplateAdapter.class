@@ -248,9 +248,9 @@ class GalleryTemplateAdapter {
      *
      * @param array $params key => value attributes
      * @param Smarty $smarty the smarty instance
-     * @return HTML content
+     * @return HTML|string
      */
-    function changeInDescendents($params, &$smarty) {
+    static function changeInDescendents($params, &$smarty) {
 	global $gallery;
 
 	if (isset($params['l10Domain'])) {
@@ -623,7 +623,7 @@ class GalleryTemplateAdapter {
      * @param array $params the items to make a css class out of
      * @return string the id of the css class
      */
-    function linkId($params) {
+    static function linkId($params) {
 	$linkId = 'gbLink';
 	if (!empty($params['urlParams']['controller'])) {
 	    $linkId .= '-' . $params['urlParams']['controller'];
@@ -675,17 +675,21 @@ class GalleryTemplateAdapter {
 	unset($params['lowercase']);
 	unset($params['text']);
 
+	$generateUrl = $urlGenerator->generateUrl($link['params'], $link['options']);
+	if (is_array($generateUrl)){
+		$generateUrl = "Array";
+	}
 	if ($type == 'option') {
-	    $tag = '<option value="' . (isset($link['script']) ? $link['script']
+		$tag = '<option value="' . (isset($link['script']) ? $link['script']
 		: ('window.location=\''
-		   . $urlGenerator->generateUrl($link['params'], $link['options']) . '\'')) . '"';
+		   . $generateUrl . '\'')) . '"';
 	    $endTag = '</option>';
 	} else {
-	    if (!array_key_exists('class', $params)) {
-		/* Use default classes */
-		$params['class'] = $this->linkId(array('urlParams' => $link['params']));
-	    }
-	    $tag = '<a href="' . $urlGenerator->generateUrl($link['params'], $link['options']) . '"'
+		if (!array_key_exists('class', $params)) {
+			/* Use default classes */
+			$params['class'] = $this->linkId(array('urlParams' => $link['params']));
+		}
+		$tag = '<a href="' . $generateUrl . '"'
 		. (isset($link['script']) ? ' onclick="' . $link['script'] . ';return false"' : '')
 		. (isset($link['attrs']) ? ' ' . $link['attrs'] : '');
 	    $endTag = '</a>';
@@ -709,7 +713,7 @@ class GalleryTemplateAdapter {
      * @return string
      * @access private
      */
-    function _safeCssName($string) {
+    static function _safeCssName($string) {
 	$string = preg_replace('/[^-A-Za-z0-9_]+/', '_', $string);
 	$string = preg_replace('/__+/', '_', $string);
 	return preg_replace('/[-_][-_]+/', '-', $string);

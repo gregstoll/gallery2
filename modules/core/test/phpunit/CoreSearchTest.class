@@ -1,0 +1,660 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test CoreSearch functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class CoreSearchTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $moduleStatusList) = GalleryCoreApi::fetchPluginStatus('module');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (empty($moduleStatusList['search']['active'])) {
+			$this->skip();
+		}
+
+		list($ret, $groupId) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'core',
+			'id.allUserGroup'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_randomKey = 'a' . mt_rand(1, 100000) . 'z';
+
+		list($ret, $this->_parentAlbum) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_parentAlbum);
+
+		$this->_item = array();
+
+		for ($i = 0; $i < 4; $i++) {
+			list($ret, $this->_item[$i]) = $this->_createRandomDataItem(
+				$this->_parentAlbum->getId(),
+				'application/unknown',
+				array(
+					'title'       => 'Title ' . $this->_randomKey,
+					'description' => 'Description ' . $this->_randomKey,
+					'summary'     => 'Summary ' . $this->_randomKey,
+					'keywords'    => 'Keywords ' . $this->_randomKey,
+				)
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = GalleryCoreApi::removeItemPermissions($this->_item[$i]->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+
+			switch ($i) {
+				case 1:
+				case 2:
+				case 3:
+					$ret = GalleryCoreApi::addUserPermission(
+						$this->_item[$i]->getId(),
+						$gallery->getActiveUserId(),
+						'core.view'
+					);
+
+					if ($ret) {
+						return $ret;
+					}
+
+					break;
+			}
+		}
+
+		if (class_exists('GallerySearchInterface_1_0')) {
+			list($ret, $this->_coreSearch) = GalleryCoreApi::newFactoryInstance(
+				'GallerySearchInterface_1_0',
+				'GalleryCoreSearch'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertTrue(isset($this->_coreSearch), 'Missing GalleryCoreSearch instance');
+		}
+
+		list($ret, $this->_module) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_user = $gallery->getActiveUser();
+	}
+
+	public function testFetchSearchModuleInfo() {
+		if (!isset($this->_coreSearch)) {
+			return;
+		}
+
+		list($ret, $info) = $this->_coreSearch->getSearchModuleInfo();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(isset($info['name']), 'name missing');
+		$this->assertTrue(isset($info['description']), 'description missing');
+		$this->assertTrue(isset($info['options']), 'options missing');
+		$this->assertTrue(is_array($info['options']), 'options not an array');
+
+		foreach (array('descriptions', 'keywords', 'summaries', 'titles') as $option) {
+			$this->assertTrue(
+				isset($info['options'][$option]['description']),
+				"options:$option description missing"
+			);
+			$this->assertTrue(
+				!empty($info['options'][$option]['enabled']),
+				"options:$option not enabled"
+			);
+		}
+	}
+
+	/**
+	 * Search for all available fields
+	 */
+	public function testSearchAll() {
+		if (!isset($this->_coreSearch)) {
+			return;
+		}
+
+		list($ret, $results) = $this->_coreSearch->search(
+			array(
+				'titles'       => 1,
+				'summaries'    => 1,
+				'descriptions' => 1,
+				'keywords'     => 1,
+			),
+			$this->_randomKey
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$keywords    = $this->_module->translate('Keywords');
+		$summary     = $this->_module->translate('Summary');
+		$title       = $this->_module->translate('Title');
+		$description = $this->_module->translate('Description');
+		$owner       = $this->_module->translate('Owner');
+		$userName    = $this->_user->getFullName();
+
+		if (empty($userName)) {
+			$userName = $this->_user->getUserName();
+		}
+
+		$this->assertEquals(
+			array(
+				'start'   => 1,
+				'end'     => 3,
+				'count'   => 3,
+				'results' => array(
+					array(
+						'itemId' => $this->_item[3]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $this->_item[3]->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $this->_item[3]->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $this->_item[3]->getKeywords(),
+							),
+							array(
+								'key'   => $description,
+								'value' => $this->_item[3]->getDescription(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[2]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $this->_item[2]->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $this->_item[2]->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $this->_item[2]->getKeywords(),
+							),
+							array(
+								'key'   => $description,
+								'value' => $this->_item[2]->getDescription(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[1]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $this->_item[1]->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $this->_item[1]->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $this->_item[1]->getKeywords(),
+							),
+							array(
+								'key'   => $description,
+								'value' => $this->_item[1]->getDescription(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+				),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Search only in the title and keywords
+	 */
+	public function testSearchAllSomeFields() {
+		if (!isset($this->_coreSearch)) {
+			return;
+		}
+
+		list($ret, $results) = $this->_coreSearch->search(
+			array(
+				'titles'   => 1,
+				'keywords' => 1,
+			),
+			$this->_randomKey
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$title    = $this->_module->translate('Title');
+		$summary  = $this->_module->translate('Summary');
+		$keywords = $this->_module->translate('Keywords');
+		$owner    = $this->_module->translate('Owner');
+		$userName = $this->_user->getFullName();
+
+		if (empty($userName)) {
+			$userName = $this->_user->getUserName();
+		}
+
+		$this->assertEquals(
+			array(
+				'start'   => 1,
+				'end'     => 3,
+				'count'   => 3,
+				'results' => array(
+					array(
+						'itemId' => $this->_item[3]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $this->_item[3]->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $this->_item[3]->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $this->_item[3]->getKeywords(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[2]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $this->_item[2]->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $this->_item[2]->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $this->_item[2]->getKeywords(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[1]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $this->_item[1]->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $this->_item[1]->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $this->_item[1]->getKeywords(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+				),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Search for all available fields, but only request a subset of the total results
+	 */
+	public function testSearchLimited() {
+		if (!isset($this->_coreSearch)) {
+			return;
+		}
+
+		list($ret, $results) = $this->_coreSearch->search(
+			array(
+				'titles'       => 1,
+				'summaries'    => 1,
+				'descriptions' => 1,
+				'keywords'     => 1,
+			),
+			$this->_randomKey,
+			1,
+			2
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$keywords    = $this->_module->translate('Keywords');
+		$summary     = $this->_module->translate('Summary');
+		$title       = $this->_module->translate('Title');
+		$description = $this->_module->translate('Description');
+		$owner       = $this->_module->translate('Owner');
+		$userName    = $this->_user->getFullName();
+
+		if (empty($userName)) {
+			$userName = $this->_user->getUserName();
+		}
+
+		$this->assertEquals(
+			array(
+				'start'   => 2,
+				'end'     => 3,
+				'count'   => 3,
+				'results' => array(
+					array(
+						'itemId' => $this->_item[2]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $this->_item[2]->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $this->_item[2]->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $this->_item[2]->getKeywords(),
+							),
+							array(
+								'key'   => $description,
+								'value' => $this->_item[2]->getDescription(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[1]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $this->_item[1]->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $this->_item[1]->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $this->_item[1]->getKeywords(),
+							),
+							array(
+								'key'   => $description,
+								'value' => $this->_item[1]->getDescription(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+				),
+			),
+			$results
+		);
+	}
+
+	public function testEmptySearch() {
+		if (!isset($this->_coreSearch)) {
+			return;
+		}
+
+		list($ret, $results) = $this->_coreSearch->search(
+			array(
+				'titles' => 1,
+			),
+			'some string that will never show up'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'start'   => 0,
+				'end'     => 0,
+				'count'   => 0,
+				'results' => array(),
+			),
+			$results
+		);
+	}
+
+	public function testSearchLinks() {
+		if (!isset($this->_coreSearch)) {
+			return;
+		}
+
+		// Create a link and make sure it shows up in the search results
+		list($ret, $linkedItem) = $this->_createLinkedItem($this->_parentAlbum->getId(), $this->_item[1]);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $results) = $this->_coreSearch->search(
+			array(
+				'titles'       => 1,
+				'summaries'    => 1,
+				'descriptions' => 1,
+				'keywords'     => 1,
+			),
+			$this->_randomKey
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$keywords    = $this->_module->translate('Keywords');
+		$summary     = $this->_module->translate('Summary');
+		$title       = $this->_module->translate('Title');
+		$description = $this->_module->translate('Description');
+		$owner       = $this->_module->translate('Owner');
+		$userName    = $this->_user->getFullName();
+
+		if (empty($userName)) {
+			$userName = $this->_user->getUserName();
+		}
+
+		$this->assertEquals(
+			array(
+				'start'   => 1,
+				'end'     => 4,
+				'count'   => 4,
+				'results' => array(
+					array(
+						'itemId' => $linkedItem->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $linkedItem->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $linkedItem->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $linkedItem->getKeywords(),
+							),
+							array(
+								'key'   => $description,
+								'value' => $linkedItem->getDescription(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[3]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $this->_item[3]->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $this->_item[3]->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $this->_item[3]->getKeywords(),
+							),
+							array(
+								'key'   => $description,
+								'value' => $this->_item[3]->getDescription(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[2]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $this->_item[2]->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $this->_item[2]->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $this->_item[2]->getKeywords(),
+							),
+							array(
+								'key'   => $description,
+								'value' => $this->_item[2]->getDescription(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[1]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $title,
+								'value' => $this->_item[1]->getTitle(),
+							),
+							array(
+								'key'   => $summary,
+								'value' => $this->_item[1]->getSummary(),
+							),
+							array(
+								'key'   => $keywords,
+								'value' => $this->_item[1]->getKeywords(),
+							),
+							array(
+								'key'   => $description,
+								'value' => $this->_item[1]->getDescription(),
+							),
+							array(
+								'key'   => $owner,
+								'value' => $userName,
+							),
+						),
+					),
+				),
+			),
+			$results
+		);
+	}
+}

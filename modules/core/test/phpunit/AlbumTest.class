@@ -1,0 +1,1640 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test Album functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17589 $
+ */
+class AlbumTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_parentAlbum) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_parentAlbum);
+
+		// Register a dummy toolkit
+		$path = 'modules/core/test/phpunit/AlbumTest.class';
+
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'GalleryToolkit',
+			'AlbumTestToolkit',
+			'AlbumTestToolkit',
+			$path,
+			'coreTest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markToolkitForCleanup('AlbumTestToolkit');
+
+		// Register operations that we can perform on our mock data items
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'AlbumTestToolkit',
+			array('test/file'),
+			'thumbnail',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+			),
+			'test-description',
+			''
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testLoadRootAlbum() {
+		global $gallery;
+
+		list($ret, $rootAlbum) = GalleryCoreApi::loadEntitiesById(
+			$this->_parentAlbum->getId(),
+			'GalleryAlbumItem'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (!GalleryUtilities::isA($rootAlbum, 'GalleryAlbumItem')) {
+			return GalleryCoreApi::error(ERROR_DELETED_OBJECT);
+		}
+	}
+
+	public function testCreateAndDeleteAlbum() {
+		global $gallery;
+
+		list($ret, $album) = $this->_createRandomAlbum($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify it
+		$ret = $this->_verifyEntity($album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Delete it
+		$ret = $this->_deleteAndVerifyEntity($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testCreateRenameAndDeleteAlbum() {
+		global $gallery;
+
+		list($ret, $album) = $this->_createRandomAlbum($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify it
+		$ret = $this->_verifyEntity($album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Lock and refresh it
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album) = $album->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Rename it
+		$ret = $album->rename('newname-' . mt_rand());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Save it
+		$ret = $album->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Unlock it
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify it
+		$ret = $this->_verifyEntity($album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Delete it
+		$ret = $this->_deleteAndVerifyEntity($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testCreateAndDeleteNestedAlbums() {
+		global $gallery;
+
+		$lockIds    = array();
+		$iterations = 5;
+		$parentId   = $this->_parentAlbum->getId();
+
+		for ($i = 0; $i < $iterations; $i++) {
+			$gallery->guaranteeTimeLimit(5);
+
+			list($ret, $nested[$i]) = $this->_createRandomAlbum($parentId);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$parentId = $nested[$i]->getId();
+		}
+
+		$ret = $this->_deleteAndVerifyEntity($nested[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		for ($i = 0; $i < $iterations; $i++) {
+			$ret = $this->_verifyMissing($nested[$i]->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+	}
+
+	/**
+	 * Create an album under the root, then create a nested album under that
+	 * one, then move the nested album to the root, then delete both.
+	 *
+	 */
+	public function testMoveAlbum() {
+		global $gallery;
+
+		$lockIds  = array();
+		$parentId = $this->_parentAlbum->getId();
+
+		for ($i = 0; $i < 3; $i++) {
+			list($ret, $album[$i]) = $this->_createRandomAlbum($parentId);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$parentId = $album[$i]->getId();
+		}
+
+		// Verify parents before moving
+		$this->assertEquals(
+			$this->_parentAlbum->getId(),
+			$album[0]->getParentId(),
+			'(before) album 0'
+		);
+		$this->assertEquals(
+			$album[0]->getId(),
+			$album[1]->getParentId(),
+			'(before) album 1'
+		);
+		$this->assertEquals(
+			$album[1]->getId(),
+			$album[2]->getParentId(),
+			'(before) album 2'
+		);
+
+		for ($i = 0; $i < 3; $i++) {
+			list($ret, $parentSequence[$i]) = GalleryCoreApi::fetchParentSequence(
+				$album[$i]->getId()
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_parentAlbum->getId(),
+			),
+			$parentSequence[0],
+			'(before) sequence 0'
+		);
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_parentAlbum->getId(),
+				$album[0]->getId(),
+			),
+			$parentSequence[1],
+			'(before) sequence 1'
+		);
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_parentAlbum->getId(),
+				$album[0]->getId(),
+				$album[1]->getId(),
+			),
+			$parentSequence[2],
+			'(before) sequence 2'
+		);
+
+		// Read lock the root, write lock the two new albums
+		list($ret, $lockIds[]) = GalleryCoreApi::acquireReadLock(
+			array($this->_parentAlbum->getId())
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $lockIds[]) = GalleryCoreApi::acquireWriteLock(
+			array(
+				$album[0]->getId(),
+				$album[1]->getId(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		for ($i = 0; $i < 2; $i++) {
+			list($ret, $album[$i]) = $album[$i]->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		// Move one of the target albums
+		$ret = $album[1]->move($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Save it
+		$ret = $album[1]->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockIds);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify parents
+		for ($i = 0; $i < 2; $i++) {
+			list($ret, $album[$i]) = $album[$i]->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$this->assertEquals(
+			$this->_parentAlbum->getId(),
+			$album[0]->getParentId(),
+			'(after) album 0'
+		);
+		$this->assertEquals(
+			$this->_parentAlbum->getId(),
+			$album[1]->getParentId(),
+			'(after) album 1'
+		);
+		$this->assertEquals(
+			$album[1]->getId(),
+			$album[2]->getParentId(),
+			'(after) album 2'
+		);
+
+		for ($i = 0; $i < 3; $i++) {
+			list($ret, $parentSequence[$i]) = GalleryCoreApi::fetchParentSequence(
+				$album[$i]->getId()
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_parentAlbum->getId(),
+			),
+			$parentSequence[0],
+			'(after) sequence 0'
+		);
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_parentAlbum->getId(),
+			),
+			$parentSequence[1],
+			'(after) sequence 1'
+		);
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_parentAlbum->getId(),
+				$album[1]->getId(),
+			),
+			$parentSequence[2],
+			'(after) sequence 2'
+		);
+	}
+
+	/**
+	 * Create several levels of nested albums, then fetch the parents from the
+	 * bottom most one and compare it against the parents we know.
+	 */
+	public function testFetchParents() {
+		global $gallery;
+
+		$iterations = 5;
+		$parentId   = $this->_parentAlbum->getId();
+
+		for ($i = 0; $i < $iterations; $i++) {
+			$gallery->guaranteeTimeLimit(5);
+
+			list($ret, $nested[$i]) = $this->_createRandomAlbum($parentId);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$parentId = $nested[$i]->getId();
+		}
+
+		// Now we have created our nested tree.  Fetch it all back again
+		list($ret, $actual) = GalleryCoreApi::fetchParents($nested[$iterations - 1]);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $expected[0]) = GalleryCoreApi::loadEntitiesById($this->_getRootId(), 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $expected[1]) = GalleryCoreApi::loadEntitiesById($this->_parentAlbum->getId(), 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		for ($i = 0; $i < sizeof($nested) - 1; $i++) {
+			$expected[] = $nested[$i];
+		}
+
+		$this->assertEquals($expected, $actual);
+	}
+
+	public function testFetchParentsWithPermission() {
+		list($ret, $album) = $this->_createRandomAlbum($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $subalbum) = $this->_createRandomAlbum($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $root) = GalleryCoreApi::loadEntitiesById($this->_getRootId(), 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $actual) = GalleryCoreApi::fetchParents($subalbum, 'core.view');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array($root, $album), $actual);
+	}
+
+	public function testFetchParentsWithoutPermission() {
+		// For this test we expect guest user to not have delete permission on root album
+		$this->_becomeGuestUser();
+
+		GalleryDataCache::clearPermissionCache();
+
+		$ret = GalleryCoreApi::assertHasItemPermission($this->_getRootId(), 'core.delete');
+
+		if (!$ret) {
+			$this->assertFalse(true, 'Guest has core.delete on root album');
+
+			return;
+		}
+
+		list($ret, $actual) = GalleryCoreApi::fetchParents($this->_parentAlbum, 'core.delete');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(), $actual);
+	}
+
+	public function testFetchParentsWithMultiplePermissions() {
+		global $gallery;
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_parentAlbum->getId(),
+			$gallery->getActiveUserId(),
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album) = $this->_createRandomAlbum($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $subalbum) = $this->_createRandomAlbum($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserPermission(
+			$album->getId(),
+			$gallery->getActiveUserId(),
+			'core.addDataItem'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $root) = GalleryCoreApi::loadEntitiesById($this->_getRootId(), 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $actual) = GalleryCoreApi::fetchParents($subalbum, array('core.view'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$root,
+				$this->_parentAlbum,
+				$album,
+			),
+			$actual,
+			'albums with core.view'
+		);
+
+		list($ret, $actual) = GalleryCoreApi::fetchParents(
+			$subalbum,
+			array('core.view', 'core.addDataItem')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array($root, $album), $actual, 'albums with both permissions');
+	}
+
+	/**
+	 * Create a parent, a child, verify that fetchChildren on the parent
+	 * returns the child, delete both.
+	 */
+	public function testFetchChildIds() {
+		global $gallery;
+
+		list($ret, $parent) = $this->_createRandomAlbum($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $child) = $this->_createRandomAlbum($parent->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryDataCache::reset();
+
+		list($ret, $actual) = GalleryCoreApi::fetchChildItemIds($parent);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array($child->getId()), $actual);
+	}
+
+	public function testGuaranteeAlbumHasThumbnail1() {
+		// Album has no thumbnail, no children
+		list($ret, $success) = GalleryCoreApi::guaranteeAlbumHasThumbnail(
+			$this->_parentAlbum->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Result: failure
+		$this->assertFalse($success, 'Did not Fail');
+	}
+
+	public function testGuaranteeAlbumHasThumbnail2() {
+		// Album has no thumbnail, 1 child
+		list($ret, $child) = $this->_createRandomDataItem(
+			$this->_parentAlbum->getId(),
+			'test/file'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $success) = GalleryCoreApi::guaranteeAlbumHasThumbnail(
+			$this->_parentAlbum->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Result: success
+		$this->assertTrue(true, $success, 'success');
+
+		list($ret, $thumbTable) = GalleryCoreApi::fetchThumbnailsByItemIds(
+			array(
+				$this->_parentAlbum->getId(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// The album's derivative is sourced to the child
+		if (!empty($thumbTable)) {
+			$thumb = $thumbTable[$this->_parentAlbum->getId()];
+
+			$this->assertEquals(
+				$child->getId(),
+				$thumb->getDerivativeSourceId(),
+				'Derivative to Child'
+			);
+		}
+	}
+
+	public function testGuaranteeAlbumHasThumbnail3() {
+		// Album has a thumbnail but its source is not in the album, 1 child
+		list($ret, $subAlbum) = $this->_createRandomAlbum($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create a thumbnail sourced from the parent album
+		list($ret, $derivative) = GalleryCoreApi::newFactoryInstanceByHint(
+			'GalleryDerivative',
+			'*'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $derivative->create(
+			$subAlbum->getId(),
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+			'test/file'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$derivative->setMimeType('test/file');
+		$derivative->setDerivativeSourceId($this->_parentAlbum->getId());
+		$derivative->setDerivativeOperations('thumbnail|150');
+
+		$ret = $derivative->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $child) = $this->_createRandomDataItem($subAlbum->getId(), 'test/file');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $success) = GalleryCoreApi::guaranteeAlbumHasThumbnail($subAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Result: success
+		$this->assertTrue(true, $success, 'guarantee');
+
+		// Reload the thumbnail and examine it
+		list($ret, $thumbTable) = GalleryCoreApi::fetchThumbnailsByItemIds(
+			array($subAlbum->getId())
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// The album's derivative is sourced to the child
+		$this->assertFalse(empty($thumbTable), 'thumb');
+
+		if (!empty($thumbTable)) {
+			$thumb = $thumbTable[$subAlbum->getId()];
+
+			$this->assertEquals($derivative->getId(), $thumb->getId());
+			$this->assertEquals($child->getId(), $thumb->getDerivativeSourceId());
+		}
+	}
+
+	/**
+	 * Verify that creating a second album with the same path as
+	 * an existing one throws a collision error.
+	 */
+	public function testCreateCollision() {
+		global $gallery;
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $basePath) = $this->_parentAlbum->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$platform =& $gallery->getPlatform();
+		$slash    = $platform->getDirectorySeparator();
+
+		for ($i = 0; $i < 3; $i++) {
+			$entity[$i] = new GalleryAlbumItem();
+
+			$ret = $entity[$i]->create($this->_parentAlbum->getId(), 'valid_path');
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = $entity[$i]->save();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			if ($i > 0) {
+				$expectedPathComponent = sprintf('valid_path_%03d', $i);
+
+				$this->assertEquals(
+					$expectedPathComponent,
+					$entity[$i]->getPathComponent(),
+					'path component mismatch'
+				);
+
+				list($ret, $entityPath) = $entity[$i]->fetchPath();
+
+				if ($ret) {
+					return $ret;
+				}
+
+				$this->assertEquals(
+					$basePath . $expectedPathComponent . $slash,
+					$entityPath,
+					'full path mismatch'
+				);
+				$this->assertTrue($platform->file_exists($entityPath), "$entityPath does not exist");
+				$this->assertTrue($platform->is_dir($entityPath), "$entityPath is not a directory");
+			}
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testMoveCollision() {
+		global $gallery;
+
+		list($ret, $outerAlbum) = $this->_createRandomAlbum($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $innerAlbum) = $this->_createRandomAlbum($outerAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $lockIds[]) = GalleryCoreApi::acquireReadLock(
+			array($this->_getRootId(), $this->_parentAlbum->getId())
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $lockIds[]) = GalleryCoreApi::acquireWriteLock(array($innerAlbum->getId(), $outerAlbum->getId()));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $innerAlbum->rename('test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $innerAlbum->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $outerAlbum->rename('test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $outerAlbum->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $innerAlbum->move($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $basePath) = $this->_parentAlbum->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $newPath) = $innerAlbum->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$platform =& $gallery->getPlatform();
+		$slash    = $platform->getDirectorySeparator();
+
+		$this->assertEquals($basePath . 'test_001' . $slash, $newPath, 'full path mismatch');
+		$this->assertTrue($platform->file_exists($newPath), "$newPath does not exist");
+		$this->assertTrue($platform->is_dir($newPath), "$newPath is not a file");
+
+		$ret = GalleryCoreApi::releaseLocks($lockIds);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testInheritDefaults() {
+		global $gallery;
+
+		// Create an album with one group of settings
+		list($ret, $album) = $this->_createRandomAlbum(
+			$this->_parentAlbum->getId(),
+			array(
+				'theme'          => 'AlbumTestTheme',
+				'orderBy'        => 'b',
+				'orderDirection' => 'c',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'theme',
+			'AlbumTestTheme',
+			'testParam',
+			'testValue',
+			$album->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Set our defaults to something else
+		foreach (array(
+			'default.theme'                => 'x',
+			'default.orderBy'              => 'y',
+			'default.orderDirection'       => 'z',
+			'default.newAlbumsUseDefaults' => 'false',
+		) as $key => $value) {
+			$ret = GalleryCoreApi::setPluginParameter('module', 'core', $key, $value);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		// Create a sub album.  It should inherit from the parent
+		list($ret, $child1) = $this->_createRandomAlbum($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('theme', 'AlbumTestTheme', $child1->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('AlbumTestTheme', $child1->getTheme());
+		$this->assertEquals('b', $child1->getOrderBy());
+		$this->assertEquals('c', $child1->getOrderDirection());
+
+		$this->assertEquals(
+			array(
+				'testParam' => 'testValue',
+			),
+			$params
+		);
+
+		// Now set the default theme to AlbumTestTheme
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'default.theme',
+			'AlbumTestTheme'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album2) = $this->_createRandomAlbum(
+			$this->_parentAlbum->getId(),
+			array(
+				'theme'          => '',
+				'orderBy'        => 'd',
+				'orderDirection' => 'e',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'theme',
+			'AlbumTestTheme',
+			'testParam',
+			'testValue2',
+			$album2->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create a sub album.  It should pick up the settings of the default theme
+		list($ret, $child2) = $this->_createRandomAlbum($album2->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('theme', 'AlbumTestTheme', $child2->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('', $child2->getTheme());
+		$this->assertEquals('d', $child2->getOrderBy());
+		$this->assertEquals('e', $child2->getOrderDirection());
+
+		$this->assertEquals(
+			array(
+				'testParam' => 'testValue2',
+			),
+			$params
+		);
+
+		// Now switch to using the defaults
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'default.newAlbumsUseDefaults',
+			'true'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create a sub album.  It should pick up the defaults
+		list($ret, $child3) = $this->_createRandomAlbum($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('theme', 'AlbumTestTheme', $child3->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(null, $child3->getTheme(), 'theme');
+		$this->assertEquals(null, $child3->getOrderBy(), 'orderBy');
+		$this->assertEquals(null, $child3->getOrderDirection(), 'orderDirection');
+		$this->assertEquals(array(), $params, 'params');
+	}
+
+	/**
+	 * Test GalleryCoreApi::fetchAlbumTree
+	 */
+	public function testFetchAlbumTree() {
+		global $gallery;
+
+		/*
+		 * Create tree.. P--0--2--4        with no permission on 5 so 6 and its subtree
+		 *                \_1-3 \_5--6--7  should appear as a child of 2 in the tree
+		 */
+		list($ret, $album[0]) = $this->_createRandomAlbum($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album[1]) = $this->_createRandomAlbum($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album[2]) = $this->_createRandomAlbum($album[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album[3]) = $this->_createRandomAlbum($album[1]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album[4]) = $this->_createRandomAlbum($album[2]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album[5]) = $this->_createRandomAlbum($album[2]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album[6]) = $this->_createRandomAlbum($album[5]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album[7]) = $this->_createRandomAlbum($album[6]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($album[5]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$fullTree = array(
+			$album[0]->getId() => array(
+				$album[2]->getId() => array(
+					$album[4]->getId() => array(),
+					$album[6]->getId() => array(
+						$album[7]->getId() => array(),
+					),
+				),
+			),
+			$album[1]->getId() => array(
+				$album[3]->getId() => array(),
+			),
+		);
+
+		$subTree = array(
+			$album[2]->getId() => array(
+				$album[4]->getId() => array(),
+				$album[6]->getId() => array(
+					$album[7]->getId() => array(),
+				),
+			),
+		);
+
+		$depthTree = array(
+			$album[0]->getId() => array(
+				$album[2]->getId() => array(),
+			),
+			$album[1]->getId() => array(
+				$album[3]->getId() => array(),
+			),
+		);
+
+		$allIds = array(
+			$album[0]->getId(),
+			$album[2]->getId(),
+			$album[4]->getId(),
+			$album[6]->getId(),
+			$album[7]->getId(),
+			$album[1]->getId(),
+			$album[3]->getId(),
+		);
+
+		list($ret, $tree) = GalleryCoreApi::fetchAlbumTree($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($fullTree, $tree, 'full tree');
+
+		$ids = GalleryUtilities::arrayKeysRecursive($tree);
+
+		$this->assertEquals($allIds, $ids, 'all ids');
+
+		list($ret, $tree) = GalleryCoreApi::fetchAlbumTree($album[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($subTree, $tree, 'sub tree');
+
+		list($ret, $tree) = GalleryCoreApi::fetchAlbumTree($this->_parentAlbum->getId(), 2);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($depthTree, $tree, 'depth tree');
+
+		list($ret, $tree) = GalleryCoreApi::fetchAlbumTree(null, 1);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(), $tree[$this->_parentAlbum->getId()], 'test album');
+		$this->assertEquals(
+			array_keys($tree),
+			GalleryUtilities::arrayKeysRecursive($tree),
+			'depth one'
+		);
+
+		// Test multiroot
+		// Used when no itemId given
+		$gallery->setConfig('defaultAlbumId', $album[0]->getId());
+
+		// Should have no effect
+		$gallery->setConfig('breadcrumbRootId', $album[2]->getId());
+
+		list($ret, $tree) = GalleryCoreApi::fetchAlbumTree();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($subTree, $tree, 'defaultAlbum tree');
+
+		list($ret, $tree) = GalleryCoreApi::fetchAlbumTree($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($fullTree, $tree, 'full tree above defaultAlbum');
+
+		list($ret, $tree) = GalleryCoreApi::fetchAlbumTree($album[2]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($subTree[$album[2]->getId()], $tree, 'defaultAlbum sub tree');
+	}
+
+	public function testFetchAlbumTreeNoPermissions() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+
+		// Delete all acls for this user
+		$ret = GalleryCoreApi::removeMapEntry(
+			'GalleryAccessMap',
+			array(
+				'userOrGroupId' => $user->getId(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryDataCache::reset();
+
+		/*
+		 * Remove user from all groups so that they are not implicitly part of a group that has
+		 * some permissions.
+		 */
+		$ret = GalleryCoreApi::removeUserFromAllGroups($user->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Put user in some random group that has no permissions
+		list($ret, $group) = $this->_createRandomGroup();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($group);
+
+		$ret = GalleryCoreApi::addUserToGroup($user->getId(), $group->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Clear any session permissions
+		$session->remove(GALLERY_PERMISSION_SESSION_KEY);
+		$gallery->setActiveUser($user);
+
+		// Verify that the album tree is empty
+		list($ret, $tree) = GalleryCoreApi::fetchAlbumTree($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(), $tree);
+	}
+
+	public function testCreateAlbumByGuestUser() {
+		global $gallery;
+
+		$savedUser = $gallery->getActiveUser();
+		$albumName = sprintf(' album %d test ', mt_rand());
+
+		list($ret, $publicAlbum) = GalleryCoreApi::createAlbum(
+			$this->_parentAlbum->getId(),
+			$albumName,
+			'title-test',
+			'summary',
+			'description',
+			'keywords'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $allUsersGroupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.allUserGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserPermission(
+			$publicAlbum->getId(),
+			$allUsersGroupId,
+			'core.addAlbumItem'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_becomeGuestUser();
+
+		$albumName = sprintf(' album %d test ', mt_rand());
+
+		list($ret, $album) = GalleryCoreApi::createAlbum(
+			$publicAlbum->getId(),
+			$albumName,
+			'title',
+			'summary',
+			'description',
+			'keywords'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::assertHasItemPermission($album->getId(), 'core.all');
+
+		$this->assertErrorEquals(ERROR_PERMISSION_DENIED, $ret);
+		$gallery->setActiveUser($savedUser);
+	}
+
+	public function testCreateAlbumWithAlternativeGuestUser() {
+		global $gallery;
+
+		$savedUser = $gallery->getActiveUser();
+
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+
+		$albumName = sprintf(' album %d test ', mt_rand());
+
+		list($ret, $publicAlbum) = GalleryCoreApi::createAlbum(
+			$this->_parentAlbum->getId(),
+			$albumName,
+			'title-test',
+			'summary',
+			'description',
+			'keywords'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $allUsersGroupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.allUserGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $groupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.allUserGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeUserFromGroup($user->getId(), $groupId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->setActiveUser($user);
+
+		$albumName = sprintf(' album %d test ', mt_rand());
+
+		list($ret, $album) = GalleryCoreApi::createAlbum(
+			$publicAlbum->getId(),
+			$albumName,
+			'title',
+			'summary',
+			'description',
+			'keywords'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $guestId) = GalleryCoreApi::getAnonymousUserId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($guestId != $user->getId(), 'Default guest userid was used');
+
+		$ret = GalleryCoreApi::assertHasItemPermission($album->getId(), 'core.all');
+
+		$this->assertErrorEquals(ERROR_PERMISSION_DENIED, $ret);
+		$gallery->setActiveUser($savedUser);
+	}
+
+	public function testCreateAlbumByRegisteredUser() {
+		global $gallery;
+
+		$savedUser = $gallery->getActiveUser();
+
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+		$gallery->setActiveUser($user);
+
+		$albumName = sprintf(' album %d test ', mt_rand());
+
+		list($ret, $album) = GalleryCoreApi::createAlbum(
+			$this->_parentAlbum->getId(),
+			$albumName,
+			'title',
+			'summary',
+			'description',
+			'keywords'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $hasPermission) = GalleryCoreApi::hasPermission($album->getId(), $user->getId(), 'core.all');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($hasPermission, 'core.all not set');
+		$gallery->setActiveUser($savedUser);
+	}
+
+	public function testCreateAlbumWithLeadingAndTrailingSpace() {
+		global $gallery;
+
+		$albumName = sprintf(' album %d test ', mt_rand());
+
+		list($ret, $album) = GalleryCoreApi::createAlbum(
+			$this->_parentAlbum->getId(),
+			$albumName,
+			'title',
+			'summary',
+			'description',
+			'keywords'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $path) = $album->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(trim($albumName), basename($path));
+		$this->assertEquals(trim($albumName), $album->getPathComponent());
+
+		/*
+		 * Verify that the path in the database matches the path on disk, since we are expecting
+		 * that the whitespace will get trimmed on both sides.
+		 */
+		$platform =& $gallery->getPlatform();
+
+		$this->assertTrue($platform->file_exists($path), 'Path does not exist');
+	}
+
+	public function testCreateAlbumEntitizesAngleBracketsButIgnoresXssPayload() {
+		global $gallery;
+
+		list($ret, $album) = GalleryCoreApi::createAlbum(
+			$this->_parentAlbum->getId(),
+			'test',
+			'title&lt;script&gt;evil',
+			'summary&lt;script&gt;evil',
+			'description&lt;script&gt;evil',
+			'keywords'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('title&lt;script&gt;evil', $album->getTitle());
+
+		$this->assertEquals('summary&lt;script&gt;evil', $album->getSummary());
+
+		$this->assertEquals('description&lt;script&gt;evil', $album->getDescription());
+	}
+
+	public function testRenameAlbumToHaveLeadingAndTrailingSpace() {
+		global $gallery;
+
+		list($ret, $album) = $this->_createRandomAlbum($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$newAlbumName = sprintf(' album %d test ', mt_rand());
+
+		list($ret, $locks[]) = GalleryCoreApi::acquireWriteLock($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $album->rename($newAlbumName);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $album->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $album) = $album->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $path) = $album->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($locks);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		/*
+		 * Verify that the path in the database matches the path on disk, since we are expecting
+		 * that the whitespace will get trimmed on both sides.
+		 */
+		$platform =& $gallery->getPlatform();
+
+		$this->assertTrue($platform->file_exists($path), 'Path does not exist');
+		$this->assertEquals(trim($newAlbumName), basename($path));
+		$this->assertEquals(trim($newAlbumName), $album->getPathComponent());
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+
+/**
+ * Dummy test toolkit
+ */
+class AlbumTestToolkit extends GalleryToolkit {
+	/**
+	 * @see GalleryToolkit::performOperation
+	 * Dummy operation
+	 */
+	public function performOperation(
+		$mimeType,
+		$operationName,
+		$sourceFilename,
+		$destFilename,
+		$parameters,
+		$context = array()
+	) {
+		global $gallery;
+
+		if ($sourceFilename != $destFilename) {
+			$platform =& $gallery->getPlatform();
+
+			$platform->copy($sourceFilename, $destFilename);
+		}
+
+		return array(null, $mimeType, $context);
+	}
+}

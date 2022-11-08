@@ -1,0 +1,351 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test PermissionSet functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class PermissionSetTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerPermission(
+			'testModule',
+			'test.test1',
+			'regular permission'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerPermission(
+			'testModule',
+			'test.test2',
+			'another regular permission'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerPermission(
+			'testModule',
+			'test.test3',
+			'composite permission',
+			GALLERY_PERMISSION_COMPOSITE,
+			array('test.test1', 'test.test2')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerPermission(
+			'testModule',
+			'test.test4',
+			'all access permission',
+			GALLERY_PERMISSION_ALL_ACCESS
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerPermission(
+			'testModule',
+			'test.test5',
+			'another regular permission'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerPermission(
+			'testModule',
+			'test.test6',
+			'overlap composite permission',
+			GALLERY_PERMISSION_COMPOSITE,
+			array('test.test1', 'test.test5')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		$ret = GalleryCoreApi::unregisterModulePermissions('testModule');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testGetPermissionIds() {
+		// Four defined perms
+		list($ret, $ids) = GalleryCoreApi::getPermissionIds();
+
+		$this->assertEquals($ids['test.test1'], 'regular permission', 'regular permission');
+		$this->assertEquals($ids['test.test2'], 'another regular permission', 'another regular permission');
+		$this->assertEquals($ids['test.test3'], 'composite permission', 'composite permission');
+		$this->assertEquals($ids['test.test4'], 'all access permission', 'all access permission');
+
+		// Only one all access perm
+		list($ret, $ids) = GalleryCoreApi::getPermissionIds(GALLERY_PERMISSION_ALL_ACCESS);
+
+		$this->assertFalse(isset($ids['test.test1']));
+		$this->assertFalse(isset($ids['test.test2']));
+		$this->assertFalse(isset($ids['test.test3']));
+		$this->assertEquals($ids['test.test4'], 'all access permission', 'all access permission');
+	}
+
+	public function testGetSubPermissions() {
+		// test.test3 is a composite of tests 1 and 2
+		list($ret, $ids) = GalleryCoreApi::getSubPermissions('test.test3');
+
+		array(
+			array(
+				'id'          => 'test.test1',
+				'module'      => 'testModule',
+				'description' => 'regular permission',
+			),
+			array(
+				'id'          => 'test.test2',
+				'module'      => 'testModule',
+				'description' => 'another regular permission',
+			),
+			array(
+				'id'          => 'test.test3',
+				'module'      => 'testModule',
+				'description' => 'composite permission',
+			),
+			$ids,
+		);
+	}
+
+	/**
+	 * We do not know what the exact bits are so do not try to assert on them.
+	 * Instead, make sure our round trip works
+	 */
+	public function testConvertRoundTrip1() {
+		list($ret, $bits) = GalleryCoreApi::convertPermissionIdsToBits(array('test.test1'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $ids) = GalleryCoreApi::convertPermissionBitsToIds($bits);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				array(
+					'id'          => 'test.test1',
+					'module'      => 'testModule',
+					'description' => 'regular permission',
+				),
+			),
+			$ids
+		);
+	}
+
+	/**
+	 * We do not know what the exact bits are so do not try to assert on them.
+	 * Instead, make sure our round trip works
+	 */
+	public function testConvertRoundTrip2() {
+		list($ret, $bits) = GalleryCoreApi::convertPermissionIdsToBits(array('test.test3'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $ids) = GalleryCoreApi::convertPermissionBitsToIds($bits);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				array(
+					'id'          => 'test.test1',
+					'module'      => 'testModule',
+					'description' => 'regular permission',
+				),
+				array(
+					'id'          => 'test.test2',
+					'module'      => 'testModule',
+					'description' => 'another regular permission',
+				),
+				array(
+					'id'          => 'test.test3',
+					'module'      => 'testModule',
+					'description' => 'composite permission',
+				),
+			),
+			$ids
+		);
+	}
+
+	public function testConvertBitsToIdsWithoutCompress() {
+		list($ret, $bits) = GalleryCoreApi::convertPermissionIdsToBits(
+			array(
+				'test.test1',
+				'test.test2',
+				'test.test5',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $ids) = GalleryCoreApi::convertPermissionBitsToIds($bits);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				array(
+					'id'          => 'test.test1',
+					'module'      => 'testModule',
+					'description' => 'regular permission',
+				),
+				array(
+					'id'          => 'test.test2',
+					'module'      => 'testModule',
+					'description' => 'another regular permission',
+				),
+				array(
+					'id'          => 'test.test3',
+					'module'      => 'testModule',
+					'description' => 'composite permission',
+				),
+				array(
+					'id'          => 'test.test5',
+					'module'      => 'testModule',
+					'description' => 'another regular permission',
+				),
+				array(
+					'id'          => 'test.test6',
+					'module'      => 'testModule',
+					'description' => 'overlap composite permission',
+				),
+			),
+			$ids
+		);
+	}
+
+	public function testConvertBitsToIdsWithCompress() {
+		list($ret, $bits) = GalleryCoreApi::convertPermissionIdsToBits(
+			array(
+				'test.test1',
+				'test.test2',
+				'test.test5',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $ids) = GalleryCoreApi::convertPermissionBitsToIds($bits, true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				array(
+					'id'          => 'test.test3',
+					'module'      => 'testModule',
+					'description' => 'composite permission',
+				),
+				array(
+					'id'          => 'test.test6',
+					'module'      => 'testModule',
+					'description' => 'overlap composite permission',
+				),
+			),
+			$ids
+		);
+	}
+
+	public function testConvertBitsToIdsWithCompressAndAllAccess() {
+		list($ret, $bits) = GalleryCoreApi::convertPermissionIdsToBits(
+			array(
+				'test.test1',
+				'test.test2',
+				'test.test5',
+				'core.all',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $ids) = GalleryCoreApi::convertPermissionBitsToIds($bits, true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(2, sizeof($ids));
+
+		// Unordered comparison
+		$this->assertEquals(
+			array(
+				'core.all'   => 1,
+				'test.test4' => 1,
+			),
+			array(
+				$ids[0]['id'] => 1,
+				$ids[1]['id'] => 1,
+			)
+		);
+	}
+}
+

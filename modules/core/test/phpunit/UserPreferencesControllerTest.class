@@ -1,0 +1,617 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * UserPreferences controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17627 $
+ */
+class UserPreferencesControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.UserPreferences');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$session                =& $gallery->getSession();
+		$this->_currentLanguage = $session->get('core.language');
+
+		list($ret, $this->_user) = $this->_createUser(
+			array(
+				'hashedPassword' => GalleryUtilities::md5Salt('TestPassword'),
+				'email'          => 'test@email.com',
+				'fullName'       => 'Test User',
+				'language'       => 'te',
+				'locked'         => 0,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_user);
+		$gallery->setActiveUser($this->_user);
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		$session->put('core.language', $this->_currentLanguage);
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testCancel() {
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserPreferences',
+				),
+				'return'   => true,
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testUndo() {
+		GalleryUtilities::putRequestVariable('form[action][undo]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserPreferences',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testEditAll() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'email@test.me');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+		GalleryUtilities::putRequestVariable('form[currentPassword]', 'TestPassword');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserPreferences',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Load back the user object and make sure the data got saved
+		list($ret, $this->_user) = $this->_user->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('full name', $this->_user->getFullName());
+		$this->assertEquals('email@test.me', $this->_user->getEmail());
+		$this->assertEquals('language', $this->_user->getLanguage());
+		$this->assertEquals('language', $session->get('core.language'), 'Language');
+	}
+
+	public function testEditRequiredOnly() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable(
+			'form[email]',
+			'  email_with-leading@space.test-o.com'
+		);
+		GalleryUtilities::putRequestVariable('form[currentPassword]', 'TestPassword');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserPreferences',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Load back the user object and make sure the data got saved
+		list($ret, $this->_user) = $this->_user->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('full name', $this->_user->getFullName());
+		$this->assertEquals('email_with-leading@space.test-o.com', $this->_user->getEmail());
+	}
+
+	public function testEditMissingEmail() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[currentPassword]', 'TestPassword');
+
+		// As a non-admin, we will get an error about it being missing
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserPreferences',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][email][missing]'),
+			),
+			$results
+		);
+
+		$this->_addUserToAdminGroup($this->_user);
+
+		// Now it lets us submit with a missing email
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserPreferences',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testEditInvalidEmail() {
+		foreach (array('user', 'admin') as $userType) {
+			if ($userType == 'admin') {
+				// We have to do 'admin' last for this to work
+				$this->_addUserToAdminGroup($this->_user);
+			}
+
+			GalleryUtilities::putRequestVariable('form[action][save]', 1);
+			GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+			GalleryUtilities::putRequestVariable('form[email]', 'no-at.test.com');
+			GalleryUtilities::putRequestVariable('form[currentPassword]', 'TestPassword');
+
+			$results = $this->handleRequest();
+
+			$this->assertEquals(
+				array(
+					'delegate' => array(
+						'view'    => 'core.UserAdmin',
+						'subView' => 'core.UserPreferences',
+					),
+					'status'   => array(),
+					'error'    => array('form[error][email][invalid]'),
+				),
+				$results,
+				'no at'
+			);
+
+			GalleryUtilities::putRequestVariable('form[email]', 'bad,char@test.com');
+
+			$results = $this->handleRequest();
+
+			$this->assertEquals(
+				array(
+					'delegate' => array(
+						'view'    => 'core.UserAdmin',
+						'subView' => 'core.UserPreferences',
+					),
+					'status'   => array(),
+					'error'    => array('form[error][email][invalid]'),
+				),
+				$results,
+				'bad char'
+			);
+
+			GalleryUtilities::putRequestVariable('form[email]', 'space test@fun.com');
+
+			$results = $this->handleRequest();
+
+			$this->assertEquals(
+				array(
+					'delegate' => array(
+						'view'    => 'core.UserAdmin',
+						'subView' => 'core.UserPreferences',
+					),
+					'status'   => array(),
+					'error'    => array('form[error][email][invalid]'),
+				),
+				$results,
+				'space'
+			);
+
+			GalleryUtilities::putRequestVariable('form[email]', 'bad.suffix@test.commmmm');
+
+			$results = $this->handleRequest();
+
+			$this->assertEquals(
+				array(
+					'delegate' => array(
+						'view'    => 'core.UserAdmin',
+						'subView' => 'core.UserPreferences',
+					),
+					'status'   => array(),
+					'error'    => array('form[error][email][invalid]'),
+				),
+				$results,
+				'bad suffix'
+			);
+
+			GalleryUtilities::putRequestVariable('form[email]', 'no@suffix');
+
+			$results = $this->handleRequest();
+
+			$this->assertEquals(
+				array(
+					'delegate' => array(
+						'view'    => 'core.UserAdmin',
+						'subView' => 'core.UserPreferences',
+					),
+					'status'   => array(),
+					'error'    => array('form[error][email][invalid]'),
+				),
+				$results,
+				'no suffix'
+			);
+		}
+	}
+
+	// No password is needed for non-email changes
+	public function testEditOtherThanEmailWithoutPassword() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'test@email.com');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+
+		// Make sure the test suit actually unsets previous request vars
+		$form = GalleryUtilities::getFormVariables('form');
+
+		$this->assertTrue(
+			!isset($form['currentPassword']),
+			'precondition failed, password was specified'
+		);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserPreferences',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Load back the user object and make sure the data got saved
+		list($ret, $this->_user) = $this->_user->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('full name', $this->_user->getFullName());
+		$this->assertEquals('test@email.com', $this->_user->getEmail());
+		$this->assertEquals('language', $this->_user->getLanguage());
+		$this->assertEquals('language', $session->get('core.language'), 'Language');
+	}
+
+	// If you provide an email, then return a error message if it is invalid
+	public function testEditOtherThanEmailInvalidPassword() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'test@email.com');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+		GalleryUtilities::putRequestVariable('form[currentPassword]', 'invalid');
+
+		$ret = $this->_registerEventListener('Gallery::FailedLogin');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserPreferences',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][currentPassword][incorrect]'),
+			),
+			$results,
+			'invalid password'
+		);
+
+		// Load back the user object and make sure the data got not saved
+		list($ret, $this->_user) = $this->_user->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('Test User', $this->_user->getFullName());
+		$this->assertEquals('test@email.com', $this->_user->getEmail());
+		$this->assertEquals('te', $this->_user->getLanguage());
+
+		// Verify our event got posted
+		$this->assertEventFired(
+			'Gallery::FailedLogin',
+			null,
+			array(
+				'userName' => $this->_user->getUserName(),
+			)
+		);
+	}
+
+	public function testEditEmailWithInvalidPassword() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'new@email.com');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+		GalleryUtilities::putRequestVariable('form[currentPassword]', 'invalid');
+
+		$ret = $this->_registerEventListener('Gallery::FailedLogin');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserPreferences',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][currentPassword][incorrect]'),
+			),
+			$results,
+			'invalid password'
+		);
+
+		// Load back the user object and make sure the data got not saved
+		list($ret, $this->_user) = $this->_user->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('Test User', $this->_user->getFullName());
+		$this->assertEquals('test@email.com', $this->_user->getEmail());
+		$this->assertEquals('te', $this->_user->getLanguage());
+
+		// Verify our event got posted
+		$this->assertEventFired(
+			'Gallery::FailedLogin',
+			null,
+			array(
+				'userName' => $this->_user->getUserName(),
+			)
+		);
+	}
+
+	public function testEditEmailWithoutPassword() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'new@email.com');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserPreferences',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][currentPassword][missing]'),
+			),
+			$results,
+			'missing password'
+		);
+
+		// Load back the user object and make sure the data got not saved
+		list($ret, $this->_user) = $this->_user->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('Test User', $this->_user->getFullName());
+		$this->assertEquals('test@email.com', $this->_user->getEmail());
+		$this->assertEquals('te', $this->_user->getLanguage());
+	}
+
+	public function testGuestPreferences() {
+		global $gallery;
+
+		$gallery->setConfig('anonymousUserId', $this->_user->getId());
+
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'email@test.me');
+		GalleryUtilities::putRequestVariable('form[currentPassword]', 'TestPassword');
+
+		$this->handleRequest(ERROR_PERMISSION_DENIED);
+	}
+
+	public function testLockedUserPreferences() {
+		global $gallery;
+
+		list($ret, $this->_user2) = $this->_createUser(
+			array(
+				'hashedPassword' => GalleryUtilities::md5Salt('TestPassword'),
+				'email'          => 'test2@email.com',
+				'fullName'       => 'Test User 2',
+				'language'       => 'te',
+				'locked'         => 1,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_user2);
+		$gallery->setActiveUser($this->_user2);
+
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'email@test.me');
+		GalleryUtilities::putRequestVariable('form[currentPassword]', 'TestPassword');
+
+		$this->handleRequest(ERROR_PERMISSION_DENIED);
+	}
+
+	public function testEditEmailWithEntityPassword() {
+		global $gallery;
+
+		list($ret, $user) = $this->_createRandomUser(null, 'pass&word');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+		$gallery->setActiveUser($user);
+
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'new-email@example.com');
+		GalleryUtilities::putRequestVariable('form[currentPassword]', 'pass&word');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserPreferences',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Load back the user object and make sure the data got saved
+		list($ret, $user) = $user->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('full name', $user->getFullName());
+		$this->assertEquals('new-email@example.com', $user->getEmail());
+	}
+
+	public function _addUserToAdminGroup() {
+		// Make ourselves an admin
+		list($ret, $adminGroupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserToGroup($this->_user->getId(), $adminGroupId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+}

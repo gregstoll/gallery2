@@ -1,0 +1,270 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test Mime type functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class MimeTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addMimeType('xxx', 'test/test', false);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addMimeType('yyy', 'test/test', false);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addMimeType('ttt', 'test/test3', false);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		$ret = GalleryCoreApi::removeMimeType(
+			array(
+				'mimeType' => 'test/test',
+			)
+		);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = GalleryCoreApi::removeMimeType(
+			array(
+				'extension' => 'mimetest',
+			)
+		);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = GalleryCoreApi::removeMimeType(
+			array(
+				'mimeType' => 'test/test3',
+			)
+		);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testGetMimeType() {
+		list($ret, $mimeType) = GalleryCoreApi::getMimeType('file.xxx');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test/test', $mimeType);
+	}
+
+	public function testGetMimeTypeExtensionIsValid() {
+		list($ret, $mimeType) = GalleryCoreApi::getMimeType('file.xxx', 'test/test2');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test/test', $mimeType, 'Expected MimeType of test/test');
+
+		list($ret, $mimeType) = GalleryCoreApi::getMimeType('file.XXX', 'test/test2');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test/test', $mimeType, 'Upper case should still produce test/test');
+	}
+
+	public function testGetMimeTypeExtensionAndMimeTypeUndefined() {
+		list($ret, $mimeType) = GalleryCoreApi::getMimeType('file.abc', 'test/test2');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'application/unknown',
+			$mimeType,
+			'Expected MimeType of application/unknown'
+		);
+	}
+
+	public function testGetMimeTypeUsedMimeType() {
+		list($ret, $mimeData) = GalleryMimeTypeHelper_simple::_getMimeData();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $mimeType) = GalleryCoreApi::getMimeType('file.abc', 'TEST/TEST3');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test/test3', $mimeType, 'Expected MimeType of test/test3');
+	}
+
+	public function testGetMimeTypeWithoutRequestMimeType() {
+		list($ret, $mimeType) = GalleryCoreApi::getMimeType('file.xxxxunknown');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('application/unknown', $mimeType);
+	}
+
+	public function testConvertExtensionToMime() {
+		list($ret, $mimeType) = GalleryCoreApi::convertExtensionToMime('xxx');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test/test', $mimeType);
+
+		list($ret, $mimeType) = GalleryCoreApi::convertExtensionToMime('XXX');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test/test', $mimeType);
+	}
+
+	public function testConvertMimeToExtensions() {
+		list($ret, $exts) = GalleryCoreApi::convertMimeToExtensions('test/test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		sort($exts);
+
+		$this->assertEquals(array('xxx', 'yyy'), $exts);
+
+		list($ret, $exts) = GalleryCoreApi::convertMimeToExtensions('test/Test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		sort($exts);
+
+		$this->assertEquals(array('xxx', 'yyy'), $exts);
+
+		// empty list (previously returned wrap(success),null if no mapping found)
+		list($ret, $exts) = GalleryCoreApi::convertMimeToExtensions('test/unmapped-mime');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(), $exts);
+	}
+
+	public function testIsViewableMimeType() {
+		list($ret, $isViewable) = GalleryCoreApi::isViewableMimeType('image/jpeg');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($isViewable, 'jpeg');
+
+		list($ret, $isViewable) = GalleryCoreApi::isViewableMimeType('test/test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($isViewable, 'test');
+	}
+
+	public function testAddMimeType() {
+		$ret = GalleryCoreApi::addMimeType('xxx', 'test/test', 1);
+
+		$this->assertTrue($ret && $ret->getErrorCode() & ERROR_COLLISION);
+
+		$ret = GalleryCoreApi::addMimeType('zzz', 'test/test', 1);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $mime) = GalleryCoreApi::convertExtensionToMime('zzz');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test/test', $mime);
+	}
+
+	public function testAddMimeTypeForLongMimeTypeString() {
+		// See bug 1634796
+		$mimeType = 'application/super.long.test.mime-type.test+html+application+test';
+
+		$ret = GalleryCoreApi::addMimeType('mimetest', $mimeType, 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $mime) = GalleryCoreApi::convertExtensionToMime('mimetest');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($mimeType, $mime);
+	}
+}
+

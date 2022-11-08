@@ -1,0 +1,579 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryTheme.class');
+
+/**
+ * AdminThemes controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminThemesControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminThemes');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_testTheme = AdminThemesControllerTestTheme::getMe();
+
+		$this->_testTheme->resetCalls();
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testSaveTheme() {
+		GalleryUtilities::putRequestVariable('themeId', 'testThemeId2');
+		GalleryUtilities::putRequestVariable('form[key][rows]', '2');
+		GalleryUtilities::putRequestVariable('form[key][columns]', '4');
+		GalleryUtilities::putRequestVariable('form[action][saveTheme]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminThemes',
+					'themeId' => 'testThemeId2',
+				),
+				'status'   => array(
+					'savedTheme' => 'Test Theme 2',
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		$map =& TestThemeId2Theme::getMap();
+
+		$this->assertEquals(2, (int)$map['rows']);
+		$this->assertEquals(4, (int)$map['columns']);
+	}
+
+	public function testUndoTheme() {
+		GalleryUtilities::putRequestVariable('themeId', 'testThemeId2');
+		GalleryUtilities::putRequestVariable('form[key][rows]', '2');
+		GalleryUtilities::putRequestVariable('form[key][columns]', '4');
+		GalleryUtilities::putRequestVariable('form[action][undoTheme]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminThemes',
+					'themeId' => 'testThemeId2',
+				),
+				'status'   => array(
+					'restoredTheme' => 'Test Theme 2',
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testSaveThemeWithValidationErrors() {
+		GalleryUtilities::putRequestVariable('themeId', 'testThemeId1');
+		GalleryUtilities::putRequestVariable('form[key][rows]', '2');
+		GalleryUtilities::putRequestVariable('form[key][columns]', '4');
+		GalleryUtilities::putRequestVariable('form[action][saveTheme]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminThemes',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][key][rows][invalid]',
+					'form[error][key][columns][invalid]',
+				),
+			),
+			$results
+		);
+	}
+
+	public function testSaveDefaults() {
+		GalleryUtilities::putRequestVariable('form[default][orderBy]', 'viewCount');
+		GalleryUtilities::putRequestVariable('form[default][orderDirection]', 'desc');
+		GalleryUtilities::putRequestVariable('form[default][presort]', 'albumsFirst');
+		GalleryUtilities::putRequestVariable('form[default][theme]', 'AdminThemesControllerTest');
+		GalleryUtilities::putRequestVariable('form[default][newAlbumsUseDefaults]', 'true');
+		GalleryUtilities::putRequestVariable('form[default][doesNotExist]', 'anything');
+		GalleryUtilities::putRequestVariable('form[action][saveDefaults]', 1);
+		GalleryUtilities::putRequestVariable('themeId', 'currentThemeId');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminThemes',
+					'themeId' => 'AdminThemesControllerTest',
+				),
+				'status'   => array(
+					'savedDefaults' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('albumsFirst|viewCount', $params['default.orderBy'], 'orderBy');
+		$this->assertEquals('desc', $params['default.orderDirection'], 'orderDirection');
+		$this->assertEquals('AdminThemesControllerTest', $params['default.theme'], 'theme');
+		$this->assertEquals(
+			'true',
+			$params['default.newAlbumsUseDefaults'],
+			'newAlbumsUseDefaults'
+		);
+		$this->assertFalse(isset($params['default.doesNotExist']), 'parameter not whitelisted');
+	}
+
+	public function testSaveDefaultsValidatesDefaultTheme() {
+		GalleryUtilities::putRequestVariable('form[default][orderBy]', 'viewCount');
+		GalleryUtilities::putRequestVariable('form[default][orderDirection]', 'desc');
+		GalleryUtilities::putRequestVariable('form[default][presort]', 'albumsFirst');
+		GalleryUtilities::putRequestVariable('form[default][theme]', 'doesNotExist');
+		GalleryUtilities::putRequestVariable('form[default][newAlbumsUseDefaults]', 'true');
+		GalleryUtilities::putRequestVariable('form[action][saveDefaults]', 1);
+		GalleryUtilities::putRequestVariable('themeId', 'anything');
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'default.theme', 'matrix');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we get an error
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+
+		$this->assertEquals(null, $results);
+
+		// Verify that the default theme has not changed
+		list($ret, $themeId) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.theme');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('matrix', $themeId);
+	}
+
+	public function testSaveDefaultsValidatesOrderBy() {
+		GalleryUtilities::putRequestVariable('form[default][orderBy]', 'doesNotExist');
+		GalleryUtilities::putRequestVariable('form[default][orderDirection]', 'desc');
+		GalleryUtilities::putRequestVariable('form[default][presort]', 'viewedFirst');
+		GalleryUtilities::putRequestVariable('form[default][theme]', 'matrix');
+		GalleryUtilities::putRequestVariable('form[default][newAlbumsUseDefaults]', 'true');
+		GalleryUtilities::putRequestVariable('form[action][saveDefaults]', 1);
+		GalleryUtilities::putRequestVariable('themeId', 'anything');
+
+		// Prepare the observed value
+		$originalOrderBy = 'albumsFirst|viewCount';
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'default.orderBy',
+			$originalOrderBy
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we get an error
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+
+		$this->assertEquals(null, $results);
+
+		// Verify that the value has not changed
+		list($ret, $orderBy) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.orderBy');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($originalOrderBy, $orderBy);
+	}
+
+	public function testSaveDefaultsValidatesPreSort() {
+		GalleryUtilities::putRequestVariable('form[default][orderBy]', 'title');
+		GalleryUtilities::putRequestVariable('form[default][orderDirection]', 'desc');
+		GalleryUtilities::putRequestVariable('form[default][presort]', 'doesNotExist');
+		GalleryUtilities::putRequestVariable('form[default][theme]', 'matrix');
+		GalleryUtilities::putRequestVariable('form[default][newAlbumsUseDefaults]', 'true');
+		GalleryUtilities::putRequestVariable('form[action][saveDefaults]', 1);
+		GalleryUtilities::putRequestVariable('themeId', 'anything');
+
+		// Prepare the observed value
+		$originalOrderBy = 'albumsFirst|viewCount';
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'default.orderBy',
+			$originalOrderBy
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we get an error
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+
+		$this->assertEquals(null, $results);
+
+		// Verify that the value has not changed
+		list($ret, $orderBy) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.orderBy');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($originalOrderBy, $orderBy);
+	}
+
+	public function testSaveDefaultsValidatesOrderDirection() {
+		GalleryUtilities::putRequestVariable('form[default][orderBy]', 'viewCount');
+		GalleryUtilities::putRequestVariable('form[default][orderDirection]', 'doesNotExist');
+		GalleryUtilities::putRequestVariable('form[default][presort]', 'albumsFirst');
+		GalleryUtilities::putRequestVariable('form[default][theme]', 'matrix');
+		GalleryUtilities::putRequestVariable('form[default][newAlbumsUseDefaults]', 'true');
+		GalleryUtilities::putRequestVariable('form[action][saveDefaults]', 1);
+		GalleryUtilities::putRequestVariable('themeId', 'anything');
+
+		// Prepare the observed value
+		$originalOrderDirection = 'desc';
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'default.orderDirection',
+			$originalOrderDirection
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we get an error
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+
+		$this->assertEquals(null, $results);
+
+		// Verify that the value has not changed
+		list($ret, $orderBy) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.orderDirection');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($originalOrderDirection, $orderBy);
+	}
+
+	public function testSaveDefaultsValidatesNewAlbumsUseDefaults() {
+		GalleryUtilities::putRequestVariable('form[default][orderBy]', 'viewCount');
+		GalleryUtilities::putRequestVariable('form[default][orderDirection]', 'desc');
+		GalleryUtilities::putRequestVariable('form[default][presort]', 'albumsFirst');
+		GalleryUtilities::putRequestVariable('form[default][theme]', 'matrix');
+		GalleryUtilities::putRequestVariable('form[default][newAlbumsUseDefaults]', 'doesNotExist');
+		GalleryUtilities::putRequestVariable('form[action][saveDefaults]', 1);
+		GalleryUtilities::putRequestVariable('themeId', 'anything');
+
+		// Prepare the observed value
+		$originalNewAlbumDefaults = 'true';
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'default.newAlbumsUseDefaults',
+			$originalNewAlbumDefaults
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we get an error
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+
+		$this->assertEquals(null, $results);
+
+		// Verify that the value has not changed
+		list($ret, $newAlbumDefaults) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.newAlbumsUseDefaults');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($originalNewAlbumDefaults, $newAlbumDefaults);
+	}
+}
+
+/**
+ * Test Theme that fails to validate settings
+ */
+class TestThemeId1Theme extends GalleryTheme {
+	/**
+	 * @see GalleryTheme::getSettings
+	 */
+	public function getSettings($itemId = 0) {
+		$settings   = array();
+		$settings[] = array(
+			'key'        => 'rows',
+			'name'       => 'Rows per album page',
+			'type'       => 'text-field',
+			'typeParams' => array(
+				'size' => 2,
+			),
+			'value'      => 4,
+		);
+
+		$settings[] = array(
+			'key'        => 'columns',
+			'name'       => 'Columns per album page',
+			'type'       => 'text-field',
+			'typeParams' => array(
+				'size' => 2,
+			),
+			'value'      => 99,
+		);
+
+		return array(null, $settings);
+	}
+
+	/**
+	 * @see GalleryTheme::validateSettings
+	 */
+	public function validateSettings($settings) {
+		$error            = array();
+		$error['rows']    = 'rows error';
+		$error['columns'] = 'columns error';
+
+		return $error;
+	}
+
+	public function __construct() {
+		$this->setId('testThemeId1');
+		$this->setName('Test Theme 1');
+	}
+
+	public function isActive() {
+		return array(null, true);
+	}
+}
+
+/**
+ * Test Theme that successfully validates settings
+ */
+class TestThemeId2Theme extends GalleryTheme {
+	/**
+	 * Class Loader
+	 */
+	public static function getMe() {
+		static $instance;
+
+		if (!isset($instance)) {
+			$instance = new TestThemeId2Theme();
+		}
+
+		return $instance;
+	}
+
+	static public function &getMap() {
+		static $map;
+
+		if (!isset($map)) {
+			$map = array();
+		}
+
+		return $map;
+	}
+
+	public function setParameter($key, $value, $itemId = 0) {
+		$map       =& $this->getMap();
+		$map[$key] = $value;
+
+		return null;
+	}
+
+	public function __construct() {
+		$this->setId('testThemeId2');
+		$this->setName('Test Theme 2');
+	}
+
+	/**
+	 * @see GalleryTheme::getSettings
+	 */
+	public function getSettings($itemId = 0) {
+		$settings   = array();
+		$settings[] = array(
+			'key'        => 'rows',
+			'name'       => 'Rows per album page',
+			'type'       => 'text-field',
+			'typeParams' => array(
+				'size' => 2,
+			),
+			'value'      => 4,
+		);
+
+		$settings[] = array(
+			'key'        => 'columns',
+			'name'       => 'Columns per album page',
+			'type'       => 'text-field',
+			'typeParams' => array(
+				'size' => 2,
+			),
+			'value'      => 3,
+		);
+
+		return array(null, $settings);
+	}
+
+	/**
+	 * @see GalleryTheme::validateSettings
+	 */
+	public function validateSettings($settings) {
+		return array();
+	}
+
+	public function isActive() {
+		return array(null, true);
+	}
+}
+
+/**
+ * Test theme
+ */
+class AdminThemesControllerTestTheme {
+	public static function getMe() {
+		static $instance;
+
+		if (!isset($instance)) {
+			$instance = new AdminThemesControllerTestTheme();
+		}
+
+		return $instance;
+	}
+
+	public function getId() {
+		return 'AdminThemesControllerTest';
+	}
+
+	public function getName() {
+		return 'AdminThemes Controller Test';
+	}
+
+	public function init() {
+		$this->_setCalled('init');
+
+		return null;
+	}
+
+	public function installOrUpgrade() {
+		$this->_setCalled('installOrUpgrade');
+
+		return null;
+	}
+
+	public function activate() {
+		$this->_setCalled('activate');
+
+		return array(null, array());
+	}
+
+	public function uninstall() {
+		$this->_setCalled('uninstall');
+
+		return null;
+	}
+
+	public function deactivate() {
+		$this->_setCalled('deactivate');
+
+		return array(null, array());
+	}
+
+	public function _setCalled($function) {
+		$instance                      = $this->getMe();
+		$instance->_callMap[$function] = 1;
+	}
+
+	public function wasCalled($function) {
+		$instance = $this->getMe();
+
+		return isset($instance->_callMap[$function]);
+	}
+
+	public function resetCalls() {
+		$instance           = $this->getMe();
+		$instance->_callMap = array();
+	}
+
+	public function _set($key, $val) {
+		$instance       = $this->getMe();
+		$instance->$key = $val;
+	}
+
+	public function isActive() {
+		$instance = $this->getMe();
+
+		return array(null, $instance->_isActive);
+	}
+
+	public function isAdvancedSettings() {
+		$instance = $this->getMe();
+
+		return $instance->_isAdvancedSettings;
+	}
+
+	public function translate($str) {
+		return $str;
+	}
+}

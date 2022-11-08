@@ -1,0 +1,343 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryDataItem.class');
+
+/**
+ * Test DataItem functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class DataItemTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+	}
+
+	/**
+	 * Verify that creating a second dataitem entity with the same path as
+	 * an existing one throws a collision error.
+	 */
+	public function testCreateCollision() {
+		global $gallery;
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $basePath) = $this->_album->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$platform =& $gallery->getPlatform();
+
+		for ($i = 0; $i < 3; $i++) {
+			$entity[$i]    = new GalleryDataItem();
+			$entityAlbumID = $this->_album->getId();
+
+			$ret = $entity[$i]->create(
+				$entityAlbumID,
+				__FILE__,
+				'text/plain',
+				'valid_path.txt'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = $entity[$i]->save();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			if ($i > 0) {
+				$expectedPathComponent = sprintf('valid_path_%03d.txt', $i);
+				$actualPathComponent   = $entity[$i]->getPathComponent();
+
+				$this->assertEquals(
+					$expectedPathComponent,
+					$actualPathComponent,
+					'path component mismatch'
+				);
+
+				list($ret, $entityPath) = $entity[$i]->fetchPath();
+
+				if ($ret) {
+					return $ret;
+				}
+
+				$this->assertEquals(
+					$basePath . $expectedPathComponent,
+					$entityPath,
+					'full path mismatch'
+				);
+				$this->assertTrue($platform->file_exists($entityPath), "$entityPath does not exist");
+				$this->assertTrue($platform->is_file($entityPath), "$entityPath is not a directory");
+			}
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testMoveCollision() {
+		global $gallery;
+
+		list($ret, $subAlbum) = $this->_createRandomAlbum($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $lockIds[]) = GalleryCoreApi::acquireReadLock(array($this->_album->getId(), $subAlbum->getId()));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$orig = new GalleryDataItem();
+
+		$ret = $orig->create(
+			$this->_album->getId(),
+			__FILE__,
+			'text/plain',
+			'valid_path.txt'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $orig->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$new = new GalleryDataItem();
+
+		$ret = $new->create(
+			$subAlbum->getId(),
+			__FILE__,
+			'text/plain',
+			'valid_path.txt'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $new->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $lockIds[]) = GalleryCoreApi::acquireWriteLock(array($new->getId()));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $new->move($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $basePath) = $this->_album->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $newPath) = $new->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($basePath . 'valid_path_001.txt', $newPath, 'full path mismatch');
+
+		$platform =& $gallery->getPlatform();
+
+		$this->assertTrue($platform->file_exists($newPath), "$newPath does not exist");
+		$this->assertTrue($platform->is_file($newPath), "$newPath is not a file");
+
+		$ret = GalleryCoreApi::releaseLocks($lockIds);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	/**
+	 * Create an data item being a symlink to an existing file
+	 */
+	public function testCreateSymlink() {
+		global $gallery;
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $basePath) = $this->_album->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$platform   =& $gallery->getPlatform();
+		$canSymlink = $platform->isSymlinkSupported();
+		$entity     = new GalleryDataItem();
+
+		$ret = $entity->create(
+			$this->_album->getId(),
+			__FILE__,
+			'text/plain',
+			'valid_path.txt',
+			true
+		);
+
+		if ($ret) {
+			// On not supported platforms, this should return an ERROR_UNSUPPORTED_OPERATION
+			if ($canSymlink || (!$canSymlink
+				&& !($ret->getErrorCode() & ERROR_UNSUPPORTED_OPERATION))
+			) {
+				return $ret;
+			}
+
+			$ret = GalleryCoreApi::releaseLocks($lockId);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			return;
+		}
+
+		$ret = $entity->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $entityPath) = $entity->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_link($entityPath));
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testRescan() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		// Create a data item with wrong "size" attribute, and a fast-download file
+		list($ret, $item) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'test/file',
+			array(
+				'size' => 123,
+			),
+			__FILE__
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $everybodyId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.everybodyGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addGroupPermission($item->getId(), $everybodyId, 'core.viewAll');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::createFastDownloadFile($item, true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify setup
+		$this->assertEquals(123, $item->getSize(), 'size');
+
+		$path = GalleryDataCache::getCachePath(
+			array(
+				'type'   => 'fast-download',
+				'itemId' => $item->getId(),
+			)
+		);
+
+		$this->assertTrue($platform->file_exists($path), 'fast-download file should exist');
+
+		// Rescan
+		$ret = $item->rescan();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify results
+		$this->assertEquals($platform->filesize(__FILE__), $item->getSize(), 'updated size');
+		$this->assertFalse($platform->file_exists($path), 'fast-download file should be removed');
+	}
+}

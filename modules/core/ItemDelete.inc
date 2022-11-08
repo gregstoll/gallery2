@@ -114,7 +114,7 @@ class ItemDeleteController extends GalleryController {
 		return array($ret, null);
 	    }
 
-	    $numPages = ceil(sizeof($peerIds) / $form['numPerPage']);
+	    $numPages = (int) ceil(sizeof($peerIds) / (int) $form['numPerPage']);
 
 	    $results['delegate']['itemId'] = $itemId;
 	    $results['delegate']['page'] = min($page + 1, $numPages);

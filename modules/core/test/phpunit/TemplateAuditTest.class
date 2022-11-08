@@ -1,0 +1,234 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+
+/**
+ * Test Template functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 20940 $
+ */
+class TemplateAuditTest extends CodeAuditTestCase {
+	public function __construct($methodName) {
+		global $gallery;
+
+		parent::__construct($methodName);
+
+		$platform                   =& $gallery->getPlatform();
+		$this->_lineEnding          = $platform->getLineEnding();
+		$this->_revisionPattern     = ' \* \$Revision(:.+)?\$';
+		$lines[]                    = '\{\*';
+		$lines[]                    = $this->_revisionPattern;
+		$lines[]                    = ' * Read this before changing templates!  http://codex.gallery2.org/Gallery2:'
+				. 'Editing_Templates';
+		$lines[]                    = ' \*}';
+		$this->_revisionPlaceHolder = ' * REVISION PLACEHOLDER';
+		$this->_headerPattern       = join("(\r\n|\n)", $lines);
+		$this->_headerLines         = $lines;
+		$this->_expectedHeaderLines = $lines;
+		array_splice($this->_expectedHeaderLines, 1, 1, $this->_revisionPlaceHolder);
+		$this->_exceptions                  = array();
+		$this->_exceptions['header']        = array();
+		$this->_exception['hiddenFormVars'] = array(
+			'modules/digibug/templates/DigibugPrintPhotos.tpl',
+			'modules/shutterfly/templates/PrintPhotos.tpl',
+			'modules/uploadapplet/templates/ItemAddUploadApplet.tpl',
+		);
+
+		$this->_exception['textInJavascript'] = array();
+		$this->_exception['trailingIfs']      = array();
+
+		// Get rid of backslashes so that we can perform string compares later
+		for ($i = 0; $i < sizeof($this->_expectedHeaderLines); $i++) {
+			$this->_expectedHeaderLines[$i] = stripslashes($this->_expectedHeaderLines[$i]);
+		}
+
+		$this->_errorCount = 0;
+	}
+
+	/**
+	 * @see CodeAuditTestCase::shouldCheckFile
+	 */
+	public function shouldCheckFile($fileName) {
+		if (preg_match('#Storage.schema\.tpl$|tools/repository/.*tpl#', $fileName)
+			|| !parent::shouldCheckFile($fileName)
+		) {
+			return false;
+		}
+
+		if (substr($fileName, -4) == '.tpl') {
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * @see CodeAuditTestCase::checkFile
+	 */
+	public function checkFile($fileName, $buffer) {
+		$truncatedFileName = substr(
+			$fileName,
+			strlen(dirname(dirname(dirname(dirname($fileName))))) + 1
+		);
+
+		$lines = preg_split("/(\r\n|\n)/", $buffer);
+
+		if (!in_array($truncatedFileName, $this->_exception['hiddenFormVars'])) {
+			$this->_checkHiddenFormVars($truncatedFileName, $lines);
+		}
+
+		if (!in_array($truncatedFileName, $this->_exception['textInJavascript'])) {
+			$this->_checkTextInJavascript($truncatedFileName, $lines);
+		}
+
+		if (!in_array($truncatedFileName, $this->_exception['trailingIfs'])) {
+			$this->_checkTrailingIfs($truncatedFileName, $lines);
+		}
+
+		if (preg_match('#^' . $this->_headerPattern . '#', $buffer)) {
+			return;
+		}
+
+		// Grab the expected number of lines and compare them
+		$actual = preg_split("/(\r\n|\n)/", $buffer, sizeof($this->_expectedHeaderLines) + 1);
+		array_splice($actual, sizeof($this->_expectedHeaderLines), 1);
+
+		// Get rid of the revision line, since we cannot compare that
+		for ($i = 0; $i < sizeof($actual); $i++) {
+			if (strstr($actual[$i], 'Revision')) {
+				list($revision) = array_splice($actual, $i, 1, $this->_revisionPlaceHolder);
+
+				break;
+			}
+		}
+
+		if (empty($revision)) {
+			$this->assertFalse(true, sprintf('[%s] Missing revision line', $truncatedFileName));
+		} elseif (!preg_match('/^' . $this->_revisionPattern . '/', $revision)) {
+			$this->assertFalse(
+				true,
+				sprintf(
+					'[%s] Invalid revision line: [%s]<br/>' .
+						'Expected pattern: [%s]',
+					$truncatedFileName,
+					$revision,
+					$this->_revisionPattern
+				)
+			);
+		}
+
+		if (!isset($this->_exceptions['header'][$truncatedFileName])) {
+			if ($this->_expectedHeaderLines !== $actual) {
+				$this->assertEquals(
+					$this->_expectedHeaderLines,
+					$actual,
+					sprintf(
+						'[%s] Malformed template header',
+						$truncatedFileName
+					)
+				);
+				$this->_errorCount++;
+			}
+		}
+
+		if ($this->_errorCount > 3) {
+			$this->halt();
+		}
+	}
+
+	public function _checkHiddenFormVars($fileName, &$lines) {
+		$inHtmlForm = $hasHiddenFormVars = false;
+
+		for ($i = $formStartLine = 0; $i < count($lines); $i++) {
+			if (preg_match('/<form\s/', $lines[$i], $matches)) {
+				$inHtmlForm    = true;
+				$formStartLine = $i;
+			}
+
+			if (preg_match('/hiddenFormVars/', $lines[$i], $matches)) {
+				$hasHiddenFormVars = true;
+			}
+
+			if (preg_match('/<\/form>/', $lines[$i], $matches)) {
+				$this->assertTrue(
+					$hasHiddenFormVars,
+					"$fileName: Form (line $formStartLine) is " .
+					'missing hidden form vars'
+				);
+
+				$inHtmlForm = $hasHiddenFormVars = false;
+			}
+		}
+	}
+
+	public function _checkTextInJavascript($fileName, &$lines) {
+		$inScriptTag = false;
+
+		// Parsing for the closing brace of {g->text } is too complex. Using check-sum instead.
+		$scriptStartLine = $textCount = $forJsCount = 0;
+
+		for ($i = 0; $i < count($lines); $i++) {
+			if (preg_match('/<script(\s.*)?$/', $lines[$i])) {
+				$inScriptTag     = true;
+				$scriptStartLine = $i;
+			}
+
+			if ($inScriptTag && ($matchCount = preg_match_all(
+				'/\{g\->text/',
+				$lines[$i],
+				$ignored
+			))
+			) {
+				$textCount += $matchCount;
+			}
+
+			if ($inScriptTag && ($matchCount = preg_match_all(
+				'/forJavascript=(true|1|"1")/',
+				$lines[$i],
+				$ignored
+			))
+			) {
+				$forJsCount += $matchCount;
+			}
+
+			if (strpos($lines[$i], '</script>') !== false) {
+				$this->assertEquals(
+					$forJsCount,
+					$textCount,
+					"$fileName: script block (line $scriptStartLine) has {g->text} calls " .
+									'without the forJavascript=true attribute.'
+				);
+
+				$inScriptTag = false;
+				$textCount   = $forJsCount   = 0;
+			}
+		}
+	}
+
+	public function _checkTrailingIfs($fileName, &$lines) {
+		for ($i = 0; $i < count($lines); $i++) {
+			if (preg_match('/[^\s}]{if[^}]*}$/', $lines[$i])) {
+				$this->fail("Warning: newline will be stripped at $fileName:$i");
+				$this->_errorCount++;
+			}
+		}
+	}
+}

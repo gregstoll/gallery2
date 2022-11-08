@@ -57,7 +57,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      * @param array $apiVersion int major, int minor
      * @return boolean
      */
-    function isCompatibleWithEmbedApi($apiVersion) {
+    static function isCompatibleWithEmbedApi($apiVersion) {
 	return GalleryUtilities::isCompatibleWithApi($apiVersion, GalleryEmbed::getApiVersion());
     }
 
@@ -205,7 +205,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      * @access private
      * @todo Ensure that the active user ($gallery->getActiveUser) is changed as well
      */
-    function checkActiveUser($activeUserId) {
+    static function checkActiveUser($activeUserId) {
 	global $gallery;
 	$session =& $gallery->getSession();
 	$phpVm = $gallery->getPhpVm();
@@ -289,7 +289,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      * @param string $extUserId external user id
      * @return GalleryStatus a status object
      */
-    function login($extUserId) {
+    static function login($extUserId) {
 	global $gallery;
 	list ($ret, $user) = GalleryCoreApi::loadEntityByExternalId($extUserId, 'GalleryUser');
 	if ($ret) {
@@ -326,7 +326,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      * @param array $params ('embedUri' => string the embedUri (e.g. /cms/index.php))
      * @return GalleryStatus a status object
      */
-    function logout($params=array()) {
+    static function logout($params=array()) {
 	require_once(dirname(__FILE__) . '/GalleryCoreApi.class');
 	require_once(dirname(__FILE__) . '/GallerySession.class');
 	$hasSession = GalleryUtilities::getCookieVar(SESSION_ID_PARAMETER);
@@ -385,7 +385,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      *               'creationtimestamp' => integer]
      * @return GalleryStatus a status object
      */
-    function createUser($extUserId, $args) {
+    static function createUser($extUserId, $args) {
 	if (empty($extUserId) || empty($args['username'])) {
 	    return GalleryCoreApi::error(ERROR_BAD_PARAMETER);
 	}
@@ -430,7 +430,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      *               'creationtimestamp' => integer]
      * @return GalleryStatus a status object
      */
-    function updateUser($extUserId, $args) {
+    static function updateUser($extUserId, $args) {
 	list ($ret, $user) = GalleryCoreApi::loadEntityByExternalId($extUserId, 'GalleryUser');
 	if ($ret) {
 	    return $ret;
@@ -467,7 +467,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      * @return GalleryStatus a status object
      * @access private
      */
-    function _setUserData(&$user, $args, $create=false) {
+    static function _setUserData(&$user, $args, $create=false) {
 	if (!empty($args['password'])) {
 	    $user->changePassword($args['password']);
 	} else if (!empty($args['hashedpassword'])) {
@@ -790,9 +790,9 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      *               array (string javascript1, string javascript2, ...),
      *               array (string meta1, string meta2, ...)
      */
-    function parseHead($headhtml) {
+    static function parseHead($headhtml) {
 	$title = '';
-	$css = $javascript = $meta = array();
+	$css = $javascript = $meta	 = array();
 
 	/* Only one title allowed */
 	if (preg_match("|<title(?:\s[^>]*)?>(.*)</title>|Usi", $headhtml, $regs)) {
@@ -939,7 +939,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      * @param array $themeParams (optional) Theme parameters to be used.
      * @return GalleryStatus
      */
-    function setThemeForRequest($themeId, $themeParams=null) {
+    static function setThemeForRequest($themeId, $themeParams=null) {
 	global $gallery;
 
 	$gallery->setConfig('embeddedTheme', array($themeId, $themeParams));
@@ -975,7 +975,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
      *               string head HTML to be inserted into the <head> section
      * @since 1.4
      */
-    function getBlock($moduleId, $blockName, $params=array()) {
+    static function getBlock($moduleId, $blockName, $params=array()) {
 	global $gallery;
 	$platform =& $gallery->getPlatform();
 	$session =& $gallery->getSession();

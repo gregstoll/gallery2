@@ -1,0 +1,280 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/AdminRepositoryDownload.inc');
+
+/**
+ * AdminRepository controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Jozef Selesi <selesi at gmail dot com>
+ * @version $Revision: 17582 $
+ */
+class AdminRepositoryDownloadControllerTest extends GalleryControllerTestCase {
+	public $_galleryTemplateAdapter;
+
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminRepositoryDownload');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		global $gallery;
+
+		$session                       =& $gallery->getSession();
+		$this->_galleryTemplateAdapter =& $gallery->getTemplateAdapter();
+		$gallery->_phpVm               = new AdminRepositoryDownloadControllerTestPhpVm();
+
+		// Use our own wrapped controller so that we can override _fetchPluginStatus
+		$this->_controller           = new AdminRepositoryDownloadControllerTestWrapper();
+		$this->_controller->_version = '0.1';
+		$this->_controller->_active  = true;
+		$cacheKey                    = 'GalleryTranslator::SupportedLanguages';
+		$supportedLanguages          = array(
+			'en' => array(
+				'US' => array('US English'),
+			),
+			'hu' => array(
+				'HU' => array('Magyar'),
+			),
+		);
+
+		$supportedLanguages = array();
+		$defaultCountry     = array();
+
+		// English
+		$supportedLanguages['en']['US']['description'] = 'English (US)';
+		$supportedLanguages['en']['GB']['description'] = 'English (UK)';
+
+		// Hungarian
+		$supportedLanguages['hu']['HU']['description'] = 'Magyar';
+
+		// Spanish
+		$supportedLanguages['es']['ES']['description'] = 'Espa&#241;ol';
+		$supportedLanguages['es']['MX']['description'] = 'Espa&#241;ol (MX)';
+		$supportedLanguages['es']['AR']['description'] = 'Espa&#241;ol (AR)';
+
+		GalleryDataCache::put($cacheKey, $supportedLanguages);
+
+		$session->put('session.siteAdminActivityTimestamp', time());
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$gallery->_templateAdapter =& $this->_galleryTemplateAdapter;
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testDownloadCancel() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('form[pluginType]', 'module');
+		GalleryUtilities::putRequestVariable('form[pluginId]', 'testModule');
+		GalleryUtilities::putRequestVariable('form[action][cancel]', '1');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminRepository',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testInitiateDownload() {
+		global $gallery;
+
+		list($ret, $adminGroupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('form[pluginType]', 'module');
+		GalleryUtilities::putRequestVariable('form[pluginId]', 'testModule');
+		GalleryUtilities::putRequestVariable('form[base]', 'test:22222');
+		GalleryUtilities::putRequestVariable('form[action][download]', '1');
+
+		$mockAdapter               = new MockTemplateAdapter();
+		$gallery->_templateAdapter =& $mockAdapter;
+
+		$ret = GalleryCoreApi::assertUserIsSiteAdministrator();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->_storage = new UnitTestStorage();
+		$storage           =& $gallery->getStorage();
+
+		$storage->setReply(
+			'getMapEntry',
+			array(
+				'GalleryPluginPackageMap',
+				array('locked', 'packageVersion', 'packageBuild', 'packageName'),
+				array(
+					'pluginType' => 'module',
+					'pluginId'   => 'testModule',
+				),
+				array(),
+			),
+			array(
+				null,
+				new UnitTestStorageSearchResults(
+					array(
+						array(0, '12345', '11111', 'base'),
+						array(0, '12345', '11111', 'lang-en_GB'),
+						array(0, '12345', '11111', 'lang-es'),
+						array(0, '12345', '11111', 'lang-es_MX'),
+						array(0, '12345', '11111', 'lang-es_AR'),
+						array(0, '12345', '11111', 'lang-hu'),
+						array(0, '12345', '11111', 'lang-pt_BR'),
+						array(0, '12345', '11111', 'lang-pt_PT'),
+					)
+				),
+			)
+		);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'core.ProgressBar',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results,
+			'Expected only core.ProgressBar delegation.'
+		);
+
+		$this->assertEquals(1, $mockAdapter->getCallbackCount());
+
+		$callback = $mockAdapter->getCallback(0);
+
+		$this->assertEquals(
+			array($this->_controller, 'performDownloadAndInstallation'),
+			$callback[0],
+			'Incorrect callback method'
+		);
+
+		$this->assertEquals(
+			array(
+				'test' => array(
+					'module' => array(
+						'testModule' => array(
+							'base'       => 1,
+							'lang-en_GB' => 1,
+							'lang-es'    => 1,
+							'lang-es_MX' => 1,
+							'lang-es_AR' => 1,
+							'lang-hu'    => 1,
+						),
+					),
+				),
+			),
+			$callback[1][0],
+			'installPackages mismatch'
+		);
+
+		$this->assertTrue($storage->isComplete(), $storage->getRemaining());
+	}
+}
+
+class AdminRepositoryDownloadControllerTestUrlGenerator {
+	public function generateUrl($params = array(), $options = array()) {
+		$buf = array();
+
+		foreach ($params as $key => $value) {
+			$buf[] = "$key=$value";
+		}
+
+		return implode(',', $buf);
+	}
+}
+
+class AdminRepositoryDownloadControllerTestModule {
+	public function installOrUpgrade() {
+		$_REQUEST['called']['installOrUpgrade'] = 1;
+
+		return null;
+	}
+
+	public function autoConfigure() {
+		$_REQUEST['called']['autoConfigure'] = 1;
+
+		return array(null, true);
+	}
+
+	public function activate() {
+		$_REQUEST['called']['activate'] = 1;
+
+		return array(null, array());
+	}
+}
+
+class AdminRepositoryDownloadControllerTestWrapper extends AdminRepositoryDownloadController {
+	public $_version;
+	public $_active;
+
+	public function _fetchPluginStatus($pluginType, $ignoreCache) {
+		list($ret, $pluginStatus) = parent::_fetchPluginStatus($pluginType, $ignoreCache);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		$testModule                           = 'AdminRepositoryDownloadControllerTest';
+		$pluginStatus[$testModule]['active']  = $this->_active;
+		$pluginStatus[$testModule]['version'] = $this->_version;
+
+		return array(null, $pluginStatus);
+	}
+}
+
+class AdminRepositoryDownloadControllerTestPhpVm {
+	public function __construct() {
+		$this->_class_exists = false;
+	}
+
+	public function class_exists($class_name) {
+		return $this->_class_exists;
+	}
+
+	public function time() {
+		return time();
+	}
+}

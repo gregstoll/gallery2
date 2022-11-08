@@ -1,0 +1,100 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Lint check our phpdoc
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class PhpDocAuditTest extends CodeAuditTestCase {
+	public $_packageMap = array();
+
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+
+		$this->_errorCount = 0;
+	}
+
+	/**
+	 * @see CodeAuditTestCase::shouldCheckFile
+	 */
+	public function shouldCheckFile($fileName) {
+		if (substr($fileName, -4) == '.inc' || (substr($fileName, -6) == '.class'
+			&& basename($fileName) != 'PhpDocAuditTest.class')
+		) {
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * @see CodeAuditTestCase::checkFile
+	 *
+	 * 1. Check that @package lines agree inside a module
+	 */
+	public function checkFile($fileName, $buffer) {
+		if (preg_match('{(?:modules|themes)[\\/]([^\\/]*)?}', $fileName, $matches)) {
+			$plugin = $matches[1];
+
+			if (preg_match_all('/@package (.*[^\s])/', $buffer, $matches)) {
+				foreach ($matches[1] as $package) {
+					$this->_packageMap[$plugin][$package][] = $fileName;
+				}
+			}
+		}
+	}
+
+	/**
+	 * @see CodeAuditTestCase::finishScan
+	 */
+	public function finishScan($halted) {
+		if (!$halted) {
+			foreach ($this->_packageMap as $plugin => $packages) {
+				$matchCount = count(array_keys($packages));
+
+				if ($matchCount > 1) {
+					$max = -1;
+
+					foreach ($packages as $package => $files) {
+						if (count($files) > $max) {
+							$probablyCorrect = $package;
+							$max             = count($files);
+						}
+					}
+
+					$mismatches = join(', ', array_keys($packages));
+
+					$this->assertFalse(
+						true,
+						sprintf(
+							'%s: %d @package mismatches (%s) (probably should be: %s)',
+							$plugin,
+							$matchCount,
+							$mismatches,
+							$probablyCorrect
+						)
+					);
+				}
+			}
+		}
+	}
+}

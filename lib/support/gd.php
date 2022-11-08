@@ -72,36 +72,37 @@ function getGdLibraryInfo() {
     $mimeChecks = array(
 	array(
 	    'mimeType' => 'image/gif',
-	    'value' => defined('IMG_GIF') ? IMG_GIF : '',
+	    'value' => defined('IMG_GIF') ? IMG_GIF : 0,
 	    'functions' => array('imageCreateFromGif', 'imageGif')
 	),
 	array(
 	    'mimeType' => 'image/jpeg',
-	    'value' => defined('IMG_JPEG') ? IMG_JPEG : '',
+	    'value' => defined('IMG_JPEG') ? IMG_JPEG : 0,
 	    'functions' => array('imageCreateFromJpeg', 'imageJpeg')
 	),
 	array(
 	    'mimeType' => 'image/png',
-	    'value' => defined('IMG_PNG') ? IMG_PNG : '',
+	    'value' => defined('IMG_PNG') ? IMG_PNG : 0,
 	    'functions' => array('imageCreateFromPng', 'imagePng')
 	),
 	array(
 	    'mimeType' => 'image/vnd.wap.wbmp',
-	    'value' => defined('IMG_WBMP') ? IMG_WBMP : '',
+	    'value' => defined('IMG_WBMP') ? IMG_WBMP : 0,
 	    'functions' => array('imageCreateFromWbmp', 'imageWbmp')
 	),
 	array(
 	    'mimeType' => 'image/x-xpixmap',
-	    'value' => defined('IMG_XPM') ? IMG_XPM : '',
+	    'value' => defined('IMG_XPM') ? IMG_XPM : 0,
 	    'functions' => array('imageCreateFromXpm', 'imageXpm')
 	),
 	array(
 	    'mimeType' => 'image/x-xbitmap',
-	    'value' => defined('IMG_XBM') ? IMG_XBM : '',
+	    'value' => defined('IMG_XBM') ? IMG_XBM : 0,
 	    'functions' => array('imageCreateFromXbm', 'imageXbm')
 	),
     );
     $mimeTypes = array();
+    $types = imagetypes();
     foreach ($mimeChecks as $check) {
 	$ok = true;
 	foreach ($check['functions'] as $fct) {
@@ -109,7 +110,7 @@ function getGdLibraryInfo() {
 		$ok = false;
 	    }
 	}
-	if ($ok && ! ($check['value'] & imageTypes())) {
+	if ($ok && ! ($check['value'] & $types)) {
 	    $ok = false;
 	}
 	if ($ok) {

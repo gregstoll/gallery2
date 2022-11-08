@@ -1,0 +1,157 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Unit test repository utilties.  This is a mock RepositoryUtilties class that the unit tests can
+ * use to simulate the exact conditions that they want from the repository utilties in order to
+ * exercise the code.
+ *
+ * Use setReply() to tell it what function calls to expect.  Provide it with an array of
+ * input parameters to expect, exact values by default or use an array key starting with
+ * 'fuzzy' to match the parameter to a regular expression.
+ * It will expect to receive calls in that specific order and play them back.
+ *
+ * In tearDown() or at the end of the test, call:
+ *
+ *
+ *  $this->assertTrue($repositoryUtilties->isComplete(), $repositoryUtilties->getRemaining());
+ *
+ * This check verifies that all expected calls were received.
+ *
+ * @package Gallery
+ * @subpackage PHPUnit
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17580 $
+ */
+class UnitTestRepositoryUtilities extends MockObject {
+	public function extractRevision($string) {
+		return $this->_makeReply('extractRevision', array($string));
+	}
+
+	public function getFileRevision($file) {
+		return $this->_makeReply('getFileRevision', array($file));
+	}
+
+	public function compareVersions($version1, $version2, $build1 = null, $build2 = null) {
+		return $this->_makeReply('compareVersions', array($version1, $version2, $build1, $build2));
+	}
+
+	public function compareRevisions($revision1, $revision2) {
+		return $this->_makeReply('compareRevisions', array($revision1, $revision2));
+	}
+
+	public function getFirstBytesFromFile($path, $bytes) {
+		return $this->_makeReply('getFirstBytesFromFile', array($path, $bytes));
+	}
+
+	public function getLanguageBaseRevision($pluginType, $pluginId) {
+		return $this->_makeReply('getLanguageBaseRevision', array($pluginType, $pluginId));
+	}
+
+	public function isPluginAvailable($pluginType, $pluginId) {
+		return $this->_makeReply('isPluginAvailable', array($pluginType, $pluginId));
+	}
+
+	public function isPluginCompatible(
+		$pluginType,
+		$requiredCoreApi,
+		$requiredPluginApi,
+		$providedApis = null
+	) {
+		return $this->_makeReply(
+			'isPluginCompatible',
+			array(
+				$pluginType,
+				$requiredCoreApi,
+				$requiredPluginApi,
+				$providedApis,
+			)
+		);
+	}
+
+	public function getProvidedApis($pluginType, $providedApis = null) {
+		return $this->_makeReply('getProvidedApis', array($pluginType, $providedApis));
+	}
+
+	public function getPluginPackages($pluginType, $pluginId) {
+		return $this->_makeReply('getPluginPackages', array($pluginType, $pluginId));
+	}
+
+	public function getLanguageDescription($languageCode) {
+		return $this->_makeReply('getLanguageDescription', array($languageCode));
+	}
+
+	public function getPluginVersion($pluginType, $pluginId) {
+		return $this->_makeReply('getPluginVersion', array($pluginType, $pluginId));
+	}
+
+	public function downloadFile($url, $ignoreCompression = false) {
+		return $this->_makeReply('downloadFile', array($url, $ignoreCompression));
+	}
+
+	public function updatePackageMetaData(
+		$pluginType,
+		$pluginId,
+		$packageName,
+		$packageVersion,
+		$packageBuild,
+		$locked
+	) {
+		return $this->_makeReply(
+			'updatePackageMetaData',
+			array($pluginType, $pluginId, $packageName, $packageVersion, $packageBuild, $locked)
+		);
+	}
+
+	public function unpackPackage($packageFile, $outputDirecory) {
+		return $this->_makeReply('unpackPackage', array($packageFile, $outputDirecory));
+	}
+
+	public function preVerifyPackage($pluginType, $pluginId, $packageName, $descriptor) {
+		return $this->_makeReply(
+			'preVerifyPackage',
+			array(
+				$pluginType,
+				$pluginId,
+				$packageName,
+				$descriptor,
+			)
+		);
+	}
+
+	public function verifyPackageIntegrity($pluginType, $pluginId, $packageName, $descriptor) {
+		return $this->_makeReply(
+			'verifyPackageIntegrity',
+			array(
+				$pluginType,
+				$pluginId,
+				$packageName,
+				$descriptor,
+			)
+		);
+	}
+
+	public function downloadAggregatePackages($source, $filesToDownload) {
+		return $this->_makeReply('downloadAggregatePackages', array($source, $filesToDownload));
+	}
+
+	public function splitAggregatePackage($source, $outputFile, &$callback) {
+		return $this->_makeReply('splitAggregatePackage', array($source, $outputFile, $callback));
+	}
+}

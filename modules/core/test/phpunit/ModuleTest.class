@@ -1,0 +1,1026 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test Module functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ModuleTest extends GalleryTestCase {
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_platform = new ModuleTestPlatform($this);
+
+		$gallery->setPlatform($this->_platform);
+
+		// Register a new module
+		GalleryDataCache::reset(true);
+
+		$_REQUEST['testCase'] = $this;
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'moduletest');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_rootAlbum) = $this->_createRandomAlbum(
+			$this->_getRootId(),
+			array(
+				'onLoadHandlers' => '|ModuleTestOnLoadHandler|',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_rootAlbum);
+
+		list($ret, $this->_item) = $this->_createRandomDataItem(
+			$this->_rootAlbum->getId(),
+			'test/file',
+			array(
+				'onLoadHandlers' => '|ModuleTestOnLoadHandler|OtherHandler|',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		// If a unittest fails it might not deactivate/uninstall the mock module properly
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'moduletest', true);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		list($ret, $isActive) = $module->isActive();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		if ($isActive) {
+			list($ret, $redirect) = $module->deactivate();
+
+			if ($ret) {
+				$this->failWithStatus($ret);
+			}
+		}
+
+		$ret = $module->uninstall();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = GalleryCoreApi::removePlugin('module', 'moduletest');
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testModuleCycle() {
+		global $gallery;
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'moduletest');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		/*
+		 * Add bogus used theme blocks to test if they are removed after activate(). Bug #1636339
+		 * For now not testing false positives in the same module since we cannot easily inject
+		 * blocks into loadAvailableBlocks().
+		 */
+		$ret = GalleryCoreApi::setPluginParameter(
+			'theme',
+			'bogusTheme',
+			'albumBlocks',
+			serialize(array(array('moduletest.missingBlock', array())))
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'theme',
+			'bogusTheme',
+			'albumBlocks',
+			serialize(
+				array(
+					array('bogusModule.someBlock', array()),
+					array('moduletest.missingBlock', array()),
+				)
+			),
+			42
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Add a real theme block if one is available, that should not be removed.
+		list($ret, $blocks) = GalleryCoreApi::loadAvailableBlocks();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$blockAvailable = false;
+
+		if (!empty($blocks)) {
+			$blockAvailable = true;
+			$pluginName     = key($blocks);
+			$blockName      = key($blocks[$pluginName]);
+
+			$ret = GalleryCoreApi::setPluginParameter(
+				'theme',
+				'bogusTheme',
+				'albumBlocks',
+				serialize(array(array("$pluginName.$blockName", array()))),
+				1337
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		// Install the module
+		$ret = $module->installOrUpgrade();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $plugins) = GalleryCoreApi::fetchPluginList('module');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(isset($plugins[$module->getId()]), 'missing PluginMap entry');
+		$this->assertTrue(
+			empty($plugins[$module->getId()]['active']),
+			'wrong PluginMap value for active'
+		);
+
+		// Verify that the first permission was added
+		list($ret, $ids) = GalleryCoreApi::getPermissionIds();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(array_key_exists('moduletest.one', $ids), 'Permission was not added');
+
+		// Remove all permissions
+		$ret = GalleryCoreApi::removeItemPermissions($this->_rootAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Add a token permission so that we have something tangible to compare
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_rootAlbum->getId(),
+			$gallery->getActiveUserId(),
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $originalBits) = $this->_fetchPermissionBitsForItem(
+			$this->_rootAlbum->getId(),
+			$gallery->getActiveUserId(),
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Assign our permission
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_rootAlbum->getId(),
+			$gallery->getActiveUserId(),
+			'moduletest.one'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Activate the module
+		list($ret, $redirect) = $module->activate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(), $redirect, 'activate redirect');
+
+		list($ret, $isActive) = $module->isActive();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($isActive, 'Is active');
+
+		list($ret, $plugins) = GalleryCoreApi::fetchPluginList('module');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(isset($plugins[$module->getId()]), 'missing PluginMap entry (2)');
+		$this->assertTrue(
+			!empty($plugins[$module->getId()]['active']),
+			'wrong PluginMap value for active'
+		);
+
+		// Create an entity
+		$entity = new ModuleTestEntity();
+
+		$ret = $entity->create();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $entity->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify that the bogus blocks have been removed from the theme.
+		list($ret, $bogusBlock) = GalleryCoreApi::getPluginParameter('theme', 'bogusTheme', 'albumBlocks');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(), unserialize($bogusBlock), 'bogusTheme general parameter');
+
+		list($ret, $bogusBlock) = GalleryCoreApi::getPluginParameter('theme', 'bogusTheme', 'albumBlocks', 42);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(array('bogusModule.someBlock', array())),
+			unserialize($bogusBlock),
+			'bogusTheme parameter'
+		);
+
+		// Make sure the real block has not been removed.
+		if ($blockAvailable) {
+			list($ret, $realBlock) = GalleryCoreApi::getPluginParameter('theme', 'bogusTheme', 'albumBlocks', 1337);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(
+				array(array("$pluginName.$blockName", array())),
+				unserialize($realBlock),
+				'Real block removed!'
+			);
+		}
+
+		// Deactivate the module
+		list($ret, $redirect) = $module->deactivate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(), $redirect, 'deactivate redirect');
+
+		list($ret, $plugins) = GalleryCoreApi::fetchPluginList('module');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(isset($plugins[$module->getId()]), 'missing PluginMap entry (3)');
+		$this->assertTrue(
+			empty($plugins[$module->getId()]['active']),
+			'wrong PluginMap value for active (3)'
+		);
+
+		// Upgrade the module
+		$module->setVersion('1.0.1');
+
+		$ret = $module->installOrUpgrade();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify that the second permission was added
+		list($ret, $ids) = GalleryCoreApi::getPermissionIds();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(array_key_exists('moduletest.two', $ids), 'Permission was not added');
+
+		// Uninstall the module
+		$ret = $module->uninstall();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			!empty($this->_removedDir),
+			'plugins_data/modules/moduletest directory not removed in uninstall'
+		);
+
+		list($ret, $plugins) = GalleryCoreApi::fetchPluginList('module');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse(isset($plugins[$module->getId()]), 'PluginMap entry still set');
+
+		// Flush cached permissions
+		GalleryDataCache::reset();
+
+		// Verify that the item permissions are gone.
+		list($ret, $newBits) = $this->_fetchPermissionBitsForItem(
+			$this->_rootAlbum->getId(),
+			$gallery->getActiveUserId(),
+			null
+		);
+		$this->assertEquals($originalBits, $newBits, 'Permission bits not restored');
+
+		// Verify that the permission itself is gone
+		list($ret, $ids) = GalleryCoreApi::getPermissionIds();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		foreach ($ids as $id) {
+			$this->assertTrue(
+				$id != 'moduletest.one' && $id != 'moduletest.two',
+				'Permission was not removed'
+			);
+		}
+
+		// Verify our OnLoadHandler was removed from all entities
+		list($ret, $album) = $this->_rootAlbum->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// For Oracle, null is replaced with '' when loading data from the database
+		$this->assertTrue(
+			in_array($album->getOnLoadHandlers(), array(null, '')),
+			'album onLoadHandlers'
+		);
+
+		list($ret, $item) = $this->_item->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('|OtherHandler|', $item->getOnLoadHandlers(), 'item onLoadHandlers');
+
+		// Verify our entity was deleted
+		list($ret) = $entity->refresh();
+
+		$this->assertEquals(GALLERY_ERROR | ERROR_MISSING_OBJECT, $ret->getErrorCode(), 'entity');
+
+		// Remove all references to the bogus theme from the database.
+		$ret = GalleryCoreApi::removeMapEntry(
+			'GalleryPluginParameterMap',
+			array(
+				'pluginId' => 'bogusTheme',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// TODO: How do we verify that the tables are removed successfully?
+	}
+
+	public function testInstallBadModuleApi() {
+		global $gallery;
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'moduletest');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($major, $minor) = $module->getRequiredModuleApi();
+
+		$module->setRequiredModuleApi(array($major - 1, $minor));
+
+		$ret = $module->installOrUpgrade();
+
+		if ($ret && !($ret->getErrorCode() & ERROR_PLUGIN_VERSION_MISMATCH)) {
+			return $ret;
+		}
+
+		$this->assertTrue($ret && ($ret->getErrorCode() & ERROR_PLUGIN_VERSION_MISMATCH), 'success?');
+	}
+
+	public function testActivateBadModuleApiActivate() {
+		global $gallery;
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'moduletest');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $module->installOrUpgrade();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($major, $minor) = $module->getRequiredModuleApi();
+
+		$module->setRequiredModuleApi(array($major - 1, $minor));
+
+		list($ret, $redirect) = $module->activate();
+
+		if ($ret && !($ret->getErrorCode() & ERROR_PLUGIN_VERSION_MISMATCH)) {
+			return $ret;
+		}
+
+		$this->assertTrue($ret && ($ret->getErrorCode() & ERROR_PLUGIN_VERSION_MISMATCH), 'success?');
+
+		list($ret, $isActive) = $module->isActive();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($isActive, 'is active');
+	}
+
+	public function testInstallBadCoreApi() {
+		global $gallery;
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'moduletest');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($major, $minor) = $module->getRequiredCoreApi();
+
+		$module->setRequiredCoreApi(array($major - 1, $minor));
+
+		$ret = $module->installOrUpgrade();
+
+		if ($ret && !($ret->getErrorCode() & ERROR_PLUGIN_VERSION_MISMATCH)) {
+			return $ret;
+		}
+
+		$this->assertTrue($ret && ($ret->getErrorCode() & ERROR_PLUGIN_VERSION_MISMATCH), 'success?');
+	}
+
+	public function testActivateBadCoreApiActivate() {
+		global $gallery;
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'moduletest');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $module->installOrUpgrade();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($major, $minor) = $module->getRequiredCoreApi();
+
+		$module->setRequiredCoreApi(array($major - 1, $minor));
+
+		list($ret, $redirect) = $module->activate();
+
+		if ($ret && !($ret->getErrorCode() & ERROR_PLUGIN_VERSION_MISMATCH)) {
+			return $ret;
+		}
+
+		$this->assertTrue($ret && ($ret->getErrorCode() & ERROR_PLUGIN_VERSION_MISMATCH), 'success?');
+
+		list($ret, $isActive) = $module->isActive();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($isActive, 'is active');
+	}
+
+	public function testPermissionsCleanup() {
+		// Test against bug where module uninstall can leave AccessMap rows with g_permission=0
+		global $gallery;
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'moduletest');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $module->installOrUpgrade();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_rootAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_rootAlbum->getId(),
+			$gallery->getActiveUserId(),
+			'moduletest.one'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $module->uninstall();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $bits) = $this->_fetchPermissionBitsForItem($this->_rootAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($bits == 0, 'no bits');
+
+		// If above leaves a row with g_permission=0 it will foul up this call:
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_rootAlbum->getId(),
+			$gallery->getActiveUserId(),
+			'core.viewAll'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $bits) = $this->_fetchPermissionBitsForItem($this->_rootAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($bits > 0, 'bits');
+	}
+
+	public function testInstallOrUpgradeSetsNewModuleVersion() {
+		// Manually set the version to an older one
+		$module = new ModuleTestModule();
+
+		$ret = $module->setParameter('_version', '0.5.0');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $ignored) = $module->activate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$module->_activate = false;
+
+		// Execute the method under test
+		$ret = $module->installOrUpgrade();
+
+		if ($ret && $ret->getErrorCode() & ERROR_CONFIGURATION_REQUIRED) {
+			// That is what we expect
+		} elseif ($ret) {
+			return $ret;
+		} else {
+			$this->fail('should have failed with an activation error');
+		}
+
+		list($ret, $version) = $module->getParameter('_version');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('1.0.0', $version, 'version not set after upgrade');
+	}
+
+	public function testDeactivatePostsEventAfterFactoryUnregistration() {
+		global $gallery;
+
+		// Prepare the test by activating a test module with some factory registrations
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'moduletest');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $module->installOrUpgrade();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $redirect) = $module->activate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(), $redirect, 'activate redirect');
+
+		list($ret, $isActive) = $module->isActive();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($isActive, 'Is active');
+
+		list($ret, $handler) = GalleryCoreApi::newFactoryInstanceById(
+			'GalleryOnLoadHandler',
+			'ModuleTestOnLoadHandler'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(isset($handler), 'Precondition failed: No factory implementation registered');
+
+		// Register our event listener to observe the test
+		$testEventListener = new ModuleTestEventListener();
+
+		$this->_registerTestEventListener('Gallery::DeactivatePlugin', $testEventListener);
+
+		// Execute the method under test
+		list($ret, $redirect) = $module->deactivate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(), $redirect, 'deactivate redirect');
+		$this->assertEquals(
+			1,
+			count($testEventListener->isOnLoadHandlerRegistered),
+			'number of deactivation events'
+		);
+		$this->assertEquals(
+			false,
+			$testEventListener->isOnLoadHandlerRegistered[0],
+			'Deactivation event was posted before unregistering factory implementations'
+		);
+	}
+
+	public function _fetchPermissionBitsForItem($itemId) {
+		global $gallery;
+
+		$userId = $gallery->getActiveUserId();
+
+		list($ret, $groupIds) = GalleryCoreApi::fetchGroupsForUser($userId);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		$groupIds             = array_keys($groupIds);
+		$userOrGroupIdMarkers = GalleryUtilities::makeMarkers(count($groupIds) + 1);
+		$storage              =& $gallery->getStorage();
+
+		list($ret, $bitOr) = $storage->getFunctionSql(
+			'BIT_OR',
+			array(
+				'[GalleryAccessMap::permission]',
+				'[GalleryAccessSubscriberMap::itemId]',
+			)
+		);
+
+		if ($ret) {
+			// Try to OR permissions using aggregate function in DB; fallback to OR in PHP
+			if ($ret->getErrorCode() & ERROR_UNSUPPORTED_OPERATION) {
+				$bitOr = '[GalleryAccessMap::permission]';
+			} else {
+				return array($ret, null);
+			}
+		}
+
+		$query = '
+	SELECT
+	  ' . $bitOr . '
+	FROM
+	  [GalleryAccessMap], [GalleryAccessSubscriberMap]
+	WHERE
+	  [GalleryAccessSubscriberMap::itemId] = ?
+	  AND
+	  [GalleryAccessSubscriberMap::accessListId] = [GalleryAccessMap::accessListId]
+	  AND
+	  [GalleryAccessMap::userOrGroupId] IN (' . $userOrGroupIdMarkers . ')
+	';
+
+		$data = array($itemId, $userId);
+		array_splice($data, count($data), 0, $groupIds);
+
+		list($ret, $searchResults) = $gallery->search($query, $data);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		$permTable = array();
+		$bits      = 0;
+
+		while ($result = $searchResults->nextResult()) {
+			$bits |= $storage->convertBitsToInt($result[0]);
+		}
+
+		return array(null, $bits);
+	}
+}
+
+/**
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class ModuleTestModule extends GalleryModule {
+	public $_activate;
+
+	public function __construct() {
+		global $gallery;
+
+		$this->setId('moduletest');
+		$this->setName('ModuleTest Module');
+		$this->setDescription('Unit test module');
+		$this->setVersion('1.0.0');
+		$this->setGroup('data', 'Gallery');
+		$this->setCallbacks('');
+		$this->setRequiredCoreApi(GalleryCoreApi::getApiVersion());
+		$this->setRequiredModuleApi(GalleryModule::getApiVersion());
+
+		$this->_activate = true;
+	}
+
+	public function upgrade($currentVersion, $x1 = null) {
+		global $gallery;
+
+		if (!isset($currentVersion)) {
+			$ret = GalleryCoreApi::registerPermission(
+				$this->getId(),
+				'moduletest.one',
+				'[test] A permission'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		} else {
+			$ret = GalleryCoreApi::registerPermission(
+				$this->getId(),
+				'moduletest.two',
+				'[test] A second permission'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		return null;
+	}
+
+	public function activate($postActivationEvent = true) {
+		if (!$this->_activate) {
+			return array(GalleryCoreApi::error(ERROR_CONFIGURATION_REQUIRED), null);
+		}
+
+		list($ret, $redirect) = parent::activate($postActivationEvent);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		return array(null, array());
+	}
+
+	public function performFactoryRegistrations() {
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'GalleryOnLoadHandler',
+			'ModuleTestOnLoadHandler',
+			'ModuleTestOnLoadHandler',
+			'modules/core/test/phpunit/ModuleTest.class',
+			'moduletest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		/*
+		 * registerFactoryImplementation() clears the factory cache. Prevent it from reading the
+		 * data from the storage again.
+		 */
+		$_REQUEST['testCase']->_unregisterFactoryImplementationForTest('GalleryEventListener');
+
+		return null;
+	}
+
+	public function getOnLoadHandlerIds() {
+		return array('ModuleTestOnLoadHandler');
+	}
+
+	public function getModuleEntityTypes() {
+		return array('ModuleTestEntity');
+	}
+}
+
+/**
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class ModuleTestOnLoadHandler {
+	public function onLoad(&$entity, $duringUpgrade) {
+		return null;
+	}
+}
+
+/**
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class ModuleTestEntity extends GalleryEntity {
+	public function getClassName() {
+		return 'ModuleTestEntity';
+	}
+}
+
+/**
+ * Test platform for this test
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class ModuleTestPlatform extends GalleryPlatform {
+	public function __construct(&$test) {
+		$this->_test =& $test;
+	}
+
+	public function opendir($path) {
+		if (strpos($path, 'modules/') !== false) {
+			$this->_list = array();
+
+			if ($dir = parent::opendir($path)) {
+				while (false !== ($file = parent::readdir($dir))) {
+					array_push($this->_list, $file);
+				}
+			}
+
+			array_push($this->_list, 'moduletest');
+
+			return 'moduletest';
+		}
+
+		return parent::opendir($path);
+	}
+
+	public function is_dir($path) {
+		if (strpos($path, 'modules/moduletest') !== false) {
+			return true;
+		}
+
+		return parent::is_dir($path);
+	}
+
+	public function readdir($handle) {
+		if ($handle == 'moduletest') {
+			return array_shift($this->_list);
+		}
+
+		return parent::readdir($handle);
+	}
+
+	public function closedir($handle) {
+		if ($handle == 'moduletest') {
+			unset($this->_list);
+
+			return true;
+		}
+
+		return parent::closedir($handle);
+	}
+
+	public function file_exists($file) {
+		if (strpos($file, 'modules/moduletest/module.inc') !== false) {
+			return true;
+		}
+
+		return parent::file_exists($file);
+	}
+
+	public function recursiveRmdir($path) {
+		if (strpos($path, 'modules/moduletest') !== false) {
+			$this->_test->_removedDir = true;
+
+			return true;
+		}
+
+		return false;
+	}
+
+	public function getDirectorySeparator() {
+		return '/';
+	}
+}
+
+class ModuleTestEventListener {
+	public $isOnLoadHandlerRegistered = array();
+
+	public function handleEvent($event) {
+		if ($event->getEventName() == 'Gallery::DeactivatePlugin') {
+			list($ret, $handler) = GalleryCoreApi::newFactoryInstanceById(
+				'GalleryOnLoadHandler',
+				'ModuleTestOnLoadHandler'
+			);
+
+			if ($ret) {
+				return array($ret, null);
+			}
+
+			$this->isOnLoadHandlerRegistered[] = isset($handler);
+		}
+
+		return array(null, null);
+	}
+}

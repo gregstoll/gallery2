@@ -1,0 +1,185 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/AdminPerformance.inc');
+
+/**
+ * AdminPerformance controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminPerformanceControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminPerformance');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$acceleration['user']['type']        = 'none';
+		$acceleration['user']['expiration']  = 0;
+		$acceleration['guest']['type']       = 'none';
+		$acceleration['guest']['expiration'] = 0;
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'acceleration',
+			serialize($acceleration)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'smarty.compile_check', 0);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testSave() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[acceleration][guest][type]', 'partial');
+		GalleryUtilities::putRequestVariable('form[acceleration][guest][expiration]', '1234');
+		GalleryUtilities::putRequestVariable('form[acceleration][user][type]', 'full');
+		GalleryUtilities::putRequestVariable('form[acceleration][user][expiration]', '5678');
+
+		// disableCompileCheck unchecked (disabled checkboxes are not set)
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminPerformance',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $acceleration) = GalleryCoreApi::getPluginParameter('module', 'core', 'acceleration');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$acceleration = unserialize($acceleration);
+
+		$this->assertEquals(
+			array(
+				'user' => array(
+					'type'       => 'full',
+					'expiration' => 5678,
+				),
+				'guest' => array(
+					'type'       => 'partial',
+					'expiration' => 1234,
+				),
+			),
+			$acceleration
+		);
+
+		list($ret, $compileCheck) = GalleryCoreApi::getPluginParameter('module', 'core', 'smarty.compile_check');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(1, (int)$compileCheck, 'compile check');
+	}
+
+	public function testSaveError() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		// Leave out any form parameters and you get an error
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+	}
+
+	public function testClear() {
+		global $gallery;
+
+		$ret = GalleryDataCache::putPageData('test-key', 0, 'key', 'test-value');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][clear]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminPerformance',
+				),
+				'status'   => array(
+					'cleared' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		/*
+		 * It would really be nice to use a mock here to avoid having to actually clear out the
+		 * database table, but it is a pain because the mock storage would have to pony up fake
+		 * data for the GalleryCoreApi::assertUserIsSiteAdministrator and
+		 * GalleryCoreApi::getPluginParameter calls too.  So for now just make sure that the table
+		 * is clean when we are done.
+		 */
+		$storage =& $gallery->getStorage();
+
+		list($ret, $results) = $storage->search('SELECT COUNT(*) FROM [GalleryCacheMap]', array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$result = $results->nextResult();
+
+		$this->assertEquals(0, (int)$result[0]);
+	}
+}

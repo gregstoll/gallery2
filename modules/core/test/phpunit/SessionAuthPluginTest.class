@@ -1,0 +1,127 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/test/phpunit/UserLoginControllerTest.class');
+
+/**
+ * Session authentication tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class SessionAuthPluginTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create a new user
+		list($ret, $this->_user) = $this->_createRandomUser(null, 'password');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_user);
+
+		$this->_saveSession = $gallery->_session;
+
+		// Set up a mock session so that we do not accidentally log out the PHPUnit session
+		$this->_mockSession = new UserLoginControllerTestSession();
+		$gallery->_session  =& $this->_mockSession;
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$gallery->_session = $this->_saveSession;
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testSessionAuthValidUser() {
+		$this->_mockSession->setUserId($this->_user->getId());
+
+		$plugin = new SessionAuthPlugin();
+
+		list($ret, $user) = $plugin->getUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($this->_user, $user);
+	}
+
+	public function testSessionAuthInvalidUser() {
+		list($ret, $userId) = $this->_getUnusedId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_mockSession->setUserId($userId);
+
+		$plugin = new SessionAuthPlugin();
+
+		list($ret, $user) = $plugin->getUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse(isset($user));
+	}
+
+	public function testSessionAuthLoadInvalidEntity() {
+		// Assume an invalid userId ended up in our session data and attempt to load it
+		list($ret, $group) = $this->_createRandomGroup();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($group);
+		$this->_mockSession->setUserId($group->getId());
+
+		// The error should be caught and null should be returned.
+		$plugin = new SessionAuthPlugin();
+
+		list($ret, $user) = $plugin->getUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(null, $user);
+	}
+}
+

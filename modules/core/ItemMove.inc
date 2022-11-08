@@ -226,7 +226,7 @@ class ItemMoveController extends GalleryController {
 		return array($ret, null);
 	    }
 
-	    $numPages = ceil(sizeof($peerIds) / $form['numPerPage']);
+	    $numPages = (int) ceil(sizeof($peerIds) / (int) $form['numPerPage']);
 
 	    $results['delegate']['itemId'] = $itemId;
 	    $results['delegate']['page'] = min($page + 1, $numPages);
@@ -291,13 +291,13 @@ class ItemMoveView extends GalleryView {
 	$peerTypes = array('album' => array(), 'data' => array());
 	$numPages = 1;
 	if (!empty($peerIds)) {
-	    $numPages = ceil(sizeof($peerIds) / $form['numPerPage']);
+	    $numPages = (int) ceil(sizeof($peerIds) / (int) $form['numPerPage']);
 	    if (empty($page)) {
 		/* determine which page we're on */
 		$page = 1;
 		for ($i = 0; $i < sizeof($peerIds); $i++) {
 		    if ($peerIds[$i] == $selectedId) {
-			$page = ceil(($i + 1) / $form['numPerPage']);
+			$page = (int) ceil(($i + 1) / (int) $form['numPerPage']);
 		    }
 		}
 	    }

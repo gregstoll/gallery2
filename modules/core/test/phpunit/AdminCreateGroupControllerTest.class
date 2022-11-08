@@ -1,0 +1,150 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * AdminCreateGroup controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminCreateGroupControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminCreateGroup');
+	}
+
+	public function testCancel() {
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminGroups',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testCreateGroup() {
+		$groupName = 'group-' . mt_rand();
+
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[groupName]', $groupName);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminGroups',
+				),
+				'status'   => array(
+					'createdGroup' => $groupName,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		$this->_deleteGroup($groupName);
+	}
+
+	public function testMissingGroupName() {
+		// Create one group
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminCreateGroup',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][groupName][missing]'),
+			),
+			$results
+		);
+	}
+
+	public function testCreateDuplicateGroup() {
+		$groupName = 'group-' . mt_rand();
+
+		// Create one group
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[groupName]', $groupName);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminGroups',
+				),
+				'status'   => array(
+					'createdGroup' => $groupName,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Create a second group with the same name
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminCreateGroup',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][groupName][exists]'),
+			),
+			$results
+		);
+
+		$this->_deleteGroup($groupName);
+	}
+
+	public function _deleteGroup($groupName) {
+		global $gallery;
+
+		list($ret, $group) = GalleryCoreApi::fetchGroupByGroupName($groupName);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::deleteEntityById($group->getId(), 'GalleryGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+}

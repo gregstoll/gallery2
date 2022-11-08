@@ -1,0 +1,387 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemEdit controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemEditControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.ItemEdit');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		list($ret, $this->_item) = $this->_createRandomDataItem($this->_album->getId(), 'test/file');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markFactoryForCleanup();
+		$this->_unregisterFactoryImplementationForTest('ItemEditPlugin');
+		$this->_unregisterFactoryImplementationForTest('ItemEditOption');
+
+		$path = 'modules/core/test/phpunit/ItemEditControllerTest.class';
+
+		$this->_registerFactoryImplementationForTest(
+			'ItemEditPlugin',
+			'ItemEditControllerTestPluginSuccess',
+			'ItemEditControllerTestPluginSuccess',
+			$path,
+			'coreTest'
+		);
+		$this->_registerFactoryImplementationForTest(
+			'ItemEditPlugin',
+			'ItemEditControllerTestPluginFailAndWarn',
+			'ItemEditControllerTestPluginFailAndWarn',
+			$path,
+			'coreTest'
+		);
+		$this->_registerFactoryImplementationForTest(
+			'ItemEditOption',
+			'ItemEditControllerTestOption',
+			'ItemEditControllerTestOption',
+			$path,
+			'coreTest',
+			array(
+				'ItemEditControllerTestPluginFailAndWarn',
+				'ItemEditControllerTestPluginRequiresProgressBar',
+			)
+		);
+		$this->_registerFactoryImplementationForTest(
+			'ItemEditPlugin',
+			'ItemEditControllerTestPluginRequiresProgressBar',
+			'ItemEditControllerTestPluginRequiresProgressBar',
+			$path,
+			'coreTest'
+		);
+		$this->_registerFactoryImplementationForTest(
+			'ItemEditOption',
+			'ItemEditControllerTestOptionWithProgressBar',
+			'ItemEditControllerTestOptionWithProgressBar',
+			$path,
+			'coreTest',
+			array('ItemEditControllerTestPluginSuccess')
+		);
+	}
+
+	public function testHandleRequestWithPreferred() {
+		list($ret, $this->_preferred) = $this->_createDerivative(
+			$this->_item,
+			$this->_item->getId(),
+			DERIVATIVE_TYPE_IMAGE_PREFERRED,
+			'rotate|90'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_item->getId());
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+		GalleryUtilities::putRequestVariable('editPlugin', 'ItemEditControllerTestPluginSuccess');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'       => 'core.ItemAdmin',
+					'subView'    => 'core.ItemEdit',
+					'editPlugin' => 'ItemEditControllerTestPluginSuccess',
+					'itemId'     => $this->_item->getId(),
+				),
+				'status'   => array(
+					'editMessage' => 'success',
+					'warning'     => array(),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testHandleRequestWithoutPreferred() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item->getId());
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+		GalleryUtilities::putRequestVariable('editPlugin', 'ItemEditControllerTestPluginSuccess');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'       => 'core.ItemAdmin',
+					'subView'    => 'core.ItemEdit',
+					'editPlugin' => 'ItemEditControllerTestPluginSuccess',
+					'itemId'     => $this->_item->getId(),
+				),
+				'status'   => array(
+					'editMessage' => 'success',
+					'warning'     => array(),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testHandleRequestDelegate() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item->getId());
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+		GalleryUtilities::putRequestVariable(
+			'editPlugin',
+			'ItemEditControllerTestPluginFailAndWarn'
+		);
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'       => 'core.ItemAdmin',
+					'subView'    => 'core.ItemEdit',
+					'editPlugin' => 'ItemEditControllerTestPluginFailAndWarn',
+				),
+				'status' => array(
+					'editMessage' => null,
+					'warning'     => array('a warning'),
+				),   // from its option
+				'error' => array(
+					'failed',   // from the plugin
+					'an error',
+				), // from its option
+			),
+			$results
+		);
+	}
+
+	public function testHandleRequestPluginWithoutProgressBarOptionRequiresProgressBar() {
+		global $gallery;
+
+		list($ret, $this->_preferred) = $this->_createDerivative(
+			$this->_item,
+			$this->_item->getId(),
+			DERIVATIVE_TYPE_IMAGE_PREFERRED,
+			'rotate|90'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_item->getId());
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+		GalleryUtilities::putRequestVariable('editPlugin', 'ItemEditControllerTestPluginSuccess');
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		$gallery->_templateAdapter = new MockTemplateAdapter();
+		$templateAdapter           =& $gallery->getTemplateAdapter();
+		$results                   = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'core.ProgressBar',
+				),
+				'status'   => array(
+					'editMessage' => 'success',
+					'warning'     => array(),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		if ($templateAdapter->getCallbackCount() !== 1) {
+			$this->assertEquals(
+				1,
+				$templateAdapter->getCallbackCount(),
+				'Wrong callback count. One callback required for Edit-option.'
+			);
+		} else {
+			$callback       = $templateAdapter->getCallback(0);
+			$callbackMethod = $callback[0][1];
+
+			$this->assertEquals('runProgressBarOptions', $callbackMethod);
+		}
+	}
+
+	public function testHandleRequestPluginRequiresProgressBarOptionDoesNot() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_item->getId());
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+		GalleryUtilities::putRequestVariable(
+			'editPlugin',
+			'ItemEditControllerTestPluginRequiresProgressBar'
+		);
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		$gallery->_templateAdapter = new MockTemplateAdapter();
+		$templateAdapter           =& $gallery->getTemplateAdapter();
+		$results                   = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'core.ProgressBar',
+				),
+				'status'   => array(
+					'editMessage' => 'success',
+					'warning'     => array(),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		if ($templateAdapter->getCallbackCount() !== 1) {
+			$this->assertEquals(
+				1,
+				$templateAdapter->getCallbackCount(),
+				'Wrong callback count. One callback required for Edit-option.'
+			);
+		} else {
+			$callback       = $templateAdapter->getCallback(0);
+			$callbackMethod = $callback[0][1];
+
+			$this->assertEquals('runProgressBarOptions', $callbackMethod);
+		}
+	}
+}
+
+/**
+ * Test plugin that returns success
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class ItemEditControllerTestPluginSuccess {
+	public function handleRequest($form, &$item, &$preferred) {
+		// TODO: We should verify the item is legit here
+		// Check to see if we have a preferred source
+		list($ret, $preferredTable) = GalleryCoreApi::fetchPreferredsByItemIds(array($item->getId()));
+
+		if ($ret) {
+			return array($ret, null, null, null);
+		}
+
+		if ($preferred != null
+			&& (empty($preferredTable)
+			|| !is_object($preferredTable[$item->getId()])
+			|| $preferredTable[$item->getId()]->getId() != $preferred->getId())
+		) {
+			return array(
+				GalleryCoreApi::error(ERROR_UNKNOWN),
+				array('PREFERRED MISMATCH'),
+				null,
+				null,
+			);
+		}
+
+		return array(null, array(), 'success', false);
+	}
+}
+
+/**
+ * Test plugin that fails
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class ItemEditControllerTestPluginFailAndWarn extends ItemEditPlugin {
+	public function handleRequest($form, &$item, &$preferred) {
+		return array(null, array('failed'), null, false);
+	}
+}
+
+/**
+ * Test plugin that requires a progress bar
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class ItemEditControllerTestPluginRequiresProgressBar extends ItemEditPlugin {
+	public function handleRequest($form, &$item, &$preferred) {
+		return array(null, array(), 'success', true);
+	}
+}
+
+/**
+ * Test ItemEditOption that returns warnings and errors and does not require a progress bar.
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class ItemEditControllerTestOption extends ItemEditOption {
+	public function isAppropriate($item, $thumbnail) {
+		return array(null, true);
+	}
+
+	public function handleRequestAfterEdit($form, &$item, &$preferred) {
+		return array(
+			null,
+			array('an error'),
+			array('a warning'),
+		);
+	}
+}
+
+/**
+ * Test ItemEditOption that returns warnings and errors and requires a progress bar.
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class ItemEditControllerTestOptionWithProgressBar extends ItemEditOption {
+	public function isAppropriate($item, $thumbnail) {
+		return array(null, true);
+	}
+
+	public function handleRequestAfterEdit($form, &$item, &$preferred) {
+		return array(
+			null,
+			array('another error'),
+			array('another warning'),
+		);
+	}
+
+	public function requiresProgressBar($form) {
+		return true;
+	}
+}

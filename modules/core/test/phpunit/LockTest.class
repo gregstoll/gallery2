@@ -1,0 +1,882 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/DatabaseLockSystem.class');
+GalleryCoreApi::requireOnce('modules/core/classes/FlockLockSystem.class');
+
+/**
+ * Lock tests.
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class LockTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		list($ret, $this->_item) = $this->_createRandomDataItem($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$storage =& $gallery->getStorage();
+
+		$ret = $storage->checkPoint();
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function _tryAllLockSystems($testFunction) {
+		global $gallery;
+
+		$testFunction         = '_' . $testFunction;
+		$gallery->_lockSystem = new DatabaseLockSystem();
+
+		$this->$testFunction('dblock');
+		$gallery->_lockSystem->releaseAllLocks();
+		$gallery->_lockSystem->releaseQueue();
+
+		$gallery->_lockSystem = new FlockLockSystem();
+
+		$this->$testFunction('flock');
+		$gallery->_lockSystem->releaseAllLocks();
+		$gallery->_lockSystem->releaseQueue();
+	}
+
+	public function testOneWriteLock() {
+		return $this->_tryAllLockSystems('testOneWriteLock');
+	}
+
+	public function _testOneWriteLock($lockSystem) {
+		$targetId = $this->_item->getId();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($targetId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($lockId), "$lockSystem: lock id is not an integer");
+		$this->assertTrue(GalleryCoreApi::isWriteLocked($targetId), $lockSystem);
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testManyWriteLocks() {
+		return $this->_tryAllLockSystems('testManyWriteLocks');
+	}
+
+	public function _testManyWriteLocks($lockSystem) {
+		global $gallery;
+
+		$ids = array($gallery->getActiveUserId(), $this->_getRootId(), $this->_item->getId());
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($ids);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($lockId), "$lockSystem: lock id is not an integer");
+
+		foreach ($ids as $id) {
+			$this->assertTrue(GalleryCoreApi::isWriteLocked($id), "$lockSystem: $id");
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testOneReadLock() {
+		return $this->_tryAllLockSystems('testOneReadLock');
+	}
+
+	public function _testOneReadLock($lockSystem) {
+		$targetId = $this->_album->getId();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($targetId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($lockId), "$lockSystem: lock id is not an integer");
+		$this->assertTrue(GalleryCoreApi::isReadLocked($targetId), $lockSystem);
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testManyReadLocks() {
+		return $this->_tryAllLockSystems('testManyReadLocks');
+	}
+
+	public function _testManyReadLocks($lockSystem) {
+		global $gallery;
+
+		$ids = array($gallery->getActiveUserId(), $this->_getRootId(), $this->_item->getId());
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($ids);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($lockId), "$lockSystem: lock id is not an integer");
+
+		foreach ($ids as $id) {
+			$this->assertTrue(GalleryCoreApi::isReadLocked($id), "$lockSystem: $id");
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testAcquireReadLockParents() {
+		return $this->_tryAllLockSystems('testAcquireReadLockParents');
+	}
+
+	public function _testAcquireReadLockParents($lockSystem) {
+		global $gallery;
+
+		// Create a hierarchy
+		$parentId = $this->_album->getId();
+
+		for ($i = 0; $i < 3; $i++) {
+			list($ret, $this->_subAlbums[$i]) = $this->_createRandomAlbum($parentId);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$parentId = $this->_subAlbums[$i]->getId();
+		}
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLockParents(
+			$this->_subAlbums[2]->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($lockId), "$lockSystem: lock id is not an integer");
+
+		// Verify that they are all locked except the item itself
+		$this->assertTrue(
+			!GalleryCoreApi::isReadLocked($this->_subAlbums[2]->getId()),
+			"$lockSystem: a2"
+		);
+		$this->assertTrue(
+			GalleryCoreApi::isReadLocked($this->_subAlbums[1]->getId()),
+			"$lockSystem: a1"
+		);
+		$this->assertTrue(
+			GalleryCoreApi::isReadLocked($this->_subAlbums[0]->getId()),
+			"$lockSystem: a0"
+		);
+		$this->assertTrue(GalleryCoreApi::isReadLocked($this->_album->getId()), "$lockSystem: p");
+		$this->assertTrue(GalleryCoreApi::isReadLocked($this->_getRootId()), "$lockSystem: r");
+
+		// Release locks
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testAcquireReadLockParentsOnRoot() {
+		return $this->_tryAllLockSystems('testAcquireReadLockParentsOnRoot');
+	}
+
+	public function _testAcquireReadLockParentsOnRoot($lockSystem) {
+		global $gallery;
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLockParents($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify that the root is not read locked
+		$this->assertTrue(
+			!GalleryCoreApi::isReadLocked($this->_getRootId()),
+			"$lockSystem: Root should not be locked"
+		);
+
+		// Release locks
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	/**
+	 * Test acquiring a write lock on an entity that has already been read locked.  We do not
+	 * currently require this ability, but it could be useful if adding or deleting an item from an
+	 * album triggered an update to that album.  Uncomment this test if this type of locking is ever
+	 * used.  (Note that Windows has problems doing this with flock based locks, so we may avoid
+	 * any functionality that needs this.)
+	 */
+
+	/*
+
+	function testReadLockToWriteLock() {
+	return $this->_tryAllLockSystems('testReadLockToWriteLock');
+	}
+
+	*/
+	public function _testReadLockToWriteLock($lockSystem) {
+		// Read lock parents, then attempt to write lock direct parent
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLockParents($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		foreach (array($this->_getRootId(), $this->_album->getId()) as $id) {
+			$this->assertTrue(GalleryCoreApi::isReadLocked($id), "$lockSystem: read lock: $id");
+		}
+
+		list($ret, $writeLockId) = GalleryCoreApi::acquireWriteLock($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($writeLockId), "$lockSystem: lock id is not an integer");
+		$this->assertTrue(
+			GalleryCoreApi::isWriteLocked($this->_album->getId()),
+			"$lockSystem: write lock"
+		);
+		$this->assertTrue(GalleryCoreApi::isReadLocked($this->_getRootId()), "$lockSystem: read lock");
+
+		// Release locks
+		$ret = GalleryCoreApi::releaseLocks(array($lockId, $writeLockId));
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	/*
+	 * Verify that releaseLocks accepts sloppy input (null entries or empty list) so that error
+	 * handling code can pass in whatever array it has and not worry about cleaning it up to have
+	 * only valid locks.
+	 */
+	public function testReleaseNull() {
+		return $this->_tryAllLockSystems('testReleaseNull');
+	}
+
+	public function _testReleaseNull($lockSystem) {
+		$targetId = $this->_item->getId();
+		$lockIds  = array();
+
+		list($ret, $lockIds[]) = GalleryCoreApi::acquireWriteLock($targetId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(GalleryCoreApi::isWriteLocked($targetId), $lockSystem);
+
+		$lockIds[] = null;
+
+		$ret = GalleryCoreApi::releaseLocks($lockIds);
+
+		if ($ret) {
+			$this->assertFalse(true, $lockSystem);
+
+			return $ret;
+		}
+
+		$this->assertFalse(GalleryCoreApi::isWriteLocked($targetId), $lockSystem . ' unlock');
+	}
+
+	// See comment above
+	public function testReleaseEmpty() {
+		return $this->_tryAllLockSystems('testReleaseEmpty');
+	}
+
+	public function _testReleaseEmpty($lockSystem) {
+		$ret = GalleryCoreApi::releaseLocks(array());
+
+		if ($ret) {
+			$this->assertFalse(true, $lockSystem);
+
+			return $ret;
+		}
+	}
+
+	/**
+	 * Verify that locks are not being released before commit on transactional databases.
+	 * http://sourceforge.net/tracker/index.php?func=detail&aid=1345508&group_id=7130&atid=107130
+	 */
+	public function testReleaseLocksNotBeforeCommit() {
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_item->setTitle($this->_item->getTitle() . 'changed');
+
+		$ret = $this->_item->save();
+
+		if ($ret) {
+			GalleryCoreApi::releaseLocks($lockId);
+
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Temporarily clear the existing lock information to simulate another request
+		$queuedLocks                         = $gallery->_lockSystem->_releaseQueue;
+		$locks                               = $gallery->_lockSystem->_locks;
+		$gallery->_lockSystem->_releaseQueue = array();
+		$gallery->_lockSystem->_locks        = array();
+
+		// This should time out if the previous lock is queued
+		list($ret, $secondLockId) = GalleryCoreApi::acquireWriteLock($this->_item->getId(), 5);
+
+		if ($ret) {
+			$this->assertEquals(
+				$ret->getErrorCode(),
+				GALLERY_ERROR | ERROR_LOCK_TIMEOUT,
+				'The lock acquisition should have timed out.'
+			);
+
+			if ($ret->getErrorCode() != (GALLERY_ERROR | ERROR_LOCK_TIMEOUT)) {
+				return $ret;
+			}
+		} else {
+			// Lock successfully acquired, this should only happen on nontransactional databases
+			$this->assertFalse($storage->isTransactional(), 'Lock acquired on transactional database.');
+
+			$ret = GalleryCoreApi::releaseLocks($secondLockId);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		// Restore lock information and force their release.
+		$gallery->_lockSystem->_releaseQueue = $queuedLocks;
+		$gallery->_lockSystem->_locks        = $locks;
+
+		$ret = $gallery->_lockSystem->releaseQueue();
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testRelockRead() {
+		// Read lock, release, relock before committing transaction
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			count($gallery->_lockSystem->_releaseQueue) == 1
+			|| !$storage->isTransactional(),
+			'release first lock'
+		);
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($lockId), 'lock id is not an integer');
+
+		// Release queue unaffected
+		$this->assertTrue(
+			count($gallery->_lockSystem->_releaseQueue) == 1
+			|| !$storage->isTransactional(),
+			'get second lock'
+		);
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Release queue unaffected, multiple read locks are ok
+		$this->assertTrue(
+			count($gallery->_lockSystem->_releaseQueue) == 2
+			|| !$storage->isTransactional(),
+			'release second lock'
+		);
+	}
+
+	public function testWriteThenRead() {
+		// Write lock, release, then acquire read lock before committing transaction
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			count($gallery->_lockSystem->_releaseQueue) == 1
+			|| !$storage->isTransactional(),
+			'release write lock'
+		);
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($lockId), 'lock id is not an integer');
+
+		// Had to release that write lock in order to get new read lock
+		$this->assertTrue(empty($gallery->_lockSystem->_releaseQueue), 'release queue should be empty');
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testWriteThenReadPartial() {
+		// Write lock, release, then acquire a read lock for one entity in that write lock
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock(
+			array(
+				$this->_album->getId(),
+				$this->_item->getId(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			(count($gallery->_lockSystem->_releaseQueue) == 1
+			&& count($gallery->_lockSystem->_releaseQueue[$lockId]['ids']) == 2)
+			|| !$storage->isTransactional(),
+			'release write lock'
+		);
+
+		list($ret, $newLockId) = GalleryCoreApi::acquireReadLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($newLockId), 'lock id is not an integer');
+
+		// Removed single entity from pending write lock in order to get new read lock
+		$this->assertTrue(
+			(count($gallery->_lockSystem->_releaseQueue) == 1
+			&& count($gallery->_lockSystem->_releaseQueue[$lockId]['ids']) == 1)
+			|| !$storage->isTransactional(),
+			'pending write lock should have one entity'
+		);
+
+		$ret = GalleryCoreApi::releaseLocks($newLockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testRelockWrite() {
+		// Write lock, release, relock before committing transaction
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			count($gallery->_lockSystem->_releaseQueue) == 1
+			|| !$storage->isTransactional(),
+			'release first lock'
+		);
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($lockId), 'lock id is not an integer');
+
+		// Real lock moved to new lockId which clears out queued lock
+		$this->assertTrue(empty($gallery->_lockSystem->_releaseQueue), 'release queue should be empty');
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testRelockWritePartial() {
+		// Write lock, release, then acquire new write lock for one id in previous lock
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock(
+			array(
+				$this->_album->getId(),
+				$this->_item->getId(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			(count($gallery->_lockSystem->_releaseQueue) == 1
+			&& count($gallery->_lockSystem->_releaseQueue[$lockId]['ids']) == 2)
+			|| !$storage->isTransactional(),
+			'release first lock'
+		);
+
+		list($ret, $newLockId) = GalleryCoreApi::acquireWriteLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($newLockId), 'lock id is not an integer');
+
+		// One id moved to new lockId
+		$this->assertTrue(
+			(count($gallery->_lockSystem->_releaseQueue) == 1
+			&& count($gallery->_lockSystem->_releaseQueue[$lockId]['ids']) == 1)
+			|| !$storage->isTransactional(),
+			'acquire new lock'
+		);
+
+		$ret = GalleryCoreApi::releaseLocks($newLockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testRelockWriteMore() {
+		// Write lock, release, then acquire new write lock with more ids than previous lock
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			(count($gallery->_lockSystem->_releaseQueue) == 1
+			&& count($gallery->_lockSystem->_releaseQueue[$lockId]['ids']) == 1)
+			|| !$storage->isTransactional(),
+			'release first lock'
+		);
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock(
+			array(
+				$this->_album->getId(),
+				$this->_item->getId(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($lockId), 'lock id is not an integer');
+
+		// Real lock moved to new lockId which clears out queued lock
+		$this->assertTrue(empty($gallery->_lockSystem->_releaseQueue), 'release queue should be empty');
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testReadThenWrite() {
+		// Read lock, release, then acquire write lock before committing transaction
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			count($gallery->_lockSystem->_releaseQueue) == 1
+			|| !$storage->isTransactional(),
+			'release read lock'
+		);
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($lockId), 'lock id is not an integer');
+
+		// Had to release that read lock in order to get new write lock
+		$this->assertTrue(empty($gallery->_lockSystem->_releaseQueue), 'release queue should be empty');
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testReadThenWritePartial() {
+		// Read lock, release, then acquire a write lock for one entity in that read lock
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock(
+			array(
+				$this->_item->getId(),
+				$this->_album->getId(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			(count($gallery->_lockSystem->_releaseQueue) == 1
+			&& count($gallery->_lockSystem->_releaseQueue[$lockId]['ids']) == 2)
+			|| !$storage->isTransactional(),
+			'release read lock'
+		);
+
+		list($ret, $newLockId) = GalleryCoreApi::acquireWriteLock($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($newLockId), 'lock id is not an integer');
+
+		// Removed single entity from pending read lock in order to get new write lock
+		$this->assertTrue(
+			(count($gallery->_lockSystem->_releaseQueue) == 1
+			&& count($gallery->_lockSystem->_releaseQueue[$lockId]['ids']) == 1)
+			|| !$storage->isTransactional(),
+			'pending read lock should have one entity'
+		);
+
+		$ret = GalleryCoreApi::releaseLocks($newLockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testReadReadAgainThenWrite() {
+		return $this->_tryAllLockSystems('testReadReadAgainThenWrite');
+	}
+
+	// Acquire a write lock when item is in multiple locks in the release queue
+	public function _testReadReadAgainThenWrite($lockSystem) {
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+		$itemId  = $this->_item->getId();
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($itemId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($itemId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			count($gallery->_lockSystem->_releaseQueue) == 2
+			|| !$storage->isTransactional(),
+			"$lockSystem: release read lock"
+		);
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($itemId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(is_int($lockId), "$lockSystem: lock id is not an integer");
+
+		// Had to release that read locks in order to get new write lock
+		$this->assertTrue(
+			empty($gallery->_lockSystem->_releaseQueue),
+			"$lockSystem: release queue should be empty"
+		);
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+}

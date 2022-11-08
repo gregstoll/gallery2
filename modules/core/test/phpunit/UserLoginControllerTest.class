@@ -1,0 +1,761 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryValidationPlugin.class');
+GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryUserHelper_medium.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+
+/**
+ * UserLogin controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17924 $
+ */
+class UserLoginControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.UserLogin');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create a new user
+		list($ret, $this->_user) = $this->_createRandomUser(null, 'password');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_user);
+
+		$this->_saveSession = $gallery->_session;
+
+		// Set up a mock session so that we do not accidentally log out the PHPUnit session
+		$this->_mockSession = new UserLoginControllerTestSession();
+		$gallery->_session  =& $this->_mockSession;
+		$eventHandler       = new GalleryUserHelper_medium();
+
+		$this->_registerTestEventListener('Gallery::Login', $eventHandler);
+
+		list($ret, $this->_validationLevel) = GalleryCoreApi::getPluginParameter('module', 'core', 'validation.level');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'validation.level', 'HIGH');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Disable all plugins by default
+		$this->_controller->setPluginInstances(array());
+
+		$this->_originalLoginRedirect = $gallery->getConfig('loginRedirect');
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$gallery->_session = $this->_saveSession;
+
+		$gallery->setConfig('loginRedirect', $this->_originalLoginRedirect);
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'validation.level',
+			$this->_validationLevel
+		);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testLogin() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', $this->_user->getUserName());
+		GalleryUtilities::putRequestVariable('form[password]', 'password');
+
+		$ret = $this->_registerEventListener('Gallery::Login');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->handleRequest();
+
+		// May get a redirect url (like from useralbum module) or return
+		$this->assertTrue(isset($results['return']) || isset($results['redirect']), 'result');
+		$this->assertEquals(array(), $results['status'], 'status');
+		$this->assertEquals(array(), $results['error'], 'error');
+		$this->assertEquals($this->_user->getId(), $gallery->getActiveUserId());
+		$this->assertTrue(
+			$this->_mockSession->regenerateWasCalled(),
+			'$session->regenerate() was not called'
+		);
+
+		// Verify our event got posted
+		$this->assertEventFired('Gallery::Login', $this->_user);
+	}
+
+	public function testLoginDisabledUserName() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', $this->_user->getUserName());
+		GalleryUtilities::putRequestVariable('form[password]', 'password');
+
+		$ret = $this->_disableUserName($this->_user->getUserName());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_registerEventListener('Gallery::FailedLogin');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserLogin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][username][disabled]'),
+			),
+			$results
+		);
+
+		// Verify our event got posted
+		$this->assertEventFired(
+			'Gallery::FailedLogin',
+			null,
+			array(
+				'userName' => $this->_user->getUserName(),
+			)
+		);
+	}
+
+	public function testEntityPassword() {
+		global $gallery;
+
+		list($ret, $user) = $this->_createRandomUser(null, 'pass&word');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', $user->getUserName());
+		GalleryUtilities::putRequestVariable('form[password]', 'pass&word');
+
+		$results = $this->handleRequest();
+
+		// May get a redirect url (like from useralbum module) or return
+		$this->assertTrue(isset($results['return']) || isset($results['redirect']), 'result');
+		$this->assertEquals(array(), $results['status'], 'status');
+		$this->assertEquals(array(), $results['error'], 'error');
+		$this->assertEquals($user->getId(), $gallery->getActiveUserId());
+		$this->assertTrue(
+			$this->_mockSession->regenerateWasCalled(),
+			'$session->regenerate() was not called'
+		);
+	}
+
+	public function testLoginInvalidUser() {
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', 'some-bogus-user');
+
+		// From _createRandomUser
+		GalleryUtilities::putRequestVariable('form[password]', 'password');
+
+		$ret = $this->_registerEventListener('Gallery::FailedLogin');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserLogin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][invalidPassword]'),
+			),
+			$results
+		);
+
+		// Verify our event got posted
+		$this->assertEventFired(
+			'Gallery::FailedLogin',
+			null,
+			array(
+				'userName' => 'some-bogus-user',
+			)
+		);
+	}
+
+	public function testLoginValidUserInvalidPassword() {
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', $this->_user->getUserName());
+		GalleryUtilities::putRequestVariable('form[password]', 'wrong password');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserLogin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][invalidPassword]'),
+			),
+			$results
+		);
+	}
+
+	public function testMissingInputs() {
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', '');
+		GalleryUtilities::putRequestVariable('form[password]', '');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserLogin',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][username][missing]',
+					'form[error][password][missing]',
+				),
+			),
+			$results
+		);
+	}
+
+	public function testCancel() {
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'return' => 1,
+				'status' => array(),
+				'error'  => array(),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Bogus user/password, and an error from the plugin.  Plugin set to halt on failure so we
+	 * should not even try to log in which means we would not see the incorrect password error
+	 */
+	public function testPlugins1() {
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', 'bogus-user');
+		GalleryUtilities::putRequestVariable('form[password]', 'wrong-password');
+
+		$plugin = new UserLoginControllerTestPlugin();
+
+		$plugin->setErrors(array('form[error][UserLoginControllerTestPlugin][anError]'));
+		$plugin->setContinue(false);
+		$this->_controller->setPluginInstances(array($plugin));
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserLogin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][UserLoginControllerTestPlugin][anError]'),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Valid user, invalid password, 2 plugins with an error from the first plugin, but the first
+	 * plugin allows the flow to continue.  We should see the error from both plugins, but not the
+	 * invalid password
+	 */
+	public function testPlugins2() {
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', $this->_user->getUserName());
+		GalleryUtilities::putRequestVariable('form[password]', 'totally-wrong-password');
+
+		$plugin1 = new UserLoginControllerTestPlugin();
+
+		$plugin1->setErrors(array('form[error][UserLoginControllerTestPlugin1][anError]'));
+		$plugin1->setContinue(true);
+
+		$plugin2 = new UserLoginControllerTestPlugin();
+
+		$plugin2->setErrors(array('form[error][UserLoginControllerTestPlugin2][anError]'));
+		$plugin2->setContinue(false);
+		$this->_controller->setPluginInstances(array($plugin1, $plugin2));
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserLogin',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][UserLoginControllerTestPlugin1][anError]',
+					'form[error][UserLoginControllerTestPlugin2][anError]',
+				),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Valid user, invalid password, 2 plugins with an error from the first plugin, and the first
+	 * plugin stops the flow from continuing.  We should see the error from only the first plugin,
+	 * and not the invalid password error
+	 */
+	public function testPlugins3() {
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', $this->_user->getUserName());
+		GalleryUtilities::putRequestVariable('form[password]', 'totally-wrong-password');
+
+		$plugin1 = new UserLoginControllerTestPlugin();
+
+		$plugin1->setErrors(array('form[error][UserLoginControllerTestPlugin1][anError]'));
+		$plugin1->setContinue(false);
+
+		$plugin2 = new UserLoginControllerTestPlugin();
+
+		$plugin2->setErrors(array('form[error][UserLoginControllerTestPlugin2][anError]'));
+		$plugin2->setContinue(false);
+		$this->_controller->setPluginInstances(array($plugin1, $plugin2));
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserLogin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][UserLoginControllerTestPlugin1][anError]'),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Correct password, but an error from the plugin
+	 */
+	public function testPlugins4() {
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', $this->_user->getUserName());
+
+		// from _createRandomUser:
+		GalleryUtilities::putRequestVariable('form[password]', 'password');
+
+		$plugin = new UserLoginControllerTestPlugin();
+
+		$plugin->setErrors(array('form[error][UserLoginControllerTestPlugin][anError]'));
+		$plugin->setContinue(true);
+		$this->_controller->setPluginInstances(array($plugin));
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'core.UserLogin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][UserLoginControllerTestPlugin][anError]'),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Correct password, no error from the plugin
+	 */
+	public function testPlugins5() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', $this->_user->getUserName());
+
+		// from _createRandomUser:
+		GalleryUtilities::putRequestVariable('form[password]', 'password');
+
+		$plugin = new UserLoginControllerTestPlugin();
+
+		$plugin->setErrors(array());
+		$plugin->setContinue(true);
+		$this->_controller->setPluginInstances(array($plugin));
+
+		$results = $this->handleRequest();
+
+		// May get a redirect url (like from useralbum module) or return
+		$this->assertTrue(isset($results['return']) || isset($results['redirect']), 'result');
+		$this->assertEquals(array(), $results['status'], 'status');
+		$this->assertEquals(array(), $results['error'], 'error');
+		$this->assertEquals($this->_user->getId(), $gallery->getActiveUserId());
+		$this->assertTrue(
+			$this->_mockSession->regenerateWasCalled(),
+			'$session->regenerate() was not called'
+		);
+	}
+
+	public function testPluginsOff() {
+		global $gallery;
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'validation.level', 'OFF');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][login]', 1);
+		GalleryUtilities::putRequestVariable('form[username]', $this->_user->getUserName());
+
+		// from _createRandomUser:
+		GalleryUtilities::putRequestVariable('form[password]', 'password');
+
+		$plugin = new UserLoginControllerTestPlugin();
+
+		$plugin->setErrors(array('form[error][UserLoginControllerTestPlugin][anError]'));
+		$plugin->setContinue(false);
+		$this->_controller->setPluginInstances(array($plugin));
+
+		$results = $this->handleRequest();
+
+		// May get a redirect url (like from useralbum module) or return
+		$this->assertTrue(isset($results['return']) || isset($results['redirect']), 'result');
+		$this->assertEquals(array(), $results['status'], 'status');
+		$this->assertEquals(array(), $results['error'], 'error');
+		$this->assertEquals($this->_user->getId(), $gallery->getActiveUserId());
+		$this->assertTrue(
+			$this->_mockSession->regenerateWasCalled(),
+			'$session->regenerate() was not called'
+		);
+	}
+
+	public function testLoginRedirect() {
+		global $gallery;
+
+		$gallery->_phpVm = new UserLoginTestPhpVm($this);
+		$expectedUrl     = 'http://otherSite.com';
+		$gallery->setConfig(
+			'loginRedirect',
+			array(
+				'href' => $expectedUrl,
+			)
+		);
+
+		$this->_becomeGuestUser();
+		$this->_loadTemplate();
+
+		// Verify that header and exit has been called
+		$this->assertEquals(
+			"Location: $expectedUrl",
+			$this->_headers[0],
+			'location header'
+		);
+		$this->assertEquals(1, $this->_exitCalls, 'exit call');
+	}
+
+	public function testLoginRedirectUrlIsAbsolute() {
+		global $gallery;
+
+		$gallery->_phpVm = new UserLoginTestPhpVm($this);
+		$urlGenerator    =& $gallery->getUrlGenerator();
+
+		$gallery->setConfig(
+			'loginRedirect',
+			array(
+				'href' => '/',
+			)
+		);
+
+		$this->_becomeGuestUser();
+		$this->_loadTemplate();
+
+		// Verify that header and exit has been called
+		$this->assertEquals(
+			'Location: ' . $urlGenerator->makeUrl('/'),
+			$this->_headers[0],
+			'location header'
+		);
+		$this->assertEquals(1, $this->_exitCalls, 'exit call');
+	}
+
+	public function testLoginRedirectIgnoredWhenAlreadyLoggedIn() {
+		global $gallery;
+
+		$gallery->_phpVm = new UserLoginTestPhpVm($this);
+		$expectedUrl     = 'http://otherSite.com';
+		$gallery->setConfig(
+			'loginRedirect',
+			array(
+				'href' => $expectedUrl,
+			)
+		);
+
+		list($ret, $results) = $this->_loadTemplate();
+
+		// Verify that we render the normal user login view
+		$this->assertEquals(0, $this->_exitCalls, 'exit called');
+
+		$this->assertEquals(
+			array(
+				'body' => 'modules/core/templates/UserLogin.tpl',
+			),
+			$results,
+			'loadTemplate results'
+		);
+	}
+
+	public function testLoginRedirectDoesNotRedirectByDefault() {
+		global $gallery;
+
+		$gallery->_phpVm = new UserLoginTestPhpVm($this);
+
+		$this->_becomeGuestUser();
+
+		list($ret, $results) = $this->_loadTemplate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify that we render the normal user login view
+		$this->assertEquals(0, $this->_exitCalls, 'exit called');
+
+		$this->assertEquals(
+			array(
+				'body' => 'modules/core/templates/UserLogin.tpl',
+			),
+			$results,
+			'loadTemplate results'
+		);
+	}
+
+	public function testLoginRedirectDoesNotRedirectIfRedirectNotDefined() {
+		global $gallery;
+
+		$gallery->_phpVm = new UserLoginTestPhpVm($this);
+
+		$gallery->setConfig('loginRedirect', array());
+		$this->_becomeGuestUser();
+
+		list($ret, $results) = $this->_loadTemplate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify that we render the normal user login view
+		$this->assertEquals(0, $this->_exitCalls, 'exit called');
+
+		$this->assertEquals(
+			array(
+				'body' => 'modules/core/templates/UserLogin.tpl',
+			),
+			$results,
+			'loadTemplate results'
+		);
+	}
+
+	public function testLoginRedirectWithSubView() {
+		global $gallery;
+
+		$gallery->_phpVm = new UserLoginTestPhpVm($this);
+		$urlGenerator    =& $gallery->getUrlGenerator();
+
+		$gallery->setConfig(
+			'loginRedirect',
+			array(
+				'view'    => 'core.UserAdmin',
+				'subView' => 'test.AltLogin',
+				'href'    => 'http://test.com/test.php',
+			)
+		);
+
+		$this->_becomeGuestUser();
+		$this->_loadTemplate();
+
+		// Verify that header and exit has been called
+		$this->assertEquals(
+			'Location: http://test.com/test.php?'
+			. GalleryUtilities::prefixFormVariable('view') . '=core.UserAdmin&'
+			. GalleryUtilities::prefixFormVariable('subView') . '=test.AltLogin',
+			$this->_headers[0],
+			'location header'
+		);
+		$this->assertEquals(1, $this->_exitCalls, 'exit call');
+	}
+
+	/**
+	 * Helper method to load the UserLoginView template data.
+	 * @see UserLoginView::loadTemplate
+	 */
+	public function _loadTemplate() {
+		$view = new UserLoginView();
+		$form = array(
+			'formName' => '',
+		);
+
+		$template = new GalleryTemplate('');
+
+		return $view->loadTemplate($template, $form);
+	}
+}
+
+/**
+ * Mock ValidationPlugin
+ */
+class UserLoginControllerTestPlugin extends GalleryValidationPlugin {
+	public function setContinue($continue) {
+		$this->_continue = $continue;
+	}
+
+	public function setErrors($errors) {
+		$this->_errors = $errors;
+	}
+
+	public function performValidation(&$form, $options = array()) {
+		return array(null, $this->_errors, $this->_continue);
+	}
+}
+
+/**
+ * Mock session
+ */
+class UserLoginControllerTestSession {
+	public function __construct() {
+		$this->_regenerateWasCalled = false;
+		$this->_hash                = array();
+	}
+
+	public function getId() {
+		return '123';
+	}
+
+	public function isPersistent() {
+		return false;
+	}
+
+	public function get($key) {
+		return isset($this->_hash[$key]) ? $this->_hash[$key] : null;
+	}
+
+	public function put($key, $value) {
+		$this->_hash[$key] = $value;
+	}
+
+	public function regenerate() {
+		$this->_regenerateWasCalled = true;
+	}
+
+	public function regenerateWasCalled() {
+		return $this->_regenerateWasCalled;
+	}
+
+	public function getUserId() {
+		if (isset($this->_sessionData['core.id.activeUser'])) {
+			return $this->_sessionData['core.id.activeUser'];
+		}
+
+		return null;
+	}
+
+	public function setUserId($userId) {
+		$this->_sessionData['core.id.activeUser'] = $userId;
+	}
+
+	public function hasSiteAdminSessionExpired() {
+		return array(null, true);
+	}
+}
+
+/**
+ * Mock PHP VM
+ */
+class UserLoginTestPhpVm {
+	public function __construct(&$test, $headersSent = false) {
+		$this->_test             =& $test;
+		$this->_headersSent      = $headersSent;
+		$this->_test->_exitCalls = 0;
+		$this->_test->_headers   = array();
+	}
+
+	public function header($header, $replace = null) {
+		$this->_test->_headers[] = $header;
+	}
+
+	public function headers_sent() {
+		return $this->_headersSent;
+	}
+
+	public function exit_($status = null) {
+		$this->_test->_exitCalls++;
+	}
+}
