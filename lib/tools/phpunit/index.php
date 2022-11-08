@@ -39,7 +39,7 @@ if ($glob) {
 			$priorRuns[] = array(
 				'key'  => $matches[1],
 				'size' => filesize($filename),
-				'date' => strftime('%Y/%m/%d-%H:%M:%S', filectime($filename)),
+				'date' => date('Y/m/d-G:i:s', filectime($filename)),
 			);
 		}
 	}
