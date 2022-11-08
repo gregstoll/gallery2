@@ -694,6 +694,9 @@ class GalleryUtilities {
      *                by magic_quotes
      */
     static function sanitizeInputValues(&$value, $adaptForMagicQuotes=true) {
+	    if(empty($value)) {
+		    return $value;
+	    }
 	if (is_array($value)) {
 	    foreach (array_keys($value) as $key) {
 		$newKey = $key;

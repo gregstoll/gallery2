@@ -418,7 +418,8 @@ class GalleryUrlGenerator {
 	    $path = '/' . $path;
 	}
 
-	return $this->_currentBaseHost[$forceDirect] . $path;
+	$prefix = isset($this->_currentBaseHost) ? $this->_currentBaseHost[$forceDirect]: '';
+	return $prefix . $path;
     }
 
     /**
