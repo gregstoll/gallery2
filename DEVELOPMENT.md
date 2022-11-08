@@ -30,7 +30,12 @@ docker compose up -d
 
 Point your browser to `http://host.docker.internal:10000/install.php` and follow the instructions.
 
-Use `/gallery2-data` on the Storage setup step.
+Use `/gallery2-data` on the Storage setup step. Make sure the directory is writable, since when initially
+created it will not allow writing.
+
+```shell
+$ docker exec -it gallery2-php8-php-1 bash -c "chmod a+w /gallery2-data"
+```
 
 You will find mysql credentials in the `docker-compose.yaml` file. Use `mysql` for the server hostname.
 
