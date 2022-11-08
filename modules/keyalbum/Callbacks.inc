@@ -157,10 +157,15 @@ class KeyAlbumCallbacks {
 		    return $c > $d ? -1 : ($c == $d ? 0 : 1);});
 
 	    /* Avoid renumbering of numeric keys from array_splice */
-	    for ($newKeywords = array(), reset($keywords), $i = 0; $i < $sizeLimit; $i++) {
-		$entry = each($keywords);
-		$newKeywords[$entry[0]] = $entry[1];
-	    }
+        $newKeywords = array();
+        $i = 0;
+        foreach ($keywords as $keyword => $keywordData) {
+            $newKeywords[$keyword] = $keywordData;
+            $i = $i + 1;
+            if ($i >= $sizeLimit) {
+                break;
+            }
+        }
 	    $keywords = $newKeywords;
 	}
 	ksort($keywords);
