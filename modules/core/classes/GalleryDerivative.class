@@ -575,7 +575,7 @@ class GalleryDerivative extends GalleryChildEntity {
 
 	/* Merge in the postfilter operations */
 	$postFilters = $this->getPostFilterOperations();
-	if (empty($operations)) {
+	if (empty($operations) || empty($postFilters)) {
 	    $operations = empty($postFilters) ? array() : explode(';', $postFilters);
 	} else {
 	    foreach (explode(';', $postFilters) as $newOperation) {
