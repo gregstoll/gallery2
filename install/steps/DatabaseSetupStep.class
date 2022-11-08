@@ -628,7 +628,8 @@ class DatabaseSetupStep extends InstallStep {
 	    require_once(dirname(__FILE__) .
 			 '/../../modules/core/classes/GalleryCapabilities.class');
 	    require_once(dirname(__FILE__) . '/../../modules/core/classes/GalleryPlatform.class');
-	    $gallery->setPlatform(new GalleryPlatform());
+	    $platform = new GalleryPlatform();
+	    $gallery->setPlatform($platform);
 	    /* Configure G2 such that getInstalledVersions() can be called */
 	    $gallery->initTranslator(true);
 	    require_once(dirname(__FILE__) . '/../../modules/core/classes/GalleryModule.class');
