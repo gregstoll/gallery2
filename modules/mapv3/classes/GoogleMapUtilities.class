@@ -1,0 +1,701 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2007 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ */
+
+/**
+ * @package map
+ * @author Eric H Daniel <ehdaniel@gmail.com>
+ * @version $Revision: 1591 $
+ *
+ */
+
+/**
+ * This implements some Google map utilities and functions
+ *
+ * @package map
+ */
+GalleryCoreApi::requireOnce('modules/mapv3/includes/toolkit/JPEG.php');
+GalleryCoreApi::requireOnce('modules/mapv3/includes/toolkit/EXIF.php');
+
+class GoogleMapUtilities {
+	/**
+	 * Written by Jcampbel1
+	 * Get a ideal center and zoom level for a set of coords and a map size
+	 *
+	 * @param $coords array of coordinates to take into account
+	 *        $mapw the width of the map in pixels
+	 *        $maph the height of the map in pixels
+	 * @return $zoom the ideal zoom level
+	 *         $center the ideal center
+	 *         $maxmercmiles the maximum mercantile projection miles in latitude for that level of zoom
+	 *         $maxlonmiles the maximum longitude miles for that level of zoom
+	 *
+	 */
+	public static function GetZoomandCenter(
+		$coords,
+		&$zoom,
+		&$center,
+		$mapw,
+		$maph,
+		&$maxmercmiles,
+		&$maxlonmiles
+	) {
+		/*
+		 * pre: $coords is in the form (lon,lat)
+		 * post: returns "ideal" zoom and center for the map
+		 */
+		$base = (3.725E-06) * 1.5; // constant Mercantor Radian miles per pixel at zoom level 5
+
+		// verify that more than one distinct coordinate exists
+		if (!is_array($coords)) {
+			$zoom   = 15;
+			$center = '0,0';
+
+			return;
+		}
+
+		if (count(array_unique($coords)) == 1) {
+			$zoom   = 6;
+			$center = implode('`', $coords);
+
+			return;
+		}
+
+		if (count(array_unique($coords)) == 0) {
+			$zoom   = 15;
+			$center = '0,0';
+
+			return;
+		}
+
+		$c              = array();
+		(float)$merclat = array();
+		(float)$lon     = array();
+
+		// nasty hackery ... need to remember how to write code.
+		foreach ($coords as $val) {
+			$c = explode(',', $val);
+			$x = tan(deg2rad($c[1]));
+			// math nonsense to translate to xy coordinates in Mercator projection
+			array_push($merclat, log($x + sqrt($x * $x + 1)) / log(exp(1)));
+			array_push($lon, $c[0]);
+		}
+		$centerlong = (min($lon) + max($lon)) / 2;
+
+		if (strpos($centerlong, ',')) {
+			$centerlong = str_replace(',', '.', $centerlong);
+		}
+		$centerlat = rad2deg(atan(sinh((min($merclat) + max($merclat)) / 2)));
+
+		if (strpos($centerlat, ',')) {
+			$centerlat = str_replace(',', '.', $centerlat);
+		}
+
+		$center = $centerlong . ',' . $centerlat;
+
+		$maxmercmiles = max($merclat) - min($merclat);
+		$maxlonmiles  = deg2rad(max($lon) - min($lon));
+
+		if ($maxmercmiles / $maph > $maxlonmiles / $mapw) {
+			$distperpixel = $maxmercmiles / $maph;
+		} else {
+			$distperpixel = $maxlonmiles / $mapw;
+		}
+
+		$zoom = ((log($distperpixel) - log($base)) / log(2)) + 5;
+		$zoom = ceil($zoom);
+
+		if ($zoom > 17) {
+			$zoom = 17;
+		}
+
+		if ($zoom < 0) {
+			$zoom = 0;
+		}
+	}
+
+	/**
+	 * Validate that a file exists and can be used for the module
+	 *
+	 * @param $rep the folder we're looking in
+	 *        $file the file to verify
+	 * @return boolean true, if the file validates
+	 *
+	 */
+	public static function GoodFile($rep, $file) {
+		$good = false;
+
+		if (!is_dir($rep . $file) and (substr($file, -1) != '.') and ($file != 'CVS') and ($file != '.svn')) {
+			$good = true;
+		}
+
+		return $good;
+	}
+
+	/**
+	 * Validate that a folder exists and can be used for the module
+	 *
+	 * @param $rep the folder we're looking in
+	 *        $file the folder to verify
+	 * @return boolean true, if the folder validates
+	 *
+	 */
+	public static function GoodFolder($rep, $file) {
+		$good = false;
+
+		if (is_dir($rep . $file) and (substr($file, -1) != '.') and ($file != 'CVS') and ($file != '.svn')) {
+			$good = true;
+		}
+
+		return $good;
+	}
+
+	/**
+	 * Create a select from a colorlist file in a folder
+	 *
+	 * @param $folder the folder we're looking in
+	 *        $selected, which item should be selected if any
+	 * @return string HTML <options> items
+	 *
+	 */
+	public static function OptionFromColorList($folder, $selected) {
+		$colorlist = '';
+
+		if (file_exists($folder . '/colorlist')) {
+			$handle = fopen($folder . '/colorlist', 'r');
+			$list   = explode('*', fread($handle, filesize($folder . '/colorlist') - 1));
+			fclose($handle);
+
+			foreach ($list as $color) {
+				$colorlist .= '<option value="' . $color . '" ';
+
+				if ($selected == $color) {
+					$colorlist .= 'selected';
+				}
+				$colorlist .= '>' . $color . '</option>';
+			}
+		}
+
+		if ($colorlist == '') {
+			$colorlist = false;
+		}
+
+		return $colorlist;
+	}
+
+	/**
+	 * Create a select from a list of item in a folder
+	 *
+	 * @param $folder the folder we're looking in
+	 *        $selected, which item should be selected if any
+	 * @return string HTML <options> items
+	 *
+	 */
+	public static function OptionFromFolder($folder, $selected) {
+		$list  = '';
+		$mydir = dir($folder);
+		// Loop through all file and folder in the directory
+		while (($file = $mydir->read()) !== false) {
+			// if the "file" is a folder and isn't "." or ".." or "CVS" then proceed with it
+			if (GoogleMapUtilities::GoodFolder($folder, $file)) {
+				$list .= '<option value="' . $file . '" ';
+
+				if ($selected == $file) {
+					$list .= 'selected';
+				}
+				$list .= '>' . $file . "</option>\n\t";
+			}
+		}
+		$mydir->close();
+
+		if ($list == '') {
+			$list = false;
+		}
+
+		return $list;
+	}
+
+	/** @TODO IMPROVE THIS */
+
+	/** Create an HTML table with a set of markers from a specific folder
+	 * This is used in the admin panel at this point
+	 *
+	 * @param $folder string a folder where the pictures exists i.e. modules/map/images/basemarkers/
+	 *        $webpath string, a way to access that folder via the webserver (to show the pics)
+	 *        $imagefolder a subfolder where the pictures may be
+	 * @return list of filenames in a table format
+	 *
+	 */
+	public static function TableFromFiles($folder, $webpath, $imagefolder) {
+		$basegallerydir = dirname(dirname(dirname(dirname(__FILE__)))) . '/';
+		$module_path    = 'modules/mapv3/';
+		$base           = GalleryUtilities::convertPathToUrl($basegallerydir);
+
+		$mydir = dir($folder . $imagefolder);
+
+		// go thought the files in the basemarker folder inside the module to use them as base.
+		while (($file = $mydir->read()) !== false) {
+			if (GoogleMapUtilities::GoodFile($folder . $imagefolder, $file)) {
+				$mimetype = GalleryCoreApi::getMimeType($file);
+
+				if (($mimetype[1] == 'image/png') and ($file != 'marker_shadow.png')) {
+					/*
+					 * The output from this function is surrounded by quotes,
+					 * for use in a IMG block
+					 */
+					$sizes = getimagesize($folder . $imagefolder . $file);
+					$name  = substr($file, 0, strrpos($file, '.'));
+					$msie  = '/msie\s(5\.[5-9]|[6-9]\.[0-9]*).*(win)/i';
+
+					if (!isset($_SERVER['HTTP_USER_AGENT'])
+						|| !preg_match($msie, $_SERVER['HTTP_USER_AGENT'])
+						|| preg_match('/opera/i', $_SERVER['HTTP_USER_AGENT'])
+					) {
+						$src = '"' . $base . $imagefolder . $name . '.png"';
+					} else {
+						$src = '"' . $base . $module_path . 'images/blank.gif" style="filter: '
+							   . 'progid:DXImageTransform.Microsoft.AlphaImageLoader(src=\''
+							   . $base . $imagefolder . $name . '.png\');"';
+					}
+					$sizes[2]         = $src;
+					$filenames[$name] = $sizes;
+				}
+			}
+		}
+		$mydir->close();
+
+		return $filenames;
+	}
+
+	/**
+	 * Creates an array with all the markers available for display or use
+	 *
+	 * @param $imagetype string can be 'makers' for now only
+	 * @return array MarkerName => MarkerIcons
+	 *
+	 */
+	public static function AllMarkers($imagetype = 'markers') {
+		global $gallery;
+		$gurl           =& $gallery->getUrlGenerator();
+		$basegallerydir = dirname(dirname(dirname(dirname(__FILE__)))) . '/';
+		$base           = $gurl->generateUrl(
+			array(
+				'href' => '',
+			),
+			array(
+				'forceFullUrl' => true,
+			)
+		);
+		$mydir          = dir($basegallerydir . 'modules/mapv3/images/' . $imagetype . '/');
+		$filenamearray  = array();
+		$exclude_files  = array('.', '..', 'multi', 'CVS', '.svn');
+
+		while (($filenames = $mydir->read()) !== false) {
+			if (is_dir($basegallerydir . 'modules/mapv3/images/' . $imagetype . '/' . $filenames)
+				&& !in_array($filenames, $exclude_files)
+			) {
+				$mydir2     = dir(
+					$basegallerydir . 'modules/mapv3/images/' . $imagetype . '/'
+					. $filenames . '/'
+				);
+				$imagearray = array();
+
+				while (($images = $mydir2->read()) !== false) {
+					if (is_file(
+						$basegallerydir . 'modules/mapv3/images/' . $imagetype . '/'
+						. $filenames . '/' . $images
+					) && $images != 'colorlist'
+					) {
+						$imagearray[] = $images;
+					}
+				}
+				$mydir2->close();
+				sort($imagearray, SORT_STRING);
+
+				$allimagesarray = array();
+
+				foreach ($imagearray as $images) {
+					$msie  = '/msie\s(5\.[5-9]|[6-9]\.[0-9]*).*(win)/i';
+					$color = substr($images, 7, -4);
+
+					if (!isset($_SERVER['HTTP_USER_AGENT'])
+						|| !preg_match($msie, $_SERVER['HTTP_USER_AGENT'])
+						|| preg_match('/opera/i', $_SERVER['HTTP_USER_AGENT'])
+					) {
+						$allimagesarray[] = $color . ': <img alt="none" src="' . $base
+											. 'modules/mapv3/images/' . $imagetype . '/'
+											. $filenames . '/' . $images . '"/>';
+					} else {
+						$allimagesarray[] = $color . ': <img alt="none" src="' . $base
+											. 'modules/mapv3/images/blank.gif" style="filter: progid:'
+											. 'DXImageTransform.Microsoft.AlphaImageLoader(src=\''
+											. $base . 'modules/mapv3/images/' . $imagetype . '/'
+											. $filenames . '/' . $images . '\');"/>';
+					}
+				}
+				$filenamearray[$filenames] = $allimagesarray;
+			}
+		}
+		$mydir->close();
+
+		ksort($filenamearray, SORT_STRING);
+
+		foreach ($filenamearray as $filenames => $allimagesarray) {
+			$allmarkers[] = array(
+				$filenames => $allimagesarray,
+			);
+		}
+
+		return $allmarkers;
+	}
+
+	/**
+	 * Write the EXIF header including GPS coordinates
+	 *
+	 * @param $item a Gallery Item
+	 *        $coordinates a string with the format "Latitude, Longitude"
+	 *        $overwrite boolean, overwrites the coordinates found in header (false by default)
+	 * @return array  GalleryStatus
+	 *                Errors
+	 *                Status
+	 *                Data
+	 *
+	 */
+	public static function setGPSCoordsInExif($item, $coordinates, $overwrite = false) {
+		global $gallery;
+		$error  = array();
+		$status = '';
+
+		list($ret, $filename) = $item->fetchPath();
+
+		if ($ret) {
+			return array($ret->wrap(__FILE__, __LINE__), null, null, null);
+		}
+		$oldfilename      = dirname($filename) . '/old' . basename($filename);
+		$jpeg_header_data = get_jpeg_header_data($filename);
+		// backup the file as "oldxyz.jpg" if it doesn't exist
+		if (!file_exists($oldfilename)) {
+			put_jpeg_header_data($filename, $oldfilename, $jpeg_header_data);
+		}
+		$exifdata = get_EXIF_JPEG($filename);
+
+		if (is_array($exifdata[0]) && array_key_exists(34853, $exifdata[0])
+			&& $exifdata[0][34853]['Tag Name'] == 'GPS Info Image File Directory (IFD)' && $overwrite == false
+		) {
+			$error[] = 'form[error][gps][coordinatesAlreadyInHeader]';
+		} else {
+			if (empty($exifdata)) {
+				$baseexif             = substr(dirname(__FILE__), 0, -8) . '/includes/toolkit/baseexifheader.dat';
+				$new_jpeg_header_data = array_merge(
+					unserialize(file_get_contents($baseexif)),
+					$jpeg_header_data
+				);
+				put_jpeg_header_data($filename, $filename, $new_jpeg_header_data);
+
+				$jpeg_header_data = get_jpeg_header_data($filename);
+				$exifdata         = get_EXIF_JPEG($filename);
+			}
+			$coords                = explode(',', $coordinates);
+			$lat[0]['Numerator']   = floor(abs($coords[0]));
+			$lat[0]['Denominator'] = 1;
+			$lat[1]['Numerator']   = floor((abs($coords[0]) - $lat[0]['Numerator']) * 60);
+			$lat[1]['Denominator'] = 1;
+			$lat[2]['Numerator']   = round(
+				3600 * (abs($coords[0]) - $lat[0]['Numerator'] - $lat[1]['Numerator'] / 60),
+				4
+			) * 10000;
+			$lat[2]['Denominator'] = 10000;
+			$latRef[0]             = (floor($coords[0]) < 0) ? 'S' : 'N';
+			$lon[0]['Numerator']   = floor(abs($coords[1]));
+			$lon[0]['Denominator'] = 1;
+			$lon[1]['Numerator']   = floor((abs($coords[1]) - $lon[0]['Numerator']) * 60);
+			$lon[1]['Denominator'] = 1;
+			$lon[2]['Numerator']   = round(
+				3600 * (abs($coords[1]) - $lon[0]['Numerator'] - $lon[1]['Numerator'] / 60),
+				2
+			) * 100;
+			$lon[2]['Denominator'] = 100;
+			$lonRef[0]             = (floor($coords[1]) < 0) ? 'W' : 'E';
+			$gpsversion            = array(
+				'Tag Number'      => 0,
+				'Tag Name'        => 'GPS Tag Version',
+				'Tag Description' => '',
+				'Data Type'       => 1,
+				'Type'            => 'Numeric',
+				'Units'           => '',
+				'Data'            => array(2, 0, 0, 0),
+				'Text Value'      => '2,0,0,0',
+				'Decoded'         => 1,
+			);
+			$gpslatref             = array(
+				'Tag Number'      => 1,
+				'Tag Name'        => 'North or South Latitude',
+				'Tag Description' => '',
+				'Data Type'       => 2,
+				'Type'            => 'String',
+				'Units'           => '',
+				'Data'            => $latRef,
+				'Text Value'      => $latRef[0],
+				'Decoded'         => 1,
+			);
+			$gpslat                = array(
+				'Tag Number'      => 2,
+				'Tag Name'        => 'Latitude',
+				'Tag Description' => '',
+				'Data Type'       => 5,
+				'Type'            => 'Numeric',
+				'Units'           => '(Degrees Minutes Seconds North or South)',
+				'Data'            => $lat,
+				'Text Value'      => $lat[0]['Numerator'] . '/'
+					. $lat[0]['Denominator'] . ' (' . $lat[0]['Numerator'] / $lat[0]['Denominator'] . '), ' . $lat[1]['Numerator']
+					. '/' . $lat[1]['Denominator'] . ' ('
+					. $lat[1]['Numerator'] / $lat[1]['Denominator'] . '), '
+					. $lat[2]['Numerator'] . '/' . $lat[2]['Denominator']
+					. ' (' . $lat[2]['Numerator'] / $lat[2]['Denominator']
+					. '), (Degrees Minutes Seconds North or South)',
+				'Decoded'         => 1,
+			);
+			$gpslonref             = array(
+				'Tag Number'      => 3,
+				'Tag Name'        => 'East or West Longitude',
+				'Tag Description' => '',
+				'Data Type'       => 2,
+				'Type'            => 'String',
+				'Units'           => '',
+				'Data'            => $lonRef,
+				'Text Value'      => $lonRef[0],
+				'Decoded'         => 1,
+			);
+			$gpslon                = array(
+				'Tag Number'      => 4,
+				'Tag Name'        => 'Longitude',
+				'Tag Description' => '',
+				'Data Type'       => 5,
+				'Type'            => 'Numeric',
+				'Units'           => '(Degrees Minutes Seconds North or South)',
+				'Data'            => $lon,
+				'Text Value'      => $lon[0]['Numerator'] . '/'
+					. $lon[0]['Denominator'] . ' (' . $lon[0]['Numerator'] / $lon[0]['Denominator'] . '), ' . $lon[1]['Numerator']
+					. '/' . $lon[1]['Denominator'] . ' ('
+					. $lon[1]['Numerator'] / $lon[1]['Denominator'] . '), '
+					. $lon[2]['Numerator'] . '/' . $lon[2]['Denominator']
+					. ' (' . $lon[2]['Numerator'] / $lon[2]['Denominator']
+					. '), (Degrees Minutes Seconds North or South)',
+				'Decoded'         => 1,
+			);
+			$gpsinfos              = array(
+				'Tags Name'   => 'GPS',
+				'Tiff Offset' => 12,
+				'0'           => $gpsversion,
+				'1'           => $gpslatref,
+				'2'           => $gpslat,
+				'3'           => $gpslonref,
+				'4'           => $gpslon,
+			);
+			$exifdata[0][34853]    = array(
+				'Tag Number'      => 34853,
+				'Tag Name'        => 'GPS Info Image File Directory (IFD)',
+				'Tag Description' => '',
+				'Data Type'       => 4,
+				'Type'            => 'SubIFD',
+				'Units'           => '',
+				'Data'            => array(
+					'0' => $gpsinfos,
+				),
+				'Text Value'      => '',
+				'Decoded'         => 1,
+			);
+			$jpeg_header_data      = put_EXIF_JPEG($exifdata, $jpeg_header_data);
+			put_jpeg_header_data($filename, $filename, $jpeg_header_data);
+		}
+
+		$status = $gallery->i18n('GPS coordinates written to file, old file backed up');
+
+		return array(null, $error, $status, null);
+	}
+
+	/**
+	 * Read the EXIF header to search for GPS coordinates
+	 *
+	 * @param $item a Gallery Item
+	 * @return array  GalleryStatus
+	 *                string of coordinates 'latitude, longitude'
+	 *
+	 */
+	public static function getGPSCoordsFromExif($item) {
+		list($ret, $filename) = $item->fetchPath();
+
+		if ($ret) {
+			return array($ret->wrap(__FILE__, __LINE__), null);
+		}
+
+		if (!is_dir($filename)) {
+			$jpeg_header_data = @get_jpeg_header_data($filename);
+
+			if (!$jpeg_header_data) {
+				$coords = null;
+			} else {
+				$temp       = @get_EXIF_JPEG($filename);
+				$Latitude   = '';
+				$Longitude  = '';
+				$NorthSouth = '';
+				$EastWest   = '';
+
+				if (is_array($temp[0])) {
+					foreach ($temp[0] as $id => $data) {
+						if (is_array($data) and array_key_exists('Tag Name', $temp[0][$id])
+							and ($temp[0][$id]['Tag Name'] == 'GPS Info Image File Directory (IFD)')
+						) {
+							$gpsdata = $temp[0][$id]['Data'][0];
+
+							foreach ($gpsdata as $id2 => $data) {
+								if (is_array($data)
+									and array_key_exists('Tag Name', $gpsdata[$id2])
+									and ($gpsdata[$id2]['Tag Name'] == 'North or South Latitude')
+								) {
+									$NorthSouth = $gpsdata[$id2]['Data'][0];
+								}
+
+								if (is_array($data)
+									and array_key_exists('Tag Name', $gpsdata[$id2])
+									and ($gpsdata[$id2]['Tag Name'] == 'East or West Longitude')
+								) {
+									$EastWest = $gpsdata[$id2]['Data'][0];
+								}
+
+								if (is_array($data)
+									and array_key_exists('Tag Name', $gpsdata[$id2])
+									and ($gpsdata[$id2]['Tag Name'] == 'Latitude')
+								) {
+									$lat      = $gpsdata[$id2]['Data'];
+									$Latitude = ($lat[0]['Numerator'] / $lat[0]['Denominator']) + (is_array($lat[1]) ? ($lat[1]['Numerator'] / $lat[1]['Denominator']) / 60 : 0) + (is_array($lat[2]) ? ($lat[2]['Numerator'] / $lat[2]['Denominator']) / 3600 : 0);
+								}
+
+								if (is_array($data)
+									and array_key_exists('Tag Name', $gpsdata[$id2])
+									and ($gpsdata[$id2]['Tag Name'] == 'Longitude')
+								) {
+									$lon       = $gpsdata[$id2]['Data'];
+									$Longitude = ($lon[0]['Numerator'] / $lon[0]['Denominator']) + (is_array($lon[1]) ? ($lon[1]['Numerator'] / $lon[1]['Denominator']) / 60 : 0) + (is_array($lon[2]) ? ($lon[2]['Numerator'] / $lon[2]['Denominator']) / 3600 : 0);
+								}
+							}
+						}
+					}
+
+					if (trim($NorthSouth) == 'S') {
+						$Latitude = -$Latitude;
+					}
+
+					if (trim($EastWest) == 'W') {
+						$Longitude = -$Longitude;
+					}
+
+					$Latitude  = str_replace(',', '.', $Latitude);
+					$Longitude = str_replace(',', '.', $Longitude);
+				}
+
+				if ($Latitude != '' and $Longitude != '') {
+					$coords = $Latitude . ',' . $Longitude;
+				} else {
+					$coords = null;
+				}
+			}
+		} else { // this is a directory, no EXIF actions
+			$coords = null;
+		}
+
+		return array(null, $coords);
+	}
+
+	/**
+	 * Create the album regroup information from the array of point
+	 *
+	 * @param $points array of item
+	 *        $distance the distance in pixels at which the item must be regrouped
+	 * @return array of points with showlow, showhigh setup.
+	 *
+	 */
+	public static function updateArrayForAlbumRegroup($points, $distance) {
+		for ($z = 19; $z >= 0; $z--) {
+			// set upper bounds for items (
+			foreach ($points as $id => $point) {
+				if ($point['parentDist'] >= 0) {
+					$pixdist = mapv3Helper::PixelDistance($point['gps'], $points[$point['parentId']]['gps'], $z);
+
+					if ($pixdist <= $distance) {
+						// hide this one, set $z+1 when first time hidden
+						if ($point['regroupShowHigh'] <= $z) {
+							$points[$id]['regroupShowHigh'] = $z + 1;
+						}
+						$points[$point['parentId']]['hasHiddenChild'] = true;
+					}
+				}
+			}
+
+			/*
+			 * set lower bounds for items display
+			 * (album items without hidden children)
+			 */
+			foreach ($points as $id => $point) {
+				if ($point['hasChild'] and $point['hasHiddenChild'] and ($point['regroupShowLow'] == 19)) {
+					$points[$id]['regroupShowLow'] = $z;
+					$points[$id]['display']        = false;
+				}
+			}
+		}
+
+		return $points;
+	}
+
+	/**
+	 * Create a preload string to add to the HTML for a marker set (needed by IE)
+	 *
+	 * @param $preload existing preload to append to
+	 *        $set the name of the marker set to preload
+	 * @return array $sizes the size of the images
+	 *               $preload return preload with added images
+	 *
+	 */
+	public static function setPreloadFromFolder($preload, $set) {
+		global $gallery;
+		$platform =& $gallery->getPlatform();
+
+		$Sizes = array();
+
+		if ($set != 'none') {
+			$folder = substr(dirname(__FILE__), 0, -7) . 'images/markers/' . $set . '/';
+			$url    = GalleryUtilities::convertPathToUrl($folder);
+
+			$mydir = $platform->opendir($folder);
+
+			while (($file = $platform->readdir($mydir)) !== false) {
+				if (($file != 'colorlist') and GoogleMapUtilities::goodFile($folder, $file)) {
+					$preload .= '<div style="display:none"><img alt="none" src="' . $url . $file . '" /></div>';
+
+					if (empty($Sizes)) {
+						$Sizes = $platform->getimagesize($folder . $file);
+					}
+				}
+			}
+			$platform->closedir($mydir);
+		}
+
+		return array($Sizes, $preload);
+	}
+}
