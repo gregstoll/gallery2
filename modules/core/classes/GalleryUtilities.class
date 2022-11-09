@@ -694,9 +694,6 @@ class GalleryUtilities {
      *                by magic_quotes
      */
     static function sanitizeInputValues(&$value, $adaptForMagicQuotes=true) {
-	    if(empty($value)) {
-		    return $value;
-	    }
 	if (is_array($value)) {
 	    foreach (array_keys($value) as $key) {
 		$newKey = $key;
@@ -717,7 +714,7 @@ class GalleryUtilities {
 	     */
 	     $value = str_replace(array('&', '"', '<', '>'),
 		    array('&amp;', '&quot;', '&lt;', '&gt;'),
-		    $value);
+		 $value ?? '');
 	}
     }
 
@@ -1598,7 +1595,7 @@ class GalleryUtilities {
      * @return string lowercase version of the string
      */
     static function strToLower($string) {
-	return strtr($string, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
+	return strtr($string ?? '', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
     }
 
     /**
@@ -1607,7 +1604,7 @@ class GalleryUtilities {
      * @return string uppercase version of the string
      */
     static function strToUpper($string) {
-	return strtr($string, 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+	return strtr($string ?? '', 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');
     }
 
     /**
