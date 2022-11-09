@@ -1,0 +1,630 @@
+<?php
+/**
+ *
+ * Helper methods for ItemAddBulkExcelUpload module
+ * Author: Miceno Atreides
+ * URL: https://github.com/miceno
+ *
+ */
+class ItemAddBulkExcelUpload_helper {
+	public static $MAX_SUMMARY = 100;
+
+	/**
+	 * Set the keywords by hand, since we don't offer that in the API.
+	 *
+	 * @param $keywords
+	 * @param $newItem GalleryItem
+	 * @return GalleryStatus|null
+	 */
+	public static function _setKeywords($keywords, $newItem) {
+		global $gallery;
+
+		$itemId = $newItem->getId();
+		$gallery->debug("Set the keywords for $itemId");
+		$gallery->debug_r($keywords);
+
+		// Set the keywords by hand, since we don't offer that in the API
+		if (!empty($keywords)) {
+			list($ret, $itemLockId) = GalleryCoreApi::acquireWriteLock($itemId);
+
+			if ($ret) {
+				return $ret;
+			}
+			list($ret, $newItem) = $newItem->refresh();
+
+			if ($ret) {
+				GalleryCoreApi::releaseLocks($itemLockId);
+
+				return $ret;
+			}
+			$newItem->setKeywords($keywords);
+			$ret = $newItem->save();
+
+			if ($ret) {
+				GalleryCoreApi::releaseLocks($itemLockId);
+
+				return $ret;
+			}
+			$ret = GalleryCoreApi::releaseLocks($itemLockId);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * @param $zipFile
+	 * @return array
+	 */
+	public static function _readZip($zipFile) {
+		$zipFiles = array();
+		$za       = new ZipArchive();
+
+		if ($za->open($zipFile) == true) {
+			for ($i = 0; $i < $za->numFiles; $i++) {
+				$entry = $za->getNameIndex($i);
+
+				if (strpos($entry, DIRECTORY_SEPARATOR) !== false) {
+					continue; // skip directories
+				}
+				$zipFiles[] = $entry;
+			}
+		} else {
+			return array(
+				GalleryCoreApi::error(
+					ERROR_PLATFORM_FAILURE,
+					null,
+					null,
+					'Bad zip file.'
+				),
+				null,
+			);
+		}
+
+		return $zipFiles;
+	}
+
+	/**
+	 * Read an Excel 2007 XML file.
+	 *
+	 * @param $fileName
+	 * @param $hasHeader
+	 */
+	public static function _readExcel($fileName, $hasHeader) {
+		// TODO: set fields on the admin interface.
+		$header      = array(
+			'number',
+			'folder',
+			'terms',
+			'media',
+			'description',
+			'place',
+			'author',
+			'date',
+		);
+		$header_cols = count($header);
+		GalleryCoreApi::requireOnce('modules/bulkexcelupload/vendor/simplexlsx.class.php');
+
+		$ret         = null;
+		$xlsx        = SimpleXLSX::parse($fileName);
+		$result_rows = array();
+
+		if ($xlsx) {
+			$xlsx->setDateTimeFormat('d/m/Y');
+
+			foreach ($xlsx->rows() as $r => $row) {
+				if ($hasHeader && $r === 0) {
+					continue;
+				}
+				$data = array();
+
+				foreach ($row as $c => $cell) {
+					$data[$header[$c]] = $cell;
+				}
+				$result_rows[] = $data;
+				$data_cols     = count($data);
+
+				if ($data_cols != $header_cols) {
+					// TODO: Translate this message.
+					$ret = "Numero de columnas del Excel ($data_cols) es distinto del numero de columnas necesario ($header_cols)";
+
+					break;
+				}
+			}
+		} else {
+			// TODO: Translate this message.
+			$ret = 'No se puede leer el fichero en formato XLSX. Probablemente está en formato XLS (y no en XLSX).';
+		}
+
+		return array($ret, $result_rows);
+	}
+
+	/**
+	 * @param $zipPath
+	 * @param $basePath
+	 * @param $filenames
+	 * @return array|null
+	 */
+	public static function _expandZip($zipPath, $basePath, $filenames) {
+		global $gallery;
+
+		if ($basePath == null) {
+			$basePath = '.';
+		}
+		$za     = new ZipArchive();
+		$ret    = null;
+		$status = null;
+		$error  = array();
+
+		if ($za->open($zipPath) == true) {
+			$ret = $za->extractTo($basePath, $filenames);
+
+			if ($ret == true) {
+				$gallery->debug("ZIP file extracted to $basePath.");
+				$ret = null;
+			} else {
+				$error[] = '';
+				$gallery->debug("Error ($ret) extracting file $zipPath.");
+			}
+		}
+		$za->close();
+
+		return array($ret, $error, $status);
+	}
+
+	/**
+	 * Create a TSV file suitable for import.
+	 *
+	 * @param $rows array Excel rows.
+	 * @param $files array Image file list. Images should
+	 * be in the same order as they appear on the excel file.
+	 * @param $basePath string Base path for the output images file.
+	 * @param $hasHeader boolean Excel file will have a header row.
+	 * @param $keyword_delimiter string Keyword delimiter.
+	 * @return array Returns TSV rows.
+	 */
+	public static function _createDelimitedData($rows, $files, $basePath, $hasHeader, $keyword_delimiter) {
+		$OUTPUT_HEADER = array('title', 'summary', 'description', 'keywords', 'filename');
+		$ret           = null;
+		// TODO: Get keyword delimiter from `keyalbum` module.
+		if ($keyword_delimiter == null) {
+			$keyword_delimiter = ';';
+		}
+
+		if (false) {
+			// TODO: implement create csv code.
+			$data = array(
+				// Header
+				$OUTPUT_HEADER,
+				array(
+					"0001 L'Aliança [1900]",
+					"Façana del primitiu edifici de la Societat L'Aliança",
+					"Façana del primitiu edifici de la Societat L'Aliança.",
+					'1,3.1,Entitats,CD/paper,Wad - Ras,Autor: Desconegut,[1900]',
+					"/var/www/vhosts/fotos-ssl.arxiuhistoricpoblenou.cat/gallery2-data/tmp/excelupload.dir/0001 L'Aliança [1900].jpg",
+				),
+				array(
+					"0033 L'Aliança 1981",
+					"Ball al Casino de L'Aliança",
+					"Ball al Casino de L' Aliança.",
+					'33,3.1.1,Entitats,CD/paper,Rambla del Poblenou,Autor: El Periódico,07-03-1981',
+					"/var/www/vhosts/fotos-ssl.arxiuhistoricpoblenou.cat/gallery2-data/tmp/excelupload.dir/0033 L'Aliança 1981.jpg",
+				),
+			);
+		} else {
+			/**
+			 *
+			 * 1. Output header
+			 * 2. For each row and file
+			 * 2.2. format row
+			 * 2.3. output csv row
+			 */
+
+			// 1. Output header
+			$data[] = $OUTPUT_HEADER;
+			$start  = $hasHeader ? 1 : 0;
+
+			$count_rows  = count($rows);
+			$count_files = count($files);
+
+			if ($count_files != $count_rows) {
+				return array("El numero de filas del fichero XLSX ($count_rows) no coincide con el numero de lineas del fichero ZIP ($count_files)", null);
+			}
+
+			for ($i = $start; $i < $count_rows; $i++) {
+				$current_file = $files[$i];
+				$current_row  = $rows[$i];
+
+				// 2.2. Format row
+				//
+				// Initialize empty array for the output line.
+				$data_line = array();
+
+				// Title is the file name without the extension
+				$title              = GalleryUtilities::getFileBase($current_file);
+				$data_line['title'] = $title;
+
+				// Summary is a summary of the description column of the excel
+				// file. We summarize the description to provide a shorter text.
+				$data_line['summary'] = ItemAddBulkExcelUpload_helper::_summarize($current_row['description']);
+
+				// Description is the description column of the excel file.
+				$data_line['description'] = $current_row['description'];
+
+				/**
+				 * Keywords include:
+				 * 1. the image reference number.
+				 * 2. the folder code.
+				 * 3. the folder code name.
+				 * 4. the terms.
+				 * 5. the kind of media of the image.
+				 * 6. the place the image shows.
+				 * 7. the author.
+				 *
+				 */
+				$folder_number = $current_row['folder'];
+				$folder_name   = ItemAddBulkExcelUpload_helper::getFolderName($folder_number);
+
+				$dateFromExcel         = ItemAddBulkExcelUpload_helper::getDateFromExcel($current_row['date']);
+				$keywords              = array(
+					$current_row['number'],
+					$folder_number,
+					$folder_name,
+					$folder_number . ' ' . $folder_name,
+					$current_row['terms'],
+					$current_row['media'],
+					$current_row['place'],
+					'Autor: ' . $current_row['author'],
+					$dateFromExcel,
+				);
+				$data_line['keywords'] = join($keyword_delimiter, $keywords);
+
+				// TODO: Review paths
+				// Add the file with the base path.
+				$image_path            = $basePath .
+					DIRECTORY_SEPARATOR . $current_file;
+				$data_line['filename'] = $image_path;
+
+				$data[] = $data_line;
+			}
+		}
+
+		return array($ret, $data);
+	}
+
+	/**
+	 * Returns if a field contains a valid filename.
+	 *
+	 * @param $form object Form
+	 * @param $file_field string File field to validate
+	 * @return array (isValid, warning). A readable non-directory
+	 * returns true.
+	 */
+	public static function _validate_file($form, $file_field) {
+		global $gallery;
+		$platform =& $gallery->getPlatform();
+
+		$error   = array();
+		$warning = null;
+
+		$is_valid = (!empty($form['tmp_name'][$file_field]) && !empty(
+			$form['size'][$file_field]
+		));
+
+		if (!$is_valid) {
+			$error[] = 'form[error][upload][' . $file_field . ']';
+
+			if (empty($form['error'])) {
+				$form['error'][$file_field] = -1;
+			}
+
+			switch ($form['error'][$file_field]) {
+				case UPLOAD_ERR_INI_SIZE:
+					$warning = array(
+						'text' => 'Input file %s exceeds maximum permitted file size',
+						'arg1' => $form['name'][$file_field],
+					);
+					$error   = "form[error][$file_field][maxfilesize]";
+
+					break;
+
+				case UPLOAD_ERR_FORM_SIZE:
+					$warning = array(
+						'text' => 'Input file %s exceeds file size specified in the form',
+						'arg1' => $form['name'][$file_field],
+					);
+					$error   = "form[error][$file_field][totaluploadsize]";
+
+					break;
+
+				case UPLOAD_ERR_PARTIAL:
+					$warning = array(
+						'text' => 'Input file %s was only partially uploaded',
+						'arg1' => $form['name'][$file_field],
+					);
+					$error   = "form[error][$file_field][partialupload]";
+
+					break;
+
+				default:
+					$warning = array(
+						'text' => 'Input file %s was not uploaded. Error %d',
+						'arg1' => $form['name'][$file_field],
+						'arg2' => $form['error'][$file_field],
+					);
+					$error   = "form[error][$file_field][notuploaded]["
+					. $form['error'][$file_field] . ']';
+			}
+		} else {
+			$file_name = $form['tmp_name'][$file_field];
+
+			$is_valid = $is_valid && $platform->is_readable($file_name)
+																	        && !$platform->is_dir($file_name);
+		}
+
+		return array($is_valid, $warning, $error);
+	}
+
+	/**
+	 * Check the parameter $path is an absolute or relative path.
+	 * An empty $path is a relative path.
+	 *
+	 * @param $path
+	 * @return bool
+	 */
+	public static function isAbsolutePath($path) {
+		if ($path === null || $path === '') {
+			return false;
+		}
+
+		return $path[0] === DIRECTORY_SEPARATOR || preg_match('~\A[A-Z]:(?![^/\\\\])~i', $path) > 0;
+	}
+
+	/**
+	 * Bulk upload code. Parses an array of entries.
+	 *
+	 * @param $data array Input data
+	 * @param $basePath string Base path for the images files in the data
+	 * @param $item object Item to add entities to
+	 * @return array GalleryStatus, errors, warnings.
+	 */
+	public static function _bulkUpload($data, $basePath, &$item) {
+		global $gallery;
+		$platform =& $gallery->getPlatform();
+		$status   = $error   = array();
+
+		$gallery->debug('Bulk upload processing...');
+
+		$basePathDirname    = dirname($basePath);
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'bulkexcelupload');
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+		// Read header fields
+		$header = array_shift($data);
+		$gallery->debug('Header line...');
+		$gallery->debug_r($header);
+
+		// Read line by line
+		foreach ($data as $fields) {
+			$newItemId = null;
+
+			$gallery->debug('Reading fields...');
+			$gallery->debug_r($fields);
+			$warnings = array();
+
+			$fileName = $fields['filename'];
+
+			if (!ItemAddBulkExcelUpload_helper::isAbsolutePath($fileName)) {
+				// Add the basePath to the file name in case it is a relative path.
+				$fileName = $basePathDirname . DIRECTORY_SEPARATOR . $fileName;
+			}
+
+			if ($platform->is_readable($fileName)) {
+				list($_, $extension)  = GalleryUtilities::getFileNameComponents(basename($fields['filename']));
+				list($ret, $mimeType) = GalleryCoreApi::convertExtensionToMime($extension);
+
+				if ($ret) {
+					$warnings[] = $module->translate(
+						array(
+							'text' => 'Wrong mimetype for extension %s of file %s',
+							'arg1' => $extension,
+							'arg2' => $fileName,
+						)
+					);
+				} else {
+					$gallery->debug(
+						'About to add the Item: ' . join(
+							', ',
+							array(
+								$fileName,
+								$fields['title'],
+								$fields['summary'],
+								$fields['description'],
+								$mimeType,
+								$item->getId(),
+							)
+						)
+					);
+
+					list($ret, $newItem) = GalleryCoreApi::addItemToAlbum(
+						$fileName,
+						isset($fields['title']) ? $fields['title'] : '',
+						isset($fields['title']) ? $fields['title'] : '',
+						isset($fields['summary']) ? $fields['summary'] : '',
+						isset($fields['description']) ? $fields['description'] : '',
+						$mimeType,
+						$item->getId(),
+						false
+					);
+
+					if ($ret) {
+						$warnings[] = $module->translate(
+							array(
+								'text' => 'Unable to addItemToAlbum for file %s',
+								'arg1' => $fileName,
+							)
+						);
+					} else {
+						$ret = ItemAddBulkExcelUpload_helper::_setKeywords($fields['keywords'], $newItem);
+
+						if ($ret) {
+							$warnings[] = $module->translate(
+								array(
+									'text' => "Unable to setKeywords '%s' for file %s",
+									'arg1' => join(',', $fields['keywords']),
+									'arg2' => $fileName,
+								)
+							);
+						}
+						$newItemId  = $newItem->getId();
+						$warnings[] = "<span class='giSuccess'>" . $module->translate('Succesfully uploaded!!') . '</span>';
+					}
+				}
+			} else {
+				$warnings[] = $module->translate(
+					array(
+						'text' => 'File %s does not exist',
+						'arg1' => $fileName,
+					)
+				);
+			}
+
+			$status['addedFiles'][] = array(
+				'fileName' => basename($fileName),
+				'id'       => $newItemId,
+				'warnings' => $warnings,
+			);
+		}
+
+		return array(null, $error, $status);
+	}
+
+	/**
+	 * Read the folder names from the file and keep it in memory.
+	 *
+	 * Folder name file is a CSV file, first column is the folder code and second is folder name.
+	 *    folder_code1, folder_name1
+	 *    ...
+	 *
+	 * Example:
+	 *    3, Associacions
+	 *    3.1.2, Entitats
+	 *    ...
+	 *
+	 * @return array|null
+	 */
+	public static function getFolderNames($filename = null) {
+		static $folderNames = null;
+
+		if (is_null($folderNames)) {
+			$folderNames = array();
+
+			if (!isset($filename)) {
+				$filename = 'modules/bulkexcelupload/data/carpetes.csv';
+			}
+			$data = GalleryPlatform::file($filename);
+
+			foreach ($data as $line) {
+				$line                  = explode(',', trim($line));
+				$folderNames[$line[0]] = $line[1];
+			}
+		}
+
+		return $folderNames;
+	}
+
+	/**
+	 * Get the folder name of a encoded folder.
+	 *
+	 * @param $code
+	 * @return mixed|string
+	 */
+	public static function getFolderName($code) {
+		$folderNames = ItemAddBulkExcelUpload_helper::getFolderNames();
+		$result      = '';
+
+		if (array_key_exists($code, $folderNames)) {
+			$result = $folderNames[$code];
+		}
+
+		return $result;
+	}
+
+	/**
+	 * @param $date_value
+	 */
+	public static function getDateFromExcel($date_value) {
+		$date = $date_value;
+		/**
+		 *
+		 * value = row[ self.DATE ].value
+		 * if row[ self.DATE ].ctype == xlrd.XL_CELL_DATE:
+		 * date_tuple = xlrd.xldate_as_tuple( row[ self.DATE ].value, MODE_1900 )
+		 * date_string = self.tupledate_to_isodate( date_tuple )
+		 * elif row[ self.DATE ].ctype == xlrd.XL_CELL_TEXT:
+		 * # It is a year as a number or as a text
+		 * date_string = value
+		 * elif row[ self.DATE ].ctype == xlrd.XL_CELL_NUMBER:
+		 * # It is a year as a number or as a text
+		 * date_string = str( int( value ) )
+		 */
+		return $date;
+	}
+
+	/**
+	 * Summarize a description text. There are a bunch of different functions, choose whatever you prefer.
+	 *
+	 * @param $description
+	 * @return bool|string
+	 */
+	public static function _summarize($description) {
+		return ItemAddBulkExcelUpload_helper::_summarize_by_size($description);
+	}
+
+	/**
+	 * Summarize a description text only by punctuation.
+	 *
+	 * @param $description
+	 * @return bool|string
+	 */
+	public static function _summarize_by_punctuation($description) {
+		$delimiters = array(',', '.', '|', ':');
+		$ready      = str_replace($delimiters, $delimiters[0], $description);
+		$launch     = explode($delimiters[0], $ready);
+
+		return substr($launch[0], 0, self::$MAX_SUMMARY);
+	}
+
+	/**
+	 * Summarize a description text by size.
+	 *
+	 * @param $description
+	 * @return bool|string
+	 */
+	public static function _summarize_by_size($description) {
+		if (strlen($description) <= self::$MAX_SUMMARY) {
+			return $description;
+		}
+
+		// Get initial summary by size.
+		$summary = substr($description, 0, self::$MAX_SUMMARY);
+
+		// Replace all delimiters.
+		$delimiters  = array(',', '.', '|', ':');
+		$dup_summary = str_replace($delimiters, $delimiters[0], $summary);
+
+		// Search for the last position of a delimiter.
+		$last_delimiter_pos = strrpos($dup_summary, $delimiters[0]);
+
+		if ($last_delimiter_pos !== false) {
+			$summary = substr($summary, 0, $last_delimiter_pos);
+		}
+
+		return $summary;
+	}
+}
