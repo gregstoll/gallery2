@@ -274,7 +274,7 @@ class StringParser {
 		$this->_parsing = true;
 		$this->_text = $this->_applyPrefilters ($text);
 		$this->_output = null;
-		$this->_length = strlen ($this->_text);
+		$this->_length = strlen ($this->_text ?? '');
 		$this->_cpos = 0;
 		unset ($this->_stack);
 		$this->_stack = array ();
@@ -583,7 +583,7 @@ class StringParser {
 		}
 		
 		// get subtext
-		if ($this->_cpos < strlen ($this->_text)) {
+		if ($this->_cpos < strlen ($this->_text ?? '')) {
 			$subtext = substr ($this->_text, $this->_cpos);
 			$res = $this->_appendText ($subtext);
 			if (!$res) {
@@ -703,8 +703,8 @@ class StringParser {
 	function _strpos ($needles, $offset) {
 		$cur_needle = false;
 		$cur_offset = -1;
-		
-		if ($offset < strlen ($this->_text)) {
+
+		if ($offset < strlen ($this->_text?? '')) {
 			foreach ($needles as $needle) {
 				$n_offset = strpos ($this->_text, $needle, $offset);
 				if ($n_offset !== false && ($n_offset < $cur_offset || $cur_offset < 0)) {

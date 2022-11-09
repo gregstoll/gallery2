@@ -1256,7 +1256,7 @@ class ShowMapView extends GalleryView {
 
 
 			if ((array_key_exists('Routes', $param)) and ($param['Routes'] != '')) {
-				list($ret, $map['Routes'], $map['routeitem']) = mapv3Helper::getRoutes($mapPoints, $map['EnableRouteNumber'], $MarkerSets, $DefaultColors);
+				list($ret, $map['Routes'], $map['routeitem']) = mapv3Helper::getRoutes($mapPoints, $MarkerSets, $DefaultColors, $map['EnableRouteNumber']);
 
 				if ($ret) {
 					return array($ret, null);
