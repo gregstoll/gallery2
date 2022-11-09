@@ -237,7 +237,7 @@ class MapSiteAdminController extends GalleryController {
 					trim($form['editProfile']['name']),
 					trim($form['editProfile']['url']),
 					trim($form['editProfile']['apiKey']),
-					$form['oldProfileUrl']
+					$form['oldProfileUrl'] ?? ''
 				);
 
 				$status['profilesaved'] = 1;
@@ -272,7 +272,7 @@ class MapSiteAdminController extends GalleryController {
 					'view'             => 'core.SiteAdmin',
 					'subView'          => 'mapv3.MapSiteAdmin',
 					'mode'             => 'mapKey',
-					'keyUrl'           => $form['oldProfileUrl'],
+					'keyUrl'           => $form['oldProfileUrl'] ?? '',
 				);
 			}
 		}

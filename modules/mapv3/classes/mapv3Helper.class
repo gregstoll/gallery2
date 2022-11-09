@@ -782,7 +782,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 	 *
 	 * @return GalleryStatus a status code
 	 */
-	public function saveKeyProfile($name, $url, $apiKey, $oldUrl) {
+	static public function saveKeyProfile($name, $url, $apiKey, $oldUrl) {
 		// Get all the key profiles.
 		list($ret, $allKeySets) = mapv3Helper::getAllKeyProfiles();
 
@@ -858,7 +858,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 	 *
 	 * @return GalleryStatus a status code
 	 */
-	public function _saveAllKeyProfiles($profiles) {
+	static public function _saveAllKeyProfiles($profiles) {
 		$ret = GalleryCoreApi::setPluginParameter('module', 'mapv3', 'mapKeys', serialize($profiles));
 
 		return $ret;
@@ -1389,7 +1389,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 	 *               $count, an integer
 	 *
 	 */
-	public function getCountItemWithCoords($itemId = null) {
+	static public function getCountItemWithCoords($itemId = null) {
 		global $gallery;
 		$userId = $gallery->getActiveUserId();
 

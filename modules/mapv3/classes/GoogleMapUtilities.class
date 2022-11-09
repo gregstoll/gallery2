@@ -581,7 +581,7 @@ class GoogleMapUtilities {
 
 								if (is_array($data)
 									and array_key_exists('Tag Name', $gpsdata[$id2])
-									and ($gpsdata[$id2]['Tag Name'] == 'Latitude')
+									and in_array($gpsdata[$id2]['Tag Name'], array('Latitude', 'GPS Latitude'))
 								) {
 									$lat      = $gpsdata[$id2]['Data'];
 									$Latitude = ($lat[0]['Numerator'] / $lat[0]['Denominator']) + (is_array($lat[1]) ? ($lat[1]['Numerator'] / $lat[1]['Denominator']) / 60 : 0) + (is_array($lat[2]) ? ($lat[2]['Numerator'] / $lat[2]['Denominator']) / 3600 : 0);
@@ -589,7 +589,7 @@ class GoogleMapUtilities {
 
 								if (is_array($data)
 									and array_key_exists('Tag Name', $gpsdata[$id2])
-									and ($gpsdata[$id2]['Tag Name'] == 'Longitude')
+								    and in_array($gpsdata[$id2]['Tag Name'], array('Longitude', 'GPS Longitude'))
 								) {
 									$lon       = $gpsdata[$id2]['Data'];
 									$Longitude = ($lon[0]['Numerator'] / $lon[0]['Denominator']) + (is_array($lon[1]) ? ($lon[1]['Numerator'] / $lon[1]['Denominator']) / 60 : 0) + (is_array($lon[2]) ? ($lon[2]['Numerator'] / $lon[2]['Denominator']) / 3600 : 0);
