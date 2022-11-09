@@ -1,0 +1,111 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GallerySmarty.class');
+GalleryCoreApi::requireOnce('modules/share/Callbacks.inc');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+//GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+/**
+ * Test Share Block functionality
+ *
+ * @package share
+ * @subpackage PHPUnit
+ * @author Orestes Sanchez <miceno.atreides@gmail.com>
+ */
+class ShareBlockCallbackTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	/**
+	 * Create an album for testing
+	 */
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'share',
+			'onlyWhenLoggedIn',
+			1
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'share',
+			'addThisAccountId',
+			'accountID'
+		);
+
+		return $ret;
+	}
+
+	public function testShareBlockCallback() {
+		$data  = $this->_doShareBlockCallback();
+		$block = $data['block']['share'];
+
+		$this->assertTrue(array_key_exists('onlyWhenLoggedIn', $block), 'Missing param onlyWhenLoggedIn');
+		$this->assertTrue(array_key_exists('addThisAccountId', $block), 'Missing param addThisAccountId');
+
+		$this->assertTrue($block['onlyWhenLoggedIn'], 'Bad param onlyWhenLoggedIn');
+		$this->assertEquals('accountID', $block['addThisAccountId'], 'Bad param addThisAccountId');
+	}
+
+	public function _doShareBlockCallback($userId = null, $itemId = null) {
+		$smarty                = new GallerySmarty();
+		$callbacks             = new ShareCallbacks();
+		$params                = array();
+		$params['useDefaults'] = true;
+
+		if (isset($userId)) {
+			$smarty->_tpl_vars['theme']['actingUserId'] = $userId;
+		}
+
+		if (isset($itemId)) {
+			$params['itemId'] = $itemId;
+		}
+		$result = $callbacks->callback($params, $smarty, 'ShareBlockParams', $userId);
+
+		if (!$result) {
+			$result = $smarty->_tpl_vars;
+		}
+
+		return $result;
+	}
+}
+
+
+// Allow for suppressed php errors
+function ShareBlockTest_error_handler($errno, $errstr, $errfile, $errline) {
+	if (error_reporting() == 0) {
+		return;
+	}
+
+	// Else call our default error_handler
+	return PHPUnit_error_handler($errno, $errstr, $errfile, $errline);
+}
