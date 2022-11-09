@@ -7,11 +7,10 @@
     <div class="{$class}">
         {* Add this link *}
 	<!-- AddThis Button BEGIN -->
-	<div class="addthis_toolbox addthis_default_style addthis_32x32_style">
 	    <span class="sr-only">{g->text text="Share:"}</span>
+	<div class="addthis_toolbox addthis_default_style addthis_32x32_style">
 	    <a class="addthis_button_facebook"></a>
 	    <a class="addthis_button_twitter"></a>
-	    <a class="addthis_button_email"></a>
 	    <a class="addthis_button_favorites"></a>
 	    <a class="addthis_button_print"></a>
 	    <span class="addthis_separator">|</span>
@@ -22,7 +21,7 @@
 	        src="//s7.addthis.com/js/300/addthis_widget.js#pubid={$block.share.addThisAccountId}"
 	        async="async"></script>
 	<!-- AddThis Button END -->
-
+    <div style="clear: both;"></div>
 	{* End Add this link *}
     </div>
 {/if}
