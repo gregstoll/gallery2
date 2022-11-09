@@ -551,9 +551,7 @@ class mapv3Module extends GalleryModule {
 					$allroutes = explode('|', $routes[1]);
 
 					foreach ($allroutes as $route) {
-						$usingnewroutes = strpos($route, '`Yes`No')
-						    ? 1
-						    : (0 + strpos($route, '`Yes`Yes') ? 1 : (0 + strpos($route, '`No`Yes') ? 1 : (0 + strpos($route, '`No`No') ? 1 : 0)));
+						$usingnewroutes = strpos($route, '`Yes`No') ? 1 : 0 + strpos($route, '`Yes`Yes') ? 1 : 0 + strpos($route, '`No`Yes') ? 1 : 0 + strpos($route, '`No`No') ? 1 : 0;
 						$posyes         = strpos($route, '`Yes');
 						$posno          = strpos($route, '`No');
 
