@@ -620,21 +620,10 @@ class GalleryPlatform {
     function legalizePathComponent($component, $forDirectory=false) {
 	global $gallery;
 
-	if(false){
-		$legalChars = $this->getLegalPathCharacters();
+	$legalChars = $this->getLegalPathCharacters();
 
-		/* Scrub out all the illegal characters */
-		$component = preg_replace("/[^$legalChars]/", '_', $component);
-	}
-	else {
-		if ($gallery->getDebug()) {
-			$gallery->debug('Legalizing PathComponent "' . $component . '"');
-		}
-		$component = GalleryPlatform::sanitize_file_name($component);
-		if ($gallery->getDebug()) {
-			$gallery->debug('New PathComponent "' . $component . '"');
-		}
-	}
+	/* Scrub out all the illegal characters */
+	$component = preg_replace("/[^$legalChars]/", '_', $component);
 
 	if (!$forDirectory) {
 	    /* Break it into filebase and extension */
@@ -683,6 +672,70 @@ class GalleryPlatform {
 
 	return $component;
     }
+
+
+	/**
+	 * Remove any illegal characters from the path component using a slugify format.
+	 * @param string $component the path component (must not contain path separators)
+	 * @param boolean $forDirectory (optional) Whether the path component is for a directory.
+	 *        Defaults to false. Periods are allowed anywhere in directories.
+	 * @return string the legalized path component
+	 */
+	function legalizePathComponentWithSlug(string $component, bool $forDirectory=false): string
+	{
+		global $gallery;
+
+		$gallery->debug('Legalizing PathComponent With Slug "$component"');
+		$component = GalleryPlatform::sanitize_file_name($component);
+		$gallery->debug('New PathComponent "$component"');
+
+		if (!$forDirectory) {
+			/* Break it into filebase and extension */
+			list ($fileBase, $extension) = GalleryUtilities::getFileNameComponents($component);
+
+			/*
+			 * Convert all dots to dashes in the fileBase.  This prevents malicious users from
+			 * uploading files like 'foo.php.jpg' which will be treated like a JPEG by Gallery, but
+			 * could be treated like a .php file by Apache opening a security hole.
+			 */
+			$fileBase = str_replace('.', '-', $fileBase);
+
+			$blacklistKey = 'GalleryPlatform::blacklistedFileExtensions';
+			if (GalleryDataCache::containsKey($blacklistKey)) {
+				$blacklistedExtensions = GalleryDataCache::get($blacklistKey);
+			} else {
+				$blacklistedExtensions = array_flip($this->_blacklistedFileExtensions);
+				GalleryDataCache::put($blacklistKey, $blacklistedExtensions);
+			}
+
+			/*
+			 * If we don't know exactly what type this file is, we have to assume that it's
+			 * something malicious.  In that case, it might be a server side script of some kind and
+			 * we don't want that to wind up in the albums directory in a pure state because it may
+			 * open up a security hole on systems that have placed the gallery data directory inside
+			 * the document root.  So mangle the extension to make sure that the webserver doesn't
+			 * execute it.
+			 */
+			list ($ret, $tmp) = GalleryCoreApi::convertExtensionToMime($extension);
+			if ($ret) {
+				$gallery->debug('Error: convertExtensionToMime in ' .
+				    'GalleryPlatform::legalizePathComponent');
+			}
+			if (!empty($extension) && ($ret || $tmp == 'application/unknown'
+				|| isset($blacklistedExtensions[GalleryUtilities::strToLower($extension)]))) {
+				$fileBase = $fileBase . '-' . $extension;
+				$extension = null;
+			}
+
+			/* Rebuild the baseName according to our transforms above */
+			if (!empty($extension)) {
+				$fileBase .= '.' . $extension;
+			}
+			$component = $fileBase;
+		}
+
+		return $component;
+	}
 
     /**
      * Execute a command and record the results and status.
@@ -926,7 +979,7 @@ class GalleryPlatform {
      * Gets line from file pointer.
      * @param resource $handle
      * @param int $length the optional max line length
-     * @return the string or false on eof
+     * @return string|bool the string or false on eof
      */
     function fgets($handle, $length=0) {
 	global $gallery;
@@ -1084,7 +1137,7 @@ class GalleryPlatform {
 
     /**
      * getcwd -- gets the current working directory.
-     * @return the current working directory, or false on failure.
+     * @return string|bool the current working directory, or false on failure.
      */
     function getcwd() {
 	global $gallery;
@@ -1704,7 +1757,7 @@ class GalleryPlatform {
 	 * @param string $string Text that might have accent characters
 	 * @return string Filtered string with replaced "nice" characters.
 	 */
-	function remove_accents( $string ) {
+	static function remove_accents( $string ) {
 		global $gallery;
 
 		if ( !preg_match('/[\x80-\xff]/', $string) )
@@ -2001,7 +2054,7 @@ class GalleryPlatform {
 		return $string;
 	}
 
-	function mbstring_binary_safe_encoding( $reset = false ) {
+	static function mbstring_binary_safe_encoding( $reset = false ) {
 		static $encodings = array();
 		static $overloaded = null;
 
@@ -2023,11 +2076,11 @@ class GalleryPlatform {
 		}
 	}
 
-	function reset_mbstring_encoding() {
+	static function reset_mbstring_encoding() {
 		GalleryPlatform::mbstring_binary_safe_encoding( true );
 	}
 
-	function seems_utf8( $str ) {
+	static function seems_utf8( $str ) {
 		GalleryPlatform::mbstring_binary_safe_encoding();
 		$length = strlen($str);
 		GalleryPlatform::reset_mbstring_encoding();
@@ -2048,46 +2101,96 @@ class GalleryPlatform {
 		return true;
 	}
 
+	static function sanitize_title_with_dashes( $title) {
+		// Preserve escaped octets.
+		$title = preg_replace( '|%([a-fA-F0-9][a-fA-F0-9])|', '---$1---', $title );
+		// Remove percent signs that are not part of an octet.
+		$title = str_replace( '%', '', $title );
+		// Restore octets.
+		$title = preg_replace( '|---([a-fA-F0-9][a-fA-F0-9])---|', '%$1', $title );
 
-	function sanitize_file_name($filename) {
+		if ( GalleryPlatform::seems_utf8( $title ) ) {
+			if ( function_exists( 'mb_strtolower' ) ) {
+				$title = mb_strtolower( $title, 'UTF-8' );
+			}
+		}
 
-		$special_chars = array("?", "[", "]", "/", "\\", "=", "<", ">", ":", ";", ",", "'", "\"", "&", "$", "#", "*", "(", ")", "|", "~", "`", "!", "{", "}", "%", "+", chr(0));
-		$filename = preg_replace( "#\x{00a0}#siu", ' ', $filename );
-		$filename = str_replace( $special_chars, '', $filename );
-		$filename = str_replace( array( '%20', '+' ), '_', $filename );
+		$title = strtolower( $title );
+
+		// Kill entities.
+		$title = preg_replace( '/&.+?;/', '', $title );
+		$title = str_replace( '.', '-', $title );
+
+		$title = preg_replace( '/[^%a-z0-9 _-]/', '-', $title );
+		$title = preg_replace( '/\s+/', '-', $title );
+		$title = preg_replace( '|-+|', '-', $title );
+		$title = trim( $title, '-' );
+
+		return $title;
+	}
+
+	static function sanitize_file_name($filename) {
+		$filename     = GalleryPlatform::remove_accents( $filename );
+
+		$special_chars = array( '?', '[', ']', '/', '\\', '=', '<', '>', ':', ';', ',', "'", '"', '&', '$', '#', '*', '(', ')', '|', '~', '`', '!', '{', '}', '%', '+', '’', '«', '»', '”', '“', chr( 0 ) );
+
+		// Check for support for utf8 in the installed PCRE library once and store the result in a static.
+		static $utf8_pcre = null;
+		if ( ! isset( $utf8_pcre ) ) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$utf8_pcre = @preg_match( '/^./u', 'a' );
+		}
+
+		$_ext     = pathinfo( $filename, PATHINFO_EXTENSION );
+		$_name    = pathinfo( $filename, PATHINFO_FILENAME );
+		$filename = GalleryPlatform::sanitize_title_with_dashes( $_name ) . '.' . $_ext;
+
+		if ( $utf8_pcre ) {
+			$filename = preg_replace( "#\x{00a0}#siu", ' ', $filename );
+		}
+
+		/**
+		 * Filters the list of characters to remove from a filename.
+		 *
+		 * @since 2.8.0
+		 *
+		 * @param string[] $special_chars Array of characters to remove.
+		 * @param string   $filename_raw  The original filename to be sanitized.
+		 */
+
+		$filename = str_replace( $special_chars, '-', $filename );
+		$filename = str_replace( array( '%20', '+' ), '-', $filename );
 		$filename = preg_replace( '/[\r\n\t -]+/', '-', $filename );
 		$filename = trim( $filename, '.-_' );
 
-		// Split the filename into a base and extension[s]
-		$parts = explode('.', $filename);
+		// Split the filename into a base and extension[s].
+		$parts = explode( '.', $filename );
 
-		// Return if only one extension
+		// Return if only one extension.
 		if ( count( $parts ) <= 2 ) {
-			$filename = GalleryPlatform::sanitize_title(array_shift($parts));
-			foreach ( (array) $parts as $part) {
-				$filename .= '.' . GalleryPlatform::sanitize_title($part);
-			}
 			return $filename;
 		}
 
-		// Process multiple extensions
-		$filename = array_shift($parts);
-		$filename = GalleryPlatform::sanitize_title($filename);
-		$extension = array_pop($parts);
-		$extension = GalleryPlatform::sanitize_title($extension);
+		// Process multiple extensions.
+		$filename  = array_shift( $parts );
+		$extension = array_pop( $parts );
 
+		$filename = trim( $filename, '.-_' );
 		/*
 		 * Loop over any intermediate extensions. Postfix them with a trailing underscore
-		 * if they are a 2 - 5 character long alpha string not in the extension whitelist.
+		 * if they are a 2 - 5 character long alpha string not in the allowed extension list.
 		 */
-		foreach ( (array) $parts as $part) {
-			$filename .= '.' . GalleryPlatform::sanitize_title($part) . '_';
+		foreach ( (array) $parts as $part ) {
+			$filename .= '.' . GalleryPlatform::sanitize_title($part);
+			if ( preg_match( '/^[a-zA-Z]{2,5}\d?$/', $part ) ) {
+				$filename .= '_';
+			}
 		}
 		$filename .= '.' . $extension;
 		return $filename;
 	}
 
-	function sanitize_title( $title, $fallback_title = '') {
+	static function sanitize_title( $title, $fallback_title = '') {
 		$title = GalleryPlatform::remove_accents($title);
 
 		if ( '' === $title || false === $title )
