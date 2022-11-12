@@ -1,0 +1,484 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemEditCaptions controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemEditCaptionsControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.ItemEditCaptions');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// create an album to hold all of the test items
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			echo $ret->getAsHtml();
+
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		// create 3 random items
+		for ($i = 0; $i < 3; $i++) {
+			list($ret, $this->_items[$i]) = $this->_createRandomDataItem($this->_album->getId());
+
+			if ($ret) {
+				echo $ret->getAsHtml();
+
+				return $ret;
+			}
+		}
+	}
+
+	public function testSaveAndDone() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+		GalleryUtilities::putRequestVariable('page', 2);
+
+		foreach ($this->_items as $item) {
+			$id = $item->getId();
+
+			GalleryUtilities::putRequestVariable("form[items][$id][title]", "title $id");
+			GalleryUtilities::putRequestVariable("form[items][$id][summary]", "summary $id");
+			GalleryUtilities::putRequestVariable("form[items][$id][keywords]", "keywords $id");
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][description]",
+				"description $id"
+			);
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][serialNumber]",
+				$item->getSerialNumber()
+			);
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][save][done]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'return'   => 1,
+				'redirect' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemEditCaptions',
+					'itemId'  => $this->_album->getId(),
+					'page'    => 2,
+				),
+				'status'   => array(
+					'successCount'            => 3,
+					'errorCount'              => 0,
+					$this->_items[0]->getId() => array(
+						'saved' => 1,
+					),
+					$this->_items[1]->getId() => array(
+						'saved' => 1,
+					),
+					$this->_items[2]->getId() => array(
+						'saved' => 1,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify that the changes happened
+		foreach ($this->_items as $item) {
+			$id = $item->getId();
+
+			list($ret, $item) = $item->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals("title $id", $item->getTitle());
+			$this->assertEquals("summary $id", $item->getSummary());
+			$this->assertEquals("keywords $id", $item->getKeywords());
+			$this->assertEquals("description $id", $item->getDescription());
+		}
+	}
+
+	public function testSaveAndNext() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+		GalleryUtilities::putRequestVariable('page', 2);
+
+		foreach ($this->_items as $item) {
+			$id = $item->getId();
+
+			GalleryUtilities::putRequestVariable("form[items][$id][title]", "title $id");
+			GalleryUtilities::putRequestVariable("form[items][$id][summary]", "summary $id");
+			GalleryUtilities::putRequestVariable("form[items][$id][keywords]", "keywords $id");
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][description]",
+				"description $id"
+			);
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][serialNumber]",
+				$item->getSerialNumber()
+			);
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][save][next]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemEditCaptions',
+					'itemId'  => $this->_album->getId(),
+					'page'    => 3,
+				),
+				'status'   => array(
+					'successCount'            => 3,
+					'errorCount'              => 0,
+					$this->_items[0]->getId() => array(
+						'saved' => 1,
+					),
+					$this->_items[1]->getId() => array(
+						'saved' => 1,
+					),
+					$this->_items[2]->getId() => array(
+						'saved' => 1,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify that the changes happened
+		foreach ($this->_items as $item) {
+			$id = $item->getId();
+
+			list($ret, $item) = $item->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals("title $id", $item->getTitle());
+			$this->assertEquals("summary $id", $item->getSummary());
+			$this->assertEquals("keywords $id", $item->getKeywords());
+			$this->assertEquals("description $id", $item->getDescription());
+		}
+	}
+
+	public function testSaveAndPrevious() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+		GalleryUtilities::putRequestVariable('page', 2);
+
+		foreach ($this->_items as $item) {
+			$id = $item->getId();
+
+			GalleryUtilities::putRequestVariable("form[items][$id][title]", "title $id");
+			GalleryUtilities::putRequestVariable("form[items][$id][summary]", "summary $id");
+			GalleryUtilities::putRequestVariable("form[items][$id][keywords]", "keywords $id");
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][description]",
+				"description $id"
+			);
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][serialNumber]",
+				$item->getSerialNumber()
+			);
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][save][previous]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemEditCaptions',
+					'itemId'  => $this->_album->getId(),
+					'page'    => 1,
+				),
+				'status'   => array(
+					'successCount'            => 3,
+					'errorCount'              => 0,
+					$this->_items[0]->getId() => array(
+						'saved' => 1,
+					),
+					$this->_items[1]->getId() => array(
+						'saved' => 1,
+					),
+					$this->_items[2]->getId() => array(
+						'saved' => 1,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify that the changes happened
+		foreach ($this->_items as $item) {
+			$id = $item->getId();
+
+			list($ret, $item) = $item->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals("title $id", $item->getTitle());
+			$this->assertEquals("summary $id", $item->getSummary());
+			$this->assertEquals("keywords $id", $item->getKeywords());
+			$this->assertEquals("description $id", $item->getDescription());
+		}
+	}
+
+	public function testCancel() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+		GalleryUtilities::putRequestVariable('page', 2);
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemEditCaptions',
+				),
+				'return'   => 1,
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify that no changes happened
+		foreach ($this->_items as $item) {
+			list($ret, $newItem) = $item->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals($item->getTitle(), $newItem->getTitle());
+			$this->assertEquals($item->getSummary(), $newItem->getSummary());
+			$this->assertEquals($item->getKeywords(), $newItem->getKeywords());
+			$this->assertEquals($item->getDescription(), $newItem->getDescription());
+		}
+	}
+
+	public function testSaveWithErrors() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+		GalleryUtilities::putRequestVariable('page', 2);
+
+		foreach ($this->_items as $item) {
+			$id = $item->getId();
+
+			GalleryUtilities::putRequestVariable("form[items][$id][title]", "title $id");
+			GalleryUtilities::putRequestVariable("form[items][$id][summary]", "summary $id");
+			GalleryUtilities::putRequestVariable("form[items][$id][keywords]", "keywords $id");
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][description]",
+				"description $id"
+			);
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][serialNumber]",
+				$item->getSerialNumber()
+			);
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][save][done]', 1);
+
+		// Remove permissions from one item
+		$ret = GalleryCoreApi::removeItemPermissions($this->_items[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_items[0]->getId(),
+			$gallery->getActiveUserId(),
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable(
+			'form[items][' . $this->_items[2]->getId() . '][serialNumber]',
+			99
+		);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemEditCaptions',
+					'itemId'  => $this->_album->getId(),
+					'page'    => 2,
+				),
+				'status'   => array(
+					'successCount'            => 1,
+					'errorCount'              => 2,
+					$this->_items[0]->getId() => array(
+						'permissionDenied' => 1,
+					),
+					$this->_items[1]->getId() => array(
+						'saved' => 1,
+					),
+					$this->_items[2]->getId() => array(
+						'obsolete' => 1,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify that the appropriate changes happened
+		for ($i = 0; $i < count($this->_items); $i++) {
+			$item = $this->_items[$i];
+
+			list($ret, $newItem) = $item->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			if ($i == 1) {
+				// Success
+				$id = $item->getId();
+
+				$this->assertEquals("title $id", $newItem->getTitle());
+				$this->assertEquals("summary $id", $newItem->getSummary());
+				$this->assertEquals("keywords $id", $newItem->getKeywords());
+				$this->assertEquals("description $id", $newItem->getDescription());
+			} else {
+				// Error, should be unchanged
+				$this->assertEquals($item->getTitle(), $newItem->getTitle());
+				$this->assertEquals($item->getSummary(), $newItem->getSummary());
+				$this->assertEquals($item->getKeywords(), $newItem->getKeywords());
+				$this->assertEquals($item->getDescription(), $newItem->getDescription());
+			}
+		}
+	}
+
+	public function testMaliciousMarkup() {
+		$ret = $this->_setMarkupType('html', true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+		GalleryUtilities::putRequestVariable('page', 1);
+
+		foreach ($this->_items as $item) {
+			$id = $item->getId();
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][title]",
+				'title <applet>here</applet>'
+			);
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][summary]",
+				'summary <p onmouseout="alert()">yy</p>'
+			);
+			GalleryUtilities::putRequestVariable("form[items][$id][keywords]", '');
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][description]",
+				'description <script>foo</script>'
+			);
+			GalleryUtilities::putRequestVariable(
+				"form[items][$id][serialNumber]",
+				$item->getSerialNumber()
+			);
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][save][done]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'return'   => 1,
+				'redirect' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemEditCaptions',
+					'itemId'  => $this->_album->getId(),
+					'page'    => 1,
+				),
+				'status'   => array(
+					'successCount'            => 3,
+					'errorCount'              => 0,
+					$this->_items[0]->getId() => array(
+						'saved' => 1,
+					),
+					$this->_items[1]->getId() => array(
+						'saved' => 1,
+					),
+					$this->_items[2]->getId() => array(
+						'saved' => 1,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		foreach ($this->_items as $item) {
+			$id = $item->getId();
+
+			list($ret, $item) = $item->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals('title here', $item->getTitle());
+			$this->assertEquals('summary &lt;p&gt;yy&lt;/p&gt;', $item->getSummary());
+
+			$this->assertEquals('', $item->getKeywords(), 'keywords');
+			$this->assertEquals('description ', $item->getDescription());
+		}
+	}
+}

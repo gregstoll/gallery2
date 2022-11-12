@@ -1,0 +1,198 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * @version $Revision: 17580 $
+ * @package RepositoryTools
+ * @subpackage PHPUnit
+ * @author Jozef Selesi <selesi at gmail dot com>
+ */
+GalleryCoreApi::requireOnce('lib/tools/repository/classes/RepositoryObject.class');
+GalleryCoreApi::requireOnce('lib/tools/repository/classes/RepositoryIndex.class');
+GalleryCoreApi::requireOnce(
+	'lib/tools/repository/test/phpunit/RepositoryTestTemplate.class'
+);
+
+/**
+ * Test RepositoryIndex functionality
+ *
+ * @package RepositoryTools
+ * @subpackage PHPUnit
+ */
+class RepositoryToolsIndexTest extends GalleryTestCase {
+	/**
+	 * Test that a valid index is being generated and a valid plugin info
+	 * structure is created based on the index.
+	 */
+	public function testIndexGeneration() {
+		global $gallery;
+
+		$index             = new RepositoryIndex();
+		$index->_outputDir = 'repositorydir/';
+
+		$index->setOutputFile('testindex');
+		$index->setTemplate(new RepositoryTestTemplate());
+		$index->setTemplateFile('test.tpl');
+		$index->setUtilities(new GalleryRepositoryUtilities());
+
+		/*
+		 * The values given to the test platform contructor in the first
+		 * array will be returned by readdir in the order specified. False
+		 * indicates that there are no more files in the directory. The
+		 * second array contains files and their contents which will be
+		 * used by fread().
+		 */
+		include __DIR__ . '/../data/SampleDescriptors.inc';
+
+		$serializeModuleDescriptor        = serialize($sampleModuleDescriptor);
+		$serializeThemeDescriptor         = serialize($sampleThemeDescriptor);
+		$serializeModule2Descriptor       = serialize($sampleModule2Descriptor);
+		$RepositoryToolsIndexTestPlatform = new RepositoryToolsIndexTestPlatform(
+			array(
+				'module.descriptor',
+				'module2.descriptor',
+				false,
+				'theme.descriptor',
+				false,
+			),
+			array(
+				'repositorydir/modules/module.descriptor'  => $serializeModuleDescriptor,
+				'repositorydir/themes/theme.descriptor'    => $serializeThemeDescriptor,
+				'repositorydir/modules/module2.descriptor' => $serializeModule2Descriptor,
+			)
+		);
+
+		$gallery->setPlatform($RepositoryToolsIndexTestPlatform);
+
+		// Generate the index.
+		list($ret, $pluginsInIndex) = $index->generate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'themes'  => 1,
+				'modules' => 1,
+			),
+			$pluginsInIndex,
+			'Incorrect number of plugins in index.'
+		);
+
+		// Verify that the index is valid.
+		include __DIR__ . '/../data/SampleIndex.inc';
+
+		$this->assertEquals($sampleIndex, $index->_index, 'Generated index differs from expected.');
+
+		$this->assertTrue(
+			md5(serialize($sampleIndex)) == $index->_indexHash,
+			'Generated hash differs from expected.'
+		);
+
+		list($ret, $pluginInfo) = $index->getPluginInfo();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				0 => array(
+					'type'              => 'modules',
+					'id'                => 'testModule',
+					'version'           => '1.0.0',
+					'requiredCoreApi'   => GalleryCoreApi::getApiVersion(),
+					'requiredPluginApi' => GalleryModule::getApiVersion(),
+				),
+				1 => array(
+					'type'              => 'themes',
+					'id'                => 'testTheme',
+					'version'           => '1.0.0',
+					'requiredCoreApi'   => GalleryCoreApi::getApiVersion(),
+					'requiredPluginApi' => GalleryTheme::getApiVersion(),
+				),
+			),
+			$pluginInfo,
+			'Plugin information incorrect.'
+		);
+	}
+}
+
+class RepositoryToolsIndexTestPlatform {
+	public $_directories;
+	public $_directoryIndex;
+	public $_writtenData;
+
+	public function __construct($directories, $fileData) {
+		$this->_directories    = $directories;
+		$this->_directoryIndex = -1;
+
+		foreach ($fileData as $path => $fileContents) {
+			$this->_writtenData[$path] = $fileContents;
+		}
+
+		// Get $sampleIndex from a separate file.
+		include __DIR__ . '/../data/SampleIndex.inc';
+
+		$this->_writtenData['repositorydir/index'] = serialize($sampleIndex);
+	}
+
+	public function setFileContents($path, $fileContents) {
+		$this->_writtenData[$path] = $fileContents;
+	}
+
+	public function opendir($path) {
+		return preg_match('/repositorydir\/[modules|themes]/', $path) ? $path : false;
+	}
+
+	public function is_dir($path) {
+		return true;
+	}
+
+	public function realpath($path) {
+		return preg_match('/\/$/', $path) ? substr($path, 0, strlen($path) - 1) : $path;
+	}
+
+	public function readdir($path) {
+		$this->_directoryIndex++;
+
+		return $this->_directories[$this->_directoryIndex];
+	}
+
+	public function filesize($path) {
+		return 10;
+	}
+
+	public function file_get_contents($path) {
+		$data = isset($this->_writtenData[$path]) ? $this->_writtenData[$path] : false;
+
+		return $data;
+	}
+
+	public function file_put_contents($path, $contents) {
+		$this->_writtenData[$path] = $contents;
+
+		return true;
+	}
+
+	public function file_exists($path) {
+		return false;
+	}
+}

@@ -1,0 +1,454 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * AdminEditUser controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminEditUserControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminEditUser');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_user[0]) = $this->_createUser(
+			array(
+				'fullName' => 'full name',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_user[0]);
+
+		list($ret, $this->_user[1]) = $this->_createUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_user[1]);
+	}
+
+	public function testCancel() {
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testUndo() {
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][undo]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditUser',
+					'userId'  => $this->_user[0]->getId(),
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results,
+			'Undo Edit User'
+		);
+	}
+
+	public function testEditUserSameUsername() {
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $this->_user[0]->getUserName());
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'email@email.com');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+		GalleryUtilities::putRequestVariable('form[password1]', '');
+		GalleryUtilities::putRequestVariable('form[password2]', '');
+		GalleryUtilities::putRequestVariable('form[locked]', '');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'modifiedUser' => $this->_user[0]->getUserName(),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testEditUserNewUsername() {
+		$newUserName = 'newname-' . mt_rand();
+
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $newUserName);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'email@email.com');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+		GalleryUtilities::putRequestVariable('form[password1]', '');
+		GalleryUtilities::putRequestVariable('form[password2]', '');
+		GalleryUtilities::putRequestVariable('form[locked]', '');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'modifiedUser' => $newUserName,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testEditUserDuplicateUsername() {
+		$newUserName = $this->_user[1]->getUserName();
+
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $newUserName);
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'email@email.com');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+		GalleryUtilities::putRequestVariable('form[password1]', '');
+		GalleryUtilities::putRequestVariable('form[password2]', '');
+		GalleryUtilities::putRequestVariable('form[locked]', '');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditUser',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][userName][duplicate]'),
+			),
+			$results
+		);
+	}
+
+	public function testMissingFields() {
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', '');
+		GalleryUtilities::putRequestVariable('form[email]', '');
+		GalleryUtilities::putRequestVariable('form[fullName]', '');
+		GalleryUtilities::putRequestVariable('form[language]', '');
+		GalleryUtilities::putRequestVariable('form[password1]', 'x');
+		GalleryUtilities::putRequestVariable('form[password2]', '');
+		GalleryUtilities::putRequestVariable('form[locked]', '');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditUser',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][userName][missing]',
+					'form[error][password2][mismatch]',
+				),
+			),
+			$results
+		);
+	}
+
+	public function testInvalidEmail() {
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $this->_user[0]->getUserName());
+		GalleryUtilities::putRequestVariable('form[email]', 'email');
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[language]', '');
+		GalleryUtilities::putRequestVariable('form[password1]', '');
+		GalleryUtilities::putRequestVariable('form[password2]', '');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditUser',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][email][invalid]'),
+			),
+			$results
+		);
+	}
+
+	public function testChangePassword() {
+		$password = '<test"pass &word;>' . mt_rand(1, 999) . "'";
+
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $this->_user[0]->getUserName());
+		GalleryUtilities::putRequestVariable('form[fullName]', 'full name');
+		GalleryUtilities::putRequestVariable('form[email]', 'email@email.com');
+		GalleryUtilities::putRequestVariable('form[language]', 'language');
+		GalleryUtilities::putRequestVariable('form[password1]', $password);
+		GalleryUtilities::putRequestVariable('form[password2]', $password);
+		GalleryUtilities::putRequestVariable('form[locked]', '');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'modifiedUser' => $this->_user[0]->getUserName(),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $user) = $this->_user[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($user->isCorrectPassword($password), 'check password');
+	}
+
+	public function testTrailingSpace() {
+		// Trailing space on full/username with no other changes used to give db error on mysql
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		$userName = $this->_user[0]->getUserName();
+		$fullName = $this->_user[0]->getFullName();
+
+		GalleryUtilities::putRequestVariable('form[userName]', "$userName  ");
+		GalleryUtilities::putRequestVariable('form[fullName]', "$fullName   ");
+		GalleryUtilities::putRequestVariable('form[email]', $this->_user[0]->getEmail());
+		GalleryUtilities::putRequestVariable('form[language]', $this->_user[0]->getLanguage());
+		GalleryUtilities::putRequestVariable('form[password1]', '');
+		GalleryUtilities::putRequestVariable('form[password2]', '');
+		GalleryUtilities::putRequestVariable('form[locked]', '');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'modifiedUser' => $userName,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $user) = $this->_user[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($userName, $user->getUserName());
+		$this->assertEquals($fullName, $user->getFullName());
+	}
+
+	public function testEditUserSetLocked() {
+		list($ret, $user) = $this->_user[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$userName = $this->_user[0]->getUserName();
+		$fullName = $this->_user[0]->getFullName();
+
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $userName);
+		GalleryUtilities::putRequestVariable('form[fullName]', $fullName);
+		GalleryUtilities::putRequestVariable('form[email]', $this->_user[0]->getEmail());
+		GalleryUtilities::putRequestVariable('form[language]', $this->_user[0]->getLanguage());
+		GalleryUtilities::putRequestVariable('form[password1]', '');
+		GalleryUtilities::putRequestVariable('form[password2]', '');
+		GalleryUtilities::putRequestVariable('form[locked]', 'on');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'modifiedUser' => $userName,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $user) = $this->_user[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($user->isLocked(), 'Check User  is Locked 1');
+
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $userName);
+		GalleryUtilities::putRequestVariable('form[fullName]', $fullName);
+		GalleryUtilities::putRequestVariable('form[email]', $this->_user[0]->getEmail());
+		GalleryUtilities::putRequestVariable('form[language]', $this->_user[0]->getLanguage());
+		GalleryUtilities::putRequestVariable('form[password1]', '');
+		GalleryUtilities::putRequestVariable('form[password2]', '');
+		GalleryUtilities::putRequestVariable('form[locked]', '');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'modifiedUser' => $userName,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $user) = $this->_user[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($user->isLocked(), 'Check User  is Locked 2');
+	}
+
+	public function testResetFailedLoginAttempts() {
+		GalleryUtilities::putRequestVariable('userId', $this->_user[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[userName]', $this->_user[0]->getUserName());
+		GalleryUtilities::putRequestVariable('form[fullName]', $this->_user[0]->getFullName());
+		GalleryUtilities::putRequestVariable('form[email]', $this->_user[0]->getEmail());
+		GalleryUtilities::putRequestVariable('form[language]', $this->_user[0]->getLanguage());
+		GalleryUtilities::putRequestVariable('form[password1]', '');
+		GalleryUtilities::putRequestVariable('form[password2]', '');
+		GalleryUtilities::putRequestVariable('form[locked]', '');
+		GalleryUtilities::putRequestVariable('form[action][resetFailedLogins]', 1);
+
+		$ret = GalleryCoreApi::addMapEntry(
+			'FailedLoginsMap',
+			array(
+				'userName'    => $this->_user[0]->getUserName(),
+				'count'       => 10,
+				'lastAttempt' => time(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'modifiedUser' => $this->_user[0]->getUserName(),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $searchResults) = GalleryCoreApi::getMapEntry(
+			'FailedLoginsMap',
+			array('userName'),
+			array(
+				'userName' => $this->_user[0]->getUserName(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, $searchResults->resultCount());
+	}
+}

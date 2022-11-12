@@ -52,6 +52,19 @@ class GalleryRepository {
     var $_source;
 
     /**
+     * Class Loader
+     */
+    public static function getMe() {
+	static $instance;
+
+	if (!isset($instance)) {
+		$instance = new GalleryRepository();
+	}
+
+	return $instance;
+    }
+
+	/**
      * Return a set of all the repositories that are currently active.  The error count indicates
      * the number of repositories that failed to initialize for some reason (perhaps from a
      * malformed local copy of the index).  The fix for this is to download a new version of the

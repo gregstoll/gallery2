@@ -1,0 +1,549 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryStorage/GalleryDatabaseImport.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryStorage.class');
+
+/**
+ * Test Database Import functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 20957 $
+ */
+class DatabaseImportTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		global $gallery;
+
+		$this->_xmlParser = new GalleryXmlProcessor($this);
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$gallery->_storage      = new UnitTestStorage();
+		$storage                =& $gallery->getStorage();
+		$storage->_tablePrefix  = 'g2_';
+		$storage->_columnPrefix = 'g_';
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$this->_xmlParser->release();
+		$this->assertTrue($gallery->_platform->isComplete(), $gallery->_platform->getRemaining());
+		$this->assertTrue($gallery->_storage->isComplete(), $gallery->_storage->getRemaining());
+
+		return parent::tearDown();
+	}
+
+	/*
+	 * The following function is required for the import classes.  This test class functions as the
+	 * parent to the various GalleryXxxImport classes under test.  When they follow the parent chain
+	 * they expect to find this method.
+	 */
+	public function updateStatus($progress = 1, $total = 0) {}
+
+	public function testVerifyVersions() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+		$storage  =& $gallery->getStorage();
+
+		GalleryDataCache::reset(true);
+
+		$pluginStatus = array(
+			'DatabaseImportTest1' => array(
+				'active'            => 1,
+				'available'         => 1,
+				'version'           => '1.0.8',
+				'requiredCoreApi'   => array(7, 27),
+				'requiredModuleApi' => array(3, 6),
+				'callbacks'         => '',
+			),
+			'DatabaseImportTest2' => array(
+				'active'            => 1,
+				'available'         => 1,
+				'version'           => '1.1.5',
+				'requiredCoreApi'   => array(7, 20),
+				'requiredModuleApi' => array(3, 6),
+				'callbacks'         => '',
+			),
+			'DatabaseImportTest3' => array(
+				'active'            => 1,
+				'available'         => 1,
+				'version'           => '1.0.8',
+				'requiredCoreApi'   => array(7, 27),
+				'requiredModuleApi' => array(3, 6),
+				'callbacks'         => '',
+			),
+		);
+
+		$cacheKey = 'GalleryPluginHelper::fetchPluginStatus(module)';
+
+		GalleryDataCache::put($cacheKey, $pluginStatus);
+
+		$installedModuleVersion     = GalleryModule::getApiVersion();
+		$installedCoreVersion       = GalleryCoreApi::getApiVersion();
+		$installedModuleApi         = implode('.', $installedModuleVersion);
+		$installedCoreApi           = implode('.', $installedCoreVersion);
+		$exportedCoreVersion        = array(1, 2, 12);
+		$exportedCoreVersion[1]    += 1;
+		$exportedCoreVersion        = implode('.', $exportedCoreVersion);
+		$installedModuleVersion[1] += 1;
+		$exportedModuleApi          = implode('.', $installedModuleVersion);
+		$installedCoreVersion[1]   += 1;
+		$exportedCoreApi            = implode('.', $installedCoreVersion);
+
+		list($ret, $coreModule) = GalleryCoreApi::loadPlugin('module', 'core', true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expectedError = $coreModule->translate(
+			array(
+				'text' => 'The available version of plugin "%s" may not be compatible with '
+													. 'the imported version.',
+				'arg1' => 'DatabaseImportTest1',
+			)
+		);
+
+		$expected = array(
+			'errors' => array($expectedError),
+		);
+
+		$expected['warnings'] = array(
+			$coreModule->translate(
+				array(
+					'text' => 'The installed module API version required '
+												. 'by "%s" may not be compatible with the imported version.',
+					'arg1' => 'DatabaseImportTest2',
+				)
+			),
+			$coreModule->translate(
+				array(
+					'text' => 'The currently installed core API version required '
+																. 'by "%s" may not be compatible with the imported version.',
+					'arg1' => 'DatabaseImportTest3',
+				)
+			),
+			$coreModule->translate(
+				array(
+					'text' => 'Plugin %s is not currently available.',
+					'arg1' => 'DatabaseImportTest4',
+				)
+			),
+		);
+
+		$platform->setReply('file_exists', array('testExport.xml'), true);
+		$platform->setReply('fopen', array('testExport.xml', 'r', 0), 'testHandle');
+		$platform->setReply('feof', array('testHandle'), false);
+
+		$line = '  <plugin-status id="DatabaseImportTest1" required-core-api="'
+		. $installedCoreApi . '" required-api="' . $installedModuleApi . '" version="1.0.8"'
+		. ' active="1" type="module"/>' . "\n";
+
+		$platform->setReply('fgets', array('testHandle', 4096), $line);
+		$platform->setReply('feof', array('testHandle'), false);
+
+		$line = '  <plugin-status id="DatabaseImportTest2" required-core-api="'
+		. $installedCoreApi . '" required-api="' . $exportedModuleApi . '" version="1.1.5"'
+		. ' active="1" type="module"/>' . "\n";
+
+		$platform->setReply('fgets', array('testHandle', 4096), $line);
+		$platform->setReply('feof', array('testHandle'), false);
+
+		$line = '  <plugin-status id="DatabaseImportTest3" required-core-api="'
+		. $exportedCoreApi . '" required-api="' . $installedModuleApi . '" version="1.0.8"'
+		. ' active="1" type="module"/>' . "\n";
+
+		$platform->setReply('fgets', array('testHandle', 4096), $line);
+		$platform->setReply('feof', array('testHandle'), false);
+
+		$line = '  <plugin-status id="DatabaseImportTest4" required-core-api="'
+		. $installedCoreApi . '" required-api="' . $installedModuleApi . '" version="1.0.6"'
+		. ' active="1" type="module"/>' . "\n";
+
+		$platform->setReply('fgets', array('testHandle', 4096), $line);
+		$platform->setReply('feof', array('testHandle'), false);
+		$platform->setReply('fgets', array('testHandle', 4096), '</plugin-status-list>');
+		$platform->setReply('fclose', array('testHandle'), true);
+
+		$select = '
+	  SELECT
+	    [GalleryPluginParameterMap::itemId],
+	    [GalleryPluginParameterMap::parameterName],
+	    [GalleryPluginParameterMap::parameterValue]
+	  FROM
+	    [GalleryPluginParameterMap]
+	  WHERE
+	    [GalleryPluginParameterMap::pluginType] = ?
+	    AND
+	    [GalleryPluginParameterMap::pluginId] = ?
+	    AND
+
+	    [GalleryPluginParameterMap::itemId] = ?';
+
+		$storage->setReply(
+			'search',
+			array($select, array('module', 'DatabaseImportTest1', 0), array()),
+			array(null, new UnitTestStorageSearchResults(array(array(0, '_version', '1.0.0'))))
+		);
+		$storage->setReply(
+			'search',
+			array($select, array('module', 'DatabaseImportTest2', 0), array()),
+			array(null, new UnitTestStorageSearchResults(array(array(0, '_version', '1.0.0'))))
+		);
+		$storage->setReply(
+			'search',
+			array($select, array('module', 'DatabaseImportTest3', 0), array()),
+			array(null, new UnitTestStorageSearchResults(array(array(0, '_version', '1.0.0'))))
+		);
+		$storage->setReply(
+			'search',
+			array($select, array('module', 'DatabaseImportTest4', 0), array()),
+			array(null, new UnitTestStorageSearchResults(array(array(0, '_version', '1.0.0'))))
+		);
+
+		$this->_testObj = new GalleryDatabaseImport();
+		$errors         = $this->_testObj->verifyVersions('testExport.xml');
+
+		$this->assertEquals($expected, $errors, 'Verify Versions test failed.');
+	}
+
+	public function testVersionsDat() {
+		global $gallery;
+
+		$platform    =& $gallery->getPlatform();
+		$versionFile = $gallery->getConfig('data.gallery.version');
+		$writeString = implode("\n", array('C2.4', 'G2.2', 'maintenance-mode'));
+
+		$platform->setReply('atomicWrite', array($versionFile, $writeString), true);
+
+		$attributes = array(
+			'core-version'    => 'C2.4',
+			'gallery-version' => 'G2.2',
+			'tables'          => '5',
+		);
+
+		$this->_testObj = new _GalleryExportTag($this, $attributes);
+	}
+
+	public function testImportSequence() {
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		$storage->setExtrasReply('dropSequence', array('testSequence'), null);
+		$storage->setExtrasReply('createSequence', array('testSequence', '46'), null);
+
+		$inputXml = '<sequence name="testSequence" start-value="46" />';
+
+		if (!$this->_xmlParser->xmlParse($inputXml, true)) {
+			return $this->_xmlParser->getParserError();
+		}
+	}
+
+	public function testCreateTableSql() {
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		$storage->setReply(
+			'_translateTableName',
+			array('GalleryTestTable'),
+			array('g2_GalleryTestTable', null, 'GalleryTestTable')
+		);
+		$storage->setReply('execute', array('DROP TABLE g2_GalleryTestTable', array()), null);
+		$storage->setExtrasReply('_executeSql', array('test create sql'), null);
+		$storage->setExtrasReply(
+			'_updateSchemaTableInfo',
+			array(
+				'GalleryTestTable',
+				'test create sql',
+				'testModule',
+				'map',
+				'test map definition',
+			),
+			null
+		);
+		$storage->setReply('checkPoint', array(), null);
+
+		$inputXml = '<table name="GalleryTestTable">'
+		  . '<definition module-id="testModule">'
+		  . '<create-sql><![CDATA[test create sql]]></create-sql>'
+		  . '<table-info type="map"><![CDATA[test map definition]]></table-info>'
+		  . '</definition>'
+		  . '</table>';
+
+		if (!$this->_xmlParser->xmlParse($inputXml, true)) {
+			return $this->_xmlParser->getParserError();
+		}
+	}
+
+	public function testDataImport() {
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		$storage->setReply(
+			'_translateTableName',
+			array('TestTable'),
+			array('g2_TestTable', null, null)
+		);
+		$storage->setReply('_translateColumnName', array('accesslistid'), 'g_accessListId');
+		$storage->setReply('_translateColumnName', array('userorgroupid'), 'g_userOrGroupId');
+		$storage->setReply('_translateColumnName', array('permission'), 'g_permission');
+
+		$query = 'INSERT INTO g2_TestTable (g_accessListId, g_userOrGroupId, g_permission) '
+			. 'VALUES (?,?,?)';
+
+		$storage->setReply(
+			'_normalizeValue',
+			array(
+				'19',
+				array(
+					'type'    => STORAGE_TYPE_INTEGER,
+					'size'    => STORAGE_SIZE_MEDIUM,
+					'notNull' => 1,
+				),
+				false,
+			),
+			19
+		);
+
+		$storage->setReply(
+			'_normalizeValue',
+			array(
+				'3',
+				array(
+					'type'    => STORAGE_TYPE_INTEGER,
+					'size'    => STORAGE_SIZE_MEDIUM,
+					'notNull' => 1,
+				),
+				false,
+			),
+			3
+		);
+
+		$storage->setReply(
+			'_normalizeValue',
+			array(
+				'&2147483647',
+				array(
+					'type' => STORAGE_TYPE_STRING,
+					'size' => STORAGE_SIZE_MEDIUM,
+				),
+				false,
+			),
+			'&2147483647'
+		);
+
+		$storage->setReply('execute', array($query, array(19, 3, '&2147483647')), null);
+
+		$storage->setReply(
+			'_normalizeValue',
+			array(
+				'19',
+				array(
+					'type'    => STORAGE_TYPE_INTEGER,
+					'size'    => STORAGE_SIZE_MEDIUM,
+					'notNull' => 1,
+				),
+				false,
+			),
+			19
+		);
+
+		$storage->setReply(
+			'_normalizeValue',
+			array(
+				'4',
+				array(
+					'type'    => STORAGE_TYPE_INTEGER,
+					'size'    => STORAGE_SIZE_MEDIUM,
+					'notNull' => 1,
+				),
+				false,
+			),
+			4
+		);
+
+		$storage->setReply(
+			'_normalizeValue',
+			array(
+				'<1040647>',
+				array(
+					'type' => STORAGE_TYPE_STRING,
+					'size' => STORAGE_SIZE_MEDIUM,
+				),
+				false,
+			),
+			'<1040647>'
+		);
+
+		$storage->setReply('execute', array($query, array(19, 4, '<1040647>')), null);
+
+		$storage->setReply(
+			'_normalizeValue',
+			array(
+				'24',
+				array(
+					'type'    => STORAGE_TYPE_INTEGER,
+					'size'    => STORAGE_SIZE_MEDIUM,
+					'notNull' => 1,
+				),
+				false,
+			),
+			24
+		);
+
+		$storage->setReply(
+			'_normalizeValue',
+			array(
+				'3',
+				array(
+					'type'    => STORAGE_TYPE_INTEGER,
+					'size'    => STORAGE_SIZE_MEDIUM,
+					'notNull' => 1,
+				),
+				false,
+			),
+			3
+		);
+
+		$storage->setReply('execute', array($query, array(24, 3, null)), null);
+
+		$inputXml = '<data>
+          <field name="accessListId" type="' . STORAGE_TYPE_INTEGER . '" size="'
+				   . STORAGE_SIZE_MEDIUM . '" not-null="1" />
+          <field name="userOrGroupId" type="' . STORAGE_TYPE_INTEGER . '" size="'
+				   . STORAGE_SIZE_MEDIUM . '" not-null="1" />
+          <field name="permission" type="' . STORAGE_TYPE_STRING . '" size="'
+					  . STORAGE_SIZE_MEDIUM . '" />
+          <row><f>19</f><f>3</f><f>&amp;2147483647</f></row>
+          <row><f>19</f><f>4</f><f>&lt;1040647&gt;</f></row>
+          <row><f>24</f><f>3</f><f null="1" /></row>
+        </data>';
+
+		if (!$this->_xmlParser->xmlParse($inputXml, true)) {
+			return $this->_xmlParser->getParserError();
+		}
+	}
+
+	/**
+	 * XML Callback to process start elements
+	 */
+	public function _processStartElement($tag, $attributes) {
+		if ($tag == 'export') {
+			return new _GalleryExportTag($this, $attributes);
+		}
+
+		if ($tag == 'config') {
+			return new _GalleryConfigTag($this, $attributes);
+		}
+
+		if ($tag == 'sequence') {
+			return new _GallerySequenceTag($this, $attributes);
+		}
+
+		if ($tag == 'table') {
+			return new _GalleryTableTag($this, $attributes);
+		}
+
+		if ($tag == 'data') {
+			return new _GalleryDataTag($this, 'TestTable', $attributes);
+		}
+
+		$this->fail('Unexepected xml tag: "' . $tag . '"');
+	}
+
+	/**
+	 * XML Callback to process end elements
+	 * @access protected
+	 */
+	public function _processEndElement($tag) {}
+
+	/**
+	 * This callback processes the child as it is popped off the stack
+	 * @access protected
+	 */
+	public function _processChildElement($childElement) {}
+}
+
+class DatabaseImportTest1Module extends GalleryModule {
+	public function __construct() {
+		$this->setId('DatabaseImportTest1');
+		$this->setName('Database Import Test Module1 Module');
+		$this->setDescription('Unit test module');
+		$this->setVersion('1.0.0');
+		$this->setGroup('data', 'Gallery');
+		$this->setCallbacks('');
+		$this->setRequiredCoreApi(GalleryCoreApi::getApiVersion());
+		$this->setRequiredModuleApi(GalleryModule::getApiVersion());
+	}
+}
+
+class DatabaseImportTest2Module extends GalleryModule {
+	public function __construct() {
+		$this->setId('DatabaseImportTest2');
+		$this->setName('Database Import Test Module2 Module');
+		$this->setDescription('Unit test module');
+		$this->setVersion('1.1.5');
+		$this->setGroup('data', 'Gallery');
+		$this->setCallbacks('');
+		$this->setRequiredCoreApi(GalleryCoreApi::getApiVersion());
+		$this->setRequiredModuleApi(GalleryModule::getApiVersion());
+	}
+}
+
+class DatabaseImportTest3Module extends GalleryModule {
+	public function __construct() {
+		$this->setId('DatabaseImportTest3');
+		$this->setName('Database Import Test Module3 Module');
+		$this->setDescription('Unit test module');
+		$this->setVersion('1.0.8');
+		$this->setGroup('data', 'Gallery');
+		$this->setCallbacks('');
+		$this->setRequiredCoreApi(GalleryCoreApi::getApiVersion());
+		$this->setRequiredModuleApi(GalleryModule::getApiVersion());
+	}
+}
+
+class DatabaseImportTest4Module extends GalleryModule {
+	public function __construct() {
+		$this->setId('DatabaseImportTest4');
+		$this->setName('Database Import Test Module4 Module');
+		$this->setDescription('Unit test module');
+		$this->setVersion('1.0.6');
+		$this->setGroup('data', 'Gallery');
+		$this->setCallbacks('');
+		$this->setRequiredCoreApi(GalleryCoreApi::getApiVersion());
+		$this->setRequiredModuleApi(GalleryModule::getApiVersion());
+	}
+}

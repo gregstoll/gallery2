@@ -1,0 +1,649 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * @version $Revision: 18156 $
+ * @package RepositoryTools
+ * @subpackage PHPUnit
+ * @author Jozef Selesi <selesi at gmail dot com>
+ */
+GalleryCoreApi::requireOnce('lib/tools/repository/classes/RepositoryObject.class');
+GalleryCoreApi::requireOnce('lib/tools/repository/classes/RepositoryDescriptor.class');
+GalleryCoreApi::requireOnce(
+	'lib/tools/repository/test/phpunit/RepositoryTestTemplate.class'
+);
+
+/**
+ * Test RepositoryDescriptor functionality
+ *
+ * @package RepositoryTools
+ * @subpackage PHPUnit
+ */
+class RepositoryDescriptorTest extends GalleryTestCase {
+	public $_testModule;
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp($x1);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		global $gallery;
+
+		// This maps to ../data/MANIFEST
+		$this->_canonicalFileMetaData = array(
+			'files' => array(
+				'MANIFEST' => array(
+					'bytes'    => '12121',
+					'hash'     => '1908582732',
+					'packages' => array('base'),
+				),
+				'file.1' => array(
+					'bytes'      => '11111',
+					'bytes_crlf' => '61111',
+					'hash'       => '12345',
+					'hash_crlf'  => '62345',
+					'packages'   => array('base'),
+				),
+				'file.2' => array(
+					'bytes'      => '11111',
+					'bytes_crlf' => '61111',
+					'hash'       => '12345',
+					'hash_crlf'  => '62345',
+					'packages'   => array('base'),
+				),
+				'po/strings.raw' => array(
+					'bytes'      => '11111',
+					'bytes_crlf' => '61111',
+					'hash'       => '12345',
+					'hash_crlf'  => '62345',
+					'packages'   => array('base'),
+				),
+				'po/aa.po' => array(
+					'bytes'      => '11111',
+					'bytes_crlf' => '61111',
+					'hash'       => '12345',
+					'hash_crlf'  => '62345',
+					'packages'   => array('lang-aa'),
+				),
+				'po/aa.mo' => array(
+					'bytes'      => '11111',
+					'bytes_crlf' => '61111',
+					'hash'       => '12345',
+					'hash_crlf'  => '62345',
+					'packages'   => array('lang-aa'),
+				),
+				'locale/aa/LC_MESSAGES/test.mo' => array(
+					'bytes'      => '11111',
+					'bytes_crlf' => '61111',
+					'hash'       => '12345',
+					'hash_crlf'  => '62345',
+					'packages'   => array('lang-aa'),
+				),
+				'test/phpunit/file.test' => array(
+					'bytes'      => '11111',
+					'bytes_crlf' => '61111',
+					'hash'       => '12345',
+					'hash_crlf'  => '62345',
+					'packages'   => array(),
+				),
+			),
+			'directories' => array(
+				'po' => array(
+					'packages' => array('base'),
+				),
+				'locale/aa/LC_MESSAGES' => array(
+					'packages' => array('lang-aa'),
+				),
+				'locale/aa' => array(
+					'packages' => array('lang-aa'),
+				),
+				'locale' => array(
+					'packages' => array('base'),
+				),
+				'test/phpunit' => array(
+					'packages' => array(),
+				),
+				'test' => array(
+					'packages' => array(),
+				),
+			),
+			'header' => array(
+				'stringsRevision' => '22222',
+			),
+		);
+
+		$gallery->_translator = new RepositoryDescriptorTestTranslator();
+		$gallery->_platform   = new UnitTestPlatform();
+
+		$gallery->_platform->setReply('file_exists', array('/MANIFEST'), true);
+	}
+
+	public function _getDescriptorWithFakeFileMetadata() {
+		$data  = array();
+		$utils = new RepositoryDescriptorTestUtilities();
+
+		$utils->setGetFileRevision('/MANIFEST', '14604');
+		$utils->setGetFileRevision('/po/aa.po', '14444');
+
+		$descriptor = new RepositoryDescriptor_FakeFileMetaDataTest($this->_canonicalFileMetaData);
+
+		$descriptor->setUtilities($utils);
+		$descriptor->setTemplate(new RepositoryTestTemplate());
+
+		$descriptor->_pluginDir = '/';
+
+		return $descriptor;
+	}
+
+	/**
+	 * Test that a valid descriptor is being generated.
+	 */
+	public function testDescriptorGeneration() {
+		$descriptor = $this->_getDescriptorWithFakeFileMetadata();
+
+		$ret = $descriptor->generate(new RepositoryDescriptorTestPlugin());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'header' => array(
+					'stringsRevision' => '22222',
+					'buildTimestamp'  => '14604',
+				),
+				'descriptions' => array(
+					'en_US' => array(
+						'name'        => 'Test Module',
+						'description' => 'This is a test module.',
+						'groupLabel'  => 'Test Group',
+					),
+					'pt_BR' => array(
+						'name'        => 'pt_BR-modules_testModule-Test Module',
+						'description' => 'pt_BR-modules_testModule-This is a test module.',
+						'groupLabel'  => 'pt_BR-modules_testModule-Test Group',
+					),
+					'pt_PT' => array(
+						'name'        => 'pt_PT-modules_testModule-Test Module',
+						'description' => 'pt_PT-modules_testModule-This is a test module.',
+						'groupLabel'  => 'pt_PT-modules_testModule-Test Group',
+					),
+				),
+				'files' => array(
+					'MANIFEST' => array(
+						'bytes'    => '12121',
+						'hash'     => '1908582732',
+						'packages' => array('base'),
+					),
+					'file.1' => array(
+						'bytes'      => '11111',
+						'bytes_crlf' => '61111',
+						'hash'       => '12345',
+						'hash_crlf'  => '62345',
+						'packages'   => array('base'),
+					),
+					'file.2' => array(
+						'bytes'      => '11111',
+						'bytes_crlf' => '61111',
+						'hash'       => '12345',
+						'hash_crlf'  => '62345',
+						'packages'   => array('base'),
+					),
+					'po/strings.raw' => array(
+						'bytes'      => '11111',
+						'bytes_crlf' => '61111',
+						'hash'       => '12345',
+						'hash_crlf'  => '62345',
+						'packages'   => array('base'),
+					),
+					'po/aa.po' => array(
+						'bytes'      => '11111',
+						'bytes_crlf' => '61111',
+						'hash'       => '12345',
+						'hash_crlf'  => '62345',
+						'packages'   => array('lang-aa'),
+					),
+					'po/aa.mo' => array(
+						'bytes'      => '11111',
+						'bytes_crlf' => '61111',
+						'hash'       => '12345',
+						'hash_crlf'  => '62345',
+						'packages'   => array('lang-aa'),
+					),
+					'locale/aa/LC_MESSAGES/test.mo' => array(
+						'bytes'      => '11111',
+						'bytes_crlf' => '61111',
+						'hash'       => '12345',
+						'hash_crlf'  => '62345',
+						'packages'   => array('lang-aa'),
+					),
+					'test/phpunit/file.test' => array(
+						'bytes'      => '11111',
+						'bytes_crlf' => '61111',
+						'hash'       => '12345',
+						'hash_crlf'  => '62345',
+						'packages'   => array(),
+					),
+				),
+				'directories' => array(
+					'locale/aa/LC_MESSAGES' => array(
+						'packages' => array('lang-aa'),
+					),
+					'locale/aa' => array(
+						'packages' => array('lang-aa'),
+					),
+					'po' => array(
+						'packages' => array('base'),
+					),
+					'locale' => array(
+						'packages' => array('base'),
+					),
+					'test' => array(
+						'packages' => array(),
+					),
+					'test/phpunit' => array(
+						'packages' => array(),
+					),
+				),
+				'languages' => array(
+					'22222' => array(
+						'aa' => '14444',
+					),
+				),
+			),
+			$descriptor->_data,
+			'Descriptor does not match expected data.'
+		);
+	}
+
+	public function testDescriptorGenerationWithNoManifest() {
+		global $gallery;
+
+		$gallery->_platform = new UnitTestPlatform();
+
+		$gallery->_platform->setReply('file_exists', array('/MANIFEST'), false);
+
+		$descriptor = $this->_getDescriptorWithFakeFileMetadata();
+
+		$ret = $descriptor->generate(new RepositoryDescriptorTestPlugin());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(),
+			$descriptor->_data,
+			'Descriptor does not match expected data.'
+		);
+	}
+
+	public function testGetFileMetaData() {
+		global $gallery;
+
+		$testDataDir = dirname(__DIR__) . '/data/';
+		$data        = array();
+		$descriptor  = new RepositoryDescriptor();
+		$utils       = new RepositoryDescriptorTestUtilities();
+
+		$utils->setGetFileRevision($testDataDir . 'po/strings.raw', '22222');
+		$descriptor->setUtilities($utils);
+
+		$platform      = new UnitTestPlatform();
+		$manifestLines = file($testDataDir . 'MANIFEST');
+
+		$platform->setReply('file', array($testDataDir . 'MANIFEST', null), $manifestLines);
+		$platform->setReply(
+			'file_get_contents',
+			array($testDataDir . 'MANIFEST'),
+			str_repeat('x', 12121)
+		);
+		$gallery->setPlatform($platform);
+		$descriptor->getFileMetaData(dirname(__DIR__) . '/data/', $data);
+		$this->assertEquals($this->_canonicalFileMetaData, $data);
+	}
+
+	public function testGetDirectoriesInPackage() {
+		$descriptor = $this->_getDescriptorWithFakeFileMetadata();
+
+		$ret = $descriptor->generate(new RepositoryDescriptorTestPlugin());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array('locale', 'po'),
+			$descriptor->getDirectoriesInPackage('base')
+		);
+
+		/*
+		 * It is important that parent dirs show up before child dirs because we will be calling
+		 * mkdir on them in this order.
+		 */
+		$this->assertEquals(
+			array('locale/aa', 'locale/aa/LC_MESSAGES'),
+			$descriptor->getDirectoriesInPackage('lang-aa')
+		);
+	}
+
+	public function testGetFilesInPackage() {
+		$descriptor = $this->_getDescriptorWithFakeFileMetadata();
+
+		$ret = $descriptor->generate(new RepositoryDescriptorTestPlugin());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array('MANIFEST', 'file.1', 'file.2', 'po/strings.raw'),
+			$descriptor->getFilesInPackage('base')
+		);
+		$this->assertEquals(
+			array('locale/aa/LC_MESSAGES/test.mo', 'po/aa.mo', 'po/aa.po'),
+			$descriptor->getFilesInPackage('lang-aa')
+		);
+	}
+
+	public function testGetPackages() {
+		$descriptor = $this->_getDescriptorWithFakeFileMetadata();
+
+		$ret = $descriptor->generate(new RepositoryDescriptorTestPlugin());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array('base', 'lang-aa'),
+			$descriptor->getPackages()
+		);
+	}
+
+	public function testCheckIntegrityMissingManifest() {
+		global $gallery;
+
+		$descriptor = $this->_getDescriptorWithFakeFileMetadata();
+
+		$ret = $descriptor->generate(new RepositoryDescriptorTestPlugin());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$platform = new UnitTestPlatform();
+
+		$platform->setReply('is_readable', array($descriptor->getPluginDir() . 'MANIFEST'), false);
+		$gallery->setPlatform($platform);
+		$this->assertEquals(
+			array('Missing MANIFEST'),
+			$descriptor->checkIntegrity()
+		);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	/**
+	 * I'd rather test each of these errors individually, but RepositoryDescriptor is structured
+	 * in such a way that it is hard to get data into it easily, so it is easiest to just test our
+	 * whole test MANIFEST at once.
+	 */
+	public function testCheckIntegrity() {
+		global $gallery;
+
+		$descriptor = $this->_getDescriptorWithFakeFileMetadata();
+
+		$ret = $descriptor->generate(new RepositoryDescriptorTestPlugin());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$phpVm = new RepositoryDescriptorTestPhpVm();
+
+		// wrong checksum
+		$phpVm->setCrc32('file.1', 1);
+
+		// correct checksum
+		$phpVm->setCrc32('file.2', 12345);
+
+		// correct checksum
+		$phpVm->setCrc32('strings.raw', 12345);
+
+		// correct checksum
+		$phpVm->setCrc32('aa.po', 12345);
+
+		// correct checksum
+		$phpVm->setCrc32('aa.mo', 12345);
+
+		// correct checksum
+		$phpVm->setCrc32('test.mo', 12345);
+
+		// correct checksum
+		$phpVm->setCrc32('file.test', 12345);
+
+		$gallery->_phpVm = $phpVm;
+		$platform        = new UnitTestPlatform();
+		$base            = $descriptor->getPluginDir();
+
+		$platform->setReply('is_readable', array($base . 'MANIFEST'), true);
+
+		$platform->setReply(
+			'stat',
+			array($base . 'MANIFEST'),
+			array(
+				9 => 1000000,
+			)
+		);
+
+		// file.1 has a bad crc
+		$platform->setReply('file_exists', array($base . 'file.1'), true);
+		$platform->setReply('file_get_contents', array($base . 'file.1'), 'file.1');
+
+		// file.2 is newer than the MANIFEST, and has the wrong size
+		$platform->setReply('file_exists', array($base . 'file.2'), true);
+		$platform->setReply('file_get_contents', array($base . 'file.2'), 'file.2');
+
+		$platform->setReply(
+			'stat',
+			array($base . 'file.2'),
+			array(
+				7 => 1,
+				9 => 2000000,
+			)
+		);
+
+		// strings.raw is missing
+		$platform->setReply('file_exists', array($base . 'po/strings.raw'), false);
+
+		// the rest of the files are older than the MANIFEST and have the right file size
+		$platform->setReply('file_exists', array($base . 'po/aa.po'), true);
+		$platform->setReply('file_get_contents', array($base . 'po/aa.po'), 'aa.po');
+
+		$platform->setReply(
+			'stat',
+			array($base . 'po/aa.po'),
+			array(
+				7 => 11111,
+				9 => 1,
+			)
+		);
+
+		$platform->setReply('file_exists', array($base . 'po/aa.mo'), true);
+		$platform->setReply('file_get_contents', array($base . 'po/aa.mo'), 'aa.mo');
+
+		$platform->setReply(
+			'stat',
+			array($base . 'po/aa.mo'),
+			array(
+				7 => 11111,
+				9 => 1,
+			)
+		);
+
+		$platform->setReply('file_exists', array($base . 'locale/aa/LC_MESSAGES/test.mo'), true);
+		$platform->setReply(
+			'file_get_contents',
+			array($base . 'locale/aa/LC_MESSAGES/test.mo'),
+			'test.mo'
+		);
+
+		$platform->setReply(
+			'stat',
+			array($base . 'locale/aa/LC_MESSAGES/test.mo'),
+			array(
+				7 => 11111,
+				9 => 1,
+			)
+		);
+
+		$platform->setReply('file_exists', array($base . 'test/phpunit/file.test'), true);
+		$platform->setReply(
+			'file_get_contents',
+			array($base . 'test/phpunit/file.test'),
+			'file.test'
+		);
+
+		$platform->setReply(
+			'stat',
+			array($base . 'test/phpunit/file.test'),
+			array(
+				7 => 11111,
+				9 => 1,
+			)
+		);
+
+		$gallery->setPlatform($platform);
+
+		$this->assertEquals(
+			array(
+				'file.1: bad crc (12345 != 1)',
+				'file.2: newer than MANIFEST',
+				'file.2: file size mismatch (11111 != 1)',
+				'po/strings.raw: file missing',
+			),
+			$descriptor->checkIntegrity()
+		);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+}
+
+class RepositoryDescriptorTestPhpVm extends GalleryPhpVm {
+	public function setCrc32($contents, $crc32) {
+		$this->_crc32[$contents] = $crc32;
+	}
+
+	public function crc32($contents) {
+		return $this->_crc32[$contents];
+	}
+}
+
+class RepositoryDescriptor_FakeFileMetaDataTest extends RepositoryDescriptor {
+	public function __construct($metaData) {
+		$this->_metaData = $metaData;
+	}
+
+	public function getFileMetaData($pluginDir, &$data) {
+		$data = array_merge($data, $this->_metaData);
+
+		return null;
+	}
+}
+
+class RepositoryDescriptorTestPlugin {
+	public function getId() {
+		return 'testModule';
+	}
+
+	public function getName() {
+		return 'Test Module';
+	}
+
+	public function getDescription() {
+		return 'This is a test module.';
+	}
+
+	public function getVersion() {
+		return '1.0.0';
+	}
+
+	public function getPluginType() {
+		return 'module';
+	}
+
+	public function getRequiredModuleApi() {
+		return array(3, 4);
+	}
+
+	public function getRequiredCoreApi() {
+		return array(1, 2);
+	}
+
+	public function getGroup() {
+		return array(
+			'group'      => 'testGroup',
+			'groupLabel' => 'Test Group',
+		);
+	}
+}
+
+class RepositoryDescriptorTestTranslator {
+	public $_languageCode;
+
+	public function init($languageCode) {
+		$this->_languageCode = $languageCode;
+	}
+
+	public function getLanguageData() {
+		return array(
+			array(
+				'pt' => array(
+					'BR' => 'Desc3',
+					'PT' => 'Desc4',
+				),
+			),
+			array(),
+		);
+	}
+
+	public function translateDomain($domain, $string) {
+		return array(
+			null,
+			sprintf(
+				'%s-%s-%s',
+				$this->_languageCode,
+				$domain,
+				$string['text']
+			),
+		);
+	}
+}
+
+class RepositoryDescriptorTestUtilities {
+	public function setGetFileRevision($expected, $reply) {
+		$this->_matches[$expected] = $reply;
+	}
+
+	public function getFileRevision($file) {
+		return array(null, $this->_matches[$file]);
+	}
+}

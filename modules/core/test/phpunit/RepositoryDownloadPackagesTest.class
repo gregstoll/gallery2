@@ -1,0 +1,607 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryRepositoryUtilities.class');
+
+/**
+ * Test repository utilities functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17580 $
+ */
+class RepositoryDownloadPackagesTest extends GalleryTestCase {
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$this->_repository             = new GalleryRepository();
+		$this->_repository->_utilities = new UnitTestRepositoryUtilities();
+
+		// Prepare test index.
+		include __DIR__ . '/../../../../lib/tools/repository/test/data/SampleIndex.inc';
+
+		$this->_repository->_index            = new GalleryRepositoryIndex('test');
+		$this->_repository->_index->_index    = $sampleIndex;
+		$this->_repository->_index->_isLoaded = true;
+		$this->_repository->_source           = 'test';
+
+		// Prepare sample descriptor
+		include __DIR__
+		. '/../../../../lib/tools/repository/test/data/SampleDescriptors.inc';
+		$this->_descriptor      = $sampleModuleDescriptor;
+		$this->_templateAdapter = new MockTemplateAdapter();
+		$this->_callback        = array(
+			'method'  => array(&$this->_templateAdapter, 'updateProgressBar'),
+			'title'   => $this->name(),
+			'current' => 0,
+			'total'   => 0,
+		);
+
+		$this->_versions = array(
+			'base'       => array('1.0.0', '44444'),
+			'lang-en_GB' => array('22222', '33333'),
+			'lang-pt_PT' => array('22222', '33333'),
+		);
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+		$this->assertTrue(
+			$this->_repository->_utilities->isComplete(),
+			$this->_repository->_utilities->getRemaining()
+		);
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function _setRepositoryResponses($params = array()) {
+		global $gallery;
+
+		$platform      =& $gallery->getPlatform();
+		$cachePath     = $gallery->getConfig('repository.cache') . 'test/';
+		$repositoryUrl = $gallery->getConfig('repository.url') . 'test/';
+		$outputDir     = GalleryCoreApi::getCodeBasePath('modules/testModule/');
+
+		// Descriptor.
+		$descriptorUrl = $repositoryUrl . 'testModule-descriptor';
+
+		$this->_repository->_utilities->setReply(
+			'downloadFile',
+			array($descriptorUrl, null),
+			array(empty($params['descriptorDownloadFailure']), serialize($this->_descriptor))
+		);
+
+		if (!empty($params['descriptorDownloadFailure'])) {
+			return;
+		}
+
+		$platform->setReply(
+			'file_exists',
+			array($outputDir),
+			empty($params['outputDirectoryNonExistent'])
+		);
+
+		if (!empty($params['outputDirectoryNonExistent'])) {
+			$platform->setReply('mkdir', array($outputDir, 755), false);
+
+			return;
+		}
+
+		$platform->setReply(
+			'file_put_contents',
+			array($cachePath . 'testModule-descriptor', serialize($this->_descriptor)),
+			true
+		);
+
+		// Preverify both language packages
+		$response          = empty($params['descriptorPreVerifyFailureResponse']) ? array() : $params['descriptorPreVerifyFailureResponse'];
+		$errors            = false;
+		$wrappedDescriptor = array(
+			'pluginType' => 'module',
+			'pluginId'   => 'testModule',
+			'contents'   => $this->_descriptor,
+		);
+
+		foreach (array('base', 'lang-en_GB', 'lang-pt_PT') as $package) {
+			$this->_repository->_utilities->setReply(
+				'preVerifyPackage',
+				array('module', 'testModule', $package, $wrappedDescriptor),
+				empty($response[$package]) ? array() : $response[$package]
+			);
+
+			$errors |= !empty($response[$package]);
+		}
+
+		if ($errors) {
+			return;
+		}
+
+		$errors = false;
+
+		foreach (array('base', 'lang-en_GB', 'lang-pt_PT') as $package) {
+			$locale          = $package == 'base' ? $package : substr($package, 5);
+			$relativeFile    = 'testModule-' . $locale . '-package';
+			$packageFile     = $repositoryUrl . $relativeFile;
+			$downloadFailure = !empty($params['downloadPackageFailure'][$package]);
+
+			$this->_repository->_utilities->setReply(
+				'downloadFile',
+				array($packageFile, null),
+				array(!$downloadFailure, $packageFile)
+			);
+
+			if ($downloadFailure) {
+				if ($package == 'base') {
+					break;
+				}
+
+				// If not the base, then skip the rest of the responses for this package
+				continue;
+			}
+
+			$otherFailure = !empty($params['downloadPackageOtherFailure'][$package]);
+
+			$platform->setReply('file_exists', array($outputDir), !$otherFailure);
+
+			if ($otherFailure) {
+				$platform->setReply('mkdir', array($outputDir, 755), false);
+
+				return;
+			}
+
+			$platform->setReply(
+				'file_put_contents',
+				array($cachePath . $relativeFile, $packageFile),
+				true
+			);
+
+			$retCode = !empty($responses[$package]) ? $responses[$package] : false;
+
+			$this->_repository->_utilities->setReply(
+				'unpackPackage',
+				array($cachePath . $relativeFile, $outputDir),
+				null
+			);
+			$this->_repository->_utilities->setReply(
+				'verifyPackageIntegrity',
+				array('module', 'testModule', $package, $this->_descriptor),
+				null
+			);
+			$this->_repository->_utilities->setReply(
+				'updatePackageMetaData',
+				array(
+					'module',
+					'testModule',
+					$package,
+					$this->_versions[$package][0],
+					$this->_versions[$package][1],
+					0,
+				),
+				null
+			);
+		}
+	}
+
+	public function testDownloadPackages() {
+		// Set up repository responses
+		$this->_setRepositoryResponses();
+
+		$downloadData = array(
+			'name'  => 'Test Module',
+			'files' => array(
+				'descriptor' => 'testModule-descriptor',
+				'base'       => 'testModule-base-package',
+				'lang-en_GB' => 'testModule-en_GB-package',
+				'lang-pt_PT' => 'testModule-pt_PT-package',
+			),
+		);
+
+		$this->_callback['total'] = 8;
+
+		list($ret, $reactivate, $status) = $this->_repository->downloadPackagesForPlugin(
+			'module',
+			'testModule',
+			$downloadData,
+			$this->_callback
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($reactivate, 'Unexpected do not re-activate');
+		$this->assertEquals(7, $this->_callback['current'], 'Callback did not match');
+		$this->assertEquals(
+			array('0.13', '0.5', '0.5'),
+			$this->_templateAdapter->_progress,
+			'Reported progress did not match'
+		);
+		$this->assertEquals(array(), $status, 'Unexpected returned status');
+	}
+
+	public function testDownloadPackagesDescriptorDownloadFailure() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		// Set up repository responses
+		$this->_setRepositoryResponses(
+			array(
+				'descriptorDownloadFailure' => true,
+			)
+		);
+
+		$downloadData = array(
+			'name'  => 'Test Module',
+			'files' => array(
+				'descriptor' => 'testModule-descriptor',
+				'base'       => 'testModule-base-package',
+				'lang-en_GB' => 'testModule-en_GB-package',
+				'lang-pt_PT' => 'testModule-pt_PT-package',
+			),
+		);
+
+		$this->_callback['total'] = 8;
+
+		list($ret, $reactivate, $status) = $this->_repository->downloadPackagesForPlugin(
+			'module',
+			'testModule',
+			$downloadData,
+			$this->_callback
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($reactivate, 'Unexpected do not re-activate');
+		$this->assertEquals(1, $this->_callback['current'], 'Callback did not match');
+		$this->assertEquals(
+			array('0.13'),
+			$this->_templateAdapter->_progress,
+			'Reported progress did not match'
+		);
+
+		$expected = array(
+			'failedToDownload' => array(
+				'module' => array(
+					'Test Module' => 'testModule-descriptor',
+				),
+			),
+		);
+
+		$this->assertEquals($expected, $status, 'Unexpected returned status');
+	}
+
+	public function testDownloadPackagesDescriptorOtherFailure() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		// Set up repository responses
+		$this->_setRepositoryResponses(
+			array(
+				'outputDirectoryNonExistent' => true,
+			)
+		);
+
+		$downloadData = array(
+			'name'  => 'Test Module',
+			'files' => array(
+				'descriptor' => 'testModule-descriptor',
+				'base'       => 'testModule-base-package',
+				'lang-en_GB' => 'testModule-en_GB-package',
+				'lang-pt_PT' => 'testModule-pt_PT-package',
+			),
+		);
+
+		$this->_callback['total'] = 8;
+
+		list($ret, $reactivate, $status) = $this->_repository->downloadPackagesForPlugin(
+			'module',
+			'testModule',
+			$downloadData,
+			$this->_callback
+		);
+
+		if ($ret && $ret->getErrorCode() & ERROR_PLATFORM_FAILURE) {
+			// Good, as expected
+			$this->assertEquals(null, $status, 'Unexpected returned status');
+		} elseif ($ret) {
+			return $ret;
+		} else {
+			$this->fail('ERROR_PLATFORM_FAILURE should not be ignored');
+		}
+	}
+
+	public function testDownloadPackagesDescriptorPreVerifyFailure() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		// Set up repository responses
+		$this->_setRepositoryResponses(
+			array(
+				'descriptorPreVerifyFailureResponse' => array(
+					'lang-en_GB' => array('en_GB-package'),
+				),
+			)
+		);
+
+		$downloadData = array(
+			'name'  => 'Test Module',
+			'files' => array(
+				'descriptor' => 'testModule-descriptor',
+				'base'       => 'testModule-base-package',
+				'lang-en_GB' => 'testModule-en_GB-package',
+				'lang-pt_PT' => 'testModule-pt_PT-package',
+			),
+		);
+
+		$this->_callback['total'] = 8;
+
+		list($ret, $reactivate, $status) = $this->_repository->downloadPackagesForPlugin(
+			'module',
+			'testModule',
+			$downloadData,
+			$this->_callback
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($reactivate, 'Unexpected do not re-activate');
+		$this->assertEquals(4, $this->_callback['current'], 'Callback did not match');
+		$this->assertEquals(
+			array('0.13'),
+			$this->_templateAdapter->_progress,
+			'Reported progress did not match'
+		);
+
+		$expected = array(
+			'failedToInstall' => array(
+				'module' => array(
+					'Test Module' => array('en_GB-package'),
+				),
+			),
+		);
+
+		$this->assertEquals($expected, $status, 'Should have errors');
+	}
+
+	public function testDownloadFailureOnBasePackage() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		// Set up repository responses
+		$this->_setRepositoryResponses(
+			array(
+				'downloadPackageFailure' => array(
+					'base' => true,
+				),
+			)
+		);
+
+		$downloadData = array(
+			'name'  => 'Test Module',
+			'files' => array(
+				'descriptor' => 'testModule-descriptor',
+				'base'       => 'testModule-base-package',
+				'lang-en_GB' => 'testModule-en_GB-package',
+				'lang-pt_PT' => 'testModule-pt_PT-package',
+			),
+		);
+
+		$this->_callback['total'] = 8;
+
+		list($ret, $reactivate, $status) = $this->_repository->downloadPackagesForPlugin(
+			'module',
+			'testModule',
+			$downloadData,
+			$this->_callback
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($reactivate, 'Unexpected do not re-activate');
+		$this->assertEquals(5, $this->_callback['current'], 'Callback did not match');
+		$this->assertEquals(
+			array('0.13', '0.5', '0.5'),
+			$this->_templateAdapter->_progress,
+			'Reported progress did not match'
+		);
+
+		$expected = array(
+			'failedToDownload' => array(
+				'module' => array(
+					'Test Module' => array(
+						'testModule-base-package',
+					),
+				),
+			),
+		);
+
+		$this->assertEquals($expected, $status, 'Unexpected returned status');
+	}
+
+	public function testDownloadOtherFailureOnBasePackage() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		// Set up repository responses
+		$this->_setRepositoryResponses(
+			array(
+				'downloadPackageOtherFailure' => array(
+					'base' => true,
+				),
+			)
+		);
+
+		$downloadData = array(
+			'name'  => 'Test Module',
+			'files' => array(
+				'descriptor' => 'testModule-descriptor',
+				'base'       => 'testModule-base-package',
+				'lang-en_GB' => 'testModule-en_GB-package',
+				'lang-pt_PT' => 'testModule-pt_PT-package',
+			),
+		);
+
+		$this->_callback['total'] = 8;
+
+		list($ret, $reactivate, $status) = $this->_repository->downloadPackagesForPlugin(
+			'module',
+			'testModule',
+			$downloadData,
+			$this->_callback
+		);
+
+		if ($ret && $ret->getErrorCode() & ERROR_PLATFORM_FAILURE) {
+			// Good, as expected
+			$this->assertEquals(null, $status, 'Unexpected returned status');
+		} elseif ($ret) {
+			return $ret;
+		} else {
+			$this->fail('ERROR_PLATFORM_FAILURE should not be ignored');
+		}
+	}
+
+	public function testDownloadFailureOnLanguagePackage() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		// Set up repository responses
+		$this->_setRepositoryResponses(
+			array(
+				'downloadPackageFailure' => array(
+					'lang-en_GB' => true,
+				),
+			)
+		);
+
+		$downloadData = array(
+			'name'  => 'Test Module',
+			'files' => array(
+				'descriptor' => 'testModule-descriptor',
+				'base'       => 'testModule-base-package',
+				'lang-en_GB' => 'testModule-en_GB-package',
+				'lang-pt_PT' => 'testModule-pt_PT-package',
+			),
+		);
+
+		$this->_callback['total'] = 8;
+
+		list($ret, $reactivate, $status) = $this->_repository->downloadPackagesForPlugin(
+			'module',
+			'testModule',
+			$downloadData,
+			$this->_callback
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($reactivate, 'Unexpected do not re-activate');
+		$this->assertEquals(7, $this->_callback['current'], 'Callback did not match');
+		$this->assertEquals(
+			array('0.13', '0.5', '0.5'),
+			$this->_templateAdapter->_progress,
+			'Reported progress did not match'
+		);
+
+		$expected = array(
+			'failedToDownload' => array(
+				'module' => array(
+					'Test Module' => array(
+						'testModule-en_GB-package',
+					),
+				),
+			),
+		);
+
+		$this->assertEquals($expected, $status, 'Unexpected returned status');
+	}
+
+	public function testDownloadOtherFailureOnLanguagePackage() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		// Set up repository responses
+		$this->_setRepositoryResponses(
+			array(
+				'downloadPackageOtherFailure' => array(
+					'lang-en_GB' => true,
+				),
+			)
+		);
+
+		$downloadData = array(
+			'name'  => 'Test Module',
+			'files' => array(
+				'descriptor' => 'testModule-descriptor',
+				'base'       => 'testModule-base-package',
+				'lang-en_GB' => 'testModule-en_GB-package',
+				'lang-pt_PT' => 'testModule-pt_PT-package',
+			),
+		);
+
+		$this->_callback['total'] = 8;
+
+		list($ret, $reactivate, $status) = $this->_repository->downloadPackagesForPlugin(
+			'module',
+			'testModule',
+			$downloadData,
+			$this->_callback
+		);
+
+		if ($ret && $ret->getErrorCode() & ERROR_PLATFORM_FAILURE) {
+			// Good, as expected
+			$this->assertEquals(null, $status, 'Unexpected returned status');
+		} elseif ($ret) {
+			return $ret;
+		} else {
+			$this->fail('ERROR_PLATFORM_FAILURE should not be ignored');
+		}
+	}
+}

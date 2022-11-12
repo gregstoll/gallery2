@@ -1,0 +1,554 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/AdminLanguageManager.inc');
+
+/**
+ * AdminLanguageManager controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17606 $
+ */
+class AdminLanguageManagerControllerTest extends GalleryControllerTestCase {
+	public $_galleryTemplateAdapter;
+
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminLanguageManager');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		global $gallery;
+
+		$this->_galleryTemplateAdapter = $gallery->getTemplateAdapter();
+		$gallery->_templateAdapter     = new MockTemplateAdapter();
+		$cacheKey                      = 'GalleryRepository::getRepositories(,GalleryRepository)';
+		$this->_testRepository         = new UnitTestRepository();
+		GalleryDataCache::put(
+			$cacheKey,
+			array(
+				array(
+					'test' => $this->_testRepository,
+				),
+				0,
+			)
+		);
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $coreParams) = GalleryCoreApi::fetchAllPluginParameters('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_useBrowserPref  = $coreParams['language.useBrowserPref'];
+		$this->_defaultLanguage = $coreParams['default.language'];
+
+		$ret = GalleryCoreApi::assertUserIsSiteAdministrator();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$gallery->_storage = new UnitTestStorage();
+		$storage           =& $gallery->getStorage();
+		$this->_callback   = array(
+			'method'  => array(&$gallery->_templateAdapter, 'updateProgressBar'),
+			'title'   => $module->translate('Updating Language Settings'),
+			'current' => 0,
+			'total'   => 10,
+		);
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$gallery->_templateAdapter = $this->_galleryTemplateAdapter;
+		$platform                  =& $gallery->getPlatform();
+		$storage                   =& $gallery->getStorage();
+
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+		$this->assertTrue($storage->isComplete(), $storage->getRemaining());
+		$this->assertTrue($this->_testRepository->isComplete(), $this->_testRepository->getRemaining());
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testUpdateBrowserPreference() {
+		global $gallery;
+
+		$storage  =& $gallery->getStorage();
+		$newValue = ($this->_useBrowserPref) ? 0 : 1;
+		GalleryUtilities::putRequestVariable(
+			'form',
+			array(
+				'save'           => 'Save',
+				'language'       => array(
+					'useBrowserPref' => $newValue,
+				),
+				'languageAction' => array(
+					'af' => 'reset',
+					'ar' => 'reset',
+					'ca' => 'reset',
+					'cs' => 'reset',
+					'da' => 'reset',
+					'es' => 'reset',
+				),
+			)
+		);
+
+		$storage->setReply(
+			'updateMapEntry',
+			array(
+				'GalleryPluginParameterMap',
+				array(
+					'pluginType'    => 'module',
+					'pluginId'      => 'core',
+					'itemId'        => 0,
+					'parameterName' => 'language.useBrowserPref',
+				),
+				array(
+					'parameterValue' => $newValue,
+				),
+				null,
+			),
+			null
+		);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminLanguageManager',
+				),
+				'status'   => array(
+					'languageSettingsSaved' => true,
+				),
+				'error'    => array(),
+			),
+			$results,
+			'Language general settings not updated'
+		);
+	}
+
+	public function testUpdateDefaultLanguage() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+		$newValue = ($this->_defaultLanguage == 'en_GB') ? 'en_US' : 'en_GB';
+		GalleryUtilities::putRequestVariable(
+			'form',
+			array(
+				'save'           => 'Save',
+				'default'        => array(
+					'language' => $newValue,
+				),
+				'language'       => array(
+					'useBrowserPref' => $this->_useBrowserPref,
+				),
+				'languageAction' => array(
+					'af' => 'reset',
+					'ar' => 'reset',
+					'ca' => 'reset',
+					'cs' => 'reset',
+					'da' => 'reset',
+					'es' => 'reset',
+				),
+			)
+		);
+
+		$storage =& $gallery->getStorage();
+
+		$storage->setReply(
+			'updateMapEntry',
+			array(
+				'GalleryPluginParameterMap',
+				array(
+					'pluginType'    => 'module',
+					'pluginId'      => 'core',
+					'itemId'        => 0,
+					'parameterName' => 'default.language',
+				),
+				array(
+					'parameterValue' => $newValue,
+				),
+				null,
+			),
+			null
+		);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminLanguageManager',
+				),
+				'status'   => array(
+					'languageSettingsSaved' => true,
+				),
+				'error'    => array(),
+			),
+			$results,
+			'Language general settings not updated'
+		);
+	}
+
+	public function testGetFormLanguages() {
+		global $gallery;
+
+		list($ret, $defaultLanguage) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'core',
+			'default.language'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$form = array(
+			'formName'       => 'adminLanguages',
+			'default'        => array(
+				'language' => $defaultLanguage,
+			),
+			'save'           => 'Save',
+			'languageAction' => array(
+				'af' => 'remove',
+				'ar' => 'upgrade',
+				'ca' => 'download',
+				'cs' => 'remove',
+				'da' => 'upgrade',
+				'es' => 'download',
+			),
+		);
+
+		$repositories = GalleryRepository::getRepositories();
+
+		list($ret, $installedPackages, $deletePackages) = $this->_controller->_getFormLanguages(
+			$form,
+			$repositories
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected = array('ar', 'ca', 'da', 'es', 'es_MX', 'es_AR');
+
+		$this->assertEquals($expected, $installedPackages, 'Unexpected installed packages list');
+
+		$expected = array('af', 'cs');
+
+		$this->assertEquals($expected, $deletePackages, 'Unexpected delete package list');
+	}
+
+	public function testDeleteLanguagePackages() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		$gallery->setConfig('data.gallery.locale', '/g2data/locale');
+
+		$packages = array('af', 'cs');
+
+		$platform->setReply('file_exists', array('/g2data/locale/af'), true);
+		$platform->setReply(
+			'glob',
+			array('/g2data/locale/af/LC_MESSAGES/*.mo', null),
+			array('theme.mo', 'module.mo')
+		);
+		$platform->setReply('recursiveRmdir', array('/g2data/locale/af'), true);
+		$platform->setReply('file_exists', array('/g2data/locale/cs'), true);
+		$platform->setReply(
+			'glob',
+			array('/g2data/locale/cs/LC_MESSAGES/*.mo', null),
+			array('theme.mo', 'module.mo')
+		);
+		$platform->setReply('recursiveRmdir', array('/g2data/locale/cs'), true);
+
+		list($ret, $packagesDelete) = $this->_controller->_deleteLanguagePackages($packages, $this->_callback);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(4, $packagesDelete, 'Incorrect number of packages deleted');
+		$this->assertEquals(
+			array('0.2', '0.4'),
+			$gallery->_templateAdapter->getProgressBarDump(),
+			'Incorrect progress'
+		);
+	}
+
+	public function testUpdateLanguagePackages() {
+		$this->_testRepository->setReply(
+			'downloadAndUnpackPackages',
+			array(
+				array(
+					'modules/testModule.descriptor',
+					'modules/testModule-af.package',
+					'modules/testModule-cs.package',
+					'themes/testTheme.descriptor',
+					'themes/testTheme-af.package',
+					'themes/testTheme-cs.package',
+				),
+				$this->_callback,
+			),
+			array(null, array('STATUS REPO1'), 6)
+		);
+		$this->_testRepository->setReply(
+			'downloadAndUnpackPackages',
+			array(
+				array(
+					'modules/anotherTest.descriptor',
+					'modules/anotherTest-ab.package',
+					'modules/anotherTest-cd.package',
+				),
+				$this->_callback,
+			),
+			array(null, array('STATUS REPO2'), 3)
+		);
+
+		list($ret, $status, $count) = $this->_controller->_downloadAndInstallLanguagePackages(
+			array(
+				'repo1' => array(
+					'module' => array(
+						'testModule' => array(
+							'name'  => 'Test Module',
+							'files' => array(
+								'descriptor' => 'modules/testModule.descriptor',
+								'af'         => 'modules/testModule-af.package',
+								'cs'         => 'modules/testModule-cs.package',
+							),
+						),
+					),
+					'theme' => array(
+						'testTheme' => array(
+							'name'  => 'Test Theme',
+							'files' => array(
+								'descriptor' => 'themes/testTheme.descriptor',
+								'af'         => 'themes/testTheme-af.package',
+								'cs'         => 'themes/testTheme-cs.package',
+							),
+						),
+					),
+				),
+				'repo2' => array(
+					'module' => array(
+						'anotherTestModule' => array(
+							'name'  => 'Test Module',
+							'files' => array(
+								'descriptor' => 'modules/anotherTest.descriptor',
+								'af'         => 'modules/anotherTest-ab.package',
+								'cs'         => 'modules/anotherTest-cd.package',
+							),
+						),
+					),
+				),
+			),
+			array(
+				'repo1' => $this->_testRepository,
+				'repo2' => $this->_testRepository,
+			),
+			$this->_callback
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(9, $count, 'Number of files that we should have downloaded');
+		$this->assertEquals(
+			array('STATUS REPO1', 'STATUS REPO2'),
+			$status,
+			'Incorrect status returned'
+		);
+	}
+
+	public function testHandleRequest() {
+		global $gallery;
+
+		list($ret, $defaultLanguage) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'core',
+			'default.language'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable(
+			'form',
+			array(
+				'formName'       => 'adminLanguages',
+				'default'        => array(
+					'language' => $defaultLanguage,
+				),
+				'save'           => 'Save',
+				'languageAction' => array(
+					'af' => 'download',
+				),
+			)
+		);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'core.ProgressBar',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results,
+			'language general settings not updated'
+		);
+	}
+
+	public function testUpdateLanguageSettings() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+		$form     = array(
+			'formName'       => 'adminLanguages',
+			'default'        => array(
+				'language' => $this->_defaultLanguage,
+			),
+			'language'       => array(
+				'useBrowserPref' => $this->_useBrowserPref,
+			),
+			'save'           => 'Save',
+			'languageAction' => array(
+				'af' => 'download',
+			),
+		);
+
+		$this->_callback['total'] = 11;
+
+		$gallery->setConfig('data.gallery.locale', '/g2data/locale/');
+
+		$this->_testRepository->setReply(
+			'getLanguagePackageFiles',
+			array(array('af')),
+			array(
+				null,
+				array(
+					'module' => array(
+						'testModule' => array(
+							'name'  => 'Test Module',
+							'files' => array(
+								'descriptor' => 'modules/testModule.descriptor',
+								'af'         => 'modules/testModule-af.package',
+							),
+						),
+					),
+					'theme' => array(
+						'testTheme' => array(
+							'name'  => 'Test Theme',
+							'files' => array(
+								'descriptor' => 'themes/testTheme.descriptor',
+								'af'         => 'themes/testTheme-af.package',
+							),
+						),
+					),
+				),
+			)
+		);
+
+		$this->_testRepository->setReply(
+			'downloadAndUnpackPackages',
+			array(
+				array(
+					'modules/testModule.descriptor',
+					'modules/testModule-af.package',
+					'themes/testTheme.descriptor',
+					'themes/testTheme-af.package',
+				),
+				$this->_callback,
+			),
+			array(null, array('STATUS'), 2)
+		);
+		$platform->setReply(
+			'glob',
+			array(GalleryCoreApi::getCodeBasePath('modules/*/po'), null),
+			array(GalleryCoreApi::getCodeBasePath('modules/testModule/po'))
+		);
+		$platform->setReply(
+			'file_exists',
+			array('/g2data/locale/af/LC_MESSAGES/modules_testModule.mo'),
+			true
+		);
+		$platform->setReply(
+			'file_exists',
+			array('/g2data/locale/af/LC_MESSAGES/modules_testModule.mo'),
+			true
+		);
+		$platform->setReply(
+			'glob',
+			array(GalleryCoreApi::getCodeBasePath('themes/*/po'), null),
+			array(GalleryCoreApi::getCodeBasePath('themes/testTheme/po'))
+		);
+		$platform->setReply(
+			'file_exists',
+			array('/g2data/locale/af/LC_MESSAGES/themes_testTheme.mo'),
+			true
+		);
+		$platform->setReply(
+			'file_exists',
+			array('/g2data/locale/af/LC_MESSAGES/themes_testTheme.mo'),
+			true
+		);
+
+		$ret = $this->_controller->updateLanguageSettings($form);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+}

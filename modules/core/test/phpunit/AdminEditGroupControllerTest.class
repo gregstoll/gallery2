@@ -1,0 +1,188 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * AdminEditGroup controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminEditGroupControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminEditGroup');
+	}
+
+	public function testCancel() {
+		list($ret, $group) = $this->_createGroup();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('groupId', $group->getId());
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminGroups',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		$this->_deleteGroup($group);
+	}
+
+	public function testUndo() {
+		list($ret, $group) = $this->_createGroup();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('groupId', $group->getId());
+		GalleryUtilities::putRequestVariable('form[action][undo]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditGroup',
+					'groupId' => $group->getId(),
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results,
+			'Undo Edit Group'
+		);
+
+		$this->_deleteGroup($group);
+	}
+
+	public function testEditGroup() {
+		list($ret, $group) = $this->_createGroup();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$newGroupName = 'newname-' . mt_rand();
+
+		GalleryUtilities::putRequestVariable('groupId', $group->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[groupName]', $newGroupName);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminGroups',
+				),
+				'status'   => array(
+					'modifiedGroup' => $newGroupName,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		$this->_deleteGroup($group);
+	}
+
+	public function testEditGroupMissingName() {
+		list($ret, $group) = $this->_createGroup();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('groupId', $group->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[groupName]', '');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditGroup',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][groupName][missing]'),
+			),
+			$results
+		);
+
+		$this->_deleteGroup($group);
+	}
+
+	public function _createGroup() {
+		global $gallery;
+
+		list($ret, $group) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryGroup');
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		if (!isset($group)) {
+			return array(
+				GalleryCoreApi::error(ERROR_MISSING_OBJECT),
+				null,
+			);
+		}
+
+		$ret = $group->create('testgroup-' . mt_rand());
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		$ret = $group->save();
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		return array(null, $group);
+	}
+
+	public function _deleteGroup($group) {
+		global $gallery;
+
+		$ret = GalleryCoreApi::deleteEntityById($group->getId(), 'GalleryGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+}

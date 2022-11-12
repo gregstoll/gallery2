@@ -1,0 +1,270 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryRepositoryUtilities.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+
+/**
+ * An abstract class for repository objects - descriptors, packages and indexes.
+ *
+ * Provides a template, methods for setting the output path and writing the
+ * contents of the object to that path from the template.
+ *
+ * @package RepositoryTools
+ * @subpackage Classes
+ * @author Jozef Selesi <selesi at gmail dot com>
+ * @version $Revision: 17580 $
+ * @abstract
+ */
+class RepositoryObject {
+	/**
+	 * Output directory for the object's data.
+	 *
+	 * @var string
+	 * @access private
+	 */
+	public $_outputDir;
+
+	/**
+	 * Output file name for the object's data.
+	 *
+	 * @var string
+	 * @access private
+	 */
+	public $_fileName;
+
+	/**
+	 * Indicates whether a file was written during the last writeToDisk operation. Useful after
+	 * specifying that writeToDisk should not overwrite an existing file.
+	 *
+	 * @var boolean
+	 * @access private
+	 */
+	public $_wasFileWritten;
+
+	/**
+	 * Template for formatting the object's data.
+	 *
+	 * @var GalleryTemplate
+	 * @access private
+	 */
+	public $_template;
+
+	/**
+	 * File name of this object's template.
+	 *
+	 * @var RepositoryTemplate
+	 * @access private
+	 */
+	public $_templateFile;
+
+	/**
+	 * Repository utilities reference.
+	 *
+	 * @var GalleryRepositoryUtilities
+	 * @access private
+	 */
+	public $_utilities;
+
+	/**
+	 * Initializes the repository template and utilities.
+	 */
+	public function init($x1 = null, $x2 = null) {
+		$this->_utilities = new GalleryRepositoryUtilities();
+		$this->_template  = new GalleryTemplate(__DIR__ . '/../../../..');
+
+		$this->_template->setVariable('l10Domain', 'lib_repository');
+	}
+
+	/**
+	 * Sets the output directory for this object.
+	 *
+	 * Checks to make sure the specified directory exists are made before setting the directory.
+	 *
+	 * @param string $outputDir object output directory
+	 * @return GalleryStatus a status code
+	 */
+	public function setOutputDir($outputDir) {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		if (!$platform->is_dir($outputDir)) {
+			return GalleryCoreApi::error(
+				ERROR_BAD_PARAMETER,
+				__FILE__,
+				__LINE__,
+				sprintf(
+					'Output directory [%s] does not exist.',
+					$outputDir
+				)
+			);
+		}
+
+		$this->_outputDir = $platform->realpath($outputDir) . '/';
+
+		return null;
+	}
+
+	/**
+	 * Writes the contents of the object from the template to the specified path.
+	 *
+	 * If a 'contents' template variable is set, it will be directly written to the output
+	 * path, otherwise Smarty will process the specified template and its output will be written.
+	 *
+	 * @param boolean $overwriteFile overwrite file if it exists
+	 * @param boolean $compressToo optionally write a compressed version of the file
+	 * @return array GalleryStatus a status code
+	 *           boolean whether the file was written to disk
+	 */
+	public function writeToDisk($overwriteFile = false, $compressToo = false) {
+		global $gallery;
+
+		$outputFilePath = $this->_outputDir . $this->_fileName;
+		$platform       =& $gallery->getPlatform();
+
+		if (!($platform->file_exists($outputFilePath) && !$overwriteFile)) {
+			if ($this->_template->hasVariable('contents')) {
+				// Skip template processing.
+				$contents = $this->_template->getVariable('contents');
+			} else {
+				// Process template with Smarty.
+				$templatePath = 'lib/tools/repository/templates/' . $this->_templateFile;
+
+				list($ret, $contents) = $this->_template->fetch('gallery:' . $templatePath);
+
+				if ($ret) {
+					return $ret;
+				}
+			}
+
+			// Write contents to disk.
+			if (false === $platform->file_put_contents($outputFilePath, $contents)) {
+				return GalleryCoreApi::error(
+					ERROR_BAD_PARAMETER,
+					__FILE__,
+					__LINE__,
+					"Error writing to $outputFilePath"
+				);
+			}
+
+			if ($compressToo) {
+				if (false === $platform->file_put_contents(
+					"$outputFilePath.gz",
+					gzdeflate($contents, 9)
+				)
+				) {
+					return GalleryCoreApi::error(
+						ERROR_BAD_PARAMETER,
+						__FILE__,
+						__LINE__,
+						"Error writing to $outputFilePath.gz"
+					);
+				}
+			}
+
+			$fileWritten = true;
+		}
+
+		$this->_wasFileWritten = isset($fileWritten);
+
+		return null;
+	}
+
+	/**
+	 * Remove any files from the manifest that are not applicable for the base package
+	 * with any developer files elided.
+	 *
+	 * @param string $manifestContents the original manifest as a single string
+	 * @return string the filtered version as a single string
+	 */
+	public function filterManifestForBasePackage($manifestContents) {
+		$result = array();
+
+		foreach (explode("\n", $manifestContents) as $line) {
+			if (!strncmp($line, "R\t", 2)) {
+				continue;
+			}
+
+			if (preg_match('@^(modules|themes)/\w+/(test|po|locale)/@', $line)) {
+				continue;
+			}
+
+			$result[] = $line;
+		}
+
+		return implode("\n", $result);
+	}
+
+	/**
+	 * Returns the currently set output directory.
+	 *
+	 * @return string directory
+	 */
+	public function getOutputDir() {
+		return $this->_outputDir;
+	}
+
+	/**
+	 * Sets the template used by RepositoryObject.
+	 */
+	public function setTemplate($template) {
+		$this->_template = $template;
+	}
+
+	/**
+	 * Sets the repository utilities used by RepositoryObject.
+	 */
+	public function setUtilities($utilities) {
+		$this->_utilities = $utilities;
+	}
+
+	/**
+	 * Sets the output file name for serializing this object.
+	 */
+	public function setOutputFile($fileName) {
+		$this->_fileName = $fileName;
+	}
+
+	/**
+	 * Returns the currently set file name used for serializing this object.
+	 *
+	 * @return string file name
+	 */
+	public function getOutputFile() {
+		return $this->_fileName;
+	}
+
+	/**
+	 * Sets the template file that contains the logic for formatting this object's contents.
+	 */
+	public function setTemplateFile($fileName) {
+		$this->_templateFile = $fileName;
+	}
+
+	/**
+	 * Indicates whether the file was actually written after a writeToDisk call.
+	 *
+	 * This is useful because writeToDisk does not overwrite files by default.
+	 *
+	 * @return boolean
+	 */
+	public function wasFileWritten() {
+		return $this->_wasFileWritten;
+	}
+}

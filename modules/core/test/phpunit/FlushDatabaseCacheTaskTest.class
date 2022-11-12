@@ -1,0 +1,175 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/FlushDatabaseCacheTask.class');
+
+/**
+ * Test the FlushDatabaseCache maintenance task functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class FlushDatabaseCacheTaskTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function testRunSuccess() {
+		global $gallery;
+
+		$gallery->setConfig('data.gallery.cache', '/cache/');
+
+		$mockPlatform = new FlushDatabaseCacheTaskTestPlatform(array());
+
+		$gallery->setPlatform($mockPlatform);
+
+		$task = new FlushDatabaseCacheTask();
+
+		list($ret, $success, $details) = $task->run();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected = array();
+
+		foreach (array('/cache/entity', '/cache/theme', '/cache/module') as $dir) {
+			$expected[] = $module->translate(
+				array(
+					'text' => 'Successfully deleted directory: %s',
+					'arg1' => $dir,
+				)
+			);
+		}
+
+		$this->assertTrue($success, 'should have succeeded');
+		$this->assertEquals($details, $expected);
+		$this->assertEquals(
+			array(
+				'file_exists(/cache/entity)',
+				'recursiveRmdir(/cache/entity)',
+				'file_exists(/cache/theme)',
+				'recursiveRmdir(/cache/theme)',
+				'file_exists(/cache/module)',
+				'recursiveRmdir(/cache/module)',
+			),
+			$mockPlatform->getCalls()
+		);
+	}
+
+	public function testRunFail() {
+		global $gallery;
+
+		$gallery->setConfig('data.gallery.cache', '/cache/');
+
+		$mockPlatform = new FlushDatabaseCacheTaskTestPlatform(
+			array(
+				'file_exists(/cache/entity)',
+				'recursiveRmdir(/cache/theme)',
+			)
+		);
+
+		$gallery->setPlatform($mockPlatform);
+
+		$task = new FlushDatabaseCacheTask();
+
+		list($ret, $success, $details) = $task->run();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected   = array();
+		$expected[] = $module->translate(
+			array(
+				'text' => 'Unable to delete directory: %s',
+				'arg1' => '/cache/theme',
+			)
+		);
+
+		$expected[] = $module->translate(
+			array(
+				'text' => 'Successfully deleted directory: %s',
+				'arg1' => '/cache/module',
+			)
+		);
+
+		$this->assertFalse($success, 'should have failed');
+		$this->assertEquals($expected, $details);
+		$this->assertEquals(
+			array(
+				'file_exists(/cache/entity)',
+				'file_exists(/cache/theme)',
+				'recursiveRmdir(/cache/theme)',
+				'file_exists(/cache/module)',
+				'recursiveRmdir(/cache/module)',
+			),
+			$mockPlatform->getCalls()
+		);
+	}
+}
+
+class FlushDatabaseCacheTaskTestPlatform {
+	public function __construct($failedCalls) {
+		GalleryUtilities::putRequestVariable('calls', array());
+
+		$this->_failedCalls = $failedCalls;
+	}
+
+	public function _addCall($call) {
+		$calls   = GalleryUtilities::getRequestVariables('calls');
+		$calls[] = $call;
+
+		GalleryUtilities::putRequestVariable('calls', $calls);
+
+		return !in_array($call, $this->_failedCalls);
+	}
+
+	public function getCalls() {
+		return GalleryUtilities::getRequestVariables('calls');
+	}
+
+	public function file_exists($dir) {
+		return $this->_addCall("file_exists($dir)");
+	}
+
+	public function mkdir($dir) {
+		return $this->_addCall("mkdir($dir)");
+	}
+
+	public function recursiveRmdir($dir) {
+		return $this->_addCall("recursiveRmdir($dir)");
+	}
+
+	public function realpath($path) {
+		return $path;
+	}
+}

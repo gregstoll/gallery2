@@ -1,0 +1,468 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This class contains method for creating plugin descriptors.
+ * @package RepositoryTools
+ * @subpackage Classes
+ * @author Jozef Selesi <selesi at gmail dot com>
+ * @version $Revision: 18676 $
+ */
+class RepositoryDescriptor extends RepositoryObject {
+	/**
+	 * Plugin version.
+	 *
+	 * @var string
+	 * @access private
+	 */
+	public $_pluginVersion;
+
+	/**
+	 * Plugin ID.
+	 *
+	 * @var string
+	 * @access private
+	 */
+	public $_pluginId;
+
+	/**
+	 * Absolute path to the plugin directory.
+	 *
+	 * @var string
+	 * @access private
+	 */
+	public $_pluginDir;
+
+	/**
+	 * All data contained in a descriptor.
+	 *
+	 * @var array
+	 * @access private
+	 */
+	public $_data;
+
+	/**
+	 * Initializes the descriptor object and gets all plugin
+	 * meta data required for a complete descriptor definition.
+	 *
+	 * @param string $outputDir directory to write the descriptor to
+	 * @return GalleryStatus a status code
+	 */
+	public function init($outputDir = null, $x1 = null) {
+		parent::init();
+
+		// Set output path.
+		$ret = $this->setOutputDir($outputDir);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Build up all the package information, in preparation for it to be written out
+	 * with (eg) writeToDisk()
+	 *
+	 * @param GalleryPlugin $plugin the plugin
+	 * @return GalleryStatus a status code
+	 */
+	public function generate($plugin) {
+		global $gallery;
+
+		// Get basic plugin meta data.
+		$pluginType           = $plugin->getPluginType();
+		$this->_pluginId      = $plugin->getId();
+		$this->_pluginVersion = $plugin->getVersion();
+
+		// Create descriptor header.
+		$header['id']                = $this->_pluginId;
+		$header['version']           = $this->_pluginVersion;
+		$header['requiredCoreApi']   = $plugin->getRequiredCoreApi();
+		$header['requiredPluginApi'] = $pluginType == 'module' ? $plugin->getRequiredModuleApi() : $plugin->getRequiredThemeApi();
+		$this->_data['header']       = $header;
+
+		// Get raw strings for translation.
+		$descriptions['en_US']['name']        = $plugin->getName();
+		$descriptions['en_US']['description'] = $plugin->getDescription();
+
+		if ($pluginType == 'module') {
+			$groupData                           = $plugin->getGroup();
+			$descriptions['en_US']['groupLabel'] = $groupData['groupLabel'];
+		}
+
+		/*
+		 * Get translated strings for all supported languages. All
+		 * locales must be installed on the system for this to work.
+		 */
+		$translator =& $gallery->getTranslator();
+
+		list($supportedLanguages, $defaultCountry) = $translator->getLanguageData();
+
+		foreach ($supportedLanguages as $language => $countries) {
+			foreach ($countries as $country => $description) {
+				$languageCode = $language . '_' . $country;
+
+				// We have already got the en_US strings.
+				if ($languageCode == 'en_US') {
+					continue;
+				}
+
+				// Translate into current language.
+				$translator->init($languageCode);
+
+				foreach ($descriptions['en_US'] as $stringId => $originalString) {
+					list($ret, $translatedString) = $translator->translateDomain(
+						sprintf('%ss_%s', $pluginType, $this->_pluginId),
+						array(
+							'text' => $originalString,
+						)
+					);
+
+					if ($ret) {
+						return $ret;
+					}
+
+					$descriptions[$languageCode][$stringId] = $translatedString;
+				}
+			}
+		}
+
+		$this->_data['descriptions'] = $descriptions;
+
+		// Get file meta data.
+		$platform =& $gallery->getPlatform();
+
+		// Do not force the _pluginDir, so that tests can override it
+		if (!isset($this->_pluginDir)) {
+			$this->_pluginDir = $platform->realpath(
+				sprintf(
+					'%s%ss/%s/',
+					GalleryCoreApi::getCodeBasePath(),
+					$pluginType,
+					$this->_pluginId
+				)
+			);
+
+			if (!in_array(substr($this->_pluginDir, -1), array('/', '\\'))) {
+				$this->_pluginDir .= '/';
+			}
+		}
+
+		if (!$platform->file_exists($this->_pluginDir . 'MANIFEST')) {
+			// Do not do anything.  Integrity check will fail on this
+			$this->_data = array();
+
+			return null;
+		}
+
+		$ret = $this->getFileMetaData($this->_pluginDir, $this->_data);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_data['header']['buildTimestamp']) = $this->_utilities->getFileRevision($this->_pluginDir . 'MANIFEST');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create available languages meta data.
+		foreach ($this->_data['files'] as $fileName => $fileMetaData) {
+			if (preg_match('/po\/(.*)\.po$/U', $fileName, $languageCode)) {
+				$languageCode = $languageCode[1];
+
+				// Get revision number from po file.
+				list($retRev, $revision) = $this->_utilities->getFileRevision(
+					$this->_pluginDir . $fileName
+				);
+
+				if ($ret) {
+					// Wrap the message so that we have the filename with the error
+					$ret = new GalleryStatus(
+						$ret->getErrorCode(),
+						sprintf(
+							'Error in file: %s: %s',
+							$this->_pluginDir . $fileName,
+							$ret->getErrorMessage()
+						)
+					);
+
+					return $ret;
+				}
+
+				$stringsRevision                                           = $this->_data['header']['stringsRevision'];
+				$this->_data['languages'][$stringsRevision][$languageCode] = $revision;
+			}
+		}
+
+		$this->setOutputFile(
+			sprintf(
+				'%s-%s-%s.descriptor',
+				$this->_pluginId,
+				$this->_pluginVersion,
+				$this->getBuildTimestamp()
+			)
+		);
+
+		// Put data into template.
+		$this->_template->setVariable('contents', serialize($this->_data));
+
+		return null;
+	}
+
+	/**
+	 * Gets all file-related plugin meta data from the filesystem.
+	 *
+	 * @param string $pluginDir
+	 * @param array $data array to write meta data to
+	 * @return GalleryStatus a status code
+	 */
+	public function getFileMetaData($pluginDir, &$data) {
+		global $gallery;
+
+		$platform     =& $gallery->getPlatform();
+		$manifest     = array();
+		$manifestFile = $pluginDir . 'MANIFEST';
+
+		GalleryUtilities::readIndividualManifest($manifestFile, $manifest);
+
+		$g2Base           = GalleryCoreApi::getCodeBasePath();
+		$ignoreOffset     = strlen(substr($pluginDir, strlen($g2Base)));
+		$manifestContents = $this->filterManifestForBasePackage(
+			$platform->file_get_contents($manifestFile)
+		);
+
+		$data['files']['MANIFEST'] = array(
+			'bytes'    => (string)strlen($manifestContents),
+			'hash'     => sprintf('%u', crc32($manifestContents)),
+			'packages' => array('base'),
+		);
+
+		foreach ($manifest as $file => $fileInfo) {
+			// Strip off the {modules,themes}/foo/ part
+			$file = substr($file, $ignoreOffset);
+
+			if (!empty($fileInfo['removed'])) {
+				continue;
+			}
+
+			for ($dir = dirname($file); $dir != '.'; $dir = dirname($dir)) {
+				if (empty($data['directories'][$dir]['packages'])) {
+					$data['directories'][$dir]['packages'] = $this->getPackageNames($dir);
+				}
+			}
+
+			$data['files'][$file] = array(
+				'bytes'      => $fileInfo['size'],
+				'bytes_crlf' => $fileInfo['size_crlf'],
+				'hash'       => $fileInfo['checksum'],
+				'hash_crlf'  => $fileInfo['checksum_crlf'],
+				'packages'   => $this->getPackageNames($file),
+			);
+
+			if (basename($file) == 'strings.raw') {
+				// Get strings.raw revision.
+				list($ret, $revision) = $this->_utilities->getFileRevision("$pluginDir$file");
+
+				if ($ret) {
+					return $ret;
+				}
+
+				$data['header']['stringsRevision'] = $revision;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Determines which package(s) the specified file or directory should be in.
+	 *
+	 * @param string $path path relative to the plugin directory
+	 * @return array packages that apply to the specified file or directory.
+	 */
+	public function getPackageNames($path) {
+		$packages = array();
+
+		if (preg_match('/^test\b/', $path)) {
+			// Ignore test data
+			// Match contents of locale and po directories except GNUmakefile and strings.raw
+		} elseif (preg_match('#^(locale/|po/)[^G]#', $path) && $path != 'po/strings.raw') {
+			if (preg_match('#locale/([^/]*)#', $path, $localeId)) {
+				$packages[] = 'lang-' . $localeId[1];
+			} elseif (preg_match('#po/(.*?)\.[pm]o#', $path, $localeId)) {
+				$packages[] = 'lang-' . $localeId[1];
+			}
+		} else {
+			$packages[] = 'base';
+		}
+
+		return $packages;
+	}
+
+	/**
+	 * Gets a list of directories that are in the specified package.
+	 *
+	 * @param string $package package name
+	 * @return array directory list
+	 */
+	public function getDirectoriesInPackage($package) {
+		$directories = array();
+
+		foreach ($this->_data['directories'] as $dir => $directoryMetaData) {
+			if (in_array($package, $directoryMetaData['packages'])) {
+				$directories[] = $dir;
+			}
+		}
+
+		sort($directories);
+
+		return $directories;
+	}
+
+	/**
+	 * Gets a list of files that are in the specified package.
+	 *
+	 * @param string $package package name
+	 * @return array file list
+	 */
+	public function getFilesInPackage($package) {
+		$files = array();
+
+		foreach ($this->_data['files'] as $file => $fileMetaData) {
+			if (in_array($package, $fileMetaData['packages'])) {
+				$files[] = $file;
+			}
+		}
+
+		sort($files);
+
+		return $files;
+	}
+
+	/**
+	 * Gets a list of packages that exist for this plugin.
+	 *
+	 * @return array package list
+	 */
+	public function getPackages() {
+		$packageTypes = array();
+
+		if (!empty($this->_data['files'])) {
+			foreach ($this->_data['files'] as $file => $info) {
+				$packageTypes = array_merge($packageTypes, $info['packages']);
+			}
+		}
+
+		$packageTypes = array_unique($packageTypes);
+		sort($packageTypes);
+
+		return $packageTypes;
+	}
+
+	/**
+	 * Check all the files in this descriptor against the MANIFEST to make sure that
+	 * they are up to date.  Return an empty array if there are no errors.
+	 * @return array (error, error, error)
+	 */
+	public function checkIntegrity() {
+		global $gallery;
+
+		$platform     =& $gallery->getPlatform();
+		$phpVm        = $gallery->getPhpVm();
+		$errors       = array();
+		$manifestPath = $this->_pluginDir . 'MANIFEST';
+
+		if (!$platform->is_readable($manifestPath)) {
+			$errors[] = 'Missing MANIFEST';
+		}
+
+		if (empty($errors)) {
+			$stat          = $platform->stat($manifestPath);
+			$manifestMtime = $stat[9];
+
+			foreach ($this->_data['files'] as $file => $metaData) {
+				if ($file == 'MANIFEST') {
+					continue;
+				}
+
+				$path = $this->_pluginDir . $file;
+
+				if (!$platform->file_exists($path)) {
+					$errors[] = sprintf('%s: file missing', $file);
+
+					continue;
+				}
+
+				$contents = $platform->file_get_contents($path);
+				$crc      = sprintf('%u', $phpVm->crc32($contents));
+
+				if ($crc != $metaData['hash'] && $crc != $metaData['hash_crlf']) {
+					$errors[] = sprintf('%s: bad crc (%s != %s)', $file, $metaData['hash'], $crc);
+				} else {
+					$stat = $platform->stat($path);
+
+					if ($stat[9 /* mtime */] > $manifestMtime) {
+						$errors[] = sprintf('%s: newer than MANIFEST', $file);
+					}
+
+					if ($stat[7 /* size */] != $metaData['bytes']
+						&& $stat[7] != $metaData['bytes_crlf']
+					) {
+						$errors[] = sprintf(
+							'%s: file size mismatch (%s != %s)',
+							$file,
+							$metaData['bytes'],
+							$stat[7]
+						);
+					}
+				}
+			}
+		}
+
+		return $errors;
+	}
+
+	public function getPluginVersion() {
+		return $this->_pluginVersion;
+	}
+
+	public function getPluginId() {
+		return $this->_pluginId;
+	}
+
+	public function getPluginDir() {
+		return $this->_pluginDir;
+	}
+
+	public function getStringsRevision() {
+		return $this->_data['header']['stringsRevision'];
+	}
+
+	public function getBuildTimestamp() {
+		return $this->_data['header']['buildTimestamp'];
+	}
+
+	public function getLanguageRevision($languageCode) {
+		return $this->_data['languages'][$this->getStringsRevision()][$languageCode];
+	}
+}

@@ -686,7 +686,10 @@ class GallerySession {
 		      'data' => serialize($this->_sessionData));
 
 	/* Get new sessionId, there's a 1:2^128 probability of collision (md5), try it 5 times */
-	$remoteHost = $this->_remoteIdentifier[0];
+    	$remoteHost = '';
+    	if (!empty($this->_remoteIdentifier)){
+		$remoteHost = $this->_remoteIdentifier[0];
+	}
 	$attempt = 0;
 	$success = false;
 	do {
@@ -1220,7 +1223,7 @@ class GallerySession {
     /**
      * Get a value from the session data.
      * @param string $key
-     * @return string the value or null if it doesn't exist
+     * @return string|array the value or null if it doesn't exist
      */
     function &get($key) {
 	if (isset($this->_sessionData[$key])) {

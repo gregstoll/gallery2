@@ -1,0 +1,148 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test Movie functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class MovieTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$path = 'modules/core/test/phpunit/MovieTest.class';
+
+		$this->_registerFactoryImplementationForTest(
+			'GalleryToolkit',
+			'MovieTestToolkit',
+			'MovieTestToolkit',
+			$path,
+			'coreTest',
+			array('test/movie')
+		);
+		$this->_markFactoryForCleanup();
+		$this->_markToolkitForCleanup('MovieTestToolkit');
+
+		$ret = GalleryCoreApi::registerToolkitProperty(
+			'MovieTestToolkit',
+			array('test/movie'),
+			'dimensions-and-duration',
+			'int,int,float',
+			'test-description',
+			'test/movie'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_movie) = $this->_createRandomDataItem(
+			$this->_getRootId(),
+			'test/movie',
+			array(),
+			__FILE__,
+			'GalleryMovieItem'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_movie);
+	}
+
+	public function testRescanMovie() {
+		$this->_movie->setWidth(1);
+		$this->_movie->setHeight(2);
+		$this->_movie->setDuration(3);
+
+		$ret = $this->_movie->rescan();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(100, $this->_movie->getWidth(), 'width');
+		$this->assertEquals(200, $this->_movie->getHeight(), 'height');
+		$this->assertEquals(10.0, $this->_movie->getDuration(), 'duration');
+	}
+
+	public function testRescanMovieWithToolkitFailure() {
+		$this->_movie->setWidth(1);
+		$this->_movie->setHeight(2);
+		$this->_movie->setDuration(3);
+
+		$_REQUEST['toolkitError'] = ERROR_TOOLKIT_FAILURE;
+
+		$ret = $this->_movie->rescan();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, $this->_movie->getWidth(), 'width');
+		$this->assertEquals(0, $this->_movie->getHeight(), 'height');
+		$this->assertEquals(0.0, $this->_movie->getDuration(), 'duration');
+	}
+
+	public function testRescanMovieWithStorageFailure() {
+		$this->_movie->setWidth(1);
+		$this->_movie->setHeight(2);
+		$this->_movie->setDuration(3);
+
+		$_REQUEST['toolkitError'] = ERROR_STORAGE_FAILURE;
+
+		$ret = $this->_movie->rescan();
+
+		if ($ret) {
+			if ($ret->getErrorCode() != (GALLERY_ERROR | ERROR_STORAGE_FAILURE)) {
+				return $ret;
+			}
+		} else {
+			$this->assertTrue(false, 'Storage failure');
+		}
+
+		// Nothing was changed
+		$this->assertEquals(1, $this->_movie->getWidth(), 'width');
+		$this->assertEquals(2, $this->_movie->getHeight(), 'height');
+		$this->assertEquals(3, $this->_movie->getDuration(), 'duration');
+	}
+}
+
+class MovieTestToolkit {
+	public function getProperty($mimeType, $propertyName, $sourceFilename) {
+		if (empty($_REQUEST['toolkitError'])) {
+			return array(null, array(100, 200, 10.0));
+		}
+
+		return array(GalleryCoreApi::error($_REQUEST['toolkitError']), null);
+	}
+}

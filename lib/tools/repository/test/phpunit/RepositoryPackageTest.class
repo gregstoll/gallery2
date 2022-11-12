@@ -1,0 +1,353 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * @version $Revision: 17580 $
+ * @package RepositoryTools
+ * @subpackage PHPUnit
+ * @author Jozef Selesi <selesi at gmail dot com>
+ */
+GalleryCoreApi::requireOnce('lib/tools/repository/classes/RepositoryObject.class');
+GalleryCoreApi::requireOnce('lib/tools/repository/classes/RepositoryPackage.class');
+GalleryCoreApi::requireOnce(
+	'lib/tools/repository/test/phpunit/RepositoryTestTemplate.class'
+);
+
+/**
+ * Test RepositoryPackage functionality
+ *
+ * @package RepositoryTools
+ * @subpackage PHPUnit
+ */
+class RepositoryPackageTest extends GalleryTestCase {
+	public $_package;
+	public $_expectedPackageData;
+
+	/**
+	 * Prepare a RepositoryPackage for testing.
+	 */
+	public function setUp($x1 = null) {
+		$ret = parent::setUp($x1);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_package = new RepositoryPackage();
+
+		$this->_package->setTemplate(new RepositoryTestTemplate());
+		$this->_package->setTemplateFile('test.tpl');
+
+		$this->_package->_outputDir = 'someoutputdir/';
+
+		// Prepare the data we expect from the methods tested for comparison.
+		$this->_expectedPackageData['package1'] = array(
+			0 => array(
+				'random' => 'random',
+			),
+			1 => array(
+				'directories' => array('dir1', 'dir2'),
+			),
+			2 => array(
+				'files' => array(
+					array(
+						'path' => 'file1',
+						'data' => base64_encode('pluginDirectory/file1'),
+					),
+					array(
+						'path' => 'file2',
+						'data' => base64_encode('pluginDirectory/file2'),
+					),
+				),
+			),
+		);
+
+		$this->_expectedPackageData['package2'] = array(
+			3 => array(
+				'random' => 'random',
+			),
+			4 => array(
+				'directories' => array('dir2', 'dir3'),
+			),
+			5 => array(
+				'files' => array(
+					array(
+						'path' => 'file2',
+						'data' => base64_encode('pluginDirectory/file2'),
+					),
+					array(
+						'path' => 'file3',
+						'data' => base64_encode('pluginDirectory/file3'),
+					),
+				),
+			),
+		);
+	}
+
+	/**
+	 * Test if valid data is being created for a package.
+	 *
+	 * We do not test how the final package looks like, because it may change
+	 * if the templates are changed, but instead check if valid data is being
+	 * put in the template. This is done by saving the data that is sent to
+	 * replaceVariable by using a mock template.
+	 */
+	public function testCreateSinglePackage() {
+		global $gallery;
+
+		$testDescriptor      = new RepositoryPackageTestDescriptor();
+		$expectedPackagePath = sprintf(
+			'%s%s-%s-%s-%s.package',
+			'someoutputdir/',
+			$testDescriptor->getPluginType(),
+			$testDescriptor->getPluginVersion(),
+			$testDescriptor->getBuildTimestamp(),
+			'package1'
+		);
+
+		$platform = new UnitTestPlatform();
+
+		$platform->setReply(
+			'file_get_contents',
+			array('pluginDirectory/file1'),
+			'pluginDirectory/file1'
+		);
+		$platform->setReply(
+			'file_get_contents',
+			array('pluginDirectory/file2'),
+			'pluginDirectory/file2'
+		);
+		$platform->setReply('file_exists', array($expectedPackagePath), true);
+		$gallery->setPlatform($platform);
+
+		// Send data to template.
+		$this->_package->_descriptor = $testDescriptor;
+
+		$ret = $this->_package->writeSinglePackageToDisk('package1');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Get data from template.
+		$templateVariables = $this->_package->_template->getVariables();
+
+		$this->assertEquals($this->_expectedPackageData['package1'], $templateVariables, '');
+
+		// Verify that the package was named appropriately.
+		$packagePath = $this->_package->getOutputDir() . $this->_package->getOutputFile();
+
+		$this->assertEquals($expectedPackagePath, $packagePath, 'Package written to wrong path []');
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testCreateAllPackages() {
+		global $gallery;
+
+		$this->_package->_descriptor = new RepositoryPackageTestDescriptor();
+		$platform                    = new UnitTestPlatform();
+
+		$platform->setReply(
+			'file_get_contents',
+			array('pluginDirectory/file1'),
+			'pluginDirectory/file1'
+		);
+		$platform->setReply(
+			'file_get_contents',
+			array('pluginDirectory/file2'),
+			'pluginDirectory/file2'
+		);
+		$platform->setReply(
+			'file_exists',
+			array('someoutputdir/testplugin-1.0.0-19700411131300-package1.package'),
+			false
+		);
+		$platform->setReply(
+			'file_put_contents',
+			array('someoutputdir/testplugin-1.0.0-19700411131300-package1.package', ''),
+			true
+		);
+		$platform->setReply(
+			'file_get_contents',
+			array('pluginDirectory/file2'),
+			'pluginDirectory/file2'
+		);
+		$platform->setReply(
+			'file_get_contents',
+			array('pluginDirectory/file3'),
+			'pluginDirectory/file3'
+		);
+		$platform->setReply(
+			'file_exists',
+			array('someoutputdir/testplugin-1.0.0-19700411131300-package2.package'),
+			false
+		);
+		$platform->setReply(
+			'file_put_contents',
+			array('someoutputdir/testplugin-1.0.0-19700411131300-package2.package', ''),
+			true
+		);
+		$gallery->setPlatform($platform);
+
+		// Send data to template.
+		list($ret, $packagesWritten) = $this->_package->writeAllPackagesToDisk();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'packagesWritten' => array('package1', 'package2'),
+				'packagesSkipped' => array(),
+			),
+			$packagesWritten,
+			'Unexpected list of written packages.'
+		);
+
+		// Get data from template.
+		$templateVariables = $this->_package->_template->getVariables();
+
+		$this->assertEquals($this->_expectedPackageData['package1'] + $this->_expectedPackageData['package2'], $templateVariables, 'package data');
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testGetPackageFileName() {
+		$this->_package->_descriptor = new RepositoryPackageTestDescriptor();
+
+		$this->assertEquals(
+			'testplugin-1.0.0-19700411131300-base.package',
+			$this->_package->getPackageFileName('base'),
+			'Unexpected package file name generated.'
+		);
+		$this->assertEquals(
+			'testplugin-1.0.0-19700411131300-test.package',
+			$this->_package->getPackageFileName('test'),
+			'Unexpected package file name generated.'
+		);
+		$this->assertEquals(
+			'testplugin-lang-en_EN-2.2-2.2.package',
+			$this->_package->getPackageFileName('lang-en_EN'),
+			'Unexpected package file name generated.'
+		);
+	}
+
+	/**
+	 * Test if getRandomString returns a string of the specified length.
+	 */
+	public function testGetPackageHash() {
+		global $gallery;
+
+		$gallery->_phpVm = new RepositoryPackageTestPhpVm();
+		$testPackage     = new RepositoryPackageTestPackage();
+
+		$this->assertEquals(
+			'mock-filename',
+			$testPackage->getPackageHash('package-type', 20)
+		);
+		$this->assertEquals(
+			'moc',
+			$testPackage->getPackageHash('package-type', 3)
+		);
+	}
+}
+
+class RepositoryPackageTestPhpVm {
+	public function md5($input) {
+		return $input;
+	}
+}
+
+class RepositoryPackageTestPackage extends RepositoryPackage {
+	public function getPackageFilename($packageType) {
+		if ($packageType == 'package-type') {
+			return 'mock-filename';
+		}
+	}
+}
+
+class RepositoryPackageTestDescriptor {
+	public $_packages;
+	public $_directories;
+	public $_files;
+	public $_pluginId;
+	public $_pluginType;
+	public $_pluginDir;
+	public $_pluginVersion;
+
+	public function __construct() {
+		$this->_packages    = array('package1', 'package2');
+		$this->_directories = array(
+			'package1' => array('dir1', 'dir2'),
+			'package2' => array('dir2', 'dir3'),
+		);
+
+		$this->_files = array(
+			'package1' => array('file1', 'file2'),
+			'package2' => array('file2', 'file3'),
+		);
+
+		$this->_pluginId              = 'testplugin';
+		$this->_pluginVersion         = '1.0.0';
+		$this->_pluginDir             = 'pluginDirectory/';
+		$this->_pluginType            = 'module';
+		$this->_pluginBuildTimestamp  = '19700411131300';
+		$this->_pluginStringsRevision = '2.2';
+	}
+
+	public function getPackages() {
+		return $this->_packages;
+	}
+
+	public function getDirectoriesInPackage($package) {
+		return isset($this->_directories[$package]) ? $this->_directories[$package] : 'error';
+	}
+
+	public function getFilesInPackage($package) {
+		return isset($this->_files[$package]) ? $this->_files[$package] : 'error';
+	}
+
+	public function getPluginId() {
+		return $this->_pluginId;
+	}
+
+	public function getPluginType() {
+		return $this->_pluginId;
+	}
+
+	public function getPluginVersion() {
+		return $this->_pluginVersion;
+	}
+
+	public function getPluginDir() {
+		return $this->_pluginDir;
+	}
+
+	public function getBuildTimestamp() {
+		return $this->_pluginBuildTimestamp;
+	}
+
+	public function getStringsRevision() {
+		return $this->_pluginStringsRevision;
+	}
+
+	public function getLanguageRevision($languageCode) {
+		return $this->_pluginStringsRevision;
+	}
+}

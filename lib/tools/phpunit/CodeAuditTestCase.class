@@ -1,0 +1,511 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A framework for scanning all of our source files for specific patterns.  Subclasses must override
+ * the checkFile() method to implement their own checks.
+ * @package Gallery
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class CodeAuditTestCase extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+
+		$this->_shouldHalt = false;
+		$this->_baseDir    = realpath(__DIR__ . '/../../..');
+		$this->_checkTime  = time();
+	}
+
+	public function testCodeAudit() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		if (!$platform->file_exists($this->_baseDir . '/.svn/entries')) {
+			//$this->skip();
+			return;
+		}
+
+		if (!function_exists('xml_parser_create')) {
+			$this->skip();
+
+			return;
+		}
+
+		$this->_scanDir($this->_baseDir);
+
+		if ($this->_shouldHalt) {
+			$this->skip();
+
+			return;
+		}
+
+		$this->finishScan($this->_shouldHalt);
+	}
+
+	public function _scanDir($dirPath) {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		if (($handle = $platform->fopen($dirPath . '/.svn/entries', 'r')) === false) {
+			//$this->skip();
+
+			return;
+		}
+
+		/*
+		 * The file starts with a decimal number which is the format version of this working copy
+		 * directory, followed by a line feed (0x0a) character.  No whitespace (except for the
+		 * terminating line feed) is allowed before or after the number.  The changes in each format
+		 * are listed in wc.h.
+		 */
+		if ((int)$platform->fread($handle, 2) < 7) {
+			// XML format
+			$functionName = '_scanXmlDir';
+		} else {
+			// Non-XML format
+			$functionName = '_scanNonXmlDir';
+		}
+
+		$platform->fclose($handle);
+
+		$dirPaths = array($dirPath);
+
+		while (($dirPath = array_shift($dirPaths)) !== null) {
+			$this->_timeCheck();
+
+			$dirPaths = array_merge($dirPaths, $this->$functionName($dirPath));
+
+			if ($this->_shouldHalt) {
+				return;
+			}
+		}
+	}
+
+	public function _scanXmlDir($dirPath) {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		static $KIND;
+
+		if (!isset($KIND)) {
+			// Wo not be KIND in Turkish locale
+			$KIND = strtoupper('kind');
+		}
+
+		$parser = xml_parser_create();
+		xml_parse_into_struct(
+			$parser,
+			$platform->file_get_contents("$dirPath/.svn/entries"),
+			$xmlValues,
+			$xmlIndex
+		);
+
+		xml_parser_free($parser);
+
+		if (empty($xmlIndex['ENTRY'])) {
+			$this->skip();
+
+			return array();
+		}
+
+		$dirPaths = array();
+
+		foreach ($xmlIndex['ENTRY'] as $entry) {
+			if (empty($xmlValues[$entry]['attributes']['NAME'])) {
+				continue;
+			}
+
+			$subPath = $dirPath . '/' . $xmlValues[$entry]['attributes']['NAME'];
+
+			if (!empty($xmlValues[$entry]['attributes']['DELETED'])
+				&& $xmlValues[$entry]['attributes']['DELETED'] == 'true'
+			) {
+				echo "Skipping deleted entry: $subPath<br/>";
+
+				continue;
+			}
+
+			switch ($xmlValues[$entry]['attributes'][$KIND]) {
+				case 'dir':
+					$dirPaths[] = $subPath;
+
+					break;
+
+				case 'file':
+					if ($this->shouldCheckFile($subPath)) {
+						$this->_timeCheck();
+						$this->checkFile($subPath, $platform->file_get_contents($subPath));
+
+						if ($this->_shouldHalt) {
+							return array();
+						}
+					}
+
+					break;
+
+				default:
+					$this->assertFalse(
+						true,
+						'Unable to parse ' . $xmlValues[$entry]['attributes'][$KIND]
+					);
+			}
+		}
+
+		return $dirPaths;
+	}
+
+	public function _scanNonXmlDir($dirPath) {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		/*
+		 * The rest of the file contains one record for each directory entry.  Each record contains
+		 * a number of ordered fields as described below.  The fields are terminated by a line feed
+		 * (0x0a) character.  Empty fields are represented by just the terminator.  Empty fields
+		 * that are only followed by empty fields may be omitted from the record.  Records are
+		 * terminated by a form feed (0x0c) and a cosmetic line feed (0x0a).
+		 *
+		 * By matching records which follow a form feed and a line feed (\f\n) we ignore the first
+		 * record, which is for this directory.
+		 *
+		 * ([^\f\n]*\n){20} matches the 20 do not care fields between the name field and the deleted
+		 * field.  It is enclosed in ()? because empty fields that are only followed by empty fields
+		 * may be omitted from the record.
+		 *
+		 * @see libsvn_wc/README
+		 *
+		 * $matches[1][$i] is the name field.
+		 * $matches[2][$i] is the kind field.
+		 * $matches[5][$i] is the deleted field, if present.
+		 */
+		$count = preg_match_all(
+			'/\f\n([^\f\n]*)\n([^\f\n]*)\n(([^\f\n]*\n){20}([^\f\n]*)\n)?/',
+			$platform->file_get_contents($dirPath . '/.svn/entries'),
+			$matches
+		);
+
+		$dirPaths = array();
+
+		for ($i = 0; $i < $count; $i++) {
+			if ($matches[5][$i] == 'deleted') {
+				echo "Skipping deleted entry: $subPath<br/>";
+
+				continue;
+			}
+
+			$subPath = $dirPath . '/' . $matches[1][$i];
+
+			switch ($matches[2][$i]) {
+				case 'dir':
+					$dirPaths[] = $subPath;
+
+					break;
+
+				case 'file':
+					if ($this->shouldCheckFile($subPath)) {
+						$this->_timeCheck();
+						$this->checkFile($subPath, $platform->file_get_contents($subPath));
+
+						if ($this->_shouldHalt) {
+							return array();
+						}
+					}
+
+					break;
+
+				default:
+					$this->assertFalse(
+						true,
+						'Unable to parse ' . $matches[2][$i]
+					);
+			}
+		}
+
+		return $dirPaths;
+	}
+
+	/**
+	 * Keep this test running.
+	 */
+	public function _timeCheck() {
+		global $gallery;
+
+		$gallery->guaranteeTimeLimit(30);
+
+		if (time() - $this->_checkTime >= 20) {
+			$this->_checkTime = time();
+			$usedMemory       = (function_exists('memory_get_usage')) ? memory_get_usage() : '"unknown"';
+			echo '<script type="text/javascript">updateStats(0,0,0,'
+			. $usedMemory . ");</script>\n";
+		}
+	}
+
+	/**
+	 * Subclasses can call this to stop scanning.
+	 */
+	public function halt() {
+		$this->_shouldHalt = true;
+	}
+
+	/**
+	 * Overload this method in subclasses to audit the file.
+	 * @access protected
+	 */
+	public function checkFile($fileName, $buffer) {}
+
+	/**
+	 * Overload this method in subclasses to run any tasks after the scan is complete.
+	 * @param bool $halted true if the scan was halted early
+	 * @access protected
+	 */
+	public function finishScan($halted) {}
+
+	/**
+	 * Overload this method in subclasses.  If this method returns true, we will call checkFile on it.
+	 * @return true if we should check this file
+	 * @access protected
+	 */
+	public function shouldCheckFile($fileName) {
+		/*
+		 * By default we accept php|inc|class|tpl|po extensions, with the exception that we only
+		 * take lib/tools/repository from the lib directory.
+		 */
+		if (!preg_match('{\.(?:php|inc|class|tpl|po)$}', $fileName)) {
+			return false;
+		}
+
+		if (strpos($fileName, $this->_baseDir . '/lib/') === 0) {
+			return strpos($fileName, $this->_baseDir . '/lib/tools/repository/') === 0;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Extract function calls from a php snippet.
+	 *
+	 *
+	 * @param string $phpCode e.g. '<?php print "meow"; $foo->bar("hello world"); ?>'
+	 *
+	 *
+	 * @param mixed $function Function to be searched for, e.g.
+	 *              - 'foo' for a global function called foo,
+	 *              - array('GalleryCoreApi', 'foo') for static function calls of function foo,
+	 *              - array(null, 'foo') for instance method calls (matches any object instance)
+	 * @param string $fileName (optional) Cache tokens between function calls for this file name
+	 * @return array of function calls, e.g. array('$bar->foo("hello world")')
+	 */
+	public function getFunctionCalls($phpCode, $function, $fileName = null) {
+		$calls = array();
+
+		if (is_array($function)) {
+			$classMethodCallsOnly = true;
+			$className            = GalleryUtilities::strToLower($function[0]);
+			$functionName         = $function[1];
+		} else {
+			$classMethodCallsOnly = false;
+			$functionName         = $function;
+			$className            = null;
+		}
+
+		$functionName = GalleryUtilities::strToLower($functionName);
+
+		if (!$fileName || !isset($this->_tokens[$fileName])) {
+			$tokens = token_get_all($phpCode);
+
+			if ($fileName) {
+				// Only cache the most recently used file (memory usage)
+				unset($this->_tokens);
+				$this->_tokens[$fileName] = $tokens;
+			}
+		} else {
+			$tokens = $this->_tokens[$fileName];
+		}
+
+		// Search for all occurrences of $functionName
+		$candidateTokens = array();
+
+		foreach ($tokens as $i => $token) {
+			if (is_array($token) && $token[0] == T_STRING
+				&& GalleryUtilities::strToLower($token[1]) == $functionName
+			) {
+				$candidateTokens[] = $i;
+			}
+		}
+
+		if (empty($candidateTokens)) {
+			return $calls;
+		}
+
+		// Check the candidates and extract the complete calls
+		foreach ($candidateTokens as $baseIndex) {
+			$call = $tokens[$baseIndex][1];
+
+			// Seek backwards to check static / instance method vs. function call
+			$j = $this->_getNextTokenIndex($tokens, $baseIndex, true);
+
+			if ($classMethodCallsOnly && isset($tokens[$j][0])
+				&& in_array($tokens[$j][0], array(T_DOUBLE_COLON, T_OBJECT_OPERATOR))
+			) {
+				$k = $this->_getNextTokenIndex($tokens, $j, true);
+
+				// Check whether it matches $foo->bar or Foo::bar
+				if (isset($tokens[$k][0]) && in_array(
+					$tokens[$k][0],
+					array(T_STRING, T_VARIABLE)
+				)
+				) {
+					if ($tokens[$k][0] == T_STRING
+						&& GalleryUtilities::strToLower($tokens[$k][1]) != $className
+						|| $tokens[$k][0] == T_VARIABLE && !empty($className)
+					) {
+						continue;
+					}
+
+					$call = $tokens[$k][1] . $tokens[$j][1] . $call;
+				}
+			} elseif ($classMethodCallsOnly) {
+				continue;
+			}
+
+			// Search forwards to parse the whole function call and its arguments
+			$i = $this->_getNextTokenIndex($tokens, $baseIndex);
+
+			if (!isset($tokens[$i]) || $tokens[$i] !== '(') {
+				continue;
+			}
+
+			$call      .= '(';
+			$parenCount = 1;
+
+			while (($i = $this->_getNextTokenIndex($tokens, $i)) && isset($tokens[$i])
+			&& $parenCount != 0) {
+				switch ($tokens[$i]) {
+					case ')':
+						$parenCount--;
+
+						break;
+
+					case '(':
+						$parenCount++;
+
+						break;
+				}
+
+				if (is_array($tokens[$i])) {
+					$call .= $tokens[$i][1];
+				} else {
+					$call .= $tokens[$i];
+				}
+			}
+
+			if ($parenCount == 0) {
+				$calls[] = $call;
+			}
+		}
+
+		return $calls;
+	}
+
+	/**
+	 * Parse a function call into parameters.
+	 * @param string $functionCall e.g. "$this->foo(array(1, 2), 'moo')"
+	 * @return array the list of parameters, e.g. array("array(1, 2)", "'moo'")
+	 */
+	public function getFunctionParameters($functionCall) {
+		// Replace the function with an array
+		$parameterString = preg_replace('/^.*?\((.*)\)$/', 'array(\1)', $functionCall);
+
+		// Seek to the beginning of the parameter string
+		$tokens = token_get_all('<?php ' . $parameterString . '; ?>');
+		$i      = 0;
+
+		do {
+			$i = $this->_getNextTokenIndex($tokens, $i);
+		} while (isset($i) && $tokens[$i] !== '(');
+		$parenCount = 1;
+
+		// Explode the parameters by ',' unless we are in a sub-expression (in parens)
+		$params = array();
+		$param  = '';
+
+		while (($i = $this->_getNextTokenIndex($tokens, $i)) && isset($tokens[$i])
+			&& $parenCount != 0) {
+			switch ($tokens[$i]) {
+				case ')':
+					$parenCount--;
+
+					break;
+
+				case '(':
+					$parenCount++;
+
+					break;
+
+				case ',':
+					if ($parenCount === 1) {
+						$params[] = $param;
+						$param    = '';
+					}
+
+					break;
+			}
+
+			if (is_array($tokens[$i])) {
+				$param .= $tokens[$i][1];
+			} else {
+				$param .= $tokens[$i];
+			}
+		}
+
+		if (!empty($param) && $parenCount == 0) {
+			// Remove the trailing ')'
+			$params[] = substr($param, 0, -1);
+		}
+
+		return $params;
+	}
+
+	/**
+	 * Get the next PHP token omitting whitespace tokens.
+	 * @param array $tokens
+	 * @param int $i the current index in the $tokens array
+	 * @param boolean $previous whether to seek backwards (defaults to forward (false))
+	 * @return int the index of the next token in the request direction, or null
+	 */
+	public function _getNextTokenIndex(&$tokens, $i, $previous = false) {
+		$i += $previous ? -1 : 1;
+
+		if (!isset($tokens[$i])) {
+			return null;
+		}
+
+		if (is_array($tokens[$i]) && $tokens[$i][0] == T_WHITESPACE) {
+			return $this->_getNextTokenIndex($tokens, $i, $previous);
+		}
+
+		return $i;
+	}
+}

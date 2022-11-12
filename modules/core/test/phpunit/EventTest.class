@@ -1,0 +1,394 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test Event functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class EventTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$EventTestPlatform = new EventTestPlatform();
+
+		$gallery->setPlatform($EventTestPlatform);
+
+		$this->_platform =& $gallery->getPlatform();
+
+		// Register a new module
+		GalleryDataCache::reset();
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'EventTest');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		// If a test fails it might not deactivate / uninstall the mock module
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'EventTest');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $isActive) = $module->isActive();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if ($isActive) {
+			list($ret, $redirect) = $module->deactivate();
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$ret = $module->uninstall();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removePlugin('module', 'EventTest');
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testPostEvent() {
+		$eventName = 'EventTest::test';
+		$listener  = new EventTestEventListener($this);
+
+		GalleryCoreApi::registerEventListener($eventName, $listener);
+
+		$event = GalleryCoreApi::newEvent($eventName);
+		$bogus = 'bogus entity';
+
+		$event->setEntity($bogus);
+		$event->setData('some data');
+
+		list($ret, $result) = GalleryCoreApi::postEvent($event);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($event, $listener->getEvent());
+		$this->assertEquals(array(), $result);
+	}
+
+	public function testPostEventReturnData() {
+		$eventName = 'EventTest::test2';
+		$listener  = new EventTestEventListener($this);
+
+		GalleryCoreApi::registerEventListener($eventName, $listener);
+
+		$event = GalleryCoreApi::newEvent($eventName);
+		$bogus = 'bogus entity';
+
+		$event->setEntity($bogus);
+		$event->setData('send result');
+
+		list($ret, $result) = GalleryCoreApi::postEvent($event);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($event, $listener->getEvent());
+		$this->assertEquals(array('result'), $result);
+	}
+
+	public function testChangePermissions() {
+		// Verify that a GalleryEntity::save event handler can modify permissions of a new item
+		global $gallery;
+
+		$listener = new EventTestEventListener($this);
+
+		$this->_registerTestEventListener('GalleryEntity::save', $listener);
+
+		list($ret, $item) = $this->_createRandomDataItem($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($item);
+
+		$event = $listener->getEvent();
+
+		$this->assertEquals('GalleryEntity::save', $event ? $event->getEventName() : 'unset');
+
+		list($ret, $permissions) = GalleryCoreApi::fetchAllPermissionsForItem($item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				array(
+					'userId'     => $gallery->getActiveUserId(),
+					'permission' => 'core.delete',
+				),
+			),
+			$permissions
+		);
+	}
+
+	public function testFactoryRegistrationsBeforeActivateEvent() {
+		/*
+		 * Verify that Gallery::ActivatePlugin event listeners can use the activated module's
+		 * factory implementations
+		 */
+		$listener = new EventTestEventListener();
+
+		$this->_registerTestEventListener('Gallery::ActivatePlugin', $listener);
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'EventTest');
+
+		if ($ret) {
+			return;
+		}
+
+		$ret = $module->installOrUpgrade();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $redirect) = $module->activate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($listener->_factory !== null, 'null factory');
+	}
+
+	public function testEmbeddedEntityIsAReference() {
+		$event  = new GalleryEvent();
+		$entity = new GalleryEntity();
+
+		$event->setEntity($entity);
+
+		// Embedded entity has the new value, even if we do not get it by reference
+		$entity->setId(1000);
+
+		$embeddedEntity = $event->getEntity();
+
+		$this->assertEquals(1000, $embeddedEntity->getId());
+
+		// Get embedded entity by reference and change it, then see that it affects the original
+		$embeddedEntity =& $event->getEntity();
+
+		$embeddedEntity->setId(2000);
+		$this->assertEquals(2000, $entity->getId());
+	}
+}
+
+/**
+ * Dummy event listener
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+
+// extends GalleryEventListener
+class EventTestEventListener {
+	public $_event;
+	public $_factory;
+
+	public function handleEvent($event) {
+		$this->_event = $event;
+		$data         = $event->getData();
+		$result       = ($data == 'send result') ? 'result' : null;
+
+		switch ($event->getEventName()) {
+			case 'GalleryEntity::save':
+				global $gallery;
+
+				$item = $event->getEntity();
+
+				$ret = GalleryCoreApi::removeItemPermissions($item->getId());
+
+				if ($ret) {
+					return array($ret, null);
+				}
+
+				$ret = GalleryCoreApi::addUserPermission(
+					$item->getId(),
+					$gallery->getActiveUserId(),
+					'core.delete'
+				);
+
+				if ($ret) {
+					return array($ret, null);
+				}
+
+				return array(null, $result);
+
+			// @see EventTest::testFactoryRegistrationsBeforeActivateEvent
+			case 'Gallery::ActivatePlugin':
+				list($ret, $this->_factory) = GalleryCoreApi::newFactoryInstance(
+					'MockFactory',
+					'EventTestFactory'
+				);
+
+				if ($ret) {
+					return array($ret, null);
+				}
+
+				return array(null, $result);
+		}
+
+		return array(null, $result);
+	}
+
+	public function getEvent() {
+		return $this->_event;
+	}
+}
+
+/**
+ * Mock platform.
+ */
+class EventTestPlatform extends GalleryPlatform {
+	public function opendir($path) {
+		if (substr($path, -8) == 'modules/') {
+			$this->_list = array();
+
+			if (($handle = parent::opendir($path)) !== false) {
+				while (($name = parent::readdir($handle)) !== false) {
+					array_push($this->_list, $name);
+				}
+			}
+
+			array_push($this->_list, 'eventtest');
+
+			return 'eventtest';
+		}
+
+		return parent::opendir($path);
+	}
+
+	public function is_dir($path) {
+		global $gallery;
+		static $ignorePath;
+
+		$ignorePath = $gallery->getConfig('data.gallery.plugins_data') . 'modules/eventtest';
+
+		if (substr($path, -17) == 'modules/eventtest'
+			&& $path != $ignorePath
+		) {
+			return true;
+		}
+
+		return parent::is_dir($path);
+	}
+
+	public function readdir($handle) {
+		if ($handle == 'eventtest') {
+			return array_shift($this->_list);
+		}
+
+		return parent::readdir($handle);
+	}
+
+	public function closedir($handle) {
+		if ($handle == 'eventtest') {
+			unset($this->_list);
+
+			return true;
+		}
+
+		return parent::closedir($handle);
+	}
+
+	public function file_exists($path) {
+		if (substr($path, -28) == 'modules/eventtest/module.inc') {
+			return true;
+		}
+
+		return parent::file_exists($path);
+	}
+
+	public function getDirectorySeparator() {
+		return '/';
+	}
+}
+
+/**
+ * Mock module.
+ */
+class EventTestModule extends GalleryModule {
+	public function __construct() {
+		global $gallery;
+
+		$this->setId('eventtest');
+		$this->setName('Event Test Module');
+		$this->setDescription('Mock module');
+		$this->setVersion('1.0.0');
+		$this->setGroup('mock', 'Mock');
+		$this->setRequiredCoreApi(GalleryCoreApi::getApiVersion());
+		$this->setRequiredModuleApi(GalleryModule::getApiVersion());
+	}
+
+	public function performFactoryRegistrations() {
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'MockFactory',
+			'EventTestFactory',
+			'EventTestFactory',
+			'/modules/core/test/phpunit/EventTest.class',
+			'eventtest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		return null;
+	}
+}
+
+class EventTestFactory {}

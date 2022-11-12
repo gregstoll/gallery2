@@ -1,0 +1,388 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemAddAlbum controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemAddAlbumControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.ItemAddAlbum');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_parentAlbum) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_parentAlbum);
+	}
+
+	public function testAddAlbum() {
+		// Use valid inputs
+		$name = 'testalbum-' . mt_rand();
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_parentAlbum->getId());
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[pathComponent]', $name);
+		GalleryUtilities::putRequestVariable('form[title]', 'title');
+		GalleryUtilities::putRequestVariable('form[summary]', 'summary');
+		GalleryUtilities::putRequestVariable('form[keywords]', 'keywords');
+		GalleryUtilities::putRequestVariable('form[description]', 'description');
+
+		list($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'       => 'core.ItemAdmin',
+					'subView'    => 'core.ItemEdit',
+					'editPlugin' => 'ItemEditAlbum',
+					'itemId'     => $this->_getChildId(),
+				),
+				'status'   => array(
+					'editMessage' => $core->translate('Album created successfully.'),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testAddDuplicateAlbum() {
+		// Create an album
+		list($ret, $subAlbum) = $this->_createRandomAlbum($this->_parentAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Use valid inputs
+		$name = 'testalbum-' . mt_rand();
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_parentAlbum->getId());
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[title]', 'title');
+		GalleryUtilities::putRequestVariable('form[summary]', 'summary');
+		GalleryUtilities::putRequestVariable('form[keywords]', 'keywords');
+		GalleryUtilities::putRequestVariable('form[description]', 'description');
+
+		// Then re-use the path component that we know will conflict
+		GalleryUtilities::putRequestVariable('form[pathComponent]', $subAlbum->getPathComponent());
+
+		list($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'       => 'core.ItemAdmin',
+					'subView'    => 'core.ItemEdit',
+					'editPlugin' => 'ItemEditAlbum',
+					'itemId'     => $this->_getSecondChildId(),
+				),
+				'status'   => array(
+					'editMessage' => $core->translate('Album created successfully.'),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $newAlbum) = GalleryCoreApi::loadEntitiesById($this->_getSecondChildId(), 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify that the new album's path component is unique (it has got _001 as a suffix)
+		$this->assertEquals($subAlbum->getPathComponent() . '_001', $newAlbum->getPathComponent());
+	}
+
+	public function testAddAlbumMissingName() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('itemId', $this->_parentAlbum->getId());
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[pathComponent]', '');
+		GalleryUtilities::putRequestVariable('form[title]', 'title');
+		GalleryUtilities::putRequestVariable('form[summary]', 'summary');
+		GalleryUtilities::putRequestVariable('form[keywords]', 'keywords');
+		GalleryUtilities::putRequestVariable('form[description]', 'description');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemAddAlbum',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][pathComponent][missing]'),
+			),
+			$results
+		);
+	}
+
+	public function testAddAlbumInvalidName() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('itemId', $this->_parentAlbum->getId());
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[pathComponent]', 'Invalid!/\Chars');
+		GalleryUtilities::putRequestVariable('form[title]', 'title');
+		GalleryUtilities::putRequestVariable('form[summary]', 'summary');
+		GalleryUtilities::putRequestVariable('form[keywords]', 'keywords');
+		GalleryUtilities::putRequestVariable('form[description]', 'description');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemAddAlbum',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][pathComponent][invalid]'),
+			),
+			$results
+		);
+	}
+
+	public function testAddAlbumWithSpaces() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+		$name     = ' testalbum-' . mt_rand() . ' ';
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_parentAlbum->getId());
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[pathComponent]', $name);
+		GalleryUtilities::putRequestVariable('form[title]', 'title');
+		GalleryUtilities::putRequestVariable('form[summary]', 'summary');
+		GalleryUtilities::putRequestVariable('form[keywords]', 'keywords');
+		GalleryUtilities::putRequestVariable('form[description]', 'description');
+
+		list($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$id      = $this->_getChildId();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'       => 'core.ItemAdmin',
+					'subView'    => 'core.ItemEdit',
+					'editPlugin' => 'ItemEditAlbum',
+					'itemId'     => $id,
+				),
+				'status'   => array(
+					'editMessage' => $core->translate('Album created successfully.'),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $newAlbum) = GalleryCoreApi::loadEntitiesById($id, 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(trim($name), $newAlbum->getPathComponent(), 'path component');
+
+		list($ret, $path) = $newAlbum->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($platform->is_dir($path), "directory '$path'");
+		$this->assertEquals(
+			trim($name),
+			basename($path),
+			'directory name: "' . basename($path) . '"'
+		);
+	}
+
+	public function testAddAlbumWithPeriodInName() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+		$name     = ' testalbum-' . mt_rand() . '.foobarbaz';
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_parentAlbum->getId());
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[pathComponent]', $name);
+		GalleryUtilities::putRequestVariable('form[title]', 'title');
+		GalleryUtilities::putRequestVariable('form[summary]', 'summary');
+		GalleryUtilities::putRequestVariable('form[keywords]', 'keywords');
+		GalleryUtilities::putRequestVariable('form[description]', 'description');
+
+		list($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$id      = $this->_getChildId();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'       => 'core.ItemAdmin',
+					'subView'    => 'core.ItemEdit',
+					'editPlugin' => 'ItemEditAlbum',
+					'itemId'     => $id,
+				),
+				'status'   => array(
+					'editMessage' => $core->translate('Album created successfully.'),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $newAlbum) = GalleryCoreApi::loadEntitiesById($id, 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(trim($name), $newAlbum->getPathComponent(), 'path component');
+
+		list($ret, $path) = $newAlbum->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($platform->is_dir($path), "directory '$path'");
+		$this->assertEquals(
+			trim($name),
+			basename($path),
+			'directory name: "' . basename($path) . '"'
+		);
+	}
+
+	public function _getChildId() {
+		list($ret, $ids) = GalleryCoreApi::fetchChildItemIds($this->_parentAlbum);
+
+		$this->assertEquals(1, count($ids));
+
+		return $ids[0];
+	}
+
+	public function _getSecondChildId() {
+		list($ret, $ids) = GalleryCoreApi::fetchChildItemIds($this->_parentAlbum);
+
+		$this->assertEquals(2, sizeof($ids));
+
+		// We want the larger id, since it is the newer one
+		return max($ids[0], $ids[1]);
+	}
+
+	public function testMaliciousMarkup() {
+		$ret = $this->_setMarkupType('html', true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$name = 'testalbum-' . mt_rand();
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_parentAlbum->getId());
+		GalleryUtilities::putRequestVariable('form[action][create]', 1);
+		GalleryUtilities::putRequestVariable('form[pathComponent]', $name);
+		GalleryUtilities::putRequestVariable('form[title]', '<script>bad</script> title');
+		GalleryUtilities::putRequestVariable('form[summary]', 'summary <div onclick="die">.</div>');
+		GalleryUtilities::putRequestVariable('form[keywords]', 'keywords');
+		GalleryUtilities::putRequestVariable('form[description]', 'description <object>.</object>');
+
+		list($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'       => 'core.ItemAdmin',
+					'subView'    => 'core.ItemEdit',
+					'editPlugin' => 'ItemEditAlbum',
+					'itemId'     => ($id = $this->_getChildId()),
+				),
+				'status'   => array(
+					'editMessage' => $core->translate('Album created successfully.'),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $newAlbum) = GalleryCoreApi::loadEntitiesById($id, 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(' title', $newAlbum->getTitle(), 'title');
+		$this->assertEquals('summary &lt;div&gt;.&lt;/div&gt;', $newAlbum->getSummary(), 'summary');
+
+		$this->assertEquals('description .', $newAlbum->getDescription(), 'description');
+	}
+}

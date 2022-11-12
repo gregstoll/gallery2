@@ -20,7 +20,7 @@
 
 /**
  * Internationalization and Localization utilities.
- * 
+ *
  * Definitions:
  * $locale - consists of ISO 3166 country codes and ISO 639 language codes i.e. en_US, en_GB, es_MX
  * $language - the first portion of the locale
@@ -28,7 +28,7 @@
  * 	       (i.e. en_US => en; en_GB => en_GB) in some cases the $langCode == $locale.  The
  * 	       exception is the handling of chinese.  For political reasons there is no default
  * 	       country and it's always represented by the full $locale (zh_CN or zh_TW)
- * @todo go through and standardize the usage or remove the langCode usage and just use locale 
+ * @todo go through and standardize the usage or remove the langCode usage and just use locale
  * @package GalleryCore
  * @subpackage Classes
  * @author Bharat Mediratta <bharat@menalto.com>
@@ -57,6 +57,18 @@ class GalleryTranslator {
      */
     var $_isRightToLeft;
 
+    /**
+     * Class Loader
+     */
+    public static function getMe() {
+	static $instance;
+
+	if (!isset($instance)) {
+		$instance = new GalleryTranslator();
+	}
+
+	return $instance;
+    }
 
     function __construct() {
 	$this->_boundDomains = array();
@@ -323,7 +335,7 @@ class GalleryTranslator {
      * @static
      * @access private
      */
-    function _setlocale($category, $locale) {
+    static function _setlocale($category, $locale) {
 	global $gallery;
 
 	if (($ret = setlocale($category, $locale)) !== false) {

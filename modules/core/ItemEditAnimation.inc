@@ -39,17 +39,26 @@ class ItemEditAnimation extends ItemEditPlugin {
 	/* Figure out which command we're taking */
 	if (isset($form['action']['save'])) {
 
-	    if (isset($form['width']) && $form['width'] < 0) {
-		$error[] = 'form[error][width][invalid]';
-	    } else {
-		$form['width'] = (int)$form['width'];
-	    }
+		/* Missing values get set to 0 */
+		if (isset($form['width'])) {
+			if (((int)$form['width']) < 0) {
+				$error[] = 'form[error][width][invalid]';
+			} else {
+				$form['width'] = (int)$form['width'];
+			}
+		}else{
+			$form['width'] = 0;
+		}
 
-	    if (isset($form['height']) && $form['height'] < 0) {
-		$error[] = 'form[error][height][invalid]';
-	    } else {
-		$form['height'] = (int)$form['height'];
-	    }
+		if (isset($form['height'])) {
+			if (((int)$form['height']) < 0) {
+				$error[] = 'form[error][height][invalid]';
+			} else {
+				$form['height'] = (int)$form['height'];
+			}
+		}else{
+			$form['height'] = 0;
+		}
 
 	    if (empty($error)) {
 		list ($ret, $lock) = GalleryCoreApi::acquireWriteLock($item->getId());

@@ -1,0 +1,208 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test language selection functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class LanguageTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.ChangeLanguage');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_siteLanguage) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.language');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGetActiveLanguageCode() {
+		global $gallery;
+
+		$session =& $gallery->getSession();
+
+		$session->remove('core.language');
+
+		list($ret, $language) = $gallery->getActiveLanguageCode();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(null, $language, 'not set');
+
+		$user = new GalleryUser();
+
+		$user->setId('testId');
+		$user->setLanguage('test_language');
+		$gallery->setActiveUser($user);
+
+		list($ret, $language) = $gallery->getActiveLanguageCode();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test_language', $language, 'user language');
+		$gallery->setActiveLanguageCode('sess_language');
+
+		list($ret, $language) = $gallery->getActiveLanguageCode();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('sess_language', $language, 'session language');
+	}
+
+	public function testChangeLanguageController() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('language', 'test_language');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'return' => 1,
+				'status' => array(),
+				'error'  => array(),
+			),
+			$results
+		);
+
+		list($ret, $language) = $gallery->getActiveLanguageCode();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('test_language', $language, 'language');
+	}
+
+	public function testGetLanguageDescription() {
+		$testCases = array(
+			'en_US' => 'English (US)',
+			'hu_HU' => 'Magyar',
+		);
+
+		foreach ($testCases as $case => $expected) {
+			list($ret, $description) = GalleryCoreApi::getLanguageDescription($case);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals($expected, $description, "Testcase: $case");
+		}
+	}
+
+	public function testGetSupportedLanguageEnglishOnly() {
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$platform =& $gallery->getPlatform();
+
+		list($languageData) = GalleryTranslator::getLanguageData();
+
+		$expected['en']['US'] = $languageData['en']['US'];
+
+		$gallery->setConfig('data.gallery.locale', '/g2data/');
+		$platform->setReply('glob', array('/g2data/*', null), array('.', '..'));
+
+		$supportedLanguages = GalleryCoreApi::getSupportedLanguages();
+
+		$this->assertEquals($expected, $supportedLanguages);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testGetSupportedLanguageEnglishFilterd() {
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$platform =& $gallery->getPlatform();
+
+		list($languageData) = GalleryTranslator::getLanguageData();
+
+		$expected['en']['US'] = $languageData['en']['US'];
+		$expected['en']['GB'] = $languageData['en']['GB'];
+		$expected['pt']['BR'] = $languageData['pt']['BR'];
+
+		$gallery->setConfig('data.gallery.locale', '/g2data/');
+		$platform->setReply('glob', array('/g2data/*', null), array('.', '..', 'en_GB', 'pt_BR'));
+		$platform->setReply('is_dir', array('en_GB'), true);
+		$platform->setReply('is_dir', array('pt_BR'), true);
+
+		$supportedLanguages = GalleryCoreApi::getSupportedLanguages();
+
+		$this->assertEquals($expected, $supportedLanguages);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testGetSupportedLanguageHasExceptionForChineseDefaultCountry() {
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$platform =& $gallery->getPlatform();
+
+		list($languageData) = GalleryTranslator::getLanguageData();
+
+		$expected['en']['US'] = $languageData['en']['US'];
+		$expected['pt']['BR'] = $languageData['pt']['BR'];
+		$expected['pt']['PT'] = $languageData['pt']['PT'];
+		$expected['zh']['CN'] = $languageData['zh']['CN'];
+		$expected['zh']['TW'] = $languageData['zh']['TW'];
+
+		$gallery->setConfig('data.gallery.locale', '/g2data/');
+		$platform->setReply(
+			'glob',
+			array('/g2data/*', null),
+			array('.', '..', 'pt_BR', 'pt', 'zh_CN', 'zh_TW')
+		);
+		$platform->setReply('is_dir', array('pt_BR'), true);
+		$platform->setReply('is_dir', array('pt'), true);
+		$platform->setReply('is_dir', array('zh_CN'), true);
+		$platform->setReply('is_dir', array('zh_TW'), true);
+
+		$supportedLanguages = GalleryCoreApi::getSupportedLanguages();
+
+		$this->assertEquals($expected, $supportedLanguages);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+}

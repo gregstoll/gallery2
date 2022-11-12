@@ -1,0 +1,94 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Mock template adapter for tests
+ * @package Gallery
+ * @subpackage PHPUnit
+ */
+class MockTemplateAdapter {
+	public function __construct($useProgressBar = true) {
+		$this->_useProgressBar      = $useProgressBar;
+		$this->_callbacks           = array();
+		$this->_completeProgressBar = array();
+		$this->_progress            = array();
+	}
+
+	public function registerTrailerCallback($callback, $args) {
+		$this->_callbacks[] = array($callback, $args);
+	}
+
+	public function runCallbacks() {
+		foreach ($this->_callbacks as $callback) {
+			$ret = call_user_func_array($callback[0], $callback[1]);
+
+			if (is_array($ret)) {
+				$ret = $ret[0];
+			}
+
+			if ($ret) {
+				// If progress bar is in use, report error via its interface
+				if ($this->_useProgressBar) {
+					$this->errorProgressBar($ret);
+				}
+
+				return $ret;
+			}
+		}
+
+		return null;
+	}
+
+	public function getCallback($index) {
+		return $this->_callbacks[$index];
+	}
+
+	public function getCallbackCount() {
+		return sizeof($this->_callbacks);
+	}
+
+	public function getProgressBarDump() {
+		return $this->_progress;
+	}
+
+	public function updateProgressBar($title, $description, $percentComplete) {
+		// Replace localized comma decimal separator with a dot
+		$this->_progress[] = str_replace(',', '.', round($percentComplete, 2));
+
+		return null;
+	}
+
+	public function resetProgressBarStats() {
+		$this->_progress[] = 'reset';
+	}
+
+	public function errorProgressBar($status) {
+		$this->_progress[] = 'error';
+	}
+
+	public function completeProgressBar($url, $doRedirect = false) {
+		$this->_progress[]          = 'complete:' . $url;
+		$this->_completeProgressBar = array($url, $doRedirect);
+	}
+
+	public function getCompleteProgressBarDump() {
+		return $this->_completeProgressBar;
+	}
+}
+

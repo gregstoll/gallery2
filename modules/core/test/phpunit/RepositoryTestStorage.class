@@ -1,0 +1,146 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test storage class used for testing functions that interact with the database.
+ * Only the features required for testing the repository code are implemented.
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Jozef Selesi <selesi at gmail dot com>
+ * @version $Revision: 17580 $
+ */
+class RepositoryTestStorage {
+	/** @todo Convert this to use UnitTestStorage */
+	public $_addedMapData;
+	public $_updatedMapData;
+	public $_searchResults;
+	public $_searches;
+	public $_removedMapData;
+
+	public function __construct() {
+		$this->reset();
+	}
+
+	public function reset() {
+		$this->_searches       = array();
+		$this->_searchResults  = array();
+		$this->_addedMapData   = array();
+		$this->_updatedMapData = array();
+		$this->_removedMapData = array();
+	}
+
+	public function search($query, $args) {
+		$this->_searches[] = array(
+			'query'     => $query,
+			'arguments' => $args,
+		);
+
+		return array(
+			null,
+			new RepositoryTestSearchResults($this->_searchResults),
+		);
+	}
+
+	public function setSearchResults($results) {
+		$this->_searchResults = $results;
+	}
+
+	public function getSearches() {
+		return $this->_searches;
+	}
+
+	public function addMapEntry($map, $data) {
+		$this->_addedMapData[$map][] = $data;
+
+		return null;
+	}
+
+	public function getMapEntry($map, $data, $match) {
+		$this->_searches[] = array(
+			'map'    => $map,
+			'select' => $data,
+			'where'  => $match,
+		);
+
+		return array(
+			null,
+			new RepositoryTestSearchResults($this->_searchResults),
+		);
+	}
+
+	public function getAddedMapData() {
+		return $this->_addedMapData;
+	}
+
+	public function updateMapEntry($map, $match, $change) {
+		$this->_updatedMapData[$map][] = array(
+			'match'  => $match,
+			'change' => $change,
+		);
+
+		return null;
+	}
+
+	public function removeMapEntry($map, $match) {
+		$this->_removedMapData[$map][] = array(
+			'match' => $match,
+		);
+
+		return null;
+	}
+
+	public function getUpdatedMapData() {
+		return $this->_updatedMapData;
+	}
+
+	public function getRemovedMapData() {
+		return $this->_removedMapData;
+	}
+
+	public function rollbackTransaction() {}
+
+	public function getUniqueId($sequence) {
+		return 1;
+	}
+
+	public function getAffectedRows($useNonTransactionalConnection) {
+		return 1;
+	}
+}
+
+class RepositoryTestSearchResults {
+	public $_results;
+	public $_resultIndex;
+
+	public function __construct($results) {
+		$this->_results     = $results;
+		$this->_resultIndex = 0;
+	}
+
+	public function resultCount() {
+		return count($this->_results);
+	}
+
+	public function nextResult() {
+		$result = $this->_resultIndex < $this->resultCount() ? $this->_results[$this->_resultIndex] : false;
+		$this->_resultIndex++;
+
+		return $result;
+	}
+}

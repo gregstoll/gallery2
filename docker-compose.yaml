@@ -1,0 +1,39 @@
+version: '3'
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "10000:8000"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/nginx.conf
+      - .:/app
+    links:
+      - php
+  php:
+    ports:
+      - "11000:9000"
+    build:
+      context: .
+      dockerfile: PHP.Dockerfile
+    environment:
+      PHP_IDE_CONFIG: "serverName=docker"
+    volumes:
+      - .:/app
+      - gallery2-data:/gallery2-data
+      - ./php.ini:/usr/local/etc/php/conf.d/custom.ini
+    links:
+      - mysql
+  mysql:
+    image: mariadb:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: 'secret'
+      MYSQL_USER: 'gallery'
+      MYSQL_PASSWORD: 'secret'
+      MYSQL_DATABASE: 'gallery2'
+    volumes:
+      - mysqldata:/var/lib/mysql
+    ports:
+      - "13306:3306"
+volumes:
+  mysqldata: {}
+  gallery2-data: {}
