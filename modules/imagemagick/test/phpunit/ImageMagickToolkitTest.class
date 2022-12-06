@@ -1,0 +1,1762 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/imagemagick/classes/ImageMagickToolkit.class');
+
+/**
+ * Test ImageMagickToolkit functionality
+ * @package ImageMagick
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 20957 $
+ */
+class ImageMagickToolkitTest extends GalleryTestCase
+{
+	// The array with environment information, from ImEnvironments.inc
+	public $_environments = array();
+
+	// The current environment array item we are processing
+	public $_currentEnvironment = array();
+
+	/*
+	 * Information about files in our pseudo-platform.
+	 * Better would be to store the files information in the Platform, but
+	 * since Gallery::getPlatform() will return a copy of the platform, we
+	 * cannot keep them there.
+	 */
+	public $_files = array();
+
+	public function __construct($methodName)
+	{
+		parent::__construct($methodName);
+
+		// Load our environments
+		include __DIR__ . '/ImEnvironments.inc';
+
+		$this->_environments = $imEnvironment;
+	}
+
+	public function setUp($x1 = null)
+	{
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'imagemagick');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Reset to the defaults -- tearDown will undo this
+		foreach (array(
+			     'jpegQuality' => 75,
+			 ) as $key => $value) {
+			$ret = GalleryCoreApi::setPluginParameter('module', 'imagemagick', $key, $value);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$this->_platform = new ImageMagickToolkitTestPlatform(
+		    $gallery->getPlatform(),
+		    $this->_files,
+		    $this
+		);
+		$gallery->setPlatform($this->_platform);
+
+		// Get a toolkit to work with
+		$this->_toolkit = new ImageMagickToolkit();
+	}
+
+	/**
+	 * Prepare to emulate a different version of IM/GM
+	 *
+	 * @param array $environment the array item of the environment
+	 * @access private
+	 */
+	public function _setEnvironment($environment)
+	{
+		$environment['path'] = '/' . $environment['name'] . $environment['version'] . '/';
+
+		$ret = GalleryCoreApi::setPluginParameter(
+		    'module',
+		    'imagemagick',
+		    'path',
+		    $environment['path']
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_currentEnvironment = $environment;
+
+		$this->_platform->setEnvironment($environment);
+
+		$ret = ImageMagickToolkitHelper::savePlatformParameters();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		return true;
+	}
+
+	public function _envName()
+	{
+		return $this->_currentEnvironment['name'] . ' ' . $this->_currentEnvironment['version'];
+	}
+
+	/**
+	 * Helper to test a certain operation
+	 *
+	 * @param string $mimeType
+	 * @param string $operation
+	 * @param string $src filename
+	 * @param string $dst filename
+	 * @param array $params indexed array
+	 * @param array $namedParams assoc-array with paramName=>paramValue
+	 * @param string $quality (optional)
+	 * @return GalleryStatus
+	 * @access private
+	 */
+	public function _testOperation(
+	    $mimeType,
+	    $operation,
+	    $src,
+	    $dst,
+	    $params,
+	    $namedParams,
+	    $quality = null
+	)
+	{
+		$this->_chmodWasCalled = false;
+
+		list($ret, $outputMimeType) = $this->_toolkit->performOperation(
+		    $mimeType,
+		    $operation,
+		    $src,
+		    $dst,
+		    $params
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected = $this->_currentEnvironment['operations'][$operation];
+
+		if (in_array($mimeType, array('image/tiff', 'application/pdf', 'application/postscript'))
+		    || (strpos($operation, 'convert-to-image/') === 0 && $mimeType == 'image/gif')
+		) {
+			if ($operation == 'select-page') {
+				$src .= '[' . ($params[0] - 1) . ']';
+			} else {
+				$src .= '[0]';
+			}
+		}
+
+		if ($mimeType == 'image/gif') {
+			$xa = $this->_currentEnvironment['name'];
+			$xb = version_compare($this->_currentEnvironment['version'], '6.2.6-3', '>');
+			$useNewCoalesceOptions = $xa == 'ImageMagick' && $xb;
+
+			foreach (array_keys($expected) as $key) {
+				if (!is_int($i = array_search('%src%', $expected[$key]))) {
+					continue;
+				}
+
+				if ($useNewCoalesceOptions) {
+					unset($expected[$key][$i]);
+					array_unshift($expected[$key], '%src%', '-coalesce', '-layers', 'optimize');
+				} else {
+					$expected[$key][$i] = '-deconstruct';
+					array_unshift($expected[$key], '-coalesce', '%src%');
+				}
+			}
+		}
+
+		$search = array('|%src%|', '|%dst%|');
+
+		list($ret, $extensions) = GalleryCoreApi::convertMimeToExtensions($outputMimeType);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (empty($extensions)) {
+			return GalleryCoreApi::error(
+			    ERROR_TOOLKIT_FAILURE,
+			    __FILE__,
+			    __LINE__,
+			    "Cannot convert to unknown mime type: $outputMimeType"
+			);
+		}
+
+		$replace = array($src, $extensions[0] . ':' . $dst);
+
+		foreach ($namedParams as $key => $value) {
+			$search[] = sprintf('|%%%s%%|', $key);
+			$replace[] = $value;
+		}
+
+		foreach (array_keys($expected) as $key) {
+			$expected[$key] = preg_replace($search, $replace, $expected[$key]);
+		}
+
+		if ($outputMimeType == 'image/jpeg' || $outputMimeType == 'image/png') {
+			if (!isset($quality)) {
+				$quality = 75;
+			}
+
+			foreach (array_keys($expected) as $key) {
+				$expected[$key] = array_merge(array('-quality', $quality), $expected[$key]);
+			}
+		}
+
+		$this->assertEquals(
+		    $expected,
+		    $this->_files[$dst]['operation'],
+		    $this->_currentEnvironment['path'] . " $operation " . implode(' ', $params)
+		);
+		$this->assertTrue($this->_chmodWasCalled, 'chmod not called');
+
+		return null;
+	}
+
+	public function testPerformOperations()
+	{
+		global $gallery;
+
+		foreach ($this->_environments as $environment) {
+			$this->_setEnvironment($environment);
+
+			$ret = $this->_testOperation(
+			    'image/gif',
+			    'thumbnail',
+			    'test[1000x1000].gif',
+			    'output.gif',
+			    array(100),
+			    array(
+				'width' => 100,
+				'height' => 100,
+			    )
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = $this->_testOperation(
+			    'image/jpeg',
+			    'thumbnail',
+			    'test[1000x1000].jpg',
+			    'output.jpg',
+			    array(100),
+			    array(
+				'width' => 100,
+				'height' => 100,
+			    )
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = $this->_testOperation(
+			    'image/tiff',
+			    'rotate',
+			    'test.tiff',
+			    'output.tiff',
+			    array(90),
+			    array(
+				'angle' => 90,
+			    )
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = $this->_testOperation(
+			    'image/bmp',
+			    'rotate',
+			    'test.bmp',
+			    'output.bmp',
+			    array(180),
+			    array(
+				'angle' => 180,
+			    )
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = $this->_testOperation(
+			    'image/png',
+			    'crop',
+			    'test[640x480].png',
+			    'output.png',
+			    array('24.667', '23.5', '51.375', '52'),
+			    array(
+				'width' => '329',
+				'height' => '250',
+				'x' => '158',
+				'y' => '113',
+			    )
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = $this->_testOperation(
+			    'image/gif',
+			    'convert-to-image/png',
+			    'test.gif',
+			    'output.png',
+			    array(),
+			    array()
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = $this->_testOperation(
+			    'application/pdf',
+			    'select-page',
+			    'test.pdf',
+			    'output.pdf',
+			    array('2'),
+			    array()
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			// Test a basic composite operation (top right corner)
+			$dataDir = $gallery->getConfig('data.gallery.base');
+
+			$ret = $this->_testOperation(
+			    'image/png',
+			    'composite',
+			    'test.png',   // composite
+			    'output.png', // composited
+			    array(
+				'image.gif', // image
+				'image/gif', // mimeType
+				5,
+				5, // image width, height
+				'top-right', // alignment type
+				0,
+				0,
+			    ),  // image alignment (unused w/ 'top-right')
+			    array(
+				'image' => $dataDir . 'image.gif',
+				'width' => '50',
+				'height' => '50',
+				'x' => '45',
+				'y' => '0',
+			    )
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			// Test another composite with out of range params that should get corrected
+			$ret = $this->_testOperation(
+			    'image/png',
+			    'composite',
+			    'test.png',   // composite
+			    'output.png', // composited
+			    array(
+				'image.gif', // image
+				'image/gif', // mimeType
+				50,
+				50, // image width, height
+				'manual', // alignment type
+				151,
+				151,
+			    ), // image alignment x, y
+			    array(
+				'image' => $dataDir . 'image.gif',
+				'width' => '50',
+				'height' => '50',
+				'x' => '0',
+				'y' => '0',
+			    )
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			// Test compress
+			$this->_files['compressMe.jpg']['size'] = 250 << 10;
+			$this->_platform->_counter = 2;
+
+			$ret = $this->_testOperation(
+			    'image/jpeg',
+			    'compress',
+			    'compressMe.jpg',
+			    'compressed.jpg',
+			    array(150),
+			    array(),
+			    58
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			if (in_array('image/jpeg-cmyk', $environment['mimeTypes'])) {
+				$ret = $this->_testOperation(
+				    'image/jpeg-cmyk',
+				    'convert-to-image/jpeg',
+				    'cmyk.jpg',
+				    'rgb.jpg',
+				    array(),
+				    array()
+				);
+
+				if ($ret) {
+					return $ret;
+				}
+			}
+
+			list($ret, $mimeType) = $this->_toolkit->performOperation(
+			    'image/png',
+			    'BOGUS',
+			    'BOGUS',
+			    'BOGUS',
+			    array('BOGUS')
+			);
+
+			$this->assertTrue($ret->getErrorCode() & ERROR_UNSUPPORTED_OPERATION, 'bad op');
+		}
+	}
+
+	public function testPercentParameters()
+	{
+		foreach ($this->_environments as $environment) {
+			$this->_setEnvironment($environment);
+
+			$ret = $this->_testOperation(
+			    'image/gif',
+			    'thumbnail',
+			    'test[1000x1000].gif',
+			    'output.gif',
+			    array('15%'),
+			    array(
+				'width' => 150,
+				'height' => 150,
+			    )
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = $this->_testOperation(
+			    'image/jpeg',
+			    'scale',
+			    'test[1000x1000].jpg',
+			    'output.jpg',
+			    array('50%', 400),
+			    array(
+				'width' => 500,
+				'height' => 400,
+			    )
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = $this->_testOperation(
+			    'image/png',
+			    'resize',
+			    'test[1000x1000].png',
+			    'output.png',
+			    array('60%', '80%'),
+			    array(
+				'width' => 600,
+				'height' => 800,
+			    )
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+	}
+
+	public function testPngQuality()
+	{
+		$ret = GalleryCoreApi::setPluginParameter('module', 'imagemagick', 'jpegQuality', 94);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		foreach ($this->_environments as $environment) {
+			$this->_setEnvironment($environment);
+
+			/*
+			 * Make sure that PNG quality uses only the compression, not the filter
+			 * so our quality level (94) becomes compression (9) and filter (4).  We
+			 * change that in the toolkit to compression (9) and filter (5) for a result
+			 * of 95.  When we implement PNG quality correctly, we should change this back.
+			 */
+			$ret = $this->_testOperation(
+			    'image/png',
+			    'rotate',
+			    'qualityTestIn.png',
+			    'qualityTestOut.png',
+			    array(90),
+			    array(
+				'angle' => 90,
+			    ),
+			    95
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+	}
+
+	/**
+	 * Ensure multiple "convert" operations in sequence only makes one exec call.  Perform a
+	 * thumbnail followed by a crop.  This is not a commonly performed sequence; normally we do the
+	 * crop first, however that causes problems with some versions of ImageMagick, and this still
+	 * serves as a good test for our sequences.
+	 */
+	public function testOperationSequence()
+	{
+		$this->_platform->_copyOk = true;
+
+		foreach ($this->_environments as $environment) {
+			$this->_setEnvironment($environment);
+
+			$context = array(
+			    'next.toolkit' => $this->_toolkit,
+			    'next.operation' => 'crop',
+			);
+
+			list($ret, $outputMimeType, $context) = $this->_toolkit->performOperation(
+			    'image/png',
+			    'thumbnail',
+			    'test[640x480].png',
+			    'outputTmp.png',
+			    array('150'),
+			    $context
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(array(), $this->_files, 'no exec yet ' . $this->_envName());
+
+			$context['next.toolkit'] = null;
+			$context['next.operation'] = null;
+
+			$this->assertEquals(
+			    array(
+				'next.toolkit' => null,
+				'next.operation' => null,
+				'width' => 150,
+				'height' => 113,
+				'imagemagick.transform' => array_merge(
+				    array('-size', '150x150', '-geometry', '150x150'),
+				    $environment['removeMetaDataSwitch']
+				),
+				'imagemagick.mime' => 'image/png',
+			    ),
+			    $context,
+			    'context after thumbnail ' . $this->_envName()
+			);
+
+			list($ret, $outputMimeType, $context) = $this->_toolkit->performOperation(
+			    'image/png',
+			    'crop',
+			    'outputTmp.png',
+			    'output.png',
+			    array('24.667', '23.5', '51.375', '52'),
+			    $context
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(
+			    array_merge(
+				array(
+				    '-quality',
+				    75,
+				    '-geometry',
+				    '150x150',
+				),
+				$environment['removeMetaDataSwitch'],
+				array('-crop', '77x59+37+27'),
+				array('outputTmp.png', 'png:output.png')
+			    ),
+			    $this->_files['output.png']['operation']['convert'],
+			    'output ' . $this->_envName()
+			);
+
+			$this->assertEquals(
+			    array(
+				'next.toolkit' => null,
+				'next.operation' => null,
+				'width' => 77.0,
+				'height' => 59.0,
+			    ),
+			    $context,
+			    'context at end ' . $this->_envName()
+			);
+
+			unset($this->_files['output.png']);
+		}
+	}
+
+	/**
+	 * Some versions of ImageMagick bomb if you do a -crop followed by a -geometry.  See the
+	 * comment in the mock platform for more details.  So make sure that these are NOT done in a
+	 * single operation.
+	 */
+	public function testOperationSequenceCropAndGeometrySeparate()
+	{
+		$this->_platform->_copyOk = true;
+
+		foreach ($this->_environments as $environment) {
+			$this->_setEnvironment($environment);
+
+			$context = array(
+			    'next.toolkit' => $this->_toolkit,
+			    'next.operation' => 'thumbnail',
+			);
+
+			list($ret, $outputMimeType, $context) = $this->_toolkit->performOperation(
+			    'image/png',
+			    'crop',
+			    'test[640x480].png',
+			    'output1.png',
+			    array('24.667', '23.5', '51.375', '52'),
+			    $context
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(
+			    array_merge(
+				array('-quality', 75, '-crop', '329x250+158+113'),
+				array('test[640x480].png', 'png:output1.png')
+			    ),
+			    $this->_files['output1.png']['operation']['convert'],
+			    'output ' .
+			    $this->_envName()
+			);
+
+			$this->assertEquals(
+			    array(
+				'next.toolkit' => $this->_toolkit,
+				'next.operation' => 'thumbnail',
+				'width' => 329.0,
+				'height' => 250.0,
+			    ),
+			    $context,
+			    'context after crop ' . $this->_envName()
+			);
+
+			$context['next.toolkit'] = null;
+			$context['next.operation'] = null;
+
+			list($ret, $outputMimeType, $context) = $this->_toolkit->performOperation(
+			    'image/png',
+			    'thumbnail',
+			    'output1.png',
+			    'output.png',
+			    array('150'),
+			    $context
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(
+			    array_merge(
+				array('-quality', 75, '-size', '150x150', '-geometry', '150x150'),
+				$environment['removeMetaDataSwitch'],
+				array('output1.png', 'png:output.png')
+			    ),
+			    $this->_files['output.png']['operation']['convert'],
+			    'output ' . $this->_envName()
+			);
+
+			$this->assertEquals(
+			    array(
+				'next.toolkit' => null,
+				'next.operation' => null,
+				'width' => 150,
+				'height' => 114,
+			    ),
+			    $context,
+			    'context at end ' . $this->_envName()
+			);
+
+			unset($this->_files['output1.png'], $this->_files['output.png']);
+		}
+	}
+
+	/**
+	 * Ensure queued operations that affect image size are taken into account
+	 * for subsequent operations..
+	 */
+	public function testOperationSequenceSizeChange()
+	{
+		$this->_platform->_copyOk = true;
+
+		foreach ($this->_environments as $environment) {
+			$this->_setEnvironment($environment);
+
+			$context = array(
+			    'next.toolkit' => $this->_toolkit,
+			    'next.operation' => 'rotate',
+			    'width' => 640,
+			    'height' => 480,
+			);
+
+			list($ret, $outputMimeType, $context) = $this->_toolkit->performOperation(
+			    'image/png',
+			    'resize',
+			    'test.png',
+			    'output.png',
+			    array('320', '240'),
+			    $context
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(array(), $this->_files, 'no exec yet ' . $this->_envName());
+
+			$this->assertEquals(
+			    array(
+				'next.toolkit' => $this->_toolkit,
+				'next.operation' => 'rotate',
+				'width' => 320,
+				'height' => 240,
+				'imagemagick.transform' => array(
+				    '-size',
+				    '320x240',
+				    '-geometry',
+				    '320x240',
+				),
+				'imagemagick.mime' => 'image/png',
+			    ),
+			    $context,
+			    'context after scale ' . $this->_envName()
+			);
+
+			$context['next.operation'] = 'thumbnail';
+
+			list($ret, $outputMimeType, $context) = $this->_toolkit->performOperation(
+			    'image/png',
+			    'rotate',
+			    'output.png',
+			    'output.png',
+			    array('90'),
+			    $context
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$context['next.toolkit'] = null;
+			$context['next.operation'] = null;
+
+			$this->assertEquals(array(), $this->_files, 'still no exec ' . $this->_envName());
+
+			$this->assertEquals(
+			    array(
+				'next.toolkit' => null,
+				'next.operation' => null,
+				'width' => 240,
+				'height' => 320,
+				'imagemagick.transform' => array('-geometry', '320x240', '-rotate', '90'),
+				'imagemagick.mime' => 'image/png',
+			    ),
+			    $context,
+			    'context after rotate ' . $this->_envName()
+			);
+
+			list($ret, $outputMimeType, $context) = $this->_toolkit->performOperation(
+			    'image/png',
+			    'thumbnail',
+			    'output.png',
+			    'output.png',
+			    array('150'),
+			    $context
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(
+			    array_merge(
+				array(
+				    '-quality',
+				    '75',
+				    '-geometry',
+				    '320x240',
+				    '-rotate',
+				    '90',
+				    '-geometry',
+				    '150x150',
+				),
+				$environment['removeMetaDataSwitch'],
+				array('output.png', 'png:output.png')
+			    ),
+			    $this->_files['output.png']['operation']['convert'],
+			    'output ' . $this->_envName()
+			);
+
+			$this->assertEquals(
+			    array(
+				'next.toolkit' => null,
+				'next.operation' => null,
+				'width' => 113,
+				'height' => 150,
+			    ),
+			    $context,
+			    'context at end ' . $this->_envName()
+			);
+
+			unset($this->_files['output.png']);
+		}
+	}
+
+	// Ensure queued operations handle change of mime type correctly
+	public function testOperationSequenceMimeChange()
+	{
+		$this->_platform->_copyOk = true;
+
+		foreach ($this->_environments as $environment) {
+			$this->_setEnvironment($environment);
+
+			$context = array(
+			    'next.toolkit' => $this->_toolkit,
+			    'next.operation' => 'thumbnail',
+			);
+
+			list($ret, $outputMimeType, $context) = $this->_toolkit->performOperation(
+			    'application/pdf',
+			    'convert-to-image/jpeg',
+			    'test.pdf',
+			    'TEMPFILE',
+			    array(),
+			    $context
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$context['next.toolkit'] = null;
+			$context['next.operation'] = null;
+
+			$this->assertEquals(array(), $this->_files, 'no exec yet ' . $this->_envName());
+
+			$this->assertEquals(
+			    array(
+				'next.toolkit' => null,
+				'next.operation' => null,
+				'width' => '612',
+				'height' => '792',
+				'imagemagick.transform' => array(),
+				'imagemagick.mime' => 'application/pdf',
+			    ),
+			    $context,
+			    'context after convert ' . $this->_envName()
+			);
+			$this->assertEquals('image/jpeg', $outputMimeType, 'jpeg ' . $this->_envName());
+
+			list($ret, $outputMimeType, $context) = $this->_toolkit->performOperation(
+			    'image/jpeg',
+			    'thumbnail',
+			    'TEMPFILE',
+			    'output.jpg',
+			    array('150'),
+			    $context
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(
+			    array_merge(
+				array('-quality', 75, '-size', '150x150', '-geometry', '150x150'),
+				$environment['removeMetaDataSwitch'],
+				array('TEMPFILE[0]', 'jpg:output.jpg')
+			    ),
+			    $this->_files['output.jpg']['operation']['convert'],
+			    'output ' . $this->_envName()
+			);
+
+			$this->assertEquals(
+			    array(
+				'next.toolkit' => null,
+				'next.operation' => null,
+				'width' => 116,
+				'height' => 150,
+			    ),
+			    $context,
+			    'context at end ' . $this->_envName()
+			);
+
+			unset($this->_files['output.jpg']);
+		}
+	}
+
+	public function testGetProperties()
+	{
+		foreach ($this->_environments as $environment) {
+			$this->_setEnvironment($environment);
+
+			list($ret, $results) = $this->_toolkit->getProperty('image/gif', 'dimensions', 'test[10x20].gif');
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(array(10, 20), $results, 'dimensions ' . $this->_envName());
+
+			list($ret, $results) = $this->_toolkit->getProperty(
+			    'application/pdf',
+			    'page-count',
+			    'test.pdf'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(array(2), $results, 'page-count ' . $this->_envName());
+
+			if (in_array('image/jpeg-cmyk', $environment['mimeTypes'])) {
+				list($ret, $results) = $this->_toolkit->getProperty(
+				    'image/jpeg',
+				    'colorspace',
+				    'cmyk.jpg'
+				);
+
+				if ($ret) {
+					return $ret;
+				}
+
+				$this->assertEquals(array('CMYK'), $results, 'colorspace ' . $this->_envName());
+			}
+
+			list($ret, $results) = $this->_toolkit->getProperty(
+			    'image/gif',
+			    'BOGUS',
+			    'BOGUS'
+			);
+
+			$this->assertTrue(
+			    $ret->getErrorCode() & ERROR_UNIMPLEMENTED,
+			    'bad op ' . $this->_envName()
+			);
+		}
+	}
+
+	public function testMergeOperations()
+	{
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'crop',
+		    array(1, 2, 3, 4),
+		    'crop',
+		    array(3, 4, 5, 6)
+		);
+
+		$this->assertTrue($success);
+		$this->assertEquals('crop', $operation);
+		$this->assertEquals(array(3, 4, 5, 6), $args);
+
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'resize',
+		    array(1, 2),
+		    'resize',
+		    array(3, 4)
+		);
+
+		$this->assertTrue($success);
+		$this->assertEquals('resize', $operation);
+		$this->assertEquals(array(3, 4), $args);
+
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'thumbnail',
+		    array(1, 2),
+		    'resize',
+		    array(3, 4)
+		);
+
+		$this->assertTrue($success);
+		$this->assertEquals('resize', $operation);
+		$this->assertEquals(array(3, 4), $args);
+
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'thumbnail',
+		    array(1, 2),
+		    'thumbnail',
+		    array(3, 4)
+		);
+
+		$this->assertTrue($success);
+		$this->assertEquals('thumbnail', $operation);
+		$this->assertEquals(array(3, 4), $args);
+
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'scale',
+		    array(1, 2),
+		    'thumbnail',
+		    array(3, 4)
+		);
+
+		$this->assertTrue($success);
+		$this->assertEquals('thumbnail', $operation);
+		$this->assertEquals(array(3, 4), $args);
+
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'rotate',
+		    array(90),
+		    'rotate',
+		    array(90)
+		);
+
+		$this->assertTrue($success);
+		$this->assertEquals('rotate', $operation);
+		$this->assertEquals(array(180), $args);
+
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'rotate',
+		    array(90),
+		    'rotate',
+		    array(-90)
+		);
+
+		$this->assertTrue($success);
+		$this->assertEquals(null, $operation);
+		$this->assertEquals(null, $args);
+
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'rotate',
+		    array(270),
+		    'rotate',
+		    array(180)
+		);
+
+		$this->assertTrue($success);
+		$this->assertEquals('rotate', $operation);
+		$this->assertEquals(array(90), $args);
+
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'rotate',
+		    array(90),
+		    'rotate',
+		    array(-180)
+		);
+
+		$this->assertTrue($success);
+		$this->assertEquals('rotate', $operation);
+		$this->assertEquals(array(-90), $args);
+
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'rotate',
+		    array(90),
+		    'rotate',
+		    array(180)
+		);
+
+		$this->assertTrue($success);
+		$this->assertEquals('rotate', $operation);
+		$this->assertEquals(array(-90), $args);
+
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'rotate',
+		    array(270),
+		    'rotate',
+		    array(90)
+		);
+
+		$this->assertTrue($success);
+		$this->assertEquals(null, $operation);
+		$this->assertEquals(null, $args);
+
+		list($success, $operation, $args) = $this->_toolkit->mergeOperations(
+		    'crop',
+		    array(1, 2, 3, 4),
+		    'thumbnail',
+		    array(3, 4)
+		);
+
+		$this->assertFalse($success);
+	}
+
+	public function testDiscoverMimeTypes()
+	{
+		foreach ($this->_environments as $environment) {
+			$this->_setEnvironment($environment);
+
+			list($ret, $results) = ImageMagickToolkitHelper::discoverMimeTypes(
+			    $this->_currentEnvironment['path']
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals($environment['mimeTypes'], $results,
+			    "Environment " . $environment['name'] . " " . $environment['version']);
+		}
+	}
+
+	public function testGetOperationsAndProperties()
+	{
+		foreach ($this->_environments as $environment) {
+			$this->_setEnvironment($environment);
+
+			list($ret, $results) = ImageMagickToolkitHelper::getOperationsAndProperties();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$canConvert = array();
+
+			foreach (array(
+				     'image/jpeg',
+				     'image/png',
+				     'image/gif',
+				     'image/tiff',
+				     'image/jp2',
+				 ) as $mimeType) {
+				if (is_int($i = array_search($mimeType, $environment['mimeTypes']))) {
+					$convertTo = array_merge(
+					    $environment['mimeTypes'],
+					    array('image/x-portable-pixmap')
+					);
+
+					array_splice($convertTo, $i, 1);
+					$canConvert['convert-to-' . $mimeType] = array(
+					    'params' => array(),
+					    'description' => 'Convert to ' . $mimeType,
+					    'mimeTypes' => $convertTo,
+					    'outputMimeType' => $mimeType,
+					);
+				}
+			}
+
+			$wantToPage = array(
+			    'image/tiff',
+			    'application/pdf',
+			    'application/postscript',
+			    'application/photoshop',
+			);
+
+			$canPage = array_intersect($wantToPage, $environment['mimeTypes']);
+			$qualityMimeTypes = array_intersect(
+			    array('image/jpeg', 'image/png'),
+			    $environment['mimeTypes']
+			);
+
+			$this->assertEquals(
+			    array_merge(
+				$canConvert,
+				array(
+				    'scale' => array(
+					'params' => array(
+					    array(
+						'type' => 'int',
+						'description' => 'target width (# pixels or #% of full size)',
+					    ),
+					    array(
+						'type' => 'int',
+						'description' => '(optional) target height, defaults to same as width',
+					    ),
+					),
+					'description' => 'Scale the image to the target size, maintain aspect ratio',
+					'mimeTypes' => $environment['mimeTypes'],
+				    ),
+				    'thumbnail' => array(
+					'params' => array(
+					    array(
+						'type' => 'int',
+						'description' => 'target width (# pixels or #% of full size)',
+					    ),
+					    array(
+						'type' => 'int',
+						'description' => '(optional) target height, defaults to same as width',
+					    ),
+					),
+					'description' => 'Scale the image to the target size, maintain aspect ratio',
+					'mimeTypes' => $environment['mimeTypes'],
+				    ),
+				    'resize' => array(
+					'params' => array(
+					    array(
+						'type' => 'int',
+						'description' => 'target width (# pixels or #% of full size)',
+					    ),
+					    array(
+						'type' => 'int',
+						'description' => 'target height (# pixels or #% of full size)',
+					    ),
+					),
+					'description' => 'Resize the image to the target dimensions',
+					'mimeTypes' => $environment['mimeTypes'],
+				    ),
+				    'rotate' => array(
+					'params' => array(
+					    array(
+						'type' => 'int',
+						'description' => 'rotation degrees',
+					    ),
+					),
+					'description' => 'Rotate the image',
+					'mimeTypes' => $environment['mimeTypes'],
+				    ),
+				    'crop' => array(
+					'params' => array(
+					    array(
+						'type' => 'float',
+						'description' => 'left edge %',
+					    ),
+					    array(
+						'type' => 'float',
+						'description' => 'top edge %',
+					    ),
+					    array(
+						'type' => 'float',
+						'description' => 'width %',
+					    ),
+					    array(
+						'type' => 'float',
+						'description' => 'height %',
+					    ),
+					),
+					'description' => 'Crop the image',
+					'mimeTypes' => $environment['mimeTypes'],
+				    ),
+				    'composite' => array(
+					'params' => array(
+					    array(
+						'type' => 'string',
+						'description' => 'overlay path',
+					    ),
+					    array(
+						'type' => 'string',
+						'description' => 'overlay mime type',
+					    ),
+					    array(
+						'type' => 'int',
+						'description' => 'overlay width',
+					    ),
+					    array(
+						'type' => 'int',
+						'description' => 'overlay height',
+					    ),
+					    array(
+						'type' => 'string',
+						'description' => 'alignment type',
+					    ),
+					    array(
+						'type' => 'int',
+						'description' => 'alignment x %',
+					    ),
+					    array(
+						'type' => 'int',
+						'description' => 'alignment y %',
+					    ),
+					),
+					'description' => 'Overlay source image with a second one',
+					'mimeTypes' => $environment['mimeTypes'],
+				    ),
+				    'select-page' => array(
+					'params' => array(
+					    array(
+						'type' => 'int',
+						'description' => 'page number',
+					    ),
+					),
+					'description' => 'Select a single page from a multi-page file',
+					'mimeTypes' => $canPage,
+				    ),
+				    'compress' => array(
+					'params' => array(
+					    array(
+						'type' => 'int',
+						'description' => 'target size in kb',
+					    ),
+					),
+					'description' => 'Reduce image quality to reach target file size',
+					'mimeTypes' => $qualityMimeTypes,
+				    ),
+				)
+			    ),
+			    $results['operations'],
+			    $this->_envName()
+			);
+
+			$properties = array(
+			    'dimensions' => array(
+				'type' => 'int,int',
+				'description' => 'Get the width and height of the image',
+				'mimeTypes' => array_merge(
+				    $environment['mimeTypes'],
+				    array('image/x-portable-pixmap', 'application/x-shockwave-flash')
+				),
+			    ),
+			    'page-count' => array(
+				'type' => 'int',
+				'description' => 'Get the number of pages',
+				'mimeTypes' => $canPage,
+			    ),
+			);
+
+			if (in_array('image/jpeg-cmyk', $environment['mimeTypes'])) {
+				$properties['colorspace'] = array(
+				    'type' => 'string',
+				    'description' => 'Get the colorspace of the image',
+				    'mimeTypes' => array('image/jpeg', 'image/tiff', 'application/photoshop'),
+				);
+			}
+
+			$this->assertEquals($properties, $results['properties'], $this->_envName());
+		}
+	}
+
+	public function testBinaries()
+	{
+		foreach ($this->_environments as $environment) {
+			$this->_setEnvironment($environment);
+
+			list($ret, $results) = ImageMagickToolkitHelper::testBinaries(
+			    $this->_currentEnvironment['path']
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$wanted = array('identify', 'convert', 'combine', 'composite');
+			$expected = array();
+
+			foreach ($wanted as $binary) {
+				if (in_array($binary, $this->_currentEnvironment['binaries'])) {
+					$expected[] = array(
+					    'name' => $binary,
+					    'success' => true,
+					);
+				}
+			}
+
+			$this->assertEquals($expected, $results);
+		}
+
+		list($ret, $results) = ImageMagickToolkitHelper::testBinaries('/bogusPath');
+
+		$this->assertTrue($ret->getErrorCode() & ERROR_BAD_PATH);
+	}
+}
+
+/**
+ * Test platform
+ *
+ * @package ImageMagick
+ * @subpackage PHPUnit
+ */
+class ImageMagickToolkitTestPlatform
+{
+	public $_environment = array();
+	public $_files;
+
+	public function __construct($originalPlatform, &$files, &$test)
+	{
+		$this->_platform = $originalPlatform;
+		$this->_files =& $files;
+		$this->_test =& $test;
+	}
+
+	public function setEnvironment($environment)
+	{
+		$this->_environment = $environment;
+	}
+
+	public function exec($cmd)
+	{
+		list($ret, $imageMagickPath) = GalleryCoreApi::getPluginParameter('module', 'imagemagick', 'path');
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		$firstCmd = $cmd[0];
+
+		if ($this->_environment['binary'] != '') {
+			if (basename($firstCmd[0]) != $this->_environment['binary']) {
+				return array(0, array('unprepared for exec()'));
+			}
+
+			array_shift($firstCmd);
+		}
+
+		$output = array();
+		$status = false;
+		$binary = array_shift($firstCmd);
+		$binary = basename($binary);
+
+		if ($binary == 'identify') {
+			$file = basename(array_shift($firstCmd) ?? '');
+			$data = $this->_environment['identify'];
+
+			if ($file == '-format' && count($firstCmd) >= 2) {
+				// Cmd to identify colorspace
+				$data = $data['-format'];
+				$file = basename($firstCmd[1]);
+
+				if (isset($this->_files[$file]['operation']['convert'][0])
+				    && $this->_files[$file]['operation']['convert'][0] == '-colorspace'
+				) {
+					$file = 'rgb_file';
+				}
+			}
+
+			if (isset($data[$file])) {
+				$output = explode("\n", $data[$file]);
+			} else {
+				$output = explode("\n", $this->_environment['identify']['UNKNOWN']);
+			}
+
+			$status = true;
+		} elseif (($binary == 'convert'
+			&& in_array('convert', $this->_environment['binaries']))
+		    || ($binary == 'composite' && in_array('composite', $this->_environment['binaries']))
+		    || ($binary == 'combine' && in_array('combine', $this->_environment['binaries']))
+		) {
+			$params = array_slice($firstCmd, 0);
+			$src = basename($firstCmd[count($firstCmd) - 2]);
+			$dst = basename($firstCmd[count($firstCmd) - 1]);
+
+			if (preg_match('#(.*):(.*)$#', $dst, $matches)) {
+				// Format 'jpeg:filename.jpg'
+				$dst = $matches[2];
+			}
+
+			if ($src == 'testProfile.jpg') {
+				// ImageMagickToolkitHelper is testing our removeMetaDataSwitch
+				$params = array_slice($firstCmd, 0, count($firstCmd) - 2);
+
+				if ($this->_environment['removeMetaDataSwitch'] == $params) {
+					$this->_files[$dst] = array(
+					    'size' => 50000,
+					);
+				} else {
+					$this->_files[$dst] = array(
+					    'size' => 0,
+					);
+				}
+
+				$output = array();
+				$status = true;
+			} else {
+				/*
+				 * ImageMagick 6.1.6 has a bug where if you do -crop followed by -geometry it
+				 * gets confused about the size of the image and the -geometry check applies
+				 * to the original dimensions, instead of the new, cropped dimensions.  This
+				 * can result it in it returning "convert: geometry does not contain image"
+				 * and a 0x0 pixel image.
+				 *
+				 * I have not verified that 6.1.3 does this also, but since we do not have a
+				 * 6.1.6 ImEnvironment yet, I will credit this bug to 6.1.3 for now.
+				 */
+				if ($this->_environment['version'] == '6.1.3'
+				    && preg_match('/crop.*geometry/', join(' ', $params))
+				) {
+					/*
+					 * Note: This does not exactly simulate what IM does.  It will continue like
+					 * everything is normal.  We just force the test to fail for now.
+					 */
+					$output = array('convert: geometry does not contain image');
+					$status = false;
+					echo 'Error: invalid -crop followed by -geometry in same convert command!';
+				} else {
+					/*
+					 * Remember how we converted from $src to $dst, so we can compare it later
+					 * with what we really wanted
+					 */
+					$this->_files[$dst] = array(
+					    'operation' => array(
+						$binary => $params,
+					    ),
+					);
+
+					$output = array();
+					$status = true;
+				}
+			}
+		}
+
+		if ($status) {
+			return array(1, $output);
+		}
+
+		echo $this->_environment['path'] . ': ERROR exec()ing:<pre>';
+
+		print_r($cmd);
+		echo "</pre>\n";
+
+		return array(0, array('unprepared for exec()'));
+	}
+
+	public function rename($oldName, $newName)
+	{
+		$oldBase = basename($oldName);
+		$newBase = basename($newName);
+
+		if (isset($this->_files[$oldBase])) {
+			$this->_files[$newBase] = $this->_files[$oldBase];
+
+			if (isset($this->_files[$newBase]['operation'])) {
+				foreach (array_keys($this->_files[$newBase]['operation']) as $operation) {
+					$count = count($this->_files[$newBase]['operation'][$operation]);
+					$val = $this->_files[$newBase]['operation'][$operation][$count - 1];
+					$parts = explode(':', $val, 2);
+
+					if (!empty($parts)) {
+						$val = $parts[0] . ':' . $newName;
+					} else {
+						$val = $newName;
+					}
+
+					$this->_files[$newBase]['operation'][$operation][$count - 1] = $val;
+				}
+			}
+
+			unset($this->_files[$oldBase]);
+
+			return true;
+		}
+
+		echo $this->_environment['path'] . ": rename($oldName, $newName)<br>\n";
+
+		return false;
+	}
+
+	public function isRestrictedByOpenBaseDir($path)
+	{
+		// echo $this->_environment['path'] . ": isRestrictedByOpenBaseDir($path)<br>\n";
+		return false;
+	}
+
+	public function file_exists($path)
+	{
+		if ($path == $this->_environment['path']) {
+			return true;
+		}
+
+		$dirName = dirname($path) . '/';
+		$baseName = basename($path);
+
+		if ($dirName == $this->_environment['path']) {
+			if ($this->_environment['binary'] != '' && $baseName == $this->_environment['binary']) {
+				return true;
+			}
+
+			if ($this->_environment['binary'] == ''
+			    && in_array($baseName, $this->_environment['binaries'])
+			) {
+				return true;
+			}
+		}
+
+		// echo $this->_environment['path'] . ": file_exists($path)<br>\n";
+		return false;
+	}
+
+	public function is_dir($path)
+	{
+		if ($path == $this->_environment['path']) {
+			return true;
+		}
+
+		// echo $this->_environment['path'] . ": is_dir($path)<br>\n";
+		return false;
+	}
+
+	public function is_executable($file)
+	{
+		$dirName = dirname($file) . '/';
+		$baseName = basename($file);
+
+		if ($dirName == $this->_environment['path']) {
+			if ($this->_environment['binary'] != '' && $baseName == $this->_environment['binary']) {
+				return true;
+			}
+
+			if ($this->_environment['binary'] == ''
+			    && in_array($baseName, $this->_environment['binaries'])
+			) {
+				return true;
+			}
+		}
+
+		echo $this->_environment['path'] . ": is_executable($file)<br>\n";
+
+		return false;
+	}
+
+	public function copy($file1, $file2)
+	{
+		if (isset($this->_copyOk)) {
+			return 1;
+		}
+
+		echo $this->_environment['path'] . ": copy($file1, $file2)<br>\n";
+	}
+
+	public function filesize($file)
+	{
+		$basename = basename($file);
+
+		if ($basename == 'testProfile.jpg') {
+			return 100000;
+		}
+
+		if ($basename == 'compressed.jpg') {
+			switch ($this->_counter--) {
+				case 2:
+					return 200 << 10;
+
+				case 1:
+					return 100 << 10;
+
+				case 0:
+					return 150 << 10;
+			}
+		}
+
+		if (isset($this->_files[$basename]['size'])) {
+			return $this->_files[$basename]['size'];
+		}
+
+		echo $this->_environment['path'] . ": filesize($file)<br>\n";
+
+		return 0;
+	}
+
+	public function tempnam($dir, $prefix)
+	{
+		$fileName = $dir . $prefix . md5(mt_rand());
+		$this->_files[basename($fileName)] = 'temp';
+
+		// echo $this->_environment['path'] . ": tempnam($dir, $prefix) = $fileName<br>\n";
+		return $fileName;
+	}
+
+	public function unlink($path)
+	{
+		$baseName = basename($path);
+
+		if (isset($this->_files[$baseName])) {
+			unset($this->_files[$baseName]);
+
+			return true;
+		}
+
+		echo $this->_environment['path'] . ": unlink($path)<br>\n";
+
+		return false;
+	}
+
+	public function getimagesize($path)
+	{
+		$basename = basename($path);
+
+		if (preg_match('#\[(\d+)x(\d+)\]#', $basename, $matches)) {
+			$result = array(
+			    $matches[1],
+			    $matches[2],
+			    1,
+			    sprintf('height="%d" width="%d"', $matches[1], $matches[2]),
+			);
+		} else {
+			// echo $this->_environment['path'] . ": getimagesize($path)<br>\n";
+			$result = false;
+		}
+
+		return $result;
+	}
+
+	public function getDirectorySeparator()
+	{
+		return $this->_platform->getDirectorySeparator();
+	}
+
+	public function realpath($path)
+	{
+		return $this->_platform->realpath($path);
+	}
+
+	public function chdir($path)
+	{
+		return true;
+	}
+
+	public function getcwd()
+	{
+		return '/tmp';
+	}
+
+	public function chmod($path, $mode = null)
+	{
+		$this->_test->_chmodWasCalled = true;
+
+		return true;
+	}
+}
