@@ -1,0 +1,616 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2007 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/AdminMaintenance.inc');
+
+/**
+ * This is a MaintenanceTask that will run checks over the data and report any inconsistencies.
+ * @package Integrity
+ * @subpackage Classes
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 1173 $
+ */
+class IntegrityCheckTask extends MaintenanceTask {
+	/**
+	 * @see MaintenanceTask::getInfo
+	 */
+	public function getInfo() {
+		global $gallery;
+
+		return array(
+			'l10Domain'   => 'modules_integrity',
+			'title'       => $gallery->i18n('Integrity Check'),
+			'description' => $gallery->i18n(
+				'Check data integrity and report any inconsistencies.'
+			),
+		);
+	}
+
+	/**
+	 * @see MaintenanceTask::run
+	 */
+	public function run() {
+		global $gallery;
+		$templateAdapter =& $gallery->getTemplateAdapter();
+		$platform        =& $gallery->getPlatform();
+		$slash           = $platform->getDirectorySeparator();
+		GalleryDataCache::setFileCachingEnabled(false);
+		$baseDir = dirname(dirname(dirname(dirname(__FILE__))));
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'integrity');
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+		$title  = $module->translate('Integrity Check');
+		$output = array();
+
+		//
+		// Load all entities
+		$message = $module->translate('Loading all entities');
+		$templateAdapter->updateProgressBar($title, $message, 0);
+
+		$query = '
+			SELECT
+				COUNT([Entity::id])
+			FROM
+				[Entity]
+		';
+
+		list($ret, $results) = $gallery->search($query);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+		$result = $results->nextResult();
+		$total  = (int)$result[0];
+
+		$query = '
+			SELECT
+				[Entity::id]
+			FROM
+				[Entity]
+			ORDER BY [Entity::id]
+		';
+
+		$failIds    = array();
+		$ids        = null;   // Initialize ids
+		$batch_size = 100;
+		$start_id   = 000;
+
+		/*
+		 * We get search results of size batch_size and we fill $ids array with them.
+		 * We store failed entities on $failIds.
+		 * */
+		for ($i = 0, $j = 0; !$i || count($ids) == $batch_size; $i += $batch_size) {
+			$gallery->guaranteeTimeLimit(120);
+			list($ret, $results) = $gallery->search(
+				$query,
+				array(),
+				array(
+					'limit' => array(
+						'offset' => $i + $start_id,
+						'count'  => $batch_size,
+					),
+				)
+			);
+
+			if ($ret) {
+				return array($ret, null, null);
+			}
+			$ids = array();
+
+			while ($result = $results->nextResult()) {
+				$ids[] = (int)$result[0];
+			}
+
+			foreach ($ids as $id) {
+				if ($j ++ % ($batch_size / 10) == 0) {
+					$gallery->guaranteeTimeLimit(120);
+				}
+				list($ret, $entity) = GalleryCoreApi::loadEntitiesById($id);
+
+				if ($ret) {
+					$failIds[] = $id;
+				}
+			}
+			$templateAdapter->updateProgressBar(
+				$title,
+				$message . ", $i+$start_id",
+				($i + $start_id + count($ids)) / $total
+			);
+		}
+
+		if (empty($failIds)) {
+			$output[] = $module->translate(
+				array(
+					'text' => 'Checked %d entities',
+					'arg1' => $total,
+				)
+			);
+		} else {
+			$output[] = $module->translate(
+				array(
+					'text' => 'Failed to load entity ids: %s',
+					'arg1' => implode(
+						', ',
+						$failIds
+					),
+				)
+			);
+		}
+
+		//
+		// Look for orphaned rows with no entry in Entity table
+		$message                   = $module->translate('Checking for orphaned entity data');
+		list($ret, $allEntityData) = GalleryCoreApi::describeEntity('GalleryEntity', true);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+		unset($allEntityData['GalleryEntity']);
+		$tables = array_keys($allEntityData);
+
+		$i     = 0;
+		$total = count($tables) + 1;
+
+		foreach ($tables as $table) {
+			$templateAdapter->updateProgressBar($message, $table, $i ++ / $total);
+			$gallery->guaranteeTimeLimit(120);
+
+			$query = "
+				SELECT
+					[$table::id]
+				FROM
+					[$table]
+				LEFT JOIN 
+					[GalleryEntity] 
+				ON 
+					[$table::id] = [GalleryEntity::id]
+				WHERE
+					[GalleryEntity::id] IS NULL
+				ORDER BY [$table::id]
+			";
+
+			list($ret, $results) = $gallery->search($query);
+
+			if ($ret) {
+				return array($ret, null, null);
+			}
+			$ids = array();
+
+			while ($result = $results->nextResult()) {
+				$ids[] = (int)$result[0];
+			}
+
+			if (!empty($ids)) {
+				$output[] = $module->translate(
+					array(
+						'text' => 'Orphaned data in table %s with no row in %s table; ids: %s',
+						'arg1' => $table,
+						'arg2' => 'Entity',
+						'arg3' => implode(', ', $ids),
+					)
+				);
+			}
+		}
+
+		// Check for missing parents
+		$templateAdapter->updateProgressBar($message, 'GalleryChildEntity', $i ++ / $total);
+
+		$query = '
+			SELECT
+				[GalleryChildEntity::id]
+			FROM
+				[GalleryChildEntity]
+			LEFT JOIN 
+				[GalleryEntity] 
+			ON 
+				[GalleryChildEntity::parentId] = [GalleryEntity::id]
+			WHERE
+				[GalleryChildEntity::parentId] > 0
+			AND
+				[GalleryEntity::id] IS NULL
+			ORDER BY 
+				[GalleryChildEntity::id]
+		';
+
+		list($ret, $results) = $gallery->search($query);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+		$ids = array();
+
+		while ($result = $results->nextResult()) {
+			$ids[] = (int)$result[0];
+		}
+
+		if (!empty($ids)) {
+			$output[] = $module->translate(
+				array(
+					'text' => 'Orphaned data in table %s with missing parent entity; ids: %s',
+					'arg1' => 'GalleryChildEntity',
+					'arg2' => implode(', ', $ids),
+				)
+			);
+		}
+		$templateAdapter->updateProgressBar($message, '', 1);
+
+
+		/* Check other orphaned data;
+		 * ItemAttributesMap, AccessSubscriberMap, AccessMap,
+		 * DerivativePreferncesMap, GalleryDerivative */
+		//TODO maybe check for AccessSubcriber with accessListId = 0 ??
+		//TODO or accesssubscriber for itemId not in item table
+		$message = $module->translate('Checking for orphaned item data');
+		$tables  = array(
+			array('ItemAttributesMap', 'itemId', 'GalleryItem', 'id'),
+			//Most AccessSubscriberMap::itemId should map to Item::id, but ThumbnailImage/WatermarkImage use
+			//permissions too.. ThumbnailImage is a ChildEntity, WatermarkImage is just an Entity.
+			//			array('AccessSubscriberMap', 'itemId', 'GalleryItem', 'id'),
+			array('AccessMap', 'accessListId', 'AccessSubscriberMap', 'accessListId'),
+			array('DerivativePreferencesMap', 'itemId', 'GalleryAlbumItem', 'id'),
+		);
+		$i     = 0;
+		$total = count($tables) + 1;
+
+		foreach ($tables as $tableData) {
+			list($table, $idColumn, $joinTable, $joinColumn) = $tableData;
+			$templateAdapter->updateProgressBar($message, $table, $i ++ / $total);
+			$gallery->guaranteeTimeLimit(120);
+
+			$query = "
+				SELECT DISTINCT
+					[$table::$idColumn]
+				FROM
+					[$table]
+				LEFT JOIN 
+					[$joinTable] 
+				ON 
+					[$table::$idColumn] = [$joinTable::$joinColumn]
+				WHERE
+					[$joinTable::$joinColumn] IS NULL
+				ORDER BY 
+					[$table::$idColumn]
+			";
+
+			list($ret, $results) = $gallery->search($query);
+
+			if ($ret) {
+				return array($ret, null, null);
+			}
+			$ids = array();
+
+			while ($result = $results->nextResult()) {
+				$ids[] = (int)$result[0];
+			}
+
+			if (!empty($ids)) {
+				$output[] = $module->translate(
+					array(
+						'text' => 'Orphaned data in table %s with no row in %s table; ids: %s',
+						'arg1' => $table,
+						'arg2' => $joinTable,
+						'arg3' => implode(', ', $ids),
+					)
+				);
+			}
+		}
+		// Check GalleryDerivative
+		$templateAdapter->updateProgressBar($message, 'GalleryDerivative', $i ++ / $total);
+
+		$query = '
+			SELECT
+				[GalleryDerivative::id]
+			FROM
+				[GalleryDerivative]
+			LEFT JOIN 
+				[GalleryEntity]
+			ON 
+				[GalleryDerivative::derivativeSourceId] = [GalleryEntity::id]
+			WHERE
+				[GalleryEntity::id] IS NULL
+			ORDER BY
+				[GalleryDerivative::id]
+		';
+
+		list($ret, $results) = $gallery->search($query);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+		$ids = array();
+
+		while ($result = $results->nextResult()) {
+			$ids[] = (int)$result[0];
+		}
+
+		if (!empty($ids)) {
+			$output[] = $module->translate(
+				array(
+					'text' => 'Orphaned data in table %s with missing derivative source; ids: %s',
+					'arg1' => $table,
+					'arg2' => implode(', ', $ids),
+				)
+			);
+		}
+		$templateAdapter->updateProgressBar($message, '', 1);
+
+		//
+		// Check plugins table vs filesystem, and pluginparameters with no plugin
+		$message = $module->translate('Checking for orphaned plugin data');
+
+		$total = 2;
+
+		$query = '
+			SELECT
+				[PluginMap::pluginType], [PluginMap::pluginId]
+			FROM
+				[PluginMap]
+		';
+
+		list($ret, $results) = $gallery->search($query);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		while ($result = $results->nextResult()) {
+			$file = $baseDir . '/' . $result[0] . 's/' . $result[1] . '/' . $result[0] . '.inc';
+
+			if (!$platform->file_exists($file)) {
+				$output[] = $module->translate(
+					array(
+						'text' => 'Unknown plugin: %s %s',
+						'arg1' => $result[0],
+						'arg2' => $result[1],
+					)
+				);
+			}
+		}
+		$templateAdapter->updateProgressBar($message, $table, 0.5);
+
+		$query = '
+			SELECT DISTINCT
+				[PluginParameterMap::pluginType], [PluginParameterMap::pluginId]
+			FROM
+				[PluginParameterMap]
+			LEFT JOIN 
+				[PluginMap] 
+			ON 
+				[PluginParameterMap::pluginType] = [PluginMap::pluginType]
+			AND 
+				[PluginParameterMap::pluginId] = [PluginMap::pluginId]
+			WHERE
+				[PluginMap::pluginId] IS NULL
+			ORDER BY
+				[PluginParameterMap::pluginType], [PluginParameterMap::pluginId]
+		';
+
+		list($ret, $results) = $gallery->search($query);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+		$ids = array();
+
+		while ($result = $results->nextResult()) {
+			$ids[] = $result[0] . '/' . $result[1];
+		}
+
+		if (!empty($ids)) {
+			$output[] = $module->translate(
+				array(
+					'text' => 'Orphaned data in table %s with no row in %s table; ids: %s',
+					'arg1' => 'PluginParameterMap',
+					'arg2' => 'PluginMap',
+					'arg3' => implode(', ', $ids),
+				)
+			);
+		}
+		$templateAdapter->updateProgressBar($message, $table, 1);
+
+		//
+		// Check FileSystem - verify dirs/files in sync with path components in db
+		$message = $module->translate('Checking file system');
+		$templateAdapter->updateProgressBar($message, '', 0);
+
+		$query = '
+			SELECT
+				COUNT(*)
+			FROM
+				[GalleryFileSystemEntity]
+		';
+
+		list($ret, $results) = $gallery->search($query);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+		$result = $results->nextResult();
+		$total  = (int)$result[0];
+
+		// Find single root album
+		$query = '
+			SELECT
+				[GalleryChildEntity::id]
+			FROM
+				[GalleryChildEntity] 
+			INNER JOIN 
+				[GalleryFileSystemEntity]
+			ON 
+				[GalleryChildEntity::id] = [GalleryFileSystemEntity::id]
+			WHERE
+				[GalleryChildEntity::parentId] = 0
+		';
+
+		list($ret, $results) = $gallery->search($query);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+		$ids = array();
+
+		while ($result = $results->nextResult()) {
+			$ids[] = $result[0];
+		}
+		list($ret, $rootId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.rootAlbum');
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		if ($ids != array($rootId)) {
+			$output[] = $module->translate(
+				array(
+					'text' => 'Expected single root id of %s, found: %s',
+					'arg1' => $rootId,
+					'arg2' => implode(', ', $ids),
+				)
+			);
+		}
+		// Traverse album directories
+		$examine = array(array($rootId, $gallery->getConfig('data.gallery.albums')));
+		$i       = 0;
+
+		while (!empty($examine)) {
+			$gallery->guaranteeTimeLimit(120);
+			list($id, $dir)                                 = array_shift($examine);
+			list($ret, $dbComponents, $fsComponents, $dirs) = $this->_checkDir($dir, $id);
+
+			if ($ret) {
+				return array($ret, null, null);
+			}
+
+			foreach ($dbComponents as $id => $component) {
+				if (!isset($fsComponents[$component])) {
+					$output[] = $module->translate(
+						array(
+							'text' => 'Path component %s%s missing for id %s',
+							'arg1' => $dir,
+							'arg2' => $component,
+							'arg3' => $id,
+						)
+					);
+				} elseif (isset($dirs[$component])) {
+					$examine[] = array($id, $dir . $component . $slash);
+				}
+			}
+
+			foreach (array_diff(array_keys($fsComponents), $dbComponents) as $extra) {
+				$output[] = $module->translate(
+					array(
+						'text' => 'Path component %s%s not connected to any item',
+						'arg1' => $dir,
+						'arg2' => $extra,
+					)
+				);
+			}
+
+			if (!(++ $i % 20)) {
+				$templateAdapter->updateProgressBar($message, '', $i / $total);
+			}
+		}
+		$templateAdapter->updateProgressBar($message, '', 1);
+
+
+
+		return array(null, true, $output);
+	}
+
+	/**
+	 * @see MaintenanceTask::requiresProgressBar
+	 */
+	public function requiresProgressBar() {
+		return true;
+	}
+
+	/**
+	 * Check that filesystem and db path components are in sync
+	 * @access private
+	 */
+	public function _checkDir($dir, $id) {
+		global $gallery;
+		$platform     =& $gallery->getPlatform();
+		$fsComponents = $dirs = array();
+
+		if (!($dh = $platform->opendir($dir))) {
+			return array(
+				GalleryCoreApi::error(
+					ERROR_PLATFORM_FAILURE,
+					null,
+					null,
+					"Unable to opendir $dir"
+				),
+				null,
+				null,
+				null,
+			);
+		}
+
+		while (($file = $platform->readdir($dh)) !== false) {
+			if ($file == '.' || $file == '..') {
+				continue;
+			}
+			$fsComponents[$file] = true;
+
+			if ($platform->is_dir($dir . $file)) {
+				$dirs[$file] = true;
+			}
+		}
+		$platform->closedir($dh);
+
+		// Skip linked entities (data file is elsewhere) and GalleryLinkItems (no data file)
+		$query = '
+			SELECT
+				[GalleryFileSystemEntity::id], [GalleryFileSystemEntity::pathComponent]
+			FROM
+				[GalleryFileSystemEntity] 
+			INNER JOIN 
+				[GalleryChildEntity]
+			ON 
+				[GalleryFileSystemEntity::id] = [GalleryChildEntity::id]
+			INNER JOIN 
+				[GalleryEntity]
+			ON 
+				[GalleryFileSystemEntity::id] = [GalleryEntity::id]
+			WHERE
+				[GalleryChildEntity::parentId] = ?
+			AND
+				[GalleryEntity::linkId] IS NULL
+			AND
+				[GalleryEntity::entityType] <> ?
+		';
+
+		list($ret, $results) = $gallery->search($query, array((int)$id, 'GalleryLinkItem'));
+
+		if ($ret) {
+			return array($ret, null, null, null);
+		}
+		$dbComponents = array();
+
+		while ($result = $results->nextResult()) {
+			$dbComponents[(int)$result[0]] = $result[1];
+		}
+
+		return array(null, $dbComponents, $fsComponents, $dirs);
+	}
+}
