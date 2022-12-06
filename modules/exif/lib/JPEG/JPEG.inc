@@ -2819,7 +2819,7 @@ class JPEG // extends PEAR
      * @param boolean flag indicating big endianess
      * @return int    the next available position
      */
-    function _putShort(&$data, $pos = 0, $val, $bigEndian = true)
+    function _putShort(&$data, $pos, $val, $bigEndian = true)
     {
         $val = intval($val);
 
