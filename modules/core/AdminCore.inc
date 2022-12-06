@@ -249,7 +249,7 @@ class AdminCoreView extends GalleryView {
 	    }
 
 	    $form['smtp']['password'] =
-		str_repeat('*', strlen(base64_decode($form['smtp']['password'])));
+		str_repeat('*', strlen(base64_decode($form['smtp']['password'] ?? '')));
 	    $form['formName'] = 'AdminCore';
 	    $form['emailTest']['to'] = '';
 	}
