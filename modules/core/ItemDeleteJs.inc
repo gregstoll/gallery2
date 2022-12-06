@@ -99,7 +99,11 @@ class ItemDeleteJsView extends GalleryView {
 	header('Last-Modified: ' . GalleryUtilities::getHttpDate());
 	header('Expires: ' . GalleryUtilities::getHttpDate(time() + 2592000));
 
-	$ret = $template->display('modules/core/templates/ItemDeleteJs.tpl');
+	list($ret, $html) = $template->fetch('gallery:modules/core/templates/ItemDeleteJs.tpl');
+	if($ret){
+		return $ret;
+	}
+	echo $html;
 	return $ret;
     }
 }
