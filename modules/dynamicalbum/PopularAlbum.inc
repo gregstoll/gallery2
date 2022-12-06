@@ -45,7 +45,8 @@ class PopularAlbumView extends UpdatesAlbumView {
      *               array of item ids
      * @static
      */
-    static function getChildIds($userId) {
+    static function getChildIds($userId, $param='date', $orderBy='creationTimestamp',
+        $orderDirection=ORDER_DESCENDING, $table='GalleryEntity', $id='id') {
 	return parent::getChildIds($userId, 'views', 'viewCount', ORDER_DESCENDING,
 				   'GalleryItemAttributesMap', 'itemId');
     }

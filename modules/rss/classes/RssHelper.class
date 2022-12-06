@@ -48,7 +48,7 @@ class RssHelper {
      * @param array $params Additional parameters.
      * @return GalleryStatus
      */
-    function getFeed(&$generator, $id, $param) {
+    static function getFeed(&$generator, $id, $param) {
 	global $gallery;
 
 	/* get gallery entity by id */
@@ -248,7 +248,7 @@ class RssHelper {
      * @param array $param feed parameters
      * @return GalleryStatus
      */
-    function addItem(&$generator, $item, $param) {
+    static function addItem(&$generator, $item, $param) {
 	if (GalleryUtilities::isA($item, 'GalleryDataItem')
 		|| GalleryUtilities::isA($item, 'GalleryAlbumItem')) {
 	    return RssHelper::addPhotoOrAlbum($generator, $item, $param);
@@ -267,7 +267,7 @@ class RssHelper {
      * @param array $param feed parameters
      * @return GalleryStatus
      */
-    function addPhotoOrAlbum(&$generator, $item, $param) {
+    static function addPhotoOrAlbum(&$generator, $item, $param) {
 	global $gallery;
 
 	/* generate url to the images */
@@ -382,7 +382,7 @@ class RssHelper {
      * @param array $param feed parameters
      * @return GalleryStatus
      */
-    function addComment(&$generator, $item, $param) {
+    static function addComment(&$generator, $item, $param) {
 	global $gallery;
 
 	/* generate url to the images */
@@ -420,7 +420,7 @@ class RssHelper {
      * @return array GalleryStatus
      *               array  creationTimeStamp => GalleryItem
      */
-    function getPhotoFeed($entity, $newOnly, $random) {
+    static function getPhotoFeed($entity, $newOnly, $random) {
 	/* retrieve subitems' ids */
 	list ($ret, $subIds) = GalleryCoreApi::fetchChildItemIds($entity);
 	if ($ret) {
@@ -466,7 +466,7 @@ class RssHelper {
      *
      * copied and modified from GalleryItemHelper_simple
      */
-    function fetchAlbumTree($itemId, $limit, $newOnly, $allowPhotos, $perAlbumLimit = 0,
+    static function fetchAlbumTree($itemId, $limit, $newOnly, $allowPhotos, $perAlbumLimit = 0,
 	    $random = false) {
 	global $gallery;
 	$storage =& $gallery->getStorage();
@@ -609,7 +609,7 @@ class RssHelper {
      * @return array GalleryStatus
      *               array of feedType => translation
      */
-    function getFeedTypeTranslation() {
+    static function getFeedTypeTranslation() {
 	list ($ret, $module) = GalleryCoreApi::loadPlugin('module', 'rss');
 	if ($ret) {
 	    return array($ret, null);

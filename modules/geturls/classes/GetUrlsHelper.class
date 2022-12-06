@@ -1,0 +1,171 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2007 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A helper class for GetUrls
+ *
+ * Utility functions useful in for the GetUrls views / blocks
+ *
+ * @package GetURLs
+ * @subpackage Classes
+ * @version $Revision: 904 $
+ * @author Kirill Talanov <k.talanov@igloos.ca>
+ * @author Andy Staudacher <ast@gmx.ch>
+ * @static
+ */
+class GetUrlsHelper {
+    /**
+     * Return URL data required by views / blocks
+     *
+     * resizeId is only set if it's publicly viewable
+     *
+     * @param int $itemId id of a GalleryItem
+     * @return array (object GalleryStatus a status code,
+     *                array ('options' => array(...),
+     *                       'warnings' => array(...),
+     *                       'itemId' => int,
+     *                       'resizeId' => int,
+     *                       'thumbId' => int,
+     *                       'itemTitle' => string,
+     *			     'showIELinks' =>int))
+     */
+    static function getUrlsByItemId($itemId) {
+	global $gallery;
+
+	if (empty($itemId)) {
+	    return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__), null);
+	}
+
+	$data = array();
+	$permissions = array('viewResizes' => false, 'viewSource' => false);
+	$options = array();
+	foreach (array('suppressSourceWarning', 'suppressResizedWarning', 'HtmlLink', 'HtmlInline',
+		       'HtmlThumbnail', 'BbLink', 'BbInline', 'BbThumbnail', 'MiscItemId',
+		       'HtmlResize2Full', 'BbResize2Full', 'MiscResizeId', 'MiscThumbnailId')
+		 as $tmp) {
+	    $options[$tmp] = 0;
+	}
+
+	/* Make sure the user is allowed to do this whole thing */
+	$ret = GalleryCoreApi::assertHasItemPermission($itemId, 'geturls.view');
+	if ($ret) {
+	    return array($ret->wrap(__FILE__, __LINE__), null);
+	}
+
+	/* We want to get the options for our module */
+	list ($ret, $param) = GalleryCoreApi::fetchAllPluginParameters('module', 'geturls');
+	if ($ret) {
+	    return array($ret->wrap(__FILE__, __LINE__), null);
+	}
+	foreach (explode('|', $param['warnings']) as $tmp) {
+	    $options[$tmp] = 1;
+	}
+	foreach (explode('|', $param['showCodes']) as $tmp) {
+	    $options[$tmp] = 1;
+	}
+	foreach (explode('|', $param['idReporting']) as $tmp) {
+	    $options[$tmp] = 1;
+	}
+	$data['showIeLinks'] = $param['showIeLinks'];
+
+	/* We'll need to load the thumbnail for this item if we want to use that linking option */
+	list ($ret, $thumbMap) = GalleryCoreApi::fetchThumbnailsByItemIds(array($itemId));
+	if ($ret) {
+	    return array($ret->wrap(__FILE__, __LINE__), null);
+	}
+	if (isset($thumbMap[$itemId])) {
+	    $data['thumbId'] = $thumbMap[$itemId]->getId();
+	}
+	
+	list ($ret, $item) = GalleryCoreApi::loadEntitiesById($itemId);
+	if ($ret) {
+	    return array($ret->wrap(__FILE__, __LINE__), null);
+	}
+	
+	/*
+	 * We're going to be using the status of these permission checks to determine what kind
+	 * of URLs to generate
+	 */
+	$userId = $gallery->getActiveUserId();
+	$data['guestMode'] = 0;
+	if ($param['guestMode']) {
+	    list ($ret, $guestUserId) = 
+		GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+	    if ($ret) {
+		return array($ret->wrap(__FILE__, __LINE__), null);
+	    }
+	    if ($userId != $guestUserId) {
+		$data['guestMode'] = 1;
+	    }
+	    $userId = $guestUserId;
+	}
+
+	list ($ret, $hasViewSourcePermission) =
+	    GalleryCoreApi::hasItemPermission($itemId, 'core.viewSource', $userId);
+	if ($ret) {
+	    return array($ret->wrap(__FILE__, __LINE__), null);
+	}
+	list ($ret, $hasViewResizesPermission) =
+	    GalleryCoreApi::hasItemPermission($itemId, 'core.viewResizes', $userId);
+	if ($ret) {
+	    return array($ret->wrap(__FILE__, __LINE__), null);
+	}
+	$permissions = array('viewResizes' => $hasViewResizesPermission,
+			     'viewSource' => $hasViewSourcePermission);
+
+	/* All items can have a thumbnail, only photo items also have fullsize and resize images */
+	if (GalleryUtilities::isA($item, 'GalleryPhotoItem')) {
+	    $data['isPhoto'] = 1;
+
+	    if($hasViewResizesPermission) {
+		/*
+		 * Because the user can't access the source image, we'll try using the
+		 * resized versions instead.
+		 */
+		list ($ret, $resizesMap) = GalleryCoreApi::fetchResizesByItemIds(array($itemId));
+		if ($ret) {
+		    return array($ret->wrap(__FILE__, __LINE__), null);
+		}
+
+		if (isset($resizesMap[$itemId])) {
+		    $resizes = $resizesMap[$itemId];
+		    /* TODO Pick any of the resizes (might change this to pick the largest one) */
+		    foreach ($resizes as $resize) {
+			$data['resizeId'] = $resize->getId();
+		    }
+		}
+	    }
+	} else {
+	    $data['isPhoto'] = 0;
+	}
+
+	$data['isDataItem'] = 0;
+	if (GalleryUtilities::isA($item, 'GalleryDataItem')) {
+	    $data['isDataItem'] = 1;
+	}
+
+	$data['itemId'] = $itemId;
+	$data['options'] = $options;
+	$data['permissions'] = $permissions;
+	$data['itemTitle'] = $item->getTitle();
+	return  array(null, $data);
+    }
+}
+?>
