@@ -620,7 +620,7 @@ class ThemeTest extends GalleryTestCase {
 
 		// Generate some random HTML that exceeds the backtrace limit in length
 		$randomHtml = '<meta foo="bar">body head </meta>';
-		$randomHtml = str_repeat($randomHtml, 160000 / strlen($randomHtml));
+		$randomHtml = str_repeat($randomHtml, (int) (160000 / strlen($randomHtml)));
 		$html       = '
 	    <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" ...>
 	    <html lang="de-DE" xmlns="...">

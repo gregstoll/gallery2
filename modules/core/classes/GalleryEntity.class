@@ -484,7 +484,7 @@ class GalleryEntity extends GalleryPersistent {
      * @return boolean
      */
     function hasOnLoadHandler($handlerId) {
-	return (strpos($this->getOnLoadHandlers(), "|$handlerId|") !== false);
+	return (strpos($this->getOnLoadHandlers() ?? '', "|$handlerId|") !== false);
     }
 
     /**
@@ -507,7 +507,7 @@ class GalleryEntity extends GalleryPersistent {
      */
     function removeOnLoadHandler($handlerId) {
 	$onLoadHandlers = preg_replace('{\|' . preg_quote($handlerId) . '\|}', '|',
-				       $this->getOnLoadHandlers());
+				       $this->getOnLoadHandlers() ?? '');
 	if (empty($onLoadHandlers) || $onLoadHandlers == '|') {
 	    $onLoadHandlers = null;
 	}
