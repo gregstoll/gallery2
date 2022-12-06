@@ -153,7 +153,7 @@ class KeyAlbumCallbacks {
 	if ($sizeLimit > 0 && count($keywords) > $sizeLimit) {
 	    /* Sort by frequency and drop least common */
         uasort($keywords, function($a,$b) {
-            $c = $a[\'count\']; $d = $b[\'count\'];
+            $c = $a['count']; $d = $b['count'];
 		    return $c > $d ? -1 : ($c == $d ? 0 : 1);});
 
 	    /* Avoid renumbering of numeric keys from array_splice */
@@ -171,7 +171,7 @@ class KeyAlbumCallbacks {
 	ksort($keywords);
 	$keywords = array_values($keywords);
 
-	/* 
+	/*
 	 * Compute weights, used for font enlargement in keyword cloud.  The adjustment shifts the
 	 * whole range from [x>=1, maxWeight] to [1, maxWeight - minWeight].  In case all
 	 * frequencies are very close together, this makes the resulting font-size rather normal
