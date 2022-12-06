@@ -1,0 +1,315 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/AdminMaintenance.inc');
+GalleryCoreApi::requireOnce('modules/core/classes/helpers/MaintenanceHelper_simple.class');
+
+/**
+ * Tests for data about maintenance tasks
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class MaintenanceHelperTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$path = 'modules/core/test/phpunit/MaintenanceHelperTest.class';
+
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'MaintenanceTask',
+			'MaintenanceHelperTestTask',
+			'MaintenanceHelperTestTask',
+			$path,
+			'coreTest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markFactoryModuleForCleanup('coreTest');
+	}
+
+	public function tearDown() {
+		$ret = GalleryCoreApi::removeMapEntry(
+			'GalleryMaintenanceMap',
+			array(
+				'taskId' => 'MaintenanceHelperTestTask',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testFetchTasks() {
+		list($ret, $tasks) = MaintenanceHelper_simple::fetchTasks();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			GalleryUtilities::isA(
+				$tasks['MaintenanceHelperTestTask'],
+				'MaintenanceHelperTestTask'
+			)
+		);
+	}
+
+	public function testAddAndFetchLastRun() {
+		// Add a task entry
+		// Choose an arbitrary time
+		$time = time() - 5;
+
+		$ret = MaintenanceHelper_simple::addRun(
+			'MaintenanceHelperTestTask',
+			$time,
+			true,
+			array('some details')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $info) = MaintenanceHelper_simple::fetchLastRun('MaintenanceHelperTestTask');
+
+		$this->assertTrue($info['runId'] > 0, 'run id 1');
+		$this->assertEquals($time, $info['timestamp'], 'timestamp 1');
+		$this->assertTrue($info['success'], 'success 1');
+		$this->assertEquals(array('some details'), $info['details'], 'details 1');
+
+		$lastRunId = $info['runId'];
+
+		// Add a second task entry
+		// Choose an arbitrary time
+		$time = time() + 15;
+
+		$ret = MaintenanceHelper_simple::addRun(
+			'MaintenanceHelperTestTask',
+			$time,
+			false,
+			array('different details')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $info) = MaintenanceHelper_simple::fetchLastRun('MaintenanceHelperTestTask');
+
+		$this->assertTrue($info['runId'] > $lastRunId, 'run id 2');
+		$this->assertEquals($time, $info['timestamp'], 'timestamp 2');
+		$this->assertFalse($info['success'], 'success 2');
+		$this->assertEquals(array('different details'), $info['details'], 'details 2');
+	}
+
+	public function testSetMaintenanceModeTrue() {
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$platform =& $gallery->getPlatform();
+
+		GalleryDataCache::remove('CoreModule::installedVersions');
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$writeString = $module->getVersion() . "\n" . $module->getGalleryVersion() . "\n"
+		. 'maintenance-mode';
+		$versionFile = $gallery->getConfig('data.gallery.version');
+
+		$platform->setReply('file_exists', array($versionFile), true, true);
+		$platform->setReply(
+			'file',
+			array($versionFile, false),
+			array(
+				$module->getVersion() . "\n",
+				$module->getGalleryVersion() . "\n",
+			),
+			true
+		);
+		$platform->setReply('atomicWrite', array($versionFile, $writeString), true);
+
+		$ret = GalleryCoreApi::setMaintenanceMode(true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			true,
+			$gallery->getConfig('mode.maintenance'),
+			'Configuration not modified'
+		);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testSetMaintenanceModeFalse() {
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$platform =& $gallery->getPlatform();
+
+		$gallery->setConfig('mode.maintenance', true);
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$writeString = $module->getVersion() . "\n" . $module->getGalleryVersion();
+		$versionFile = $gallery->getConfig('data.gallery.version');
+
+		$platform->setReply('file_exists', array($versionFile), true, true);
+		$platform->setReply(
+			'file',
+			array($versionFile, false),
+			array(
+				$module->getVersion() . "\n",
+				$module->getGalleryVersion() . "\n",
+			),
+			true
+		);
+		$platform->setReply('atomicWrite', array($versionFile, $writeString), true);
+
+		$ret = GalleryCoreApi::setMaintenanceMode(false);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			false,
+			$gallery->getConfig('mode.maintenance'),
+			'Configuration not modified'
+		);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testSetMaintenanceModeUrl() {
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$platform =& $gallery->getPlatform();
+
+		GalleryDataCache::remove('CoreModule::installedVersions');
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$writeString = $module->getVersion() . "\n" . $module->getGalleryVersion() . "\n"
+		. 'maintenance-mode:http://test.gallery.com/maintenance.html';
+		$versionFile = $gallery->getConfig('data.gallery.version');
+
+		$platform->setReply('file_exists', array($versionFile), true);
+		$platform->setReply(
+			'file',
+			array($versionFile, false),
+			array(
+				$module->getVersion() . "\n",
+				$module->getGalleryVersion() . "\n",
+			)
+		);
+		$platform->setReply('atomicWrite', array($versionFile, $writeString), true);
+
+		$ret = GalleryCoreApi::setMaintenanceMode('http://test.gallery.com/maintenance.html');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'http://test.gallery.com/maintenance.html',
+			$gallery->getConfig('mode.maintenance'),
+			'Configuration not modified'
+		);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testSetMaintenanceModeEqual() {
+		global $gallery;
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$current = $gallery->getConfig('mode.maintenance');
+
+		$ret = GalleryCoreApi::setMaintenanceMode($current);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			$current,
+			$gallery->getConfig('mode.maintenance'),
+			'Configuration not modified'
+		);
+	}
+}
+
+class MaintenanceHelperTestTask extends MaintenanceTask {
+	public function getInfo() {
+		return array(
+			'title'       => 'MaintenanceHelperTestTask title',
+			'description' => 'MaintenanceHelperTestTask description',
+			'l10Domain'   => 'modules_core',
+		);
+	}
+
+	public function run() {
+		return array(null, false, array('fail details'));
+	}
+}

@@ -1,0 +1,703 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test FileSystem functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class FileSystemTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$iterations = 3;
+		$parentId   = $this->_getRootId();
+
+		for ($i = 0; $i < $iterations; $i++) {
+			$gallery->guaranteeTimeLimit(5);
+
+			list($ret, $this->_albums[$i]) = $this->_createRandomAlbum($parentId);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$parentId = $this->_albums[$i]->getId();
+		}
+
+		// delete the top album
+		$this->_markForCleanup($this->_albums[0]);
+	}
+
+	public function testFetchItemIdByPath() {
+		$path = '/';
+
+		for ($i = 0; $i < sizeof($this->_albums); $i++) {
+			$path .= $this->_albums[$i]->getPathComponent() . '/';
+		}
+
+		list($ret, $id) = GalleryCoreApi::fetchItemIdByPath($path);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($this->_albums[2]->getId(), $id);
+	}
+
+	public function testFetchLogicalPath() {
+		list($ret, $root) = GalleryCoreApi::loadEntitiesById($this->_getRootId(), 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $logicalPath) = $root->fetchLogicalPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('/', $logicalPath);
+
+		list($ret, $logicalPath) = $this->_albums[1]->fetchLogicalPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			sprintf(
+				'/%s/%s/',
+				$this->_albums[0]->getPathComponent(),
+				$this->_albums[1]->getPathComponent()
+			),
+			$logicalPath
+		);
+
+		list($ret, $item) = $this->_createRandomDataItem($this->_albums[1]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $logicalPath) = $item->fetchLogicalPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			sprintf(
+				'/%s/%s/%s',
+				$this->_albums[0]->getPathComponent(),
+				$this->_albums[1]->getPathComponent(),
+				$item->getPathComponent()
+			),
+			$logicalPath
+		);
+	}
+
+	public function testFetchPath() {
+		global $gallery;
+
+		$originalPlatform       =& $gallery->getPlatform();
+		$FileSystemTestPlatform = new FileSystemTestPlatform('/');
+
+		$gallery->setPlatform($FileSystemTestPlatform);
+
+		$originalAlbumsDir = $gallery->getConfig('data.gallery.albums');
+
+		$gallery->setConfig('data.gallery.albums', '');
+
+		list($ret, $path) = $this->_albums[1]->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			sprintf(
+				'%s/%s/',
+				$this->_albums[0]->getPathComponent(),
+				$this->_albums[1]->getPathComponent()
+			),
+			$path
+		);
+
+		$FileSystemTestPlatform = new FileSystemTestPlatform('\\');
+
+		$gallery->setPlatform($FileSystemTestPlatform);
+
+		list($ret, $path) = $this->_albums[1]->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			sprintf(
+				'%s\\%s\\',
+				$this->_albums[0]->getPathComponent(),
+				$this->_albums[1]->getPathComponent()
+			),
+			$path
+		);
+		$gallery->setPlatform($originalPlatform);
+		$gallery->setConfig('data.gallery.albums', $originalAlbumsDir);
+	}
+
+	public function testFetchChildIdByPathComponent() {
+		list($ret, $id) = GalleryCoreApi::fetchChildIdByPathComponent(
+			$this->_albums[1]->getId(),
+			$this->_albums[2]->getPathComponent()
+		);
+		$this->assertEquals($this->_albums[2]->getId(), $id);
+	}
+
+	/**
+	 * Verify that creating a second filesystem entity with the same path as
+	 * an existing one throws a collision error.
+	 */
+	public function testCreateCollision() {
+		global $gallery;
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_albums[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		for ($i = 0; $i < 3; $i++) {
+			$entity[$i] = new GalleryFileSystemEntity();
+
+			$ret = $entity[$i]->create($this->_albums[0]->getId(), 'valid_path.jpg');
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = $entity[$i]->save();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			if ($i > 0) {
+				$this->assertEquals(
+					sprintf('valid_path_%03d.jpg', $i),
+					$entity[$i]->getPathComponent()
+				);
+			}
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testMoveCollision() {
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock(
+			array(
+				$this->_albums[0]->getId(),
+				$this->_albums[1]->getId(),
+				$this->_albums[2]->getId(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_albums[1]->rename('foo');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_albums[1]->save();
+
+		$ret = $this->_albums[1]->move($this->_albums[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_albums[2]->rename('foo');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_albums[2]->move($this->_albums[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('foo_001', $this->_albums[2]->getPathComponent());
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	/*
+	 * Test the platform->rename($old,$newpath) call of FileSystemEntity::move.
+	 * The call should have legal platformspecific slashes.
+	 *
+	 * It tests not the functionality of FileSystemEntity::move, it only tests if
+	 * FileSystemEntity::move uses valid paths (no incorrect slashes) in its call to the platform
+	 * specific "rename($oldname, $newname)" function.
+	 */
+	public function testMoveRenameCall() {
+		global $gallery;
+
+		// Use a windows alike mock platfrom
+		$originalPlatform =& $gallery->getPlatform();
+
+		// Acquire the write locks
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock(
+			array(
+				$this->_albums[0]->getId(),
+				$this->_albums[1]->getId(),
+				$this->_albums[2]->getId(),
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$FileSystemTestPlatformForRename = new FileSystemTestPlatformForRename('\\');
+
+		$gallery->setPlatform($FileSystemTestPlatformForRename);
+
+		// Execute the move command, success expected
+		$ret = $this->_albums[2]->move($this->_albums[0]->getId());
+
+		if ($ret) {
+			$gallery->setPlatform($originalPlatform);
+
+			return $ret;
+		}
+
+		// Now change the mock platform to a unix like system
+		$FileSystemTestPlatformForRename = new FileSystemTestPlatformForRename('/');
+
+		$gallery->setPlatform($FileSystemTestPlatformForRename);
+
+		// And move again album 1 (back, but all virtual move command), success expected
+		$ret = $this->_albums[2]->move($this->_albums[1]->getId());
+
+		if ($ret) {
+			$gallery->setPlatform($originalPlatform);
+
+			return $ret;
+		}
+
+		$gallery->setPlatform($originalPlatform);
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGetLegalPathComponent() {
+		// Simple case, no collision
+		list($ret, $path) = GalleryCoreApi::getLegalPathComponent('testpath', $this->_albums[2]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('testpath', $path, 'no collision');
+
+		// Collision with existing album: _001 gets added
+		list($ret, $path) = GalleryCoreApi::getLegalPathComponent(
+			$this->_albums[1]->getPathComponent(),
+			$this->_albums[0]->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			$this->_albums[1]->getPathComponent() . '_001',
+			$path,
+			'avoid collision'
+		);
+
+		// Ignore self-collision
+		list($ret, $path) = GalleryCoreApi::getLegalPathComponent(
+			$this->_albums[1]->getPathComponent(),
+			$this->_albums[0]->getId(),
+			$this->_albums[1]->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($this->_albums[1]->getPathComponent(), $path, 'ignore self-collision');
+
+		// Filename with some invalid path characters and .php extension
+		list($ret, $path) = GalleryCoreApi::getLegalPathComponent(
+			'my/test&file!.php',
+			$this->_albums[1]->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('my_test_file__php', $path, 'a few bad characters');
+
+		// Filename of all extended characters, except extension: we rewrite with date-filename
+		list($ret, $path) = GalleryCoreApi::getLegalPathComponent(
+			"\xe6\xaa\x94\xe6\xa1\x88.jpg",
+			$this->_albums[1]->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(date('Ymd') . '.jpg', $path, 'extended characters');
+	}
+
+	public function testPathComponentLength() {
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+		$string  = '1234567890123456789012345678901234567890123456789012345678901234567890';
+		$string .= '1234567890123456789012345678901234567890123456789012345678901234567890';
+
+		$this->assertEquals(140, strlen($string), 'precondition: length of test string');
+
+		list($ret, $entityInfo) = GalleryCoreApi::describeEntity('GalleryFileSystemEntity');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$size = $entityInfo['GalleryFileSystemEntity']['members']['pathComponent']['size'];
+
+		$this->assertEquals(
+			128,
+			strlen($storage->_truncateString($string, $size)),
+			'pathComponent string size changed, change the redundant value in ' .
+			'GalleryFileSystemEntityHelper_medium!'
+		);
+	}
+
+	// Verify that too long path components get truncated and that the extension gets preserved.
+	public function testGetLegalPathComponentForTruncatedName() {
+		// Prepare by setting the name of an existing album to a string with max length.
+		$component = '1234567890123456789012345678901234567890123456789012345678901234567890' .
+		'1234567890123456789012345678901234567890123456789012345678';
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_albums[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_albums[0]->setPathComponent($component);
+
+		$ret = $this->_albums[0]->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Execute the test: Get the legal path component for a too long colliding name.
+		$newComponent = $component . 'abcdefghi.jpg';
+
+		list($ret, $path) = GalleryCoreApi::getLegalPathComponent(
+			$newComponent,
+			$this->_getRootId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expectedPathComponent = substr($component, 0, 124) . '.jpg';
+
+		$this->assertEquals($expectedPathComponent, $path);
+	}
+
+	public function testGetLegalPathComponentForTruncatedNameWithCollision() {
+		// Prepare the 2nd case, where we try to fix a collision.
+		$component = '1234567890123456789012345678901234567890123456789012345678901234567890' .
+		'123456789012345678901234567890123456789012345678901234.jpg';
+
+		list($ret, $item) = $this->_createRandomDataItem($this->_albums[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $item->rename($component);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $item->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($component, $item->getPathComponent(), 'precondition');
+
+		// Execute the test: path component with truncation and collision.
+		$newComponent = $component . 'abcdefghi.jpg';
+
+		list($ret, $path) = GalleryCoreApi::getLegalPathComponent(
+			$newComponent,
+			$this->_albums[0]->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expectedPathComponent = substr($component, 0, 120) . '_001.jpg';
+
+		$this->assertEquals($expectedPathComponent, $path);
+	}
+
+	/*
+	 * Verify that a path component that would be truncated is detected as one that would
+	 * collide with an existing path component of max length.
+	 */
+	public function testCheckPathCollisionTruncation() {
+		// Prepare by setting the name of an existing album to a string with max length.
+		$component = '1234567890123456789012345678901234567890123456789012345678901234567890' .
+		'1234567890123456789012345678901234567890123456789012345678';
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_albums[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_albums[0]->setPathComponent($component);
+
+		$ret = $this->_albums[0]->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Execute the test: Try to use a path component that collides once it is truncated.
+		$newComponent = $component . 'abcdefghi';
+
+		list($ret, $isCollision) = GalleryCoreApi::checkPathCollision($newComponent, $this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($isCollision);
+	}
+
+	public function testCheckPathCollisionCaseSensitivity() {
+		$pathComponentA = 'test';
+		$pathComponentB = 'TEST';
+
+		list($ret, $item) = $this->_createRandomAlbum($this->_albums[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $item->rename($pathComponentA);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $item->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Execute the test: Try a path that only varies in the letter case.
+		list($ret, $isCollision) = GalleryCoreApi::checkPathCollision($pathComponentB, $this->_albums[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($isCollision);
+	}
+}
+
+/**
+ * Mock platform
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class FileSystemTestPlatform {
+	public function __construct($separator) {
+		$this->_separator = $separator;
+	}
+
+	public function getDirectorySeparator() {
+		return $this->_separator;
+	}
+}
+
+/**
+ * Mock platform for the rename method
+ *
+ * Implements all methods used by FileSystemEntity::move()
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class FileSystemTestPlatformForRename extends GalleryPlatform {
+	public function __construct($separator) {
+		$this->_separator = $separator;
+	}
+
+	public function getDirectorySeparator() {
+		return $this->_separator;
+	}
+
+	/**
+	 * Rename a file/dir
+	 *
+	 * Override rename method for the testMoveRenamePaths
+	 * It would not rename the item actually, just check if the paths contain no invalid slashs
+	 */
+	public function rename($oldname, $newname) {
+		global $gallery;
+
+		if ($gallery->getDebug()) {
+			$gallery->debug("rename($oldname, $newname)");
+		}
+
+		/*
+		 * Check if there are some platform specific slash problems in the paths
+		 * The platform should be forced to have a '\' separator and thus, no '/'
+		 * should be found in the paths.
+		 */
+
+		/*
+		 * Strip off the g2data path part of the $oldname and $newname, because they are platform
+		 * specific and correct anyway.
+		 */
+		$oldname = substr(
+			$oldname,
+			strlen($gallery->getConfig('data.gallery.albums'))
+		);
+
+		$newname = substr(
+			$newname,
+			strlen($gallery->getConfig('data.gallery.albums'))
+		);
+
+		/* We had a case where FileSystemEntity::move produced a rename(a,b) path b, which had a
+		 * separator too much and this additional seapartor was not even platform specific, but
+		 * just '/'. The consequence: ->move() did not work on windows xp.
+		 * What we do here is: Force a windows xp separator '\' and check if no '/' separator is
+		 * found in the paths. nested ifs are not necessary, but more readable.
+		 * And we do not accept // or \\ in our paths. Most probably this would not be an issue, but
+		 * it is good to create exactly the paths that we actually indend to create.
+		 */
+		if ($this->_separator == '\\') {
+			if (strrchr($oldname, '/') || strrchr($newname, '/')
+				|| strpos($oldname, '\\\\') || strpos($newname, '\\\\')
+			) {
+				return false;
+			}
+		} elseif ($this->_separator == '/') {
+			if (strrchr($oldname, '\\') || strrchr($newname, '\\')
+				|| strpos($oldname, '//') || strpos($newname, '//')
+			) {
+				return false;
+			}
+		}
+
+		// Now pretend the rename command was successful
+		return true;
+	}
+}

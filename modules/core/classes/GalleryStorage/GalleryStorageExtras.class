@@ -1001,7 +1001,12 @@ class GalleryStorageExtras /* the other half of GalleryStorage */ {
 	$query .= ') VALUES (' . $markers . ')';
 
 	$this->_gs->_traceStart();
-	$recordSet = $db->Execute($query, $data);
+	try{
+		$recordSet = $db->Execute($query, $data);
+	}
+	catch (\Exception $ex){
+		return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
+	}
 	$this->_gs->_traceStop();
 	if ($recordSet === false) {
 	    return GalleryCoreApi::error(ERROR_STORAGE_FAILURE);
@@ -1991,7 +1996,7 @@ class GalleryStorageExtras /* the other half of GalleryStorage */ {
      * @return array a GalleryStatus and a string class name
      */
     function _identifyEntities($ids) {
-	assert('!empty($ids)');
+	assert(!empty($ids));
 
 	if (!is_array($ids)) {
 	    $ids = array($ids);

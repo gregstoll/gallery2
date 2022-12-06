@@ -1,0 +1,178 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Scan through all of our source code and verify proper subversion properties.
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class SvnAuditTest extends CodeAuditTestCase {
+	public function __construct($methodName) {
+		global $gallery;
+
+		$this->_platform   =& $gallery->getPlatform();
+		$this->_exceptions = array(
+			'lib/pear/mime.php' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/pear/mimePart.php' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/smarty/Smarty.class.php' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/smarty/Smarty_Compiler.class.php' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/smarty/Config_File.class.php' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/animation-min.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/autocomplete-min.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/color.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/connection-min.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/container-min.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/dom-min.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/dragdrop-min.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/event-min.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/slider-min.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/treeview-min.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/utilities.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/yahoo-min.js' => array(
+				'svn:eol-style' => 'native',
+			),
+			'lib/yui/yahoo-dom-event.js' => array(
+				'svn:eol-style' => 'native',
+			),
+		);
+
+		parent::__construct($methodName);
+
+		$this->_errorCount = 0;
+	}
+
+	/**
+	 * @see CodeAuditTestCase::shouldCheckFile
+	 */
+	public function shouldCheckFile($fileName) {
+		$base = basename($fileName);
+
+		return in_array($base, array('MANIFEST', 'GNUmakefile', 'strings.raw'))
+		|| preg_match('{\.(php|inc|class|tpl|html|css|js|txt|xml|po|mo|png|gif|jpg)$}', $base);
+	}
+
+	/**
+	 * @see CodeAuditTestCase::checkFile
+	 */
+	public function checkFile($fileName, $buffer) {
+		$slash     = $this->_platform->getDirectorySeparator();
+		$base      = basename($fileName);
+		$propsFile = dirname($fileName) . "${slash}.svn${slash}props${slash}${base}.svn-work";
+
+		if (!$this->_platform->file_exists($propsFile)) {
+			// svn 1.4.x does not write .svn-work unless local prop changes are made
+			$propsFile = dirname($fileName) . "${slash}.svn${slash}prop-base${slash}${base}.svn-base";
+		}
+
+		$g2Path = str_replace($this->_baseDir . '/', '', $fileName);
+
+		if (isset($this->_exceptions[$g2Path])) {
+			$expected = $this->_exceptions[$g2Path];
+		} elseif (preg_match('{\.txt$}', $base)) {
+			$expected = array(
+				'svn:eol-style' => 'native',
+			);
+		} elseif (in_array($base, array('MANIFEST', 'GNUmakefile', 'strings.raw'))
+			|| preg_match('{\.(php|inc|class|tpl|html|css|js|xml|po)$}', $base)
+		) {
+			$expected = array(
+				'svn:eol-style' => 'native',
+				'svn:keywords'  => 'Author Id Revision',
+			);
+		} else {
+			$expected = array(
+				'svn:mime-type' => '(image|application)/.*',
+			);
+		}
+
+		$lines = $this->_platform->file($propsFile);
+
+		if (empty($lines)) {
+			$this->assertFalse(true, 'Properties missing or empty: ' . $propsFile);
+		} else {
+			$props = array();
+
+			for ($i = 0; $i < count($lines); $i++) {
+				if (preg_match('{^[KV]\s*\d+$}', $lines[$i])) {
+					continue;
+				}
+
+				if (isset($key)) {
+					$props[$key] = rtrim($lines[$i]);
+					$key         = null;
+				} else {
+					$key = rtrim($lines[$i]);
+				}
+			}
+
+			foreach ($expected as $key => $valueMatch) {
+				if (!isset($props[$key])) {
+					$this->assertFalse(true, "svn property $key missing for $fileName");
+					$this->_errorCount++;
+				} elseif (!preg_match('{^' . $valueMatch . '$}', $props[$key])) {
+					$this->assertFalse(
+						true,
+						"svn property $key = " . $props[$key]
+						. " for $fileName expected to match $valueMatch"
+					);
+
+					$this->_errorCount++;
+				}
+			}
+		}
+
+		if ($this->_errorCount > 10) {
+			$this->halt();
+		}
+	}
+}

@@ -1,0 +1,461 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/AdminLanguageManager.inc');
+
+/**
+ * AdminLanguageManager view tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Tim Almdal <tnalmdal@shaw.ca>
+ * @version $Revision: 17580 $
+ */
+class AdminLanguageManagerViewTest extends GalleryViewTestCase {
+	public $_galleryTemplateAdapter;
+
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminLanguageManager');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		global $gallery;
+
+		// Load the cache for testing
+		$cacheKey = 'GalleryPluginHelper::getAllPluginIds(module)';
+
+		GalleryDataCache::put($cacheKey, array('testModule'));
+
+		$cacheKey = 'GalleryPluginHelper::getAllPluginIds(theme)';
+
+		GalleryDataCache::put($cacheKey, array('testTheme'));
+
+		$gallery->_translator  = AdminLanguagesViewTestTranslator::getMe();
+		$cacheKey              = 'GalleryRepository::getRepositories(,GalleryRepository)';
+		$this->_testRepository = new UnitTestRepository();
+		GalleryDataCache::put(
+			$cacheKey,
+			array(
+				array(
+					'test' => $this->_testRepository,
+				),
+				0,
+			)
+		);
+
+		$cacheKey           = 'GalleryTranslator::SupportedLanguages';
+		$supportedLanguages = array(
+			'en' => array(
+				'US' => array('US English'),
+			),
+			'hu' => array(
+				'HU' => array('Magyar'),
+			),
+		);
+
+		GalleryDataCache::put($cacheKey, $supportedLanguages);
+
+		$UnitTestPlatform = new UnitTestPlatform();
+
+		$gallery->setPlatform($UnitTestPlatform);
+
+		$gallery->_storage = new UnitTestStorage();
+		$storage           =& $gallery->getStorage();
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+		$storage  =& $gallery->getStorage();
+
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+		$this->assertTrue($storage->isComplete(), $storage->getRemaining());
+		$this->assertTrue($this->_testRepository->isComplete(), $this->_testRepository->getRemaining());
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testGetAllLanguagesCompatible() {
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		foreach (array(array('module', 'testModule', 1), array('theme', 'testTheme', 1)) as $case) {
+			$this->_testRepository->setReply(
+				'getPluginUpgradeInfo',
+				$case,
+				array(
+					null,
+					array(
+						'base'        => array(
+							'newVersion'     => '1.0.0',
+							'newBuild'       => '44444',
+							'currentVersion' => '1.0.0',
+							'currentBuild'   => '11111',
+							'relation'       => 'older',
+							'locked'         => 0,
+							'isCompatible'   => true,
+						),
+						'upgradeable' => false,
+						'complete'    => 0,
+						'languages'   => array(
+							'en_US' => array(
+								'name'         => 'en_US',
+								'currentBuild' => '00001',
+								'newBuild'     => '33333',
+								'relation'     => 'older',
+								'locked'       => 0,
+							),
+							'hu_HU' => array(
+								'name'         => 'hu_HU',
+								'currentBuild' => '22222',
+								'newBuild'     => '33333',
+								'relation'     => 'older',
+								'locked'       => 0,
+							),
+							'zh_CN' => array(
+								'name'         => 'zh_CN',
+								'currentBuild' => '22222',
+								'newBuild'     => '33333',
+								'relation'     => 'older',
+								'locked'       => 0,
+							),
+							'zh_TW' => array(
+								'name'         => 'zh_TW',
+								'currentBuild' => '22222',
+								'newBuild'     => '33333',
+								'relation'     => 'older',
+								'locked'       => 0,
+							),
+						),
+					),
+				)
+			);
+		}
+
+		$enableAllFlags = array(
+			'upgrade'  => false,
+			'remove'   => false,
+			'download' => false,
+		);
+
+		list($ret, $repositories) = GalleryRepository::getRepositories();
+
+		list($ret, $languagePackages) = $this->_view->_getAllLanguages($repositories['test'], $enableAllFlags);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected = array(
+			'en_GB' => array(
+				'upgrade'     => false,
+				'installed'   => false,
+				'description' => 'English (UK)',
+			),
+			'hu' => array(
+				'upgrade'     => true,
+				'installed'   => true,
+				'description' => 'Magyar',
+			),
+			'pt' => array(
+				'upgrade'     => false,
+				'installed'   => false,
+				'description' => 'Portugu&#234;s',
+			),
+			'zh_CN' => array(
+				'upgrade'     => true,
+				'installed'   => false,
+				'description' => '&#31616;&#20307;&#20013;&#25991;',
+			),
+			'zh_TW' => array(
+				'upgrade'     => true,
+				'installed'   => false,
+				'description' => '&#32321;&#39636;&#20013;&#25991;',
+			),
+		);
+
+		$this->assertEquals($expected, $languagePackages, 'Language packages incorrect');
+
+		$this->assertEquals(
+			array(
+				'upgrade'  => true,
+				'remove'   => true,
+				'download' => true,
+			),
+			$enableAllFlags,
+			'Enable all flags incorrect'
+		);
+	}
+
+	public function testGetAllLanguagesNotCompatible() {
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		foreach (array(array('module', 'testModule', 1), array('theme', 'testTheme', 1)) as $case) {
+			$this->_testRepository->setReply(
+				'getPluginUpgradeInfo',
+				$case,
+				array(
+					null,
+					array(
+						'base'        => array(
+							'newVersion'     => '1.0.0',
+							'newBuild'       => '44444',
+							'currentVersion' => '1.0.0',
+							'currentBuild'   => '11111',
+							'relation'       => 'older',
+							'locked'         => 0,
+							'isCompatible'   => false,
+						),
+						'upgradeable' => false,
+						'complete'    => 0,
+						'languages'   => array(
+							'en_US' => array(
+								'name'         => 'en_US',
+								'currentBuild' => '00001',
+								'newBuild'     => '33333',
+								'relation'     => 'older',
+								'locked'       => 0,
+							),
+							'hu_HU' => array(
+								'name'         => 'hu_HU',
+								'currentBuild' => '22222',
+								'newBuild'     => '33333',
+								'relation'     => 'older',
+								'locked'       => 0,
+							),
+						),
+					),
+				)
+			);
+		}
+
+		$enableAllFlags = array(
+			'upgrade'  => false,
+			'remove'   => false,
+			'download' => false,
+		);
+
+		list($ret, $repositories) = GalleryRepository::getRepositories();
+
+		list($ret, $languagePackages) = $this->_view->_getAllLanguages($repositories['test'], $enableAllFlags);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected = array(
+			'en_GB' => array(
+				'upgrade'     => false,
+				'installed'   => false,
+				'description' => 'English (UK)',
+			),
+			'hu' => array(
+				'upgrade'     => false,
+				'installed'   => true,
+				'description' => 'Magyar',
+			),
+			'pt' => array(
+				'upgrade'     => false,
+				'installed'   => false,
+				'description' => 'Portugu&#234;s',
+			),
+			'zh_CN' => array(
+				'upgrade'     => false,
+				'installed'   => false,
+				'description' => '&#31616;&#20307;&#20013;&#25991;',
+			),
+			'zh_TW' => array(
+				'upgrade'     => false,
+				'installed'   => false,
+				'description' => '&#32321;&#39636;&#20013;&#25991;',
+			),
+		);
+
+		$this->assertEquals($expected, $languagePackages, 'Language packages incorrect');
+
+		$this->assertEquals(
+			array(
+				'upgrade'  => false,
+				'remove'   => true,
+				'download' => true,
+			),
+			$enableAllFlags,
+			'Enable all flags incorrect'
+		);
+	}
+
+	public function testGetAllLanguagesNoPackages() {
+		global $gallery;
+
+		$storage =& $gallery->getStorage();
+
+		foreach (array(array('module', 'testModule', 1), array('theme', 'testTheme', 1)) as $case) {
+			$this->_testRepository->setReply(
+				'getPluginUpgradeInfo',
+				$case,
+				array(
+					null,
+					array(
+						'base'        => array(
+							'newVersion'     => '1.0.0',
+							'newBuild'       => '44444',
+							'currentVersion' => '1.0.0',
+							'currentBuild'   => '11111',
+							'relation'       => 'older',
+							'locked'         => 0,
+							'isCompatible'   => true,
+						),
+						'upgradeable' => false,
+						'complete'    => 0,
+						'languages'   => array(
+							'en_US' => array(
+								'name'         => 'en_US',
+								'currentBuild' => '00001',
+								'newBuild'     => '33333',
+								'relation'     => 'older',
+								'locked'       => 0,
+							),
+							'hu_HU' => array(
+								'name'         => 'hu_HU',
+								'currentBuild' => '22222',
+								'newBuild'     => '33333',
+								'relation'     => 'older',
+								'locked'       => 0,
+							),
+						),
+					),
+				)
+			);
+		}
+
+		$enableAllFlags = array(
+			'upgrade'  => false,
+			'remove'   => false,
+			'download' => false,
+		);
+
+		list($ret, $repositories) = GalleryRepository::getRepositories();
+
+		list($ret, $languagePackages) = $this->_view->_getAllLanguages(
+			$repositories['test'],
+			$enableAllFlags
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected = array(
+			'en_GB' => array(
+				'upgrade'     => false,
+				'installed'   => false,
+				'description' => 'English (UK)',
+			),
+			'hu' => array(
+				'upgrade'     => true,
+				'installed'   => true,
+				'description' => 'Magyar',
+			),
+			'pt' => array(
+				'upgrade'     => false,
+				'installed'   => false,
+				'description' => 'Portugu&#234;s',
+			),
+			'zh_CN' => array(
+				'upgrade'     => false,
+				'installed'   => false,
+				'description' => '&#31616;&#20307;&#20013;&#25991;',
+			),
+			'zh_TW' => array(
+				'upgrade'     => false,
+				'installed'   => false,
+				'description' => '&#32321;&#39636;&#20013;&#25991;',
+			),
+		);
+
+		$this->assertEquals($expected, $languagePackages, 'Language packages incorrect');
+
+		$this->assertEquals(
+			array(
+				'upgrade'  => true,
+				'remove'   => true,
+				'download' => true,
+			),
+			$enableAllFlags,
+			'Enable all flags incorrect'
+		);
+	}
+}
+
+class AdminLanguagesViewTestTranslator extends GalleryTranslator {
+	/**
+	 * Class Loader
+	 */
+	public static function getMe() {
+		static $instance;
+
+		if (!isset($instance)) {
+			$instance = new AdminLanguagesViewTestTranslator();
+		}
+
+		return $instance;
+	}
+
+	static public function getLanguageData() {
+		$supportedLanguages = array();
+		$defaultCountry     = array();
+
+		// English
+		$supportedLanguages['en']['US']['description'] = 'English (US)';
+		$supportedLanguages['en']['GB']['description'] = 'English (UK)';
+		$defaultCountry['en']                          = 'US';
+
+		// Hungarian
+		$supportedLanguages['hu']['HU']['description'] = 'Magyar';
+		$defaultCountry['hu']                          = 'HU';
+
+		// Portuguese
+		$supportedLanguages['pt']['BR']['description'] = 'Portugu&#234;s Brasileiro';
+		$supportedLanguages['pt']['PT']['description'] = 'Portugu&#234;s';
+		$defaultCountry['pt']                          = 'PT';
+
+		// Chinese
+		$supportedLanguages['zh']['CN']['description'] = '&#31616;&#20307;&#20013;&#25991;';
+		$supportedLanguages['zh']['TW']['description'] = '&#32321;&#39636;&#20013;&#25991;';
+		$defaultCountry['zh']                          = 'CN';
+
+		return array($supportedLanguages, $defaultCountry);
+	}
+
+	static public function canTranslate() {
+		return true;
+	}
+}

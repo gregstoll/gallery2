@@ -1,0 +1,225 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+
+/**
+ * Test Photo functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class PhotoTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Register a dummy toolkit
+		$path = 'modules/core/test/phpunit/PhotoTest.class';
+
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'GalleryToolkit',
+			'PhotoTestToolkit',
+			'PhotoTestToolkit',
+			$path,
+			'coreTest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markToolkitForCleanup('PhotoTestToolkit');
+
+		$ret = GalleryCoreApi::registerToolkitProperty(
+			'PhotoTestToolkit',
+			array('image/test'),
+			'colorspace',
+			'string',
+			'phototest property'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testCreateAndDeletePhoto() {
+		global $gallery;
+
+		// Create the photo
+		list($ret, $photo) = GalleryCoreApi::newItemByMimeType('image/jpeg');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $photo->create(
+			$this->_getRootId(),
+			__DIR__ . '/../data/test1.jpg',
+			'image/jpeg'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $photo->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Load the photo back and verify it
+		GalleryDataCache::reset();
+
+		list($ret, $newPhoto) = GalleryCoreApi::loadEntitiesById($photo->getId(), 'GalleryPhotoItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($photo, $newPhoto);
+
+		// Delete the photo
+		$ret = GalleryCoreApi::deleteEntityById($photo->getId(), 'GalleryPhotoItem');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testCMYKPhoto() {
+		// Test that mime type gets -cmyk appended if toolkit says it uses CMYK colorspace
+		list($ret, $photo) = GalleryCoreApi::newItemByMimeType('image/test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $photo->create($this->_getRootId(), __FILE__, 'image/test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $photo->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($photo);
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('image/test-cmyk', $photo->getMimeType(), 'cmyk mime type');
+	}
+
+	public function testRGBPhoto() {
+		// Test that mime type is not affected if toolkit says it uses RGB colorspace
+		list($ret, $photo) = GalleryCoreApi::newItemByMimeType('image/test');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $photo->create(
+			$this->_getRootId(),
+			__DIR__ . '/../data/test1.gif',
+			'image/test'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $photo->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($photo);
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('image/test', $photo->getMimeType(), 'mime type');
+	}
+}
+
+/**
+ * Test toolkit
+ *
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class PhotoTestToolkit extends GalleryToolkit {
+	public function getProperty($mimeType, $propertyName, $sourceFilename) {
+		// This will be called by GalleryPhotoItem::create
+		if ($propertyName == 'colorspace' && $mimeType == 'image/test') {
+			$colorspace = (basename($sourceFilename) == basename(__FILE__)) ? 'CMYK' : 'RGB';
+
+			return array(null, array($colorspace));
+		}
+
+		return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+	}
+}
+

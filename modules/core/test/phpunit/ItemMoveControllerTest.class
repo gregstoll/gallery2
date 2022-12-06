@@ -1,0 +1,881 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemMove controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemMoveControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.ItemMove');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Register a dummy toolkit
+		$path = 'modules/core/test/phpunit/ItemMoveControllerTest.class';
+
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'GalleryToolkit',
+			'ItemMoveTestToolkit',
+			'ItemMoveTestToolkit',
+			$path,
+			'coreTest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markToolkitForCleanup('ItemMoveTestToolkit');
+
+		// Register operations that we can perform on our mock data items
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemMoveTestToolkit',
+			array('image/test'),
+			'thumbnail',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'foo',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'foo',
+				),
+			),
+			'test-description'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemMoveTestToolkit',
+			array('image/test'),
+			'scale',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'foo',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'foo',
+				),
+			),
+			'test-description'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$parentId = $this->_getRootId();
+
+		for ($i = 0; $i < 5; $i++) {
+			list($ret, $this->_album[$i]) = $this->_createRandomAlbum($parentId);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$parentId = $this->_album[$i]->getId();
+			$itemId   = $this->_album[$i]->getId();
+			$userId   = $gallery->getActiveUserId();
+
+			switch ($i) {
+				case 0:
+					// Can delete, can add albums
+					$ret = GalleryCoreApi::removeItemPermissions($itemId);
+
+					if ($ret) {
+						return $ret;
+					}
+
+					$ret = GalleryCoreApi::addUserPermission($itemId, $userId, 'core.view');
+
+					if ($ret) {
+						return $ret;
+					}
+
+					$ret = GalleryCoreApi::addUserPermission($itemId, $userId, 'core.delete');
+
+					if ($ret) {
+						return $ret;
+					}
+
+					$ret = GalleryCoreApi::addUserPermission($itemId, $userId, 'core.addAlbumItem');
+
+					if ($ret) {
+						return $ret;
+					}
+
+					break;
+
+				case 1:
+					// Can delete, can add data items
+					$ret = GalleryCoreApi::removeItemPermissions($itemId);
+
+					if ($ret) {
+						return $ret;
+					}
+
+					$ret = GalleryCoreApi::addUserPermission($itemId, $userId, 'core.view');
+
+					if ($ret) {
+						return $ret;
+					}
+
+					$ret = GalleryCoreApi::addUserPermission($itemId, $userId, 'core.delete');
+
+					if ($ret) {
+						return $ret;
+					}
+
+					$ret = GalleryCoreApi::addUserPermission($itemId, $userId, 'core.addDataItem');
+
+					if ($ret) {
+						return $ret;
+					}
+
+					break;
+
+				case 2:
+					// Can delete, cannot add albums or data items
+					$ret = GalleryCoreApi::removeItemPermissions($itemId);
+
+					if ($ret) {
+						return $ret;
+					}
+
+					$ret = GalleryCoreApi::addUserPermission($itemId, $userId, 'core.view');
+
+					if ($ret) {
+						return $ret;
+					}
+
+					$ret = GalleryCoreApi::addUserPermission($itemId, $userId, 'core.delete');
+
+					if ($ret) {
+						return $ret;
+					}
+
+					break;
+
+				case 3:
+					// full permissions
+					$ret = GalleryCoreApi::addUserPermission($itemId, $userId, 'core.all');
+
+					if ($ret) {
+						return $ret;
+					}
+
+					break;
+
+				case 4:
+					// No permissions
+					$ret = GalleryCoreApi::removeItemPermissions($itemId);
+
+					if ($ret) {
+						return $ret;
+					}
+
+					break;
+			}
+		}
+
+		$this->_markForCleanup($this->_album[0]);
+
+		// Create a data item
+		list($ret, $this->_item) = $this->_createRandomDataItem(
+			$this->_album[3]->getId(),
+			'image/test',
+			array(
+				'width' => 700,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function _setDerivativePreferences() {
+		$args      = func_get_args();
+		$itemId    = array_shift($args);
+		$thumbSize = array_shift($args);
+
+		$ret = GalleryCoreApi::removeDerivativePreferencesForItem($itemId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addDerivativePreference(
+			0,
+			$itemId,
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+			'thumbnail|' . $thumbSize
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		foreach ($args as $i => $resizeSize) {
+			$ret = GalleryCoreApi::addDerivativePreference(
+				$i + 1,
+				$itemId,
+				DERIVATIVE_TYPE_IMAGE_RESIZE,
+				'scale|' . $resizeSize
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+	}
+
+	public function _getDerivativeSizes($itemIds) {
+		if (!is_array($itemIds)) {
+			$itemIds = array($itemIds);
+		}
+
+		$data = array();
+
+		list($ret, $thumbnails) = GalleryCoreApi::fetchThumbnailsByItemIds($itemIds);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		foreach ($thumbnails as $id => $deriv) {
+			$data[$id][] = array(
+				'type' => $deriv->getDerivativeType(),
+				'op'   => $deriv->getDerivativeOperations(),
+			);
+		}
+
+		list($ret, $resizes) = GalleryCoreApi::fetchResizesByItemIds($itemIds);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		foreach ($resizes as $id => $derivs) {
+			foreach ($derivs as $deriv) {
+				$data[$id][] = array(
+					'type' => $deriv->getDerivativeType(),
+					'op'   => $deriv->getDerivativeOperations(),
+				);
+			}
+		}
+
+		return count($data) == 1 ? array_shift($data) : $data;
+	}
+
+	/**
+	 * Test moving an item
+	 */
+	public function testMoveItem() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[1]->getId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$this->_album[2]->getId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][move]', 1);
+		GalleryUtilities::putRequestVariable('form[destination]', $this->_album[0]->getId());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+					'itemId'  => $this->_album[1]->getId(),
+				),
+				'status'   => array(
+					'moved' => array(
+						'count' => 1,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify parent sequence
+		list($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($this->_album[2]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array($this->_getRootId(), $this->_album[0]->getId()),
+			$parentSequence
+		);
+	}
+
+	/**
+	 * Test moving an item into a peer.  This is to find a regression in the parent sequence code.
+	 */
+	public function testMoveItemIntoPeer() {
+		global $gallery;
+
+		list($ret, $peer) = $this->_createRandomAlbum($this->_album[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[0]->getId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$this->_album[1]->getId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][move]', 1);
+		GalleryUtilities::putRequestVariable('form[destination]', $peer->getId());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+					'itemId'  => $this->_album[0]->getId(),
+				),
+				'status'   => array(
+					'moved' => array(
+						'count' => 1,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify parent sequences
+		list($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($this->_album[1]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_album[0]->getId(),
+				$peer->getId(),
+			),
+			$parentSequence,
+			'album 1 is inside peer'
+		);
+
+		list($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($peer->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array($this->_getRootId(), $this->_album[0]->getId()),
+			$parentSequence,
+			'peer is under the root'
+		);
+
+		list($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($this->_album[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array($this->_getRootId()),
+			$parentSequence,
+			'album 0 is under the root'
+		);
+	}
+
+	/**
+	 * Test changing pages with to an invalid page number
+	 */
+	public function testMoveNextPageOutOfRange() {
+		global $gallery;
+
+		// create random items
+		$items = array();
+
+		for ($i = 0; $i < 5; $i++) {
+			if (($i % 2) == 0) {
+				list($ret, $items[$i]) = $this->_createRandomAlbum($this->_album[1]->getId());
+			} else {
+				list($ret, $items[$i]) = $this->_createRandomDataItem($this->_album[1]->getId());
+			}
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$selectedIds = array();
+
+		foreach ($items as $item) {
+			$selectedIds[$item->getId()] = 1;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[1]->getId());
+		GalleryUtilities::putRequestVariable('form[selectedIds]', $selectedIds);
+		GalleryUtilities::putRequestVariable('form[numPerPage]', 3);
+		GalleryUtilities::putRequestVariable('page', 3);
+		GalleryUtilities::putRequestVariable('form[action][next]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+					'itemId'  => $this->_album[1]->getId(),
+					'page'    => 2,
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results,
+			'Move Next Page Out Of Range'
+		);
+	}
+
+	public function testMovePreviousPageOutOfRange() {
+		global $gallery;
+
+		// create random items
+		$items = array();
+
+		for ($i = 0; $i < 5; $i++) {
+			if (($i % 2) == 0) {
+				list($ret, $items[$i]) = $this->_createRandomAlbum($this->_album[1]->getId());
+			} else {
+				list($ret, $items[$i]) = $this->_createRandomDataItem($this->_album[1]->getId());
+			}
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$selectedIds = array();
+
+		foreach ($items as $item) {
+			$selectedIds[$item->getId()] = 1;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[1]->getId());
+		GalleryUtilities::putRequestVariable('form[selectedIds]', $selectedIds);
+		GalleryUtilities::putRequestVariable('page', -1);
+		GalleryUtilities::putRequestVariable('form[action][previous]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+					'itemId'  => $this->_album[1]->getId(),
+					'page'    => 1,
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Test moving an item to a bogus destination
+	 */
+	public function testMoveItemIntoBogusDestination() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[2]->getId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$this->_album[2]->getId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][move]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][destination][empty]'),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Test moving an item into itself
+	 */
+	public function testMoveItemIntoSelf() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[0]->getId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$this->_album[1]->getId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][move]', 1);
+		GalleryUtilities::putRequestVariable('form[destination]', $this->_album[1]->getId());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][source][' .
+								   $this->_album[1]->getId() .
+								   '][selfMove]',
+				),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Test moving an item into its own child
+	 */
+	public function testMoveItemIntoChild() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[0]->getId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$this->_album[1]->getId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][move]', 1);
+		GalleryUtilities::putRequestVariable('form[destination]', $this->_album[3]->getId());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][source][' .
+								   $this->_album[1]->getId() .
+								   '][selfMove]',
+				),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Test moving an item into a container where we have no add permissions
+	 */
+	public function testMoveItemIntoAlbumWithNoAddPermissions() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[3]->getId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$this->_album[4]->getId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][move]', 1);
+		GalleryUtilities::putRequestVariable('form[destination]', $this->_album[2]->getId());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][destination][permission]'),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Test moving an item that we cannot delete
+	 */
+	public function testMoveItemWithNoDeletePermissions() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[3]->getId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$this->_album[4]->getId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][move]', 1);
+		GalleryUtilities::putRequestVariable('form[destination]', $this->_album[0]->getId());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][source][' .
+								   $this->_album[4]->getId() .
+								   '][permission][delete]',
+				),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Test moving an album into a container where we have no add album permissions
+	 */
+	public function testMoveAlbumIntoDestinationWithNoAddAlbumPermissions() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[2]->getId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$this->_album[3]->getId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][move]', 1);
+		GalleryUtilities::putRequestVariable('form[destination]', $this->_album[1]->getId());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][source][' .
+								   $this->_album[3]->getId() .
+								   '][permission][addAlbumItem]',
+				),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Test moving an album into a container where we have no add album permissions
+	 */
+	public function testMoveDataItemIntoDestinationWithNoAddDataItemPermissions() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[3]->getId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$this->_item->getId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][move]', 1);
+		GalleryUtilities::putRequestVariable('form[destination]', $this->_album[0]->getId());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][source][' .
+								   $this->_item->getId() .
+								   '][permission][addDataItem]',
+				),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Test moving an item to an album with different derivative preferences
+	 */
+	public function testMoveItemWithDerivatives() {
+		global $gallery;
+
+		// Set derivative preferences for old and new parent..
+		$this->_setDerivativePreferences($this->_album[3]->getId(), 120, 500);
+		$this->_setDerivativePreferences($this->_album[1]->getId(), 150, 800);
+
+		// Create initial derivatives..
+		$ret = GalleryCoreApi::addExistingItemToAlbum(
+			$this->_item,
+			$this->_album[3]->getId(),
+			true
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify they were created ok..
+		$sizes = $this->_getDerivativeSizes($this->_item->getId());
+
+		$this->assertEquals(
+			array(
+				array(
+					'type' => DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+					'op'   => 'thumbnail|120',
+				),
+				array(
+					'type' => DERIVATIVE_TYPE_IMAGE_RESIZE,
+					'op'   => 'scale|500',
+				),
+			),
+			$sizes,
+			'Initial derivative sizes'
+		);
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album[3]->getId());
+		GalleryUtilities::putRequestVariable(
+			'form[selectedIds]',
+			array(
+				$this->_item->getId() => 1,
+			)
+		);
+		GalleryUtilities::putRequestVariable('form[action][move]', 1);
+		GalleryUtilities::putRequestVariable('form[destination]', $this->_album[1]->getId());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.ItemAdmin',
+					'subView' => 'core.ItemMove',
+					'itemId'  => $this->_album[3]->getId(),
+				),
+				'status'   => array(
+					'moved' => array(
+						'count' => 1,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify parent sequence
+		list($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$this->_getRootId(),
+				$this->_album[0]->getId(),
+				$this->_album[1]->getId(),
+			),
+			$parentSequence,
+			'Parent sequence'
+		);
+
+		// Verify derivatives were recreated with preferences of new parent album
+		$sizes = $this->_getDerivativeSizes($this->_item->getId());
+
+		$this->assertEquals(
+			array(
+				array(
+					'type' => DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+					'op'   => 'thumbnail|150',
+				),
+			),
+			// 800 deriv not created because item size only 700
+			$sizes,
+			'Derivative sizes after move'
+		);
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+
+/**
+ * Dummy test toolkit
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ */
+class ItemMoveTestToolkit extends GalleryToolkit {}

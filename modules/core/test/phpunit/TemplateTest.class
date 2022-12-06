@@ -1,0 +1,641 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+
+/**
+ * Test Template functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17950 $
+ */
+class TemplateTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $module->setParameter('smarty.compile_check', 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_template        = new GalleryTemplate('/legal/path');
+		$this->_mockSmarty      = new TemplateTestMockSmarty();
+		$tplVersion             = $module->getTemplateVersion();
+		$this->_baseDirOverride = '/legal/path/themes/mockTheme/templates/core_' . $tplVersion;
+		$this->_origPlatform    =& $gallery->getPlatform();
+		$this->_mockPlatform    = new TemplateTestMockPlatform();
+
+		$gallery->setPlatform($this->_mockPlatform);
+	}
+
+	// Test retrieving a template that falls outside the module or theme template pattern
+	public function testResourceGetTemplateNonModule() {
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/local/templateThatHasNoLocal.tpl',
+			false
+		);
+		$this->_mockPlatform->set('is_readable', '/legal/path/templateThatHasNoLocal.tpl', true);
+
+		$success = $this->_template->resourceGetTemplate(
+			'templateThatHasNoLocal.tpl',
+			$templateSource,
+			$this->_mockSmarty
+		);
+		$this->assertTrue($success, "Did not return success");
+		$this->assertEquals(
+			'/legal/path/templateThatHasNoLocal.tpl',
+			$templateSource,
+			'Non module template not retrieved'
+		);
+	}
+
+	// Test retrieving non-overridden template
+	public function testResourceGetTemplateNonOverriden() {
+		$this->_mockPlatform->set(
+			'is_readable',
+			$this->_baseDirOverride . '/local/template.tpl',
+			false
+		);
+		$this->_mockPlatform->set('is_readable', $this->_baseDirOverride . '/template.tpl', false);
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/modules/core/templates/local/template.tpl',
+			false
+		);
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/modules/core/templates/template.tpl',
+			true
+		);
+
+		$success = $this->_template->resourceGetTemplate(
+			'modules/core/templates/template.tpl',
+			$templateSource,
+			$this->_mockSmarty
+		);
+		$this->assertTrue($success, "Did not return success");
+		$this->assertEquals(
+			'/legal/path/modules/core/templates/template.tpl',
+			$templateSource,
+			'Failed to get the base template'
+		);
+	}
+
+	// Test retrieving local override template
+	public function testResourceGetTemplateLocalOverride() {
+		$this->_mockPlatform->set(
+			'is_readable',
+			$this->_baseDirOverride . '/local/template.tpl',
+			false
+		);
+		$this->_mockPlatform->set('is_readable', $this->_baseDirOverride . '/template.tpl', false);
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/modules/core/templates/local/template.tpl',
+			true
+		);
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/modules/core/templates/template.tpl',
+			true
+		);
+
+		$success = $this->_template->resourceGetTemplate(
+			'modules/core/templates/template.tpl',
+			$templateSource,
+			$this->_mockSmarty
+		);
+		$this->assertTrue($success, "Did not return success");
+		$this->assertEquals(
+			'/legal/path/modules/core/templates/local/template.tpl',
+			$templateSource,
+			'Failed to retrieve the /local/ supplied template'
+		);
+	}
+
+	// Test retrieving an overridden template block
+	public function testResourceGetTemplateThemeOverride() {
+		$this->_mockPlatform->set(
+			'is_readable',
+			$this->_baseDirOverride . '/block/local/template.tpl',
+			true
+		);
+		$this->_mockPlatform->set(
+			'is_readable',
+			$this->_baseDirOverride . '/block/template.tpl',
+			true
+		);
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/modules/core/templates/block/local/template.tpl',
+			true
+		);
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/modules/core/templates/block/template.tpl',
+			true
+		);
+
+		$success = $this->_template->resourceGetTemplate(
+			'modules/core/templates/block/template.tpl',
+			$templateSource,
+			$this->_mockSmarty
+		);
+		$this->assertTrue($success, "Did not return success");
+		$this->assertEquals(
+			$this->_baseDirOverride . '/block/local/template.tpl',
+			$templateSource,
+			'Failed to retrieve the them overriden template'
+		);
+	}
+
+	// Test retrieving non-overridden template
+	public function testResourceGetTimestampNonOverridden() {
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/local/templateThatHasNoLocal.tpl',
+			false
+		);
+		$this->_mockPlatform->set('is_readable', '/legal/path/templateThatHasNoLocal.tpl', true);
+		$this->_mockPlatform->set('file_exists', '/legal/path/templateThatHasNoLocal.tpl', true);
+		$this->_mockPlatform->set(
+			'stat',
+			'/legal/path/templateThatHasNoLocal.tpl',
+			array(0, 0, 0, 0, 0, 0, 0, 0, 0, 98765)
+		);
+
+		$success = $this->_template->resourceGetTimestamp(
+			'templateThatHasNoLocal.tpl',
+			$templateTimestamp,
+			$this->_mockSmarty
+		);
+		$this->assertTrue($success, "Did not return success");
+		$this->assertEquals(98765, $templateTimestamp, 'no override');
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	// Test retrieving an overridden template
+	public function testResourceGetTimestampOverridden() {
+		$this->_mockPlatform->set(
+			'is_readable',
+			$this->_baseDirOverride . '/local/template.tpl',
+			false
+		);
+		$this->_mockPlatform->set('is_readable', $this->_baseDirOverride . '/template.tpl', false);
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/modules/core/templates/local/template.tpl',
+			true
+		);
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/modules/core/templates/template.tpl',
+			true
+		);
+		$this->_mockPlatform->set(
+			'file_exists',
+			'/legal/path/modules/core/templates/local/template.tpl',
+			true
+		);
+		$this->_mockPlatform->set(
+			'stat',
+			'/legal/path/modules/core/templates/local/template.tpl',
+			array(0, 0, 0, 0, 0, 0, 0, 0, 0, 12345)
+		);
+
+		$success = $this->_template->resourceGetTimestamp(
+			'modules/core/templates/template.tpl',
+			$templateTimestamp,
+			$this->_mockSmarty
+		);
+		$this->assertTrue($success, "Did not return success");
+		$this->assertEquals(12345, $templateTimestamp, 'override');
+	}
+
+	public function testResourceGetTimestampStaticCall() {
+		// Ensure static call is ok
+		$this->_mockPlatform->set(
+			'is_readable',
+			$this->_baseDirOverride . '/local/template.tpl',
+			false
+		);
+		$this->_mockPlatform->set('is_readable', $this->_baseDirOverride . '/template.tpl', false);
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/modules/core/templates/local/template.tpl',
+			true
+		);
+		$this->_mockPlatform->set(
+			'is_readable',
+			'/legal/path/modules/core/templates/template.tpl',
+			true
+		);
+		$this->_mockPlatform->set(
+			'file_exists',
+			'/legal/path/modules/core/templates/local/template.tpl',
+			true
+		);
+		$this->_mockPlatform->set(
+			'stat',
+			'/legal/path/modules/core/templates/local/template.tpl',
+			array(0, 0, 0, 0, 0, 0, 0, 0, 0, 12345)
+		);
+
+		$success = GalleryTemplate::resourceGetTimestamp(
+			'modules/core/templates/template.tpl',
+			$templateTimestamp,
+			$this->_mockSmarty
+		);
+		$this->assertTrue($success, "Did not return success");
+		$this->assertEquals(12345, $templateTimestamp, 'static');
+	}
+
+	public function testSmartyCompileCheckByPluginParam() {
+		GalleryDataCache::remove('GalleryTemplate::compileCheck');
+
+		$template = new GalleryTemplate('/legal/path');
+
+		$this->assertFalse($template->_smarty->compile_check, 'SmartyCompileCheckByPluginParam 1');
+
+		GalleryDataCache::remove('GalleryTemplate::compileCheck');
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'smarty.compile_check',
+			1
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$template = new GalleryTemplate('/legal/path');
+
+		$this->assertTrue($template->_smarty->compile_check, 'SmartyCompileCheckByPluginParam 2');
+	}
+
+	public function testSmartyCompileCheckEnabledIfNoCacheRequested() {
+		GalleryDataCache::remove('GalleryTemplate::compileCheck');
+
+		$_SERVER['HTTP_PRAGMA'] = 'no-cache';
+		$template               = new GalleryTemplate('/legal/path');
+
+		$this->assertTrue(
+			$template->_smarty->compile_check,
+			'SmartyCompileCheckEnabledIfNoCacheRequested'
+		);
+	}
+
+	public function testSmartyCompileCheckUsesCache() {
+		GalleryDataCache::remove('GalleryTemplate::compileCheck');
+
+		$template = new GalleryTemplate('/legal/path');
+
+		$this->assertFalse($template->_smarty->compile_check, 'SmartyCompileCheckUsesCache 1');
+
+		$_SERVER['HTTP_PRAGMA'] = 'no-cache';
+		$newTemplate            = new GalleryTemplate('/legal/path');
+
+		$this->assertFalse($newTemplate->_smarty->compile_check, 'SmartyCompileCheckUsesCache 2');
+	}
+
+	public function testStyle() {
+		$template = new GalleryTemplate('');
+
+		$template->style('/path/to/foo.css');
+
+		$head = $template->getVariable('head');
+
+		$this->assertEquals(
+			array(
+				'<link rel="stylesheet" type="text/css" href="/path/to/foo.css"/>' => true,
+			),
+			$head['link']
+		);
+	}
+
+	public function testLink() {
+		$template = new GalleryTemplate('');
+
+		$template->link(
+			array(
+				'attr1' => 'value1',
+				'attr2' => 'value2',
+			)
+		);
+
+		$head = $template->getVariable('head');
+
+		$this->assertEquals(
+			array(
+				'<link attr1="value1" attr2="value2"/>' => true,
+			),
+			$head['link']
+		);
+	}
+
+	public function _createAlbumWithNonDefaultTheme($themeId) {
+		if (class_exists($themeId . 'theme')) {
+			$themeClassName = $themeId . 'theme';
+			$themeClass     = new $themeClassName();
+			GalleryPluginHelper_medium::setPluginInstance(
+				'theme',
+				$themeId,
+				$themeClass
+			);
+		}
+
+		list($ret, $album) = $this->_createRandomAlbum(
+			$this->_getRootId(),
+			array(
+				'theme' => $themeId,
+			)
+		);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		$this->_markForCleanup($album);
+
+		return array(null, $album, $themeId);
+	}
+
+	public function testGetThemeIdWithViewPermission() {
+		global $gallery;
+
+		$gallery->setPlatform($this->_origPlatform);
+
+		list($ret, $album, $fakeThemeId) = $this->_createAlbumWithNonDefaultTheme('templatetestfake');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserPermission(
+			$album->getId(),
+			$gallery->getActiveUserId(),
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $album->getId());
+
+		// Execute the function under test
+		$template = new GalleryTemplate('');
+
+		list($ret, $themeId) = $template->_getThemeId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($fakeThemeId, $themeId, 'wrong themeid');
+	}
+
+	public function testGetThemeIdForMissingObject() {
+		global $gallery;
+
+		$gallery->setPlatform($this->_origPlatform);
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_getUnusedId());
+
+		list($ret, $expectedThemeId) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.theme');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$template = new GalleryTemplate('');
+
+		list($ret, $themeId) = $template->_getThemeId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($expectedThemeId, $themeId, 'wrong themeid');
+	}
+
+	public function testGetThemeIdWithoutViewPermissionHasFallback() {
+		global $gallery;
+
+		$gallery->setPlatform($this->_origPlatform);
+
+		list($ret, $album, $fakeThemeId) = $this->_createAlbumWithNonDefaultTheme('templatetestfake');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $album->getId());
+
+		list($ret, $expectedThemeId) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.theme');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$template = new GalleryTemplate('');
+
+		list($ret, $themeId) = $template->_getThemeId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($expectedThemeId, $themeId, 'wrong themeid');
+	}
+
+	public function testGetThemeIdForMissingTheme() {
+		global $gallery;
+
+		$gallery->setPlatform($this->_origPlatform);
+
+		list($ret, $album, $fakeThemeId) = $this->_createAlbumWithNonDefaultTheme('TemplateTest_Missing_Theme');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $album->getId());
+
+		list($ret, $expectedThemeId) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.theme');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$template = new GalleryTemplate('');
+
+		list($ret, $themeId) = $template->_getThemeId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($expectedThemeId, $themeId, 'wrong themeid');
+	}
+
+	public function testGetThemeIdForInactiveTheme() {
+		global $gallery;
+
+		$gallery->setPlatform($this->_origPlatform);
+
+		list($ret, $album, $inactiveThemeId) = $this->_createAlbumWithNonDefaultTheme('templatetestinactive');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $album->getId());
+
+		list($ret, $expectedThemeId) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.theme');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$template = new GalleryTemplate('');
+
+		list($ret, $themeId) = $template->_getThemeId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($expectedThemeId, $themeId, 'wrong themeid');
+	}
+}
+
+class TemplateTestMockPlatform {
+	public function set($func, $filename, $return) {
+		$this->_returns[$func][$filename] = $return;
+	}
+
+	public function file_exists($filename) {
+		return $this->_returns['file_exists'][$filename];
+	}
+
+	public function is_readable($filename) {
+		return $this->_returns['is_readable'][$filename];
+	}
+
+	public function stat($filename) {
+		return $this->_returns['stat'][$filename];
+	}
+}
+
+class TemplateTestMockSmarty {
+	public function __construct() {
+		$this->template_dir = '/legal/path';
+		$this->_tpl_vars    = array(
+			'theme' => array(
+				'themeId' => 'mockTheme',
+			),
+		);
+	}
+
+	public function _read_file($templateName) {
+		// Return the name as if it were the contents
+		return $templateName;
+	}
+
+	public function &get_template_vars($name = null) {
+		if (!isset($name)) {
+			return $this->_tpl_vars;
+		}
+
+		if (isset($this->_tpl_vars[$name])) {
+			return $this->_tpl_vars[$name];
+		}
+
+		// var non-existent, return valid reference
+		$_tmp = null;
+
+		return $_tmp;
+	}
+}
+
+class TemplateTestFakeTheme {
+	public function isActive() {
+		return array(null, true);
+	}
+
+	public function getId() {
+		return 'templatetestfake';
+	}
+
+	public function fetchParameters($itemId = 0) {
+		return array(null, array());
+	}
+}
+
+class TemplateTestInactiveTheme {
+	public function isActive() {
+		return array(null, false);
+	}
+
+	public function getId() {
+		return 'templatetestinactive';
+	}
+
+	public function fetchParameters($itemId = 0) {
+		return array(null, array());
+	}
+}

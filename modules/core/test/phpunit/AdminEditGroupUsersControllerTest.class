@@ -1,0 +1,304 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * AdminEditGroupUsers controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminEditGroupUsersControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminEditGroupUsers');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create a test group
+		list($ret, $this->_group) = $this->_createRandomGroup();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_group);
+
+		// Create a test user
+		list($ret, $this->_user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_user);
+	}
+
+	public function testDone() {
+		GalleryUtilities::putRequestVariable('groupId', $this->_group->getId());
+		GalleryUtilities::putRequestVariable('form[action][done]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminGroups',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testRemoveUser() {
+		// Add the user to the group
+		$ret = GalleryCoreApi::addUserToGroup($this->_user->getId(), $this->_group->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('groupId', $this->_group->getId());
+		GalleryUtilities::putRequestVariable('form[action][remove]', 1);
+		GalleryUtilities::putRequestVariable(
+			sprintf('form[userIds][%s]', $this->_user->getId()),
+			1
+		);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditGroupUsers',
+					'groupId' => $this->_group->getId(),
+				),
+				'status'   => array(
+					'removedUsers' => 1,
+					'removedUser'  => $this->_user->getUserName(),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testRemoveMultipleUser() {
+		// Create a second user
+		list($ret, $newUser) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Add the users to the group
+		$ret = GalleryCoreApi::addUserToGroup($this->_user->getId(), $this->_group->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserToGroup($newUser->getId(), $this->_group->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('groupId', $this->_group->getId());
+		GalleryUtilities::putRequestVariable('form[action][remove]', 1);
+		GalleryUtilities::putRequestVariable(
+			sprintf('form[userIds][%s]', $this->_user->getId()),
+			1
+		);
+		GalleryUtilities::putRequestVariable(sprintf('form[userIds][%s]', $newUser->getId()), 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditGroupUsers',
+					'groupId' => $this->_group->getId(),
+				),
+				'status'   => array(
+					'removedUsers' => 2,
+					'removedUser'  => 2,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Delete it
+		$ret = $this->_deleteAndVerifyEntity($newUser->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testCantRemoveSelfFromSiteAdmins() {
+		global $gallery;
+
+		list($ret, $adminGroupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Add the user to the site admin group
+		$ret = GalleryCoreApi::addUserToGroup($this->_user->getId(), $adminGroupId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Become that user
+		$gallery->setActiveUser($this->_user);
+
+		GalleryUtilities::putRequestVariable('groupId', $adminGroupId);
+		GalleryUtilities::putRequestVariable('form[action][remove]', 1);
+		GalleryUtilities::putRequestVariable(
+			sprintf('form[userIds][%s]', $this->_user->getId()),
+			1
+		);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditGroupUsers',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][list][cantRemoveSelf]'),
+			),
+			$results
+		);
+
+		list($ret, $inGroup) = GalleryCoreApi::isUserInGroup($this->_user->getId(), $adminGroupId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($inGroup, 'User should still be in the group');
+	}
+
+	public function testAddUser() {
+		GalleryUtilities::putRequestVariable('groupId', $this->_group->getId());
+		GalleryUtilities::putRequestVariable('form[action][add]', 1);
+		GalleryUtilities::putRequestVariable('form[text][userName]', $this->_user->getUserName());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditGroupUsers',
+					'groupId' => $this->_group->getId(),
+				),
+				'status'   => array(
+					'addedUser' => $this->_user->getUserName(),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testAddBogusUser() {
+		GalleryUtilities::putRequestVariable('groupId', $this->_group->getId());
+		GalleryUtilities::putRequestVariable('form[action][add]', 1);
+		GalleryUtilities::putRequestVariable('form[text][userName]', 'bogus-user-' . mt_rand());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditGroupUsers',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][userName][invalid]'),
+			),
+			$results
+		);
+	}
+
+	public function testAddMissingUser() {
+		GalleryUtilities::putRequestVariable('groupId', $this->_group->getId());
+		GalleryUtilities::putRequestVariable('form[action][add]', 1);
+		GalleryUtilities::putRequestVariable('form[text][userName]', '');
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditGroupUsers',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][userName][missing]'),
+			),
+			$results
+		);
+	}
+
+	public function testAddDuplicateUser() {
+		$ret = GalleryCoreApi::addUserToGroup($this->_user->getId(), $this->_group->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryDataCache::reset();
+		GalleryUtilities::putRequestVariable('groupId', $this->_group->getId());
+		GalleryUtilities::putRequestVariable('form[action][add]', 1);
+		GalleryUtilities::putRequestVariable('form[text][userName]', $this->_user->getUserName());
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminEditGroupUsers',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][userName][alreadyInGroup]'),
+			),
+			$results
+		);
+	}
+}

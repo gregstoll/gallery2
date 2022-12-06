@@ -529,7 +529,7 @@ class GalleryUtilities {
      * @param string $className
      * @return boolean
      */
-    function isExactlyA($instance, $className) {
+    static function isExactlyA($instance, $className) {
 	return (($instanceClass = get_class($instance)) == $className || $instanceClass ==
 		strtr($className, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'));
     }
@@ -712,10 +712,7 @@ class GalleryUtilities {
 	     * changes the character set of the input data (in one environment it converted the
 	     * UTF-8 data to ISO-8859-1)
 	     */
-	    $value = (!is_null($value)) ? str_replace(array('&', '"', '<', '>'),
-				    array('&amp;', '&quot;', '&lt;', '&gt;'),
-				    $value)
-                 : null;
+		$value = str_replace(array('&', '"', '<', '>'), array('&amp;', '&quot;', '&lt;', '&gt;'), $value ?? '');
 	}
     }
 
@@ -941,7 +938,7 @@ class GalleryUtilities {
      * Return true if the path exists and is in the given path list.  Make sure to pass paths in the
      * system charset to this method.
      * @param string $path
-     * @param string $list the list of legal paths
+     * @param array $list the list of legal paths
      * @return boolean
      */
     static function isPathInList($path, $list) {
@@ -1596,7 +1593,7 @@ class GalleryUtilities {
      * @return string lowercase version of the string
      */
     static function strToLower($string) {
-	return strtr($string, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
+	return strtr($string ?? '', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
     }
 
     /**
@@ -1605,7 +1602,7 @@ class GalleryUtilities {
      * @return string uppercase version of the string
      */
     static function strToUpper($string) {
-	return strtr($string, 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+	return strtr($string ?? '', 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');
     }
 
     /**

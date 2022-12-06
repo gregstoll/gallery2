@@ -449,7 +449,7 @@ class GalleryDerivative extends GalleryChildEntity {
 	    /* Perform the operation */
 	    list ($ret, $outputMimeType, $context) = $toolkit->performOperation(
 		$mimeType, $operationName, $sourcePath, $destPath,
-		explode(',', $operationArgs), $context);
+		explode(',', $operationArgs ?? ''), $context);
 	    if ($ret) {
 		return $ret;
 	    }
@@ -551,7 +551,7 @@ class GalleryDerivative extends GalleryChildEntity {
 	     */
 	    if (count($sources) > 1 && /* we have at least one derivative in the chain */
 		    $sources[0]->getDerivativeType() == DERIVATIVE_TYPE_IMAGE_PREFERRED &&
-		    strlen($sources[0]->getPostFilterOperations()) == 0) {
+		    empty($sources[0]->getPostFilterOperations())) {
 		$source = array_shift($sources);  /* the preferred is now our source */
 	    }
 
@@ -578,7 +578,7 @@ class GalleryDerivative extends GalleryChildEntity {
 	if (empty($operations)) {
 	    $operations = empty($postFilters) ? array() : explode(';', $postFilters);
 	} else {
-	    foreach (explode(';', $postFilters) as $newOperation) {
+	    foreach (explode(';', $postFilters ?? '') as $newOperation) {
 		list ($ret, $operations) =
 		    GalleryCoreApi::mergeDerivativeOperations($operations, $newOperation);
 		if ($ret) {

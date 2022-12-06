@@ -1,0 +1,109 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * A view specific version of GalleryTestCase
+ * @package Gallery
+ * @subpackage PHPUnit
+ * @author Andy Staudacher <ast@gmx.ch>
+ * @version $Revision: 17580 $
+ */
+class GalleryViewTestCase extends GalleryTestCase {
+	/**
+	 * The view instance
+	 * @var GalleryView
+	 * @access protected
+	 */
+	public $_view;
+
+	/**
+	 * A template instance used as parameter to loadTemplate
+	 * @var GalleryTemplate
+	 * @access protected
+	 */
+	public $_template;
+
+	public function __construct($methodName, $viewName) {
+		parent::__construct($methodName);
+		GalleryCoreApi::requireOnce('modules/core/classes/GalleryView.class');
+
+		list($ret, $this->_view) = GalleryView::loadView($viewName);
+
+		if ($ret) {
+			$this->fail($ret->getAsHtml());
+		}
+
+		$this->_template = new UnitTestTemplate();
+	}
+
+	public function loadTemplate($errorCode = null) {
+		// Get our form variables
+		$form = GalleryUtilities::getFormVariables('form');
+
+		if (!isset($form['formName'])) {
+			$form['formName'] = '';
+		}
+
+		list($ret, $results) = $this->_view->loadTemplate($this->_template, $form);
+
+		if (isset($errorCode)) {
+			if ($ret) {
+				if (($ret->getErrorCode() & $errorCode) != $errorCode) {
+					$this->fail(
+						sprintf(
+							'Expected error code (%s) but received (%s)',
+							implode(
+								' | ',
+								GalleryStatus::getErrorCodeConstants($errorCode)
+							),
+							implode(
+								' | ',
+								GalleryStatus::getErrorCodeConstants(
+									$ret->getErrorCode()
+								)
+							)
+						)
+					);
+				}
+			} else {
+				$this->fail(
+					sprintf(
+						'Expected error code (%s) but test was successful',
+						implode(
+							' | ',
+							GalleryStatus::getErrorCodeConstants($errorCode)
+						)
+					)
+				);
+			}
+		} elseif ($ret) {
+			$this->fail($ret->getAsHtml());
+
+			return array();
+		} else {
+			// Check to make sure we got back everything we want
+			$this->assertTrue(
+				isset($results['body']) || isset($results['redirect']),
+				'view results neither specify a body nor a redirect'
+			);
+		}
+
+		return $results;
+	}
+}

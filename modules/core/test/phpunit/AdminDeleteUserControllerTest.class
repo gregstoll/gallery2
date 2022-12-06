@@ -1,0 +1,754 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryDataCache.class');
+
+/**
+ * AdminDeleteUser controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminDeleteUserControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core.AdminDeleteUser');
+	}
+
+	// We are creating a tree of test items owned by the user
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// create an album to hold all of the test items
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		$this->_userIds = array();
+
+		// Save activeUser as it will be changed during the tests
+		$this->_activeUserBackup = $gallery->getActiveUser();
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		// Remove all user mappings in case of error
+		$ret = array();
+
+		foreach ($this->_userIds as $userId) {
+			$ret[] = GalleryCoreApi::removeMapEntry(
+				'GalleryUserGroupMap',
+				array(
+					'userId' => $userId,
+				)
+			);
+
+			$ret[] = GalleryCoreApi::removeMapEntry(
+				'GalleryAccessMap',
+				array(
+					'userOrGroupId' => $userId,
+				)
+			);
+		}
+
+		for ($i = 0; $i < count($ret); $i++) {
+			if ($ret[$i]) {
+				$this->failWithStatus($ret[$i]);
+			}
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testCancel() {
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+
+		$results = $this->handleRequest();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Create and delete a user, no items created/deleted
+	 */
+	public function testDeleteUser() {
+		// Create a user that we can delete
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markUserForCleanup($user);
+
+		GalleryUtilities::putRequestVariable('userId', $user->getId());
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		$results = $this->handleRequest();
+
+		GalleryDataCache::reset();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'deletedUser' => $user->getUserName(),
+				),
+				'error'    => array(),
+			),
+			$results,
+			'Failed to create user'
+		);
+
+		// Verify the user is gone
+		list($ret, $user) = $user->refresh();
+
+		if ($ret) {
+			if (!$ret->getErrorCode() & ERROR_MISSING_OBJECT) {
+				return $ret;
+			}
+		} else {
+			$this->assertFalse(true, 'The user was actually deleted');
+		}
+	}
+
+	/**
+	 * Try to delete the active user (this will fail silently)
+	 */
+	public function testDeleteActiveUser() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('userId', $gallery->getActiveUserId());
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		$results = $this->handleRequest();
+
+		GalleryDataCache::reset();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminDeleteUser',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Try to delete the anonymous user (this will fail silently)
+	 */
+	public function testDeleteAnonymousUser() {
+		global $gallery;
+
+		list($ret, $anonymousUserId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('userId', $anonymousUserId);
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		$results = $this->handleRequest();
+
+		GalleryDataCache::reset();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminDeleteUser',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Try to delete a user and assign items to nonexistent userName
+	 */
+	public function testDeleteUserAndAssignItemsToNonexistentUser() {
+		global $gallery;
+
+		// Create a user that we can delete
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+		$this->_markUserForCleanup($user);
+
+		// Get a username that does not exist
+		while (true) {
+			$name = 'testuser-' . mt_rand();
+
+			list($ret, $dummyUser) = GalleryCoreApi::fetchUserByUserName($name);
+
+			if ($ret) {
+				if ($ret->getErrorCode() & ERROR_MISSING_OBJECT) {
+					break;
+				}
+
+				return $ret;
+			}
+		}
+
+		GalleryUtilities::putRequestVariable('userId', $user->getId());
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+		GalleryUtilities::putRequestVariable('form[text][newOwner]', $name);
+		GalleryUtilities::putRequestVariable('form[deletionVariant]', 'assignNewOwner');
+
+		$results = $this->handleRequest();
+
+		GalleryDataCache::reset();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminDeleteUser',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][noSuchUser]'),
+			),
+			$results
+		);
+
+		// Verify the user still exists
+		list($ret, $user) = $user->refresh();
+
+		if ($ret) {
+			if ($ret->getErrorCode() & ERROR_MISSING_OBJECT) {
+				$this->assertFalse(true, 'The user was deleted');
+			} else {
+				return $ret;
+			}
+		}
+
+		// The teardown code takes care of deleting the user
+	}
+
+	/**
+	 * Try to delete a user and assign items to nonexistent userName
+	 */
+	public function testDeleteUserAndAssignItemsToSameUser() {
+		global $gallery;
+
+		// Create a user that we can delete
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+		$this->_markUserForCleanup($user);
+
+		GalleryUtilities::putRequestVariable('userId', $user->getId());
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+		GalleryUtilities::putRequestVariable('form[text][newOwner]', $user->getuserName());
+		GalleryUtilities::putRequestVariable('form[deletionVariant]', 'assignNewOwner');
+
+		$results = $this->handleRequest();
+
+		GalleryDataCache::reset();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminDeleteUser',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][newOwnerIsDeletedUser]'),
+			),
+			$results
+		);
+
+		// Verify the user still exists
+		list($ret, $user) = $user->refresh();
+
+		if ($ret) {
+			if ($ret->getErrorCode() & ERROR_MISSING_OBJECT) {
+				$this->assertFalse(true, 'The user was deleted');
+			} else {
+				return $ret;
+			}
+		}
+
+		// The teardown code takes care of deleting the user
+	}
+
+	/**
+	 * Try to delete a user and assign items to anonymous user
+	 */
+	public function testDeleteUserAndAssignItemsToAnonymousUser() {
+		global $gallery;
+
+		// Create a user that we can delete
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($user);
+		$this->_markUserForCleanup($user);
+
+		// Get Name of anonymous user
+		list($ret, $anonymousUserId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $anonymousUser) = GalleryCoreApi::loadEntitiesById($anonymousUserId, 'GalleryUser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('userId', $user->getId());
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+		GalleryUtilities::putRequestVariable('form[text][newOwner]', $anonymousUser->getuserName());
+		GalleryUtilities::putRequestVariable('form[deletionVariant]', 'assignNewOwner');
+
+		$results = $this->handleRequest();
+
+		GalleryDataCache::reset();
+
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminDeleteUser',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][text][newOwnerIsGuest]'),
+			),
+			$results
+		);
+
+		// Verify the user still exists
+		list($ret, $user) = $user->refresh();
+
+		if ($ret) {
+			if ($ret->getErrorCode() & ERROR_MISSING_OBJECT) {
+				$this->assertFalse(true, 'The user was deleted');
+			} else {
+				return $ret;
+			}
+		}
+
+		// The teardown code takes care of the deletion of the user
+	}
+
+	/**
+	 * Create a user, add 1 item, delete the user and the item
+	 */
+	public function testDeleteUserDeleteItemWithDirectPermission() {
+		global $gallery;
+
+		// Create a user that we can delete
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markUserForCleanup($user);
+
+		// Add an item to this user
+		// Therefore first grant the user the permission to add and delete items
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_album->getId(),
+			$user->getId(),
+			'core.addDataItem',
+			false
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->setActiveUser($user);
+
+		list($ret, $item) = $this->_createRandomDataItem($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Add permission to delete the item to the new user/owner
+		$ret = GalleryCoreApi::addUserPermission(
+			$item->getId(),
+			$user->getId(),
+			'core.delete',
+			false
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Now execute the request
+		$gallery->setActiveUser($this->_activeUserBackup);
+
+		GalleryUtilities::putRequestVariable('userId', $user->getId());
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+		GalleryUtilities::putRequestVariable('form[deletionVariant]', 'deleteItems');
+
+		$results = $this->handleRequest();
+
+		GalleryDataCache::reset();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'deletedUser' => $user->getUserName(),
+				),
+				'error'    => array(),
+			),
+			$results,
+			'Failed to create user'
+		);
+
+		// Verifiy the user, his permissions and his groupMappings are gone
+		$ret = $this->_verifyMissingAll($user->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify the item is gone
+		$ret = $this->_verifyMissing($item->getId());
+
+		if ($ret) {
+			$this->assertFalse(true, 'The item was not deleted and/or there was an error');
+		}
+	}
+
+	/**
+	 * Create a user, add 1 item, delete the user
+	 * The user does not have the permission to delete the item
+	 * The item should have a new owner, Site Admin
+	 */
+	public function testDeleteUserDeleteItemWithoutPermission() {
+		global $gallery;
+
+		// Create a user that we can delete
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markUserForCleanup($user);
+
+		// Add an item to this user
+		// Therefore first grant the user the permission to add and delete items
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_album->getId(),
+			$user->getId(),
+			'core.addDataItem',
+			false
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->setActiveUser($user);
+
+		list($ret, $item) = $this->_createRandomDataItem($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Now execute the request
+		$gallery->setActiveUser($this->_activeUserBackup);
+
+		GalleryUtilities::putRequestVariable('userId', $user->getId());
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+		GalleryUtilities::putRequestVariable('form[deletionVariant]', 'deleteItems');
+
+		$results = $this->handleRequest();
+
+		GalleryDataCache::reset();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'deletedUser' => $user->getUserName(),
+				),
+				'error'    => array(),
+			),
+			$results,
+			'Failed to create user'
+		);
+
+		// Verifiy the user, his permissions and his groupMappings are gone
+		$ret = $this->_verifyMissingAll($user->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify the item still exists
+		list($ret, $item) = $item->refresh();
+
+		if ($ret) {
+			if ($ret->getErrorCode() & ERROR_MISSING_OBJECT) {
+				$this->assertFalse(true, 'The item was deleted');
+			}
+
+			return $ret;
+		}
+
+		// Verify the new owner of the item
+		list($ret, $groupIds) = GalleryCoreApi::fetchGroupsForUser($item->getOwnerId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $siteAdminGroupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.adminGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(isset($groupIds[$siteAdminGroupId]), 'The new ownerId of the item is wrong.');
+
+		// The teardown method takes care of the item deletion
+	}
+
+	/**
+	 * Create a user, add 1 subalbum, add another user, delete the user
+	 * with variant "assign all items to a new owner"
+	 */
+	public function testDeleteUserNewOwnerForItem() {
+		global $gallery;
+
+		// Create a user that we can delete
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markUserForCleanup($user);
+
+		// Create a new owner
+		list($ret, $newOwner) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($newOwner);
+		$this->_markUserForCleanup($newOwner);
+
+		// Add an item to this user
+		// Therefore first grant the user the permission to add and delete items
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_album->getId(),
+			$user->getId(),
+			'core.addAlbumItem',
+			false
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->setActiveUser($user);
+
+		list($ret, $item) = $this->_createRandomAlbum($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Now execute the request
+		$gallery->setActiveUser($this->_activeUserBackup);
+
+		GalleryUtilities::putRequestVariable('userId', $user->getId());
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+		GalleryUtilities::putRequestVariable('form[text][newOwner]', $newOwner->getuserName());
+		GalleryUtilities::putRequestVariable('form[deletionVariant]', 'assignNewOwner');
+
+		$results = $this->handleRequest();
+
+		GalleryDataCache::reset();
+
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminUsers',
+				),
+				'status'   => array(
+					'deletedUser' => $user->getUserName(),
+				),
+				'error'    => array(),
+			),
+			$results,
+			'Failed to create user'
+		);
+
+		// Verifiy the user, his permissions and his groupMappings are gone
+		$ret = $this->_verifyMissingAll($user->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify the item still exists
+		list($ret, $item) = $item->refresh();
+
+		if ($ret) {
+			if ($ret->getErrorCode() & ERROR_MISSING_OBJECT) {
+				$this->assertFalse(true, 'The item was deleted');
+			}
+
+			return $ret;
+		}
+
+		// Verify the new owner of the item
+		$this->assertTrue(
+			$item->getOwnerId() == $newOwner->getId(),
+			'The new owner of the item is wrong.'
+		);
+
+		// Verify the permissions were transfered correctly
+		list($ret, $userPermissions) = GalleryCoreApi::fetchPermissionsForItems(
+			array($item->getId()),
+			$newOwner->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			isset($userPermissions[$item->getId()]['core.addAlbumItem']),
+			'Not all permissions were transfered correctly.'
+		);
+
+		// The teardown method takes care of deletion of the item + new owner
+	}
+
+	/**
+	 * All Delete requests have in common that the user,
+	 * all his permissions and his group mappings should be gone
+	 */
+	public function _verifyMissingAll($userId) {
+		global $gallery;
+
+		// Verify the group mappings are for this user are gone
+		list($ret, $groupIds) = GalleryCoreApi::fetchGroupsForUser($userId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(count($groupIds) == 0, 'Not all group memberships were removed');
+
+		// Verify all permission maps for this user are gone
+		$query = '
+		SELECT
+		COUNT([GalleryAccessMap::accessListId])
+		FROM
+		[GalleryAccessMap]
+		WHERE
+		[GalleryAccessMap::userOrGroupId] = ?
+		';
+
+		list($ret, $searchResults) = $gallery->search($query, array($userId));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(1, (int)$searchResults->resultCount());
+
+		$result = $searchResults->nextResult();
+
+		$this->assertEquals(0, (int)$result[0], 'Not all permissions were removed');
+
+		// Verify the user is gone
+		$ret = $this->_verifyMissing($userId);
+
+		if ($ret) {
+			$this->assertFalse(true, 'The user was not deleted and/or there was an error');
+		}
+
+		return null;
+	}
+
+	// Register a user for permission and group map cleanup
+	public function _markUserForCleanup($user) {
+		$this->_userIds[] = $user->getId();
+	}
+}

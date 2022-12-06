@@ -1,0 +1,221 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * This class provides methods for creating plugin packages.
+ * @package RepositoryTools
+ * @subpackage Classes
+ * @author Jozef Selesi <selesi at gmail dot com>
+ * @version $Revision: 18677 $
+ */
+class RepositoryPackage extends RepositoryObject {
+	/**
+	 * A RepositoryDescriptor object, used for getting meta data for package generation.
+	 *
+	 * @var object
+	 * @access private
+	 */
+	public $_descriptor;
+
+	/**
+	 * Initializes the package generator.
+	 *
+	 * This method should be called after instantiating the class. It
+	 * loads the package templates and sets the output directory.
+	 *
+	 * @param RepositoryDescriptor $descriptor an initialized RepositoryDescriptor
+	 * @param string $outputDir output directory
+	 * @return GalleryStatus a status code
+	 */
+	public function init($descriptor = null, $outputDir = null) {
+		parent::init();
+
+		$ret = $this->setOutputDir($outputDir);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_descriptor = $descriptor;
+
+		$this->setTemplateFile('package.tpl');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Writes all possible packages for this plugin to the repository.
+	 *
+	 * @param boolean $overwritePackages specifies whether to overwrite existing packages
+	 * @param boolean $compressToo write a compressed version also?
+	 * @return array GalleryStatus a status code
+	 *           array packages created for this plugin
+	 */
+	public function writeAllPackagesToDisk($overwritePackages = false, $compressToo = false) {
+		$packagesWritten = array();
+		$packagesSkipped = array();
+
+		foreach ($this->_descriptor->getPackages() as $packageType) {
+			$ret = $this->writeSinglePackageToDisk($packageType, $overwritePackages, $compressToo);
+
+			if ($ret) {
+				return array($ret, null);
+			}
+
+			if ($this->_wasFileWritten) {
+				$packagesWritten[] = $packageType;
+			} else {
+				$packagesSkipped[] = $packageType;
+			}
+		}
+
+		return array(
+			null,
+			array(
+				'packagesWritten' => $packagesWritten,
+				'packagesSkipped' => $packagesSkipped,
+			),
+		);
+	}
+
+	/**
+	 * Writes the specified package of current plugin to the repository.
+	 *
+	 * @param string $packageType
+	 * @param boolean $overwritePackage overwrite package on disk if it already exists
+	 * @param boolean $compressToo write a compressed version also?
+	 * @return GalleryStatus a status code
+	 */
+	public function writeSinglePackageToDisk($packageType, $overwritePackage = false, $compressToo = false) {
+		global $gallery;
+
+		$randomString = $this->getPackageHash($packageType, 10);
+
+		$this->_template->setVariable('random', $randomString);
+
+		// Directory structure creation code.
+		$packageDirectories = array();
+
+		foreach ($this->_descriptor->getDirectoriesInPackage($packageType) as $dir) {
+			$packageDirectories[] = $dir;
+		}
+
+		// File creation code.
+		$platform     =& $gallery->getPlatform();
+		$packageFiles = array();
+
+		foreach ($this->_descriptor->getFilesInPackage($packageType) as $file) {
+			$pluginFilePath = $this->_descriptor->getPluginDir() . $file;
+
+			if (false === ($fileContents = $platform->file_get_contents($pluginFilePath))) {
+				return GalleryCoreApi::error(
+					ERROR_PLATFORM_FAILURE,
+					__FILE__,
+					__LINE__,
+					sprintf(
+						'Error reading path [%s]',
+						$pluginFilePath
+					)
+				);
+			}
+
+			if ($file == 'MANIFEST') {
+				$fileContents = $this->filterManifestForBasePackage($fileContents);
+			}
+
+			$packageFiles[] = array(
+				'path' => $file,
+				'data' => base64_encode($fileContents),
+			);
+		}
+
+		$this->_template->setVariable('directories', $packageDirectories);
+		$this->_template->setVariable('files', $packageFiles);
+
+		// Set file name and write it to disk.
+		$this->setOutputFile($this->getPackageFileName($packageType));
+
+		$ret = $this->writeToDisk($overwritePackage, $compressToo);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Calculates the file name of the specified package of this plugin.
+	 *
+	 * Language packages are versioned with the strings.raw and po file revisions, other packages
+	 * include the build timestamp - date and time of the last modified file in the plugin's CVS
+	 * directory. Examples:
+	 *
+	 * Package Name File Name
+	 *  lang-en_EN   pluginid-lang-en_EN-1.1-1.23.package
+	 *  base         pluginid-1.0.3-20051810223141-base.package
+	 *
+	 * @param string $package package name
+	 * @return string package file name
+	 */
+	public function getPackageFileName($package) {
+		if (preg_match('/^lang-(.*)$/', $package, $languageCode)) {
+			$stringsRevision = $this->_descriptor->getStringsRevision();
+			$languageCode    = $languageCode[1];
+			$packageFileName = sprintf(
+				'%s-%s-%s-%s.package',
+				$this->_descriptor->getPluginId(),
+				$package,
+				$stringsRevision,
+				$this->_descriptor->getLanguageRevision($languageCode)
+			);
+		} else {
+			$packageFileName = sprintf(
+				'%s-%s-%s-%s.package',
+				$this->_descriptor->getPluginId(),
+				$this->_descriptor->getPluginVersion(),
+				$this->_descriptor->getBuildTimestamp(),
+				$package
+			);
+		}
+
+		return $packageFileName;
+	}
+
+	/**
+	 * Return a hash code for the given descriptor.  Not guaranteed to be unique,
+	 * but at 5 characters the collision rate is 1 in 60 million.
+	 *
+	 * @param int $length desired length
+	 * @return string random string
+	 */
+	public function getPackageHash($packageType, $length) {
+		global $gallery;
+
+		$phpVm = $gallery->getPhpVm();
+		$key   = $this->getPackageFileName($packageType) .
+		  GalleryUtilities::getRequestVariables('repositoryName');
+
+		return substr($phpVm->md5($key), 0, $length);
+	}
+}

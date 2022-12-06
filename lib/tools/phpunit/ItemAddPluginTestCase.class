@@ -1,0 +1,124 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+require_once __DIR__ . '/../../../modules/core/classes/GalleryView.class';
+require_once __DIR__ . '/../../../modules/core/classes/GalleryController.class';
+require_once __DIR__ . '/../../../modules/core/ItemAdd.inc';
+
+/**
+ * An ItemAddPlugin specific version of GalleryTestCase
+ * @package Gallery
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 18065 $
+ */
+class ItemAddPluginTestCase extends GalleryTestCase {
+	/**
+	 * The plugin instance
+	 * @access protected
+	 */
+	public $_plugin;
+
+	public function __construct($methodName, $moduleName, $pluginName) {
+		parent::__construct($methodName);
+
+		list($ret, $this->_plugin) = GalleryCoreApi::newFactoryInstanceById('ItemAddPlugin', $pluginName);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (!isset($this->_plugin)) {
+			return $this->assertFalse(
+				true,
+				'Unable to create ItemAddPlugin, type ' . $pluginName
+			);
+		}
+
+		list($ret, $this->_module) = GalleryCoreApi::loadPlugin('module', $moduleName);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function handleRequest(&$item, $errorCode = null) {
+		// Get our form variables
+		$form                 = GalleryUtilities::getFormVariables('form');
+		$this->_addController = new ItemAddPluginTestItemAddController();
+
+		list($ret, $error, $status) = $this->_plugin->handleRequest($form, $item, $this->_addController);
+
+		if (isset($errorCode)) {
+			if ($ret && ($ret->getErrorCode() & $errorCode) != $errorCode) {
+				$this->assertFalse(
+					true,
+					sprintf(
+						'Expected error code (%s) but received (%s)',
+						implode(
+							' | ',
+							GalleryStatus::getErrorCodeConstants($errorCode)
+						),
+						implode(
+							' | ',
+							$ret ? '' : GalleryStatus::getErrorCodeConstants(
+								$ret->getErrorCode()
+							)
+						)
+					)
+				);
+			}
+		} elseif ($ret) {
+			$this->failWithStatus($ret);
+
+			return array($error, $status);
+		} else {
+			// Check to make sure we got back everything we want
+			$this->assertTrue(isset($error) && is_array($error), 'plugin error results missing');
+
+			/*
+			 * This does not appear to test much, but it will cause us to examine $status so if
+			 * it is not set then we will trigger a PHP warning which will fail the test
+			 */
+			$this->assertTrue(isset($status) || $status == null, 'plugin status result missing');
+		}
+
+		return array($error, $status);
+	}
+
+	public function _translate($message) {
+		return $this->_module->translate($message);
+	}
+}
+
+/**
+ * Mock ItemAddController to observe post-processing calls.
+ */
+class ItemAddPluginTestItemAddController {
+	public $_calls = array();
+
+	public function getCalls() {
+		return $this->_calls;
+	}
+
+	public function postprocessItems($form, &$status) {
+		$this->_calls[] = array($form, $status);
+
+		return null;
+	}
+}

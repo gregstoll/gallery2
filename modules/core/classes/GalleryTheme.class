@@ -812,10 +812,11 @@ class GalleryTheme extends GalleryPlugin {
 	switch ($view->getViewType()) {
 	case VIEW_TYPE_ADMIN:
 	    $theme['pageType'] = 'admin';
-	    $theme['adminTemplate'] = $viewResults['body'];
+	    $view_body = $viewResults['body'] ?? null;
+	    $theme['adminTemplate'] = $view_body;
 	    $theme['adminL10Domain'] = $view->getL10Domain();
 	    list ($ret, $result) = $this->showAdminPage(
-		$template, $item, $params, $viewResults['body']);
+		$template, $item, $params, $view_body);
 	    if ($ret) {
 		return array($ret, null);
 	    }
@@ -999,10 +1000,11 @@ class GalleryTheme extends GalleryPlugin {
 
 	default: /* VIEW_TYPE_MODULE */
 	    $theme['pageType'] = 'module';
-	    $theme['moduleTemplate'] = $viewResults['body'];
+	    $view_body = $viewResults['body'] ?? null;
+	    $theme['moduleTemplate'] = $view_body;
 	    $theme['moduleL10Domain'] = $view->getL10Domain();
 	    list ($ret, $result) = $this->showModulePage(
-		$template, $item, $params, $viewResults['body']);
+		$template, $item, $params, $view_body);
 	    if ($ret) {
 		return array($ret, null);
 	    }
@@ -1459,7 +1461,7 @@ class GalleryTheme extends GalleryPlugin {
 		     * generateUrl(array('href'=>$path)); need full url to avoid any distortion.
 		     * (that later call will actually shorten the URL again if appropriate)
 		     */
-		    $url = $urlGenerator->generateUrl(array('view' => 'core.ItemDeleteJs', 
+		    $url = $urlGenerator->generateUrl(array('view' => 'core.ItemDeleteJs',
 			'lang' => $lang), array('forceDirect' => true, 'forceFullUrl' => true));
 		    $template->javascript($url);
 		    break;
@@ -1790,7 +1792,11 @@ class GalleryTheme extends GalleryPlugin {
 	    }
 
 	    if (empty($sourceImage['width'])) {
-		$fullSizeDimensions = $sourceImage['itemTypeName'][0];
+		    if (empty($sourceImage)) {
+			    $fullSizeDimensions = "";
+		    } else {
+			    $fullSizeDimensions = $sourceImage['itemTypeName'][0];
+		    }
 	    } else {
 		$fullSizeDimensions = $core->translate(
 		    array('text' => '%dx%d',

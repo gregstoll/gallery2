@@ -1,0 +1,212 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test ItemOrder functionality
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemOrderTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function _createTestAlbum($orderBy, $orderDirection = ORDER_ASCENDING) {
+		global $gallery;
+
+		list($ret, $this->_parentItem) = $this->_createRandomAlbum(
+			$this->_getRootId(),
+			array(
+				'orderBy'        => $orderBy,
+				'orderDirection' => $orderDirection,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_parentItem);
+
+		// Give us full perms
+		$userId = $gallery->getActiveUserId();
+
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_parentItem->getId(),
+			$userId,
+			'core.all',
+			false
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$titles = array('ztitle', 'ytitle', 'xtitle');
+
+		for ($i = 0; $i < 3; $i++) {
+			// So items get different timestamps
+			sleep(1);
+
+			list($ret, $this->_childItems[$i]) = $this->_createRandomAlbum(
+				$this->_parentItem->getId(),
+				array(
+					'title' => $titles[$i],
+				)
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		return null;
+	}
+
+	public function testFetchByOrder() {
+		$ret = $this->_createTestAlbum('orderWeight');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Assign the item order in reverse
+		$correctResults = array();
+
+		for ($i = 0; $i < count($this->_childItems); $i++) {
+			$ret = GalleryCoreApi::setItemOrderWeight($this->_childItems[$i]->getId(), 100 - $i);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			array_unshift($correctResults, $this->_childItems[$i]->getId());
+		}
+
+		list($ret, $results) = GalleryCoreApi::fetchChildItemIds($this->_parentItem);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($correctResults, $results);
+	}
+
+	public function testFetchByCreateDate() {
+		$ret = $this->_createTestAlbum('creationTimestamp');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Make manual order different from creation order
+		$correctResults = array();
+
+		for ($i = 0; $i < count($this->_childItems); $i++) {
+			$ret = GalleryCoreApi::setItemOrderWeight($this->_childItems[$i]->getId(), 100 - $i);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$correctResults[] = $this->_childItems[$i]->getId();
+		}
+
+		list($ret, $results) = GalleryCoreApi::fetchChildItemIds($this->_parentItem);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($correctResults, $results);
+	}
+
+	public function testFetchByModifyDate() {
+		$ret = $this->_createTestAlbum('modificationTimestamp', ORDER_DESCENDING);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$correctResults = array();
+
+		for ($i = 0; $i < count($this->_childItems); $i++) {
+			array_unshift($correctResults, $this->_childItems[$i]->getId());
+		}
+
+		list($ret, $results) = GalleryCoreApi::fetchChildItemIds($this->_parentItem);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($correctResults, $results);
+	}
+
+	public function testFetchByTitle() {
+		$ret = $this->_createTestAlbum('title');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$correctResults = array();
+
+		for ($i = 0; $i < count($this->_childItems); $i++) {
+			array_unshift($correctResults, $this->_childItems[$i]->getId());
+		}
+
+		list($ret, $results) = GalleryCoreApi::fetchChildItemIds($this->_parentItem);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($correctResults, $results);
+	}
+
+	public function testFetchByRandom() {
+		$ret = $this->_createTestAlbum('random');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Cannot verify the order (it is random), just make sure we got the right ids
+		$correctResults = array();
+
+		for ($i = 0; $i < count($this->_childItems); $i++) {
+			$correctResults[] = $this->_childItems[$i]->getId();
+		}
+
+		sort($correctResults);
+
+		list($ret, $results) = GalleryCoreApi::fetchChildItemIds($this->_parentItem);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		sort($results);
+
+		$this->assertEquals($correctResults, $results);
+	}
+}

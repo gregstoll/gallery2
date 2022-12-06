@@ -1,0 +1,882 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemEditPhoto controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemEditRotateAndScalePhotoPluginTest extends ItemEditPluginTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core', 'ItemEditRotateAndScalePhoto');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		// Register a dummy toolkit
+		$path = 'modules/core/test/phpunit/ItemEditRotateAndScalePhotoPluginTest.class';
+
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'GalleryToolkit',
+			'ItemEditRotateAndScalePhotoPluginTestToolkit',
+			'ItemEditRotateAndScalePhotoPluginTestToolkit',
+			$path,
+			'coreTest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markToolkitForCleanup('ItemEditRotateAndScalePhotoPluginTestToolkit');
+
+		// Register operations that we can perform on our mock data items
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemEditRotateAndScalePhotoPluginTestToolkit',
+			array('test/file'),
+			'scale',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+			),
+			'test-description'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemEditRotateAndScalePhotoPluginTestToolkit',
+			array('test/file'),
+			'rotate',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+			),
+			'test-description'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemEditRotateAndScalePhotoPluginTestToolkit',
+			array('test/file'),
+			'resize',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+			),
+			'test-description',
+			''
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemEditRotateAndScalePhotoPluginTestToolkit',
+			array('test/blob'),
+			'convert-to-image/jpeg',
+			array(),
+			'test-description',
+			'image/jpeg'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_item) = $this->_createRandomDataItem($this->_album->getId(), 'test/file');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_derivative[0]) = $this->_createDerivative(
+			$this->_item,
+			$this->_item->getId(),
+			DERIVATIVE_TYPE_IMAGE_PREFERRED,
+			'rotate|90'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_derivative[1]) = $this->_createDerivative(
+			$this->_item,
+			$this->_derivative[0]->getId(),
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+			'crop|10,10,30,40;thumbnail|200',
+			'test/file',
+			array(
+				'width'  => 200,
+				'height' => 150,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_derivative[2]) = $this->_createDerivative(
+			$this->_item,
+			$this->_derivative[0]->getId(),
+			DERIVATIVE_TYPE_IMAGE_RESIZE,
+			'scale|500',
+			'test/file',
+			array(
+				'width'  => 640,
+				'height' => 480,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_blob) = $this->_createRandomDataItem($this->_album->getId(), 'test/blob');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_blobDerivative[0]) = $this->_createDerivative(
+			$this->_blob,
+			$this->_blob->getId(),
+			DERIVATIVE_TYPE_IMAGE_PREFERRED,
+			'convert-to-image/jpeg'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testScalePreserveOriginal() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[preserveOriginal]', 'on');
+		GalleryUtilities::putRequestVariable('form[action][resize]', 1);
+		GalleryUtilities::putRequestVariable('form[resize][width]', 270);
+		GalleryUtilities::putRequestVariable('form[resize][height]', '80%');
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Reparent the thumbnail cause we are going to want to check it later
+		$ret = GalleryCoreApi::remapSourceIds(
+			$this->_derivative[0]->getId(),
+			$this->_item->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Delete the preferred
+		$ret = GalleryCoreApi::deleteEntityById($this->_derivative[0]->getId(), 'GalleryDerivative');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Save current serial
+		$originalSerial = $this->_item->getSerialNumber();
+
+		// Perform the request and verify that we succeeded
+		$preferred = null;
+		$results   = $this->handleRequest($this->_item, $preferred);
+
+		$this->assertEquals(
+			array(
+				array(),
+				$this->_translate('Scaled photo successfully'),
+			),
+			$results
+		);
+
+		// Verify that we have a preferred again
+		list($ret, $preferredIds) = GalleryCoreApi::fetchPreferredsByItemIds(array($this->_item->getId()));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(1, sizeof($preferredIds), 'there should be a preferred');
+
+		// Verify that the item serial is the same
+		list($ret, $this->_item) = $this->_item->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($originalSerial, $this->_item->getSerialNumber());
+
+		// Verify that the thumbnail's crop is the same
+		list($ret, $this->_derivative[1]) = $this->_derivative[1]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'crop|10,10,30,40;thumbnail|200',
+			$this->_derivative[1]->getDerivativeOperations()
+		);
+	}
+
+	public function testScaleReplaceOriginal() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][resize]', 1);
+		GalleryUtilities::putRequestVariable('form[resize][width]', 270);
+		GalleryUtilities::putRequestVariable('form[resize][height]', 250);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Reparent the thumbnail cause we are going to want to check it later
+		$ret = GalleryCoreApi::remapSourceIds(
+			$this->_derivative[0]->getId(),
+			$this->_item->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Delete the preferred
+		$ret = GalleryCoreApi::deleteEntityById($this->_derivative[0]->getId(), 'GalleryDerivative');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Save current size
+		$originalSize = $this->_item->getSize();
+
+		// Perform the request and verify that we succeeded
+		$preferred = null;
+		$results   = $this->handleRequest($this->_item, $preferred);
+
+		$this->assertEquals(
+			array(
+				array(),
+				$this->_translate('Scaled photo successfully'),
+			),
+			$results
+		);
+
+		// Verify that we do not have a preferred
+		list($ret, $preferredIds) = GalleryCoreApi::fetchPreferredsByItemIds(array($this->_item->getId()));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, sizeof($preferredIds), 'there should be no preferreds');
+
+		// Verify that the item modification time has changed
+		list($ret, $this->_item) = $this->_item->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$newSize = $this->_item->getSize();
+		$this->assertTrue($originalSize != $newSize, "Item size should have changed ($newSize)");
+
+		// Verify that the thumbnail's crop is the same
+		list($ret, $this->_derivative[1]) = $this->_derivative[1]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'crop|10,10,30,40;thumbnail|200',
+			$this->_derivative[1]->getDerivativeOperations()
+		);
+	}
+
+	public function testScale() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][resize]', 1);
+		GalleryUtilities::putRequestVariable('form[resize][width]', 200);
+		GalleryUtilities::putRequestVariable('form[resize][height]', 200);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_derivative[0]);
+
+		$this->assertEquals(
+			array(
+				array(),
+				$this->_translate('Scaled photo successfully'),
+			),
+			$results
+		);
+
+		// Verify that the transform went ok
+		list($ret, $this->_derivative[0]) = $this->_derivative[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'rotate|90;scale|200,200',
+			$this->_derivative[0]->getDerivativeOperations()
+		);
+	}
+
+	public function testScaleConvertedPreferred() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][resize]', 1);
+		GalleryUtilities::putRequestVariable('form[resize][width]', 200);
+		GalleryUtilities::putRequestVariable('form[resize][height]', 200);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_blob, $this->_blobDerivative[0]);
+
+		$this->assertEquals(
+			array(
+				array(),
+				$this->_translate('Scaled photo successfully'),
+			),
+			$results
+		);
+
+		// Verify that the transform went ok
+		list($ret, $this->_blobDerivative[0]) = $this->_blobDerivative[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'convert-to-image/jpeg;scale|200,200',
+			$this->_blobDerivative[0]->getDerivativeOperations()
+		);
+	}
+
+	public function testScaleMissing() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][resize]', 1);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_derivative[0]);
+
+		$this->assertEquals(
+			array(array('form[error][resize][size][missing]'), null),
+			$results
+		);
+	}
+
+	public function testScaleInvalid() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][resize]', 1);
+		GalleryUtilities::putRequestVariable('form[resize][width]', 200);
+		GalleryUtilities::putRequestVariable('form[resize][height]', 'scooby doo');
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_derivative[0]);
+
+		$this->assertEquals(
+			array(array('form[error][resize][size][invalid]'), null),
+			$results
+		);
+	}
+
+	public function testRotateClockwise() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][rotate][clockwise]', 1);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_derivative[0]);
+
+		$this->assertEquals(
+			array(array(), $this->_translate('Rotated photo successfully')),
+			$results
+		);
+
+		// Verify that the transform went ok
+		list($ret, $this->_derivative[0]) = $this->_derivative[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('rotate|180', $this->_derivative[0]->getDerivativeOperations());
+
+		// Verify that the thumbnail's crop was adjusted
+		list($ret, $this->_derivative[1]) = $this->_derivative[1]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'crop|50,10,40,30;thumbnail|200',
+			$this->_derivative[1]->getDerivativeOperations()
+		);
+	}
+
+	public function testRotateCounterClockwise() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][rotate][counterClockwise]', 1);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_derivative[0]);
+
+		$this->assertEquals(
+			array(array(), $this->_translate('Rotated photo successfully')),
+			$results
+		);
+
+		// Verify that the derivative is now gone (90 + -90 == 0)
+		list($ret, $this->_derivative[0]) = $this->_derivative[0]->refresh();
+
+		$this->assertTrue($ret && ($ret->getErrorCode() & ERROR_MISSING_OBJECT));
+
+		// Verify that the thumbnail's crop was adjusted
+		list($ret, $this->_derivative[1]) = $this->_derivative[1]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'crop|10,60,40,30;thumbnail|200',
+			$this->_derivative[1]->getDerivativeOperations()
+		);
+	}
+
+	public function testRotateInvalidatesDerivativeDimensions() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][rotate][clockwise]', 1);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		$results = $this->handleRequest($this->_item, $this->_derivative[0]);
+
+		list($ret, $this->_derivative[1]) = $this->_derivative[1]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, $this->_derivative[1]->getWidth());
+		$this->assertEquals(0, $this->_derivative[1]->getHeight());
+	}
+
+	public function testRotateFlipDoesntInvalidateDerivativeDimensions() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][rotate][flip]', 1);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		$results = $this->handleRequest($this->_item, $this->_derivative[0]);
+
+		list($ret, $this->_derivative[1]) = $this->_derivative[1]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(200, $this->_derivative[1]->getWidth());
+		$this->assertEquals(150, $this->_derivative[1]->getHeight());
+	}
+
+	public function testRotateFlip() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][rotate][flip]', 1);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_derivative[0]);
+
+		$this->assertEquals(
+			array(array(), $this->_translate('Rotated photo successfully')),
+			$results
+		);
+
+		// Verify that the transform went ok
+		list($ret, $this->_derivative[0]) = $this->_derivative[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('rotate|-90', $this->_derivative[0]->getDerivativeOperations());
+
+		// Verify that the thumbnail's crop was adjusted
+		list($ret, $this->_derivative[1]) = $this->_derivative[1]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'crop|60,50,30,40;thumbnail|200',
+			$this->_derivative[1]->getDerivativeOperations()
+		);
+	}
+
+	public function testRotateFlipConvertedPreferred() {
+		// Put a convert operation on our preferred
+		list($ret, $this->_blobDerivative[1]) = $this->_createDerivative(
+			$this->_blob,
+			$this->_blobDerivative[0]->getId(),
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+			'crop|10,10,30,40;thumbnail|200'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][rotate][flip]', 1);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_blob, $this->_blobDerivative[0]);
+
+		$this->assertEquals(
+			array(array(), $this->_translate('Rotated photo successfully')),
+			$results
+		);
+
+		// Verify that the transform went ok
+		list($ret, $this->_blobDerivative[0]) = $this->_blobDerivative[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'convert-to-image/jpeg;rotate|180',
+			$this->_blobDerivative[0]->getDerivativeOperations()
+		);
+
+		// Verify that the thumbnail's crop was adjusted
+		list($ret, $this->_blobDerivative[1]) = $this->_blobDerivative[1]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'crop|60,50,30,40;thumbnail|200',
+			$this->_blobDerivative[1]->getDerivativeOperations()
+		);
+	}
+
+	public function testRevertToOriginal() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][revertToOriginal]', 1);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_derivative[0]);
+
+		$this->assertEquals(
+			array(array(), $this->_translate('Reverted rotate and scale changes successfully')),
+			$results
+		);
+
+		// Verify that the preferred is gone
+		list($ret, $this->_derivative[0]) = $this->_derivative[0]->refresh();
+
+		$this->assertTrue($ret && ($ret->getErrorCode() & ERROR_MISSING_OBJECT));
+
+		// And that the other derivatives now point at the item
+		for ($i = 1; $i <= 2; $i++) {
+			list($ret, $this->_derivative[$i]) = $this->_derivative[$i]->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertTrue($this->_item->getId(), $this->_derivative[$i]->getDerivativeSourceId());
+		}
+
+		// Verify that the thumbnail's crop was adjusted
+		list($ret, $this->_derivative[1]) = $this->_derivative[1]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'crop|10,60,40,30;thumbnail|200',
+			$this->_derivative[1]->getDerivativeOperations()
+		);
+	}
+
+	/**
+	 * This verifies that we do not remove preferred derivatives that have operations we do not
+	 * understand so it covers postfilters as well as convert-to-xxx operations.
+	 */
+	public function testRevertToOriginalWithPostfilter() {
+		// Put a postfilter on our derivative
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_derivative[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_derivative[0]->setDerivativeOperations('rotate|90;bogus|1,2,3');
+
+		$this->_derivative[0]->setPostFilterOperations('bogus|4,5,6');
+
+		$ret = $this->_derivative[0]->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][revertToOriginal]', 1);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_derivative[0]);
+
+		$this->assertEquals(
+			array(array(), $this->_translate('Reverted rotate and scale changes successfully')),
+			$results
+		);
+
+		// Verify that the preferred is still there
+		list($ret, $this->_derivative[0]) = $this->_derivative[0]->refresh();
+
+		$this->assertFalse($ret);
+
+		// Make sure that its postfilter is still the same, but its rotate op is gone
+		$this->assertEquals('bogus|1,2,3', $this->_derivative[0]->getDerivativeOperations());
+		$this->assertEquals('bogus|4,5,6', $this->_derivative[0]->getPostFilterOperations());
+	}
+
+	public function testScaleWithInvalidSerialNumber() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][resize]', 1);
+		GalleryUtilities::putRequestVariable('form[resize][width]', 270);
+		GalleryUtilities::putRequestVariable('form[resize][height]', 220);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', -1);
+
+		// Delete the preferred
+		$ret = GalleryCoreApi::deleteEntityById($this->_derivative[0]->getId(), 'GalleryDerivative');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$preferred = null;
+		$results   = $this->handleRequest($this->_item, $preferred, ERROR_OBSOLETE_DATA);
+	}
+
+	public function testCheckForOperation() {
+		list($ret, $result) = $this->_plugin->_checkForOperation('scale', array('test/file'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($result, 'should be supported');
+
+		list($ret, $result) = $this->_plugin->_checkForOperation(
+			'scale',
+			array('test/notsupported', 'test/file')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($result, 'should be supported');
+
+		list($ret, $result) = $this->_plugin->_checkForOperation(
+			'scale',
+			array('test/file', 'test/notsupported')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($result, 'should be supported');
+
+		list($ret, $result) = $this->_plugin->_checkForOperation(
+			'scale',
+			array('test/notsupported')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($result, 'should not be supported');
+
+		list($ret, $result) = $this->_plugin->_checkForOperation('scale', array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($result, 'should not be supported');
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+
+/**
+ * Test toolkit
+ */
+class ItemEditRotateAndScalePhotoPluginTestToolkit extends GalleryToolkit {
+	/**
+	 * @see GalleryToolkit::performOperation
+	 * Dummy operation
+	 */
+	public function performOperation(
+		$mimeType,
+		$operationName,
+		$sourceFilename,
+		$destFilename,
+		$parameters,
+		$context = array()
+	) {
+		global $gallery;
+
+		$platform =& $gallery->getPlatform();
+
+		if ($sourceFilename != $destFilename) {
+			$platform->copy($sourceFilename, $destFilename);
+		}
+
+		$fd = $platform->fopen($destFilename, 'a');
+
+		$platform->fwrite($fd, $operationName);
+		$platform->fclose($fd);
+
+		// Clear cache to ensure new filesize will be seen
+		$platform->clearstatcache();
+
+		return array(null, $mimeType, $context);
+	}
+
+	/**
+	 * @see GalleryToolkit::mergeOperations
+	 * Dummy operation
+	 */
+	public function mergeOperations($operation1, $args1, $operation2, $args2) {
+		switch (serialize(array($operation1, $args1, $operation2, $args2))) {
+			case serialize(
+				array(
+					'rotate',
+					array(
+						0 => '90',
+					),
+					'rotate',
+					array(
+						0 => '90',
+					),
+				)
+			):
+				return array(true, 'rotate', array('180'));
+
+			break;
+
+			case serialize(
+				array(
+					'rotate',
+					array(
+						0 => '90',
+					),
+					'rotate',
+					array(
+						0 => '-90',
+					),
+				)
+			):
+				return array(true, null, null);
+
+			break;
+
+			case serialize(
+				array(
+					'rotate',
+					array(
+						0 => '90',
+					),
+					'rotate',
+					array(
+						0 => '180',
+					),
+				)
+			):
+				return array(true, 'rotate', array('-90'));
+
+			break;
+
+			default:
+				return array(false, null, null);
+		}
+	}
+}

@@ -1,0 +1,146 @@
+<?php
+
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemEditAnimation controller tests
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemEditAnimationPluginTest extends ItemEditPluginTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'core', 'ItemEditAnimation');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		list($ret, $this->_item) = $this->_createRandomDataItem($this->_album->getId(), 'application/x-director');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_preferred = null;
+	}
+
+	public function testChangeSize() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[width]', 123);
+		GalleryUtilities::putRequestVariable('form[height]', 456);
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_preferred);
+
+		$this->assertEquals(
+			array(
+				array(),
+				$this->_translate('Changes saved successfully'),
+			),
+			$results
+		);
+
+		// Verify that the preferred is gone
+		list($ret, $this->_item) = $this->_item->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(123, $this->_item->getWidth());
+		$this->assertEquals(456, $this->_item->getHeight());
+	}
+
+	public function testChangeSizeMissingValues() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[width]', '');
+		GalleryUtilities::putRequestVariable('form[height]', '');
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item->getSerialNumber());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_preferred);
+
+		$this->assertEquals(
+			array(
+				array(),
+				$this->_translate('Changes saved successfully'),
+			),
+			$results
+		);
+
+		// Reload the item
+		list($ret, $this->_item) = $this->_item->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, $this->_item->getWidth());
+		$this->assertEquals(0, $this->_item->getHeight());
+	}
+
+	public function testChangeSizeInvalidValues() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[width]', -123);
+		GalleryUtilities::putRequestVariable('form[height]', -456);
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_item, $this->_preferred);
+
+		$this->assertEquals(
+			array(
+				array(
+					'form[error][width][invalid]',
+					'form[error][height][invalid]',
+				),
+				null,
+			),
+			$results
+		);
+	}
+
+	public function testInvalidSerialNumber() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[width]', 123);
+		GalleryUtilities::putRequestVariable('form[height]', 456);
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		// Use invalid serial number
+		GalleryUtilities::putRequestVariable('form[serialNumber]', -1);
+
+		$results = $this->handleRequest($this->_item, $this->_preferred, ERROR_OBSOLETE_DATA);
+	}
+}
