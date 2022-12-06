@@ -1981,8 +1981,8 @@ class SessionTest extends GalleryTestCase {
 		 * Create a persistent session, expecting no error, only 1 md5 call then create the second
 		 * persistent session, etc.
 		 */
+		$gallery->_phpVm        = new SessionTestPhpVm($sessionIds);
 		for ($i = 0; $i < 5; $i++) {
-			$gallery->_phpVm        = new SessionTestPhpVm($sessionIds);
 			$session->_sessionId    = '';
 			$session->_isPersistent = false;
 
