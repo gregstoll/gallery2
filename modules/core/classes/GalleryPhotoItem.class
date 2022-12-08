@@ -127,6 +127,10 @@ class GalleryPhotoItem extends GalleryDataItem {
 	return null;
     }
 
+	public function getCanContainChildren() {
+		return false;
+	}
+
     /**
      * @see GalleryDataItem::rescan
      */
@@ -211,7 +215,9 @@ class GalleryPhotoItem extends GalleryDataItem {
 		array('forceFullUrl' => !empty($params['forceFullUrl'])));
 	    list ($width, $height) = array($this->getWidth(), $this->getHeight());
 
-	    /* Shrink our dimensions if necessary */
+		$params['class'] .= ' gcPhotoImage';
+
+		/* Shrink our dimensions if necessary */
 	    if (isset($params['maxSize'])) {
 		list ($width, $height) =
 		    GalleryUtilities::shrinkDimensionsToFit($width, $height, $params['maxSize']);
@@ -220,6 +226,10 @@ class GalleryPhotoItem extends GalleryDataItem {
 
 	    $sizeStr = '';
 	    if ($width > 0 && $height > 0) {
+		    if($height > $width){
+						// Image orientation is portrait
+						$params['class'] .= ' giPortrait';
+		    }
 		$sizeStr = sprintf(' width="%s" height="%s"', $width, $height);
 	    }
 	    if (!isset($params['alt'])) {
@@ -232,6 +242,11 @@ class GalleryPhotoItem extends GalleryDataItem {
 	    unset($params['fallback']);
 	    unset($params['forceFullUrl']);
 	    unset($params['forceRawImage']);
+
+	    	$classes = " class=\"". $params['class'] . "\"";
+		$html .= $classes;
+		unset($params['class']);
+
 	    foreach ($params as $attr => $value) {
 		if (isset($value)) {
 		    $html .= " $attr=\"$value\"";

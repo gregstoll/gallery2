@@ -80,6 +80,16 @@ class GalleryDerivativeImage extends GalleryDerivative {
      */
     function create($parentId=null, $derivativeType=null) {
 	global $gallery;
+
+		if (is_null($parentId) || is_null($derivativeType)) {
+			return GalleryCoreApi::error(
+				ERROR_BAD_PARAMETER,
+				__FILE__,
+				__LINE__,
+				'Null parameter passed to GalleryDerivativeImage create function'
+			);
+		}
+
 	$parentId = (int)$parentId;
 
 	if ($derivativeType != DERIVATIVE_TYPE_IMAGE_THUMBNAIL &&
@@ -198,9 +208,17 @@ class GalleryDerivativeImage extends GalleryDerivative {
 		unset($params['maxSize']);
 	    }
 
+		/* Set a default value for class */
+		$params['class'] .= ' gcPhotoImage';
+
 	    $sizeStr = '';
 	    if ($width > 0 && $height > 0) {
-		$sizeStr = sprintf(' width="%s" height="%s"', $width, $height);
+		    if($height > $width){
+			    /* Image orientation is portrait */
+			    $params['class'] .= ' giPortrait';
+		    }
+
+		    $sizeStr = sprintf(' width="%s" height="%s"', $width, $height);
 	    }
 	    if (!isset($params['alt'])) {
 		$params['alt'] =
