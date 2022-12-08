@@ -870,16 +870,16 @@ class GalleryTemplateAdapter {
 	$buf = '';
 	if ($debug == 'buffered' || $profiling) {
 	    /* don't worry about localizing this -- it's only debug output */
-	    $buf .= '<div id="gpDebug"> <h3> Debug Output </h3>';
+	    $buf .= '<div id="gpDebug"> <h3> Debug Output </h3><pre>';
 	    if ($debug == 'buffered') {
 		$buf .= $gallery->getDebugBuffer();
 	    }
 
 	    if ($profiling) {
 		$storage =& $gallery->getStorage();
-		$buf .= '<span>' . $storage->getProfilingHtml() . '</span>';
+		$buf .= '</pre><span>' . $storage->getProfilingHtml() . '</span>';
 	    }
-	    $buf .= '</div>';
+	    $buf .= '</pre></div>';
 	}
 	if ($debug == 'buffered') {
 	    /* Smarty debug console */
