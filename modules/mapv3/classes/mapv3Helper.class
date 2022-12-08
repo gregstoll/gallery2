@@ -753,7 +753,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 	 * @return array GalleryStatus a status code
 	 *               boolean delete was successful
 	 */
-	public function deleteKeyProfile($url) {
+	static public function deleteKeyProfile($url) {
 		// Get the key profiles and test each one against the passed URL. Delete the matching one.
 		list($ret, $allKeySets) = mapv3Helper::getAllKeyProfiles();
 
@@ -940,7 +940,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 	 * @return coordinates of item
 	 *
 	 */
-	public function getItemGPSCoordinatesFromDB($itemId) {
+	public static function getItemGPSCoordinatesFromDB($itemId) {
 		global $gallery;
 
 		$query = '
