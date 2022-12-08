@@ -127,6 +127,10 @@ class GalleryPhotoItem extends GalleryDataItem {
 	return null;
     }
 
+	public function getCanContainChildren() {
+		return false;
+	}
+
     /**
      * @see GalleryDataItem::rescan
      */
@@ -211,7 +215,9 @@ class GalleryPhotoItem extends GalleryDataItem {
 		array('forceFullUrl' => !empty($params['forceFullUrl'])));
 	    list ($width, $height) = array($this->getWidth(), $this->getHeight());
 
-	    /* Shrink our dimensions if necessary */
+	    $params['class'] = GalleryUtilities::getImageOrientationClasses($width, $height, $params['class'] ?? '');
+
+		/* Shrink our dimensions if necessary */
 	    if (isset($params['maxSize'])) {
 		list ($width, $height) =
 		    GalleryUtilities::shrinkDimensionsToFit($width, $height, $params['maxSize']);
@@ -232,6 +238,7 @@ class GalleryPhotoItem extends GalleryDataItem {
 	    unset($params['fallback']);
 	    unset($params['forceFullUrl']);
 	    unset($params['forceRawImage']);
+
 	    foreach ($params as $attr => $value) {
 		if (isset($value)) {
 		    $html .= " $attr=\"$value\"";
