@@ -854,7 +854,12 @@ function get_IFD_Packed_Data($ifd_data, $IFD_offset, $Byte_Align, $Another_IFD) 
 			} else {
 				// Add the array count to the packed data as the Count
 				// TODO: make tag['Data'] Countable
-				$ifd_body_str .= put_IFD_Data_Type(count($tag['Data']), 4, $Byte_Align);
+				if (is_array($tag['Data'])) {
+					$ifd_body_str .= put_IFD_Data_Type(count($tag['Data']), 4, $Byte_Align);
+				}
+				else {
+					$ifd_body_str .= put_IFD_Data_Type(strlen($tag['Data']), 4, $Byte_Align);
+				}
 			}
 
 

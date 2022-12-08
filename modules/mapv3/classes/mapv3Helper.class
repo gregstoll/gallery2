@@ -1000,6 +1000,8 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 		}
 
 		$itemTitle = $item->getTitle();
+		GalleryCoreApi::requireOnce(
+		    'modules/core/classes/helpers/php-8.1-strftime-modified.class');
 
 		$properties = array(
 			'type'        => $item->getEntityType(),
@@ -1014,7 +1016,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 				array('', ''),
 				$item->getDescription()
 			),
-			'created'     => strftime($dateFormat, $item->getOriginationTimestamp()),
+			'created'     => PHP81_BC\strftime_modified($dateFormat, $item->getOriginationTimestamp()),
 		);
 
 		if (array_key_exists($itemId, $thumb)) {
