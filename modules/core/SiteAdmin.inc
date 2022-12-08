@@ -70,7 +70,7 @@ class SiteAdminView extends GalleryView {
 	    }
 
 	    /* Get the selected module's admin view */
-	    if (in_array('getSiteAdminViews', explode('|', $status['callbacks'])) ||
+	    if (in_array('getSiteAdminViews', explode('|', $status['callbacks'] ?? '')) ||
 		$showAllSiteAdminViews) {
 		if ($showAllSiteAdminViews) {
 		    list ($ret, $module) =
