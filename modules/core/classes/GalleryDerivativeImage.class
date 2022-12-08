@@ -208,18 +208,10 @@ class GalleryDerivativeImage extends GalleryDerivative {
 		unset($params['maxSize']);
 	    }
 
-		/* Set a default value for class */
-		if(!array_key_exists('class', $params)){
-			$params['class'] = "";
-		}
-		$params['class'] .= ' gcPhotoImage';
+		$params['class'] = GalleryUtilities::getImageOrientationClasses($width, $height, $params['class'] ?? '');
 
 	    $sizeStr = '';
 	    if ($width > 0 && $height > 0) {
-		    if($height > $width){
-			    /* Image orientation is portrait */
-			    $params['class'] .= ' giPortrait';
-		    }
 
 		    $sizeStr = sprintf(' width="%s" height="%s"', $width, $height);
 	    }

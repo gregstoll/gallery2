@@ -215,7 +215,7 @@ class GalleryPhotoItem extends GalleryDataItem {
 		array('forceFullUrl' => !empty($params['forceFullUrl'])));
 	    list ($width, $height) = array($this->getWidth(), $this->getHeight());
 
-		$params['class'] .= ' gcPhotoImage';
+	    $params['class'] = GalleryUtilities::getImageOrientationClasses($width, $height, $params['class'] ?? '');
 
 		/* Shrink our dimensions if necessary */
 	    if (isset($params['maxSize'])) {
@@ -226,10 +226,6 @@ class GalleryPhotoItem extends GalleryDataItem {
 
 	    $sizeStr = '';
 	    if ($width > 0 && $height > 0) {
-		    if($height > $width){
-						// Image orientation is portrait
-						$params['class'] .= ' giPortrait';
-		    }
 		$sizeStr = sprintf(' width="%s" height="%s"', $width, $height);
 	    }
 	    if (!isset($params['alt'])) {
@@ -242,10 +238,6 @@ class GalleryPhotoItem extends GalleryDataItem {
 	    unset($params['fallback']);
 	    unset($params['forceFullUrl']);
 	    unset($params['forceRawImage']);
-
-	    	$classes = " class=\"". $params['class'] . "\"";
-		$html .= $classes;
-		unset($params['class']);
 
 	    foreach ($params as $attr => $value) {
 		if (isset($value)) {
