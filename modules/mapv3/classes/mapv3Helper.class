@@ -876,7 +876,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 		global $gallery;
 
 		$query = '
-	SELECT 
+	SELECT
 	  [mapv3Map::value]
 	FROM [mapv3Map]
 	WHERE
@@ -913,7 +913,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 		}
 
 		$query = '
-	SELECT 
+	SELECT
 	  [mapv3Map::value]
 	FROM [mapv3Map]
 	WHERE
@@ -944,7 +944,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 		global $gallery;
 
 		$query = '
-	       SELECT 
+	       SELECT
 		       [mapv3Map::value]
 		   FROM [mapv3Map]
            WHERE [mapv3Map::field] = \'GPS\' AND [mapv3Map::itemId] = ?
@@ -1074,11 +1074,11 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 		$aclMarkers = GalleryUtilities::makeMarkers(count($aclIds));
 
 		$query = '
-	SELECT 
+	SELECT
 	  [mapv3Map::itemId], [mapv3Map::value]
-	FROM 
+	FROM
 	  [mapv3Map], [GalleryAccessSubscriberMap]
-	WHERE 
+	WHERE
 	  [mapv3Map::field] = \'GPS\'
 	AND
 	  SUBSTRING([mapv3Map::itemId],1,1) <> \'G\'
@@ -1224,13 +1224,13 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 		}
 
 		$query = '
-	       SELECT 
+	       SELECT
 			   [mapv3Map::itemId], [mapv3Map::value]
-		   FROM 
+		   FROM
 		       [mapv3Map]
            WHERE
 		       [mapv3Map::field] = \'GPS\'
-		   AND 
+		   AND
 		       SUBSTRING([mapv3Map::itemId],1,1) = \'G\'
 	    ';
 
@@ -1456,7 +1456,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 	 *               $routes array of routes
 	 *
 	 */
-	public function getRoutes($Points, $MarkerSets, $DefaultColors, $EnableRouteNumbering = false) {
+	static public function getRoutes($Points, $MarkerSets, $DefaultColors, $EnableRouteNumbering = false) {
 		global $gallery;
 		$platform =& $gallery->getPlatform();
 
