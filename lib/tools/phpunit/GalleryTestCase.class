@@ -1112,7 +1112,7 @@ class GalleryTestCase extends TestCase {
 			}
 		} else {
 			if ($obj1 !== $obj2) {
-				$result = sprintf('[%s ', trim($context));
+				$result = sprintf('[%s ', trim($context ?? ''));
 
 				if (is_string($obj1)) {
 					$len1 = strlen($obj1);
@@ -1134,7 +1134,7 @@ class GalleryTestCase extends TestCase {
 						if ($obj1[$i] != $obj2[$i]) {
 							$result = sprintf(
 								'at char %d (0x%d != 0x%d)',
-								trim($context),
+								trim($context ?? ''),
 								$i,
 								ord($obj1[$i]),
 								ord($obj2[$i])
