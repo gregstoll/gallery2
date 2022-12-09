@@ -460,6 +460,19 @@ class GalleryUtilities {
 	}
 	return array($width, $height);
     }
+	/**
+	 * Return appropriate classes for the image orientation.
+	 * @return string
+	 */
+	static function getImageOrientationClasses($width, $height, $init_classes='')
+	{
+		$classes = $init_classes . ' gcPhotoImage';
+		if($height > $width){
+			/* Image orientation is portrait */
+			$classes .= ' giPortrait';
+		}
+		return $classes;
+	}
 
     /**
      * Scale the given width/height to a new target size, maintaining aspect ratio.

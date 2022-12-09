@@ -651,6 +651,27 @@ class UtilitiesTest extends GalleryTestCase {
 		$this->assertEquals(array(1067, 800), $results);
 	}
 
+	public function testGetImageOrientationClassesPortrait() {
+		$results = GalleryUtilities::getImageOrientationClasses(768, 1024);
+		$this->assertTrue( str_contains($results, 'gcPhotoImage'));
+
+		$this->assertTrue( str_contains($results, 'giPortrait'));
+	}
+
+	public function testGetImageOrientationClassesNotPortrait() {
+		$results = GalleryUtilities::getImageOrientationClasses(1024, 768);
+		$this->assertTrue( str_contains($results, 'gcPhotoImage'));
+
+		$this->assertFalse( str_contains($results, 'giPortrait'));
+	}
+
+	public function testGetImageOrientationClassesWithInitialClasses() {
+		$results = GalleryUtilities::getImageOrientationClasses(1024, 768, 'initial');
+		$this->assertTrue( str_contains($results, 'gcPhotoImage'));
+
+		$this->assertTrue( str_contains($results, 'initial'));
+	}
+
 	public function testIsA() {
 		$this->assertTrue(GalleryUtilities::isA(new UtilitiesTest('x'), 'GalleryTestCase'));
 		$this->assertTrue(GalleryUtilities::isA(new UtilitiesTest('x'), 'UtilitiesTest'));
