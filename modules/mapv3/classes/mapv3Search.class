@@ -1,0 +1,176 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2007 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * @package map
+ * @author Eric Daniel <ehdaniel@gmail.com>
+ * @version $Revision: 1253 $
+ *
+ * based on a code from Alan Harder <alan.harder@sun.com>
+ */
+// Required classes
+GalleryCoreApi::requireOnce('modules/search/classes/GallerySearchInterface_1_0.class');
+
+/**
+ * This is an implementation of the search module's SearchInterface_1_0
+ *
+ * @package map
+ * @subpackage Classes
+ *
+ */
+class mapv3Search extends GallerySearchInterface_1_0 {
+	/**
+	 * @see GallerySearchInterface_1_0::getSearchModuleInfo()
+	 */
+	public function getSearchModuleInfo() {
+		global $gallery;
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'mapv3');
+
+		if ($ret) {
+			return $ret->wrap(__FILE__, __LINE__);
+		}
+
+		$info = array(
+			'name'        => $gallery->i18n('Google Map v3'),
+			'description' => $gallery->i18n('Google Map v3 Module'),
+			'options'     => array(
+				'map' => array(
+					'description' => $gallery->i18n('Search Google Map v3 Fields'),
+					'enabled'     => 1,
+				),
+			),
+		);
+
+		return array(null, $info);
+	}
+
+	/**
+	 * @see GallerySearchInterface_1_0::search()
+	 */
+	public function search($options, $criteria, $offset = 0, $count = -1) {
+		global $gallery;
+
+		list($ret, $aclIds) = GalleryCoreApi::fetchAccessListIds('core.view', $gallery->getActiveUserId());
+
+		if ($ret) {
+			return $ret->wrap(__FILE__, __LINE__);
+		}
+
+		if (empty($aclIds)) {
+			return array(
+				null,
+				array(
+					'start'                      => 0,
+					'end'                        => '0',
+					'count'                      => 0,
+					'results'                    => array(),
+				),
+			);
+		}
+		$aclMarkers = GalleryUtilities::makeMarkers(count($aclIds));
+
+		$countQuery = sprintf(
+			'
+	SELECT
+	  COUNT([mapv3Map::itemId])
+	FROM
+	  [mapv3Map], [GalleryAccessSubscriberMap]
+	WHERE
+	  [mapv3Map::itemId] =  [GalleryAccessSubscriberMap::itemId] 
+	  AND
+	  [GalleryAccessSubscriberMap::accessListId] IN (%s)
+	  AND
+	  [mapv3Map::value] LIKE ?
+	',
+			$aclMarkers
+		);
+
+		$query = sprintf(
+			'
+	SELECT
+	  [mapv3Map::itemId],
+	  [mapv3Map::field],
+	  [mapv3Map::value]
+	FROM
+	  [mapv3Map], [GalleryAccessSubscriberMap]
+	WHERE
+	  [mapv3Map::itemId] = [GalleryAccessSubscriberMap::itemId]
+	  AND
+	  [GalleryAccessSubscriberMap::accessListId] IN (%s)
+	  AND
+	  [mapv3Map::value] LIKE ?
+	ORDER BY
+	  [mapv3Map::itemId] DESC
+	',
+			$aclMarkers
+		);
+
+		$data   = $aclIds;
+		$data[] = '%' . $criteria . '%';
+
+		// Find the total
+		list($ret, $results) = $gallery->search($countQuery, $data);
+
+		if ($ret) {
+			return $ret->wrap(__FILE__, __LINE__);
+		}
+		$result  = $results->nextResult();
+		$numRows = (int)$result[0];
+
+		list($ret, $results) = $gallery->search(
+			$query,
+			$data,
+			array(
+				'limit' => array(
+					'offset' => $offset,
+					'count'  => $count,
+				),
+			)
+		);
+
+		if ($ret) {
+			return $ret->wrap(__FILE__, __LINE__);
+		}
+
+		$searchResults = array();
+
+		while ($result = $results->nextResult()) {
+			$searchResults[] = array(
+				'itemId' => (int)$result[0],
+				'fields' => array(
+					array(
+						'key'   => $result[1],
+						'value' => $result[2],
+					),
+				),
+			);
+		}
+
+		$data = array(
+			'start'     => ($numRows == 0) ? 0 : $offset + 1,
+			'end'       => ($numRows == 0) ? 0 : $offset + sizeof($searchResults),
+			'count'     => $numRows,
+			'results'   => $searchResults,
+		);
+
+		return array(null, $data);
+	}
+}

@@ -1,0 +1,150 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2007 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+/**
+ * @package map
+ * @subpackage Classes
+ * @author Eric Daniel <ehdaniel@gmail.com>
+ * @version $Revision: 1253 $
+ */
+GalleryCoreApi::requireOnce('modules/core/AdminMaintenance.inc');
+GalleryCoreApi::requireOnce('modules/mapv3/classes/mapv3Helper.class');
+GalleryCoreApi::requireOnce('modules/mapv3/classes/GoogleMapUtilities.class');
+
+/**
+ * This is a MaintenanceTask that will populate the database with all GPS coordinates included in the EXIF header if they exist.
+ *
+ * @package map
+ * @subpackage Classes
+ */
+class PopulateGPSEXIFInfos extends MaintenanceTask {
+	/**
+	 * @see MaintenanceTask::getInfo()
+	 */
+	public function getInfo() {
+		global $gallery;
+
+		$info['l10Domain']   = 'modules_map';
+		$info['title']       = $gallery->i18n('Populate GPS Data from EXIF Headers');
+		$info['description'] = $gallery->i18n(
+			'This task will go through all the gallery items and populate the GPS property' .
+			' for each photo item from the GPS information in the EXIF header, if present.'
+		);
+
+		return $info;
+	}
+
+	/**
+	 * @see MaintenanceTask::run()
+	 */
+	public function run() {
+		global $gallery;
+		$templateAdapter =& $gallery->getTemplateAdapter();
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'mapv3');
+
+		if ($ret) {
+			return $ret->wrap(__FILE__, __LINE__);
+		}
+
+		$query               = 'SELECT [PhotoItem::id] FROM [PhotoItem] ORDER BY [PhotoItem::id]';
+		list($ret, $result)  = $gallery->search($query);
+
+		if ($ret) {
+			return $ret->wrap(__FILE__, __LINE__);
+		}
+		$ids = array();
+
+		while ($res = $result->nextResult()) {
+			$ids[] = $res[0];
+		}
+		$totalitems            = count($ids);
+		$current               = 1;
+		$insertEXIFcoordinates = $module->translate('Inserting GPS coordinates from EXIF header');
+
+		$ret = $templateAdapter->updateProgressBar(
+			$insertEXIFcoordinates,
+			$module->translate(
+				array(
+					'text' => 'Item %d of %d',
+					'arg1' => 0,
+					'arg2' => $totalitems,
+				)
+			),
+			0
+		);
+
+		if ($ret) {
+			return $ret->wrap(__FILE__, __LINE__);
+		}
+
+		foreach ($ids as $id) {
+			list($ret, $item) = GalleryCoreApi::loadEntitiesById($id);
+
+			if ($ret) {
+				return array($ret->wrap(__FILE__, __LINE__), null);
+			}
+
+			list($ret, $coords) = GoogleMapUtilities::getGPSCoordsFromExif($item);
+
+			if ($ret) {
+				return array($ret->wrap(__FILE__, __LINE__), null);
+			}
+
+			if ($coords != null) {
+				list($ret, $fields)  = mapv3Helper::fetchFieldValues(array($item));
+				$fields[$id]['GPS']  = $coords;
+				$ret                 = mapv3Helper::saveFieldValues($item, $fields[$id]);
+
+				if ($ret) {
+					return $ret->wrap(__FILE__, __LINE__);
+				}
+			}
+			$ret = $templateAdapter->updateProgressBar(
+				$insertEXIFcoordinates,
+				$module->translate(
+					array(
+						'text'                          => 'Item %d of %d',
+						'arg1'                          => $current,
+						'arg2'                          => $totalitems,
+					)
+				),
+				$current / $totalitems
+			);
+
+			if ($ret) {
+				return $ret->wrap(__FILE__, __LINE__);
+			}
+			$current++;
+		}
+
+		return array(
+			null,
+			true,
+			array($module->translate('EXIF header information imported successfully')),
+		);
+	}
+
+	/**
+	 * @see MaintenanceTask::requiresProgressBar()
+	 */
+	public function requiresProgressBar() {
+		return true;
+	}
+}
