@@ -79,6 +79,69 @@
   <textarea id="description_{$item.id}" rows="4" cols="60"
    name="{g->formVar var="form[items][`$item.id`][description]"}">{$item.description}</textarea>
 
+    <!--  START NEW FIELD -->
+    <h4> {g->text text="Photo Date and Time"} </h4>
+    {* Specific translations: {g->text text="Link Date and Time"} *}
+
+        <div class="col-xs-10">
+            {if !empty($item.originationTimestamp) and is_array($item.originationTimestamp)}
+                <p class="form-inline">
+                    {capture name=originationTimestampField}{strip}
+                        {g->formVar var="form[items][`$item.id`][originationTimestampSplit]"}
+                    {/strip}{/capture}
+                    <label>{g->text text="Date:"}</label>
+                    {capture name=htmlSelectDate}
+                        {html_select_date time=$item.originationTimestamp.timestamp
+                        field_array=$smarty.capture.originationTimestampField start_year="1970" end_year="+0"
+                        all_extra='class="form-control"'}
+                    {/capture}
+                    {$smarty.capture.htmlSelectDate|utf8}
+                    <label>{g->text text="Time:"}</label>
+                    {html_select_time time=$item.originationTimestamp.timestamp
+                    field_array=$smarty.capture.originationTimestampField
+                    all_extra='class="form-control"'}
+                    <br/>
+                </p>
+
+            {if !empty($item.originationTimestamp) and is_array($item.originationTimestamp)}
+                <script type="text/javascript">
+                    // <![CDATA[
+                    function setOriginationTimestamp_{$item.id}() {ldelim}
+                        var frm = document.getElementById('itemAdminForm');
+                        frm.elements['{$smarty.capture.originationTimestampField}[Date_Month]'].value = '{$item.originationTimestamp.Date_Month}';
+                        frm.elements['{$smarty.capture.originationTimestampField}[Date_Day]'].value = '{$item.originationTimestamp.Date_Day}';
+                        frm.elements['{$smarty.capture.originationTimestampField}[Date_Year]'].value = '{$item.originationTimestamp.Date_Year}';
+                        frm.elements['{$smarty.capture.originationTimestampField}[Time_Hour]'].value = '{$item.originationTimestamp.Time_Hour}';
+                        frm.elements['{$smarty.capture.originationTimestampField}[Time_Minute]'].value = '{$item.originationTimestamp.Time_Minute}';
+                        frm.elements['{$smarty.capture.originationTimestampField}[Time_Second]'].value = '{$item.originationTimestamp.Time_Second}';
+                        {rdelim}
+                    // ]]>
+                </script>
+                <p>
+                    {g->text text="Use the original capture date and time from file information (e.g. Exif tag):"}
+                    <br/>
+                    <a href="#" onclick="setOriginationTimestamp_{$item.id}();return false">
+                        {g->date timestamp=$item.originationTimestamp.timestamp style="datetime"}
+                    </a>
+                </p>
+            {/if}
+
+            {if !empty($form.error.originationTimestamp.invalid)}
+                <div class="giError">
+                    {g->text text="You must enter a valid date and time"}
+                </div>
+            {/if}
+                <p class="help-block">
+                    {g->text text="Set the date and time when this image was captured."}
+                </p>
+            {else}
+                <div class="form-control-static">{g->text
+                    text="Entity date is not available. Change it using the Edit action of the element."}</div>
+            {/if}
+        </div>
+
+    <!--  END NEW FIELD -->
+
   {if isset($status[$item.id].saved)}
   <div class="giSuccess">
     {g->text text="Saved successfully."}
