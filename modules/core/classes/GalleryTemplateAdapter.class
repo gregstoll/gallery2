@@ -870,10 +870,9 @@ class GalleryTemplateAdapter {
 	$buf = '';
 	if ($debug == 'buffered' || $profiling) {
 	    /* don't worry about localizing this -- it's only debug output */
-	    $buf .= '<div id="gpDebug"> <h3> Debug Output </h3><pre>';
+	    $buf .= '<div id="gpDebug"> <h3> Debug Output </h3>';
 	    if ($debug == 'buffered') {
-		$buf .= $gallery->getDebugBuffer();
-	    	$buf .= '</pre>';
+		$buf .= '<pre>' . $gallery->getDebugBuffer() . '</pre>';
 	    }
 
 	    if ($profiling) {
