@@ -120,7 +120,7 @@ class NetPbmToolkit extends GalleryToolkit {
 	    $transform[] = array($this->_pnmCmd('pnmscale'),
 				 '--quiet', '-xysize', $parameters[0],
 				 $ysize);
-	    if (isset($width)) {
+	    if (isset($width) && $width > 0) {
 		list ($width, $height) = GalleryUtilities::scaleDimensionsToFit(
 		    $width, $height, $parameters[0], $ysize);
 	    }
@@ -129,7 +129,7 @@ class NetPbmToolkit extends GalleryToolkit {
 	case 'resize':
 	    $transform[] = array($this->_pnmCmd('pnmscale'),
 				 '--quiet', '-xsize', $parameters[0], '-ysize', $parameters[1]);
-	    if (isset($width)) {
+	    if (isset($width) && $width > 0) {
 		list ($width, $height) = GalleryUtilities::scaleDimensionsToFit(
 					 $width, $height, $parameters[0], $parameters[1]);
 	    }

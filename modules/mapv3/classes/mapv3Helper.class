@@ -753,7 +753,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 	 * @return array GalleryStatus a status code
 	 *               boolean delete was successful
 	 */
-	public function deleteKeyProfile($url) {
+	static public function deleteKeyProfile($url) {
 		// Get the key profiles and test each one against the passed URL. Delete the matching one.
 		list($ret, $allKeySets) = mapv3Helper::getAllKeyProfiles();
 
@@ -876,7 +876,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 		global $gallery;
 
 		$query = '
-	SELECT 
+	SELECT
 	  [mapv3Map::value]
 	FROM [mapv3Map]
 	WHERE
@@ -913,7 +913,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 		}
 
 		$query = '
-	SELECT 
+	SELECT
 	  [mapv3Map::value]
 	FROM [mapv3Map]
 	WHERE
@@ -940,11 +940,11 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 	 * @return coordinates of item
 	 *
 	 */
-	public function getItemGPSCoordinatesFromDB($itemId) {
+	public static function getItemGPSCoordinatesFromDB($itemId) {
 		global $gallery;
 
 		$query = '
-	       SELECT 
+	       SELECT
 		       [mapv3Map::value]
 		   FROM [mapv3Map]
            WHERE [mapv3Map::field] = \'GPS\' AND [mapv3Map::itemId] = ?
@@ -1000,6 +1000,8 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 		}
 
 		$itemTitle = $item->getTitle();
+		GalleryCoreApi::requireOnce(
+		    'modules/core/classes/helpers/php-8.1-strftime-modified.class');
 
 		$properties = array(
 			'type'        => $item->getEntityType(),
@@ -1014,7 +1016,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 				array('', ''),
 				$item->getDescription()
 			),
-			'created'     => strftime($dateFormat, $item->getOriginationTimestamp()),
+			'created'     => PHP81_BC\strftime_modified($dateFormat, $item->getOriginationTimestamp()),
 		);
 
 		if (array_key_exists($itemId, $thumb)) {
@@ -1072,11 +1074,11 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 		$aclMarkers = GalleryUtilities::makeMarkers(count($aclIds));
 
 		$query = '
-	SELECT 
+	SELECT
 	  [mapv3Map::itemId], [mapv3Map::value]
-	FROM 
+	FROM
 	  [mapv3Map], [GalleryAccessSubscriberMap]
-	WHERE 
+	WHERE
 	  [mapv3Map::field] = \'GPS\'
 	AND
 	  SUBSTRING([mapv3Map::itemId],1,1) <> \'G\'
@@ -1222,13 +1224,13 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 		}
 
 		$query = '
-	       SELECT 
+	       SELECT
 			   [mapv3Map::itemId], [mapv3Map::value]
-		   FROM 
+		   FROM
 		       [mapv3Map]
            WHERE
 		       [mapv3Map::field] = \'GPS\'
-		   AND 
+		   AND
 		       SUBSTRING([mapv3Map::itemId],1,1) = \'G\'
 	    ';
 
@@ -1454,7 +1456,7 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 	 *               $routes array of routes
 	 *
 	 */
-	public function getRoutes($Points, $MarkerSets, $DefaultColors, $EnableRouteNumbering = false) {
+	static public function getRoutes($Points, $MarkerSets, $DefaultColors, $EnableRouteNumbering = false) {
 		global $gallery;
 		$platform =& $gallery->getPlatform();
 

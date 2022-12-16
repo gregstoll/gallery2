@@ -130,9 +130,7 @@
 		{/if}
 
                 {if !empty($child.summary)}
-                <p class="giDescription">
-                  {$child.summary|markup|entitytruncate:256}
-                </p>
+                <p class="giDescription">{$child.summary|markup|entitytruncate:256}</p>
                 {/if}
 
                 {if ($child.canContainChildren && $theme.params.showAlbumOwner) ||
