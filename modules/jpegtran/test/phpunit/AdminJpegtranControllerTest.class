@@ -1,0 +1,346 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * AdminJpegtran controller tests
+ * @package Jpegtran
+ * @subpackage PHPUnit
+ * @author Andy Staudacher <ast@gmx.ch>
+ * @version $Revision: 17580 $
+ */
+class AdminJpegtranControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'jpegtran.AdminJpegtran');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'jpegtran');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_savePlatform =& $gallery->getPlatform();
+		$testPlatform        = new AdminJpegtranControllerTestPlatform();
+		$gallery->setPlatform($testPlatform);
+	}
+
+	public function testSaveGoodPath() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[path]', '/validPath/jpegtran');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'jpegtran.AdminJpegtran',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify the settings went in properly
+		list($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'jpegtran');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('/validPath/jpegtran', $params['path'], 'wrong path stored in DB');
+	}
+
+	public function testReset() {
+		GalleryUtilities::putRequestVariable('form[action][reset]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'jpegtran.AdminJpegtran',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testCancel() {
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminPlugins',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testSaveTestErrorPath() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[path]', '/validPathBadBinary/jpegtran');
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'jpegtran.AdminJpegtran',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][path][testError]'),
+			),
+			$results
+		);
+	}
+
+	public function testSaveBadPath() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[path]', '/invalidPath/jpegtran');
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'jpegtran.AdminJpegtran',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][path][badPath]'),
+			),
+			$results
+		);
+	}
+
+	public function testNotExecutablePath() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[path]', '/notExecutablePath/jpegtran');
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'jpegtran.AdminJpegtran',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][path][notExecutable]'),
+			),
+			$results
+		);
+	}
+
+	public function testSaveIncompletePath() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[path]', '/incompletePath/');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'jpegtran.AdminJpegtran',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify the settings went in properly
+		list($ret, $path) = GalleryCoreApi::getPluginParameter('module', 'jpegtran', 'path');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('/incompletePath/jpegtran.exe', $path);
+	}
+
+	public function testSaveMissingPath() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[path]', '');
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'jpegtran.AdminJpegtran',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][path][missing]'),
+			),
+			$results
+		);
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPlatform/WinNtPlatform.class');
+
+/**
+ * Test platform for this test
+ *
+ * @package Jpegtran
+ * @subpackage PHPUnit
+ */
+class AdminJpegtranControllerTestPlatform extends WinNtPlatform {
+	public function getDirectorySeparator() {
+		return '/';
+	}
+
+	public function is_dir($dir) {
+		switch ($dir) {
+			case '/validPath/':
+			case '/validPathBadBinary/':
+			case '/incompletePath/':
+			case '/notExecutablePath/':
+				return true;
+		}
+
+		return false;
+	}
+
+	public function realpath($file) {
+		return $file;
+	}
+
+	public function is_file($path) {
+		switch ($path) {
+			case '/validPath/jpegtran':
+			case '/validPathBadBinary/jpegtran':
+			case '/incompletePath/jpegtran.exe':
+			case '/notExecutablePath/jpegtran':
+				return true;
+		}
+
+		return false;
+	}
+
+	public function is_executable($path) {
+		switch ($path) {
+			case '/validPath/jpegtran':
+			case '/validPathBadBinary/jpegtran':
+			case '/incompletePath/jpegtran.exe':
+				return true;
+		}
+
+		return false;
+	}
+
+	public function tempnam($dir, $prefix) {
+		return 'tmp_123';
+	}
+
+	public function file_exists($path) {
+		return true;
+	}
+
+	public function unlink($args) {
+		// do nothing
+	}
+
+	public function isRestrictedByOpenBaseDir($path) {
+		return false;
+	}
+
+	public function exec($args, $returnErrorOutput = false) {
+		switch ($args[0][0]) {
+			case '/incompletePath/jpegtran.exe':
+			case '/validPath/jpegtran':
+				return array(
+					1,
+					array(),
+					array(
+						"Independent JPEG Group's JPEGTRAN, version 6b  27-Mar-1998",
+						'Copyright (C) 1998, Thomas G. Lane',
+						'Start of Image',
+						'JFIF APP0 marker: version 1.02, density 100x100  0',
+						'Miscellaneous marker 0xec, length 15',
+						'Adobe APP14 marker: version 100, flags 0xc000 0x0000, transform 1',
+						'Define Quantization Table 0  precision 0',
+						'Define Quantization Table 1  precision 0',
+						'Start Of Frame 0xc0: width=50, height=50, components=3',
+						'    Component 1: 1hx1v q=0',
+						'    Component 2: 1hx1v q=1',
+						'    Component 3: 1hx1v q=1',
+						'Define Huffman Table 0x00',
+						'Define Huffman Table 0x01',
+						'Define Huffman Table 0x10',
+						'Define Huffman Table 0x11',
+						'Start Of Scan: 3 components',
+						'    Component 1: dc=0 ac=0',
+						'    Component 2: dc=1 ac=1',
+						'    Component 3: dc=1 ac=1',
+						'  Ss=0, Se=63, Ah=0, Al=0',
+						'End Of Image',
+					),
+				);
+
+			break;
+
+			case '/validPathBadBinary/jpegtran':
+				return array(
+					1,
+					array(),
+					array(
+						"Independent JPEG Group's JPEGTRAN, version 6b  27-Mar-1998",
+						'foo',
+					),
+				);
+
+			break;
+
+			default:
+				return array(0, array(), array());
+		}
+	}
+}
