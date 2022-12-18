@@ -54,7 +54,7 @@ class RatingHelper {
 		    'rating' => GalleryUtilities::roundToString($rating, 3),
 		    'votes' => (int)$result[2],
 		    'averagePercent' => GalleryUtilities::roundToString(($rating * 100 / 5), 3),
-		    'stars' => round($rating * 2),
+		    'stars' => (int) round($rating * 2),
 		    'userRating' => 'N/A', 'userStars' => 0
 		    );
 
@@ -129,7 +129,7 @@ class RatingHelper {
 	/* Make sure the user isn't a search engine crawler */
 	$botId = GalleryUtilities::identifySearchEngine();
 	if (isset($botId)) {
-	    return array(null, null);
+		return array(null, array('rating' => 0, 'votes' => 0, 'userRating' => 0));
 	}
 
 	/* Make sure the item really exists */
