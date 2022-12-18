@@ -814,22 +814,16 @@ class CommentTest_GalleryCommentHelper_MockCheckWithAkismet extends GalleryComme
 
 	public function __construct()
 	{
-		CommentTest_GalleryCommentHelper_MockCheckWithAkismet::$singleton = $this;
+		self::$singleton = $this;
 		$this->_calls = [];
-	}
-	/**
-	 * Load as Singleton
-	 */
-	public static function doStatic() {
-		return CommentTest_GalleryCommentHelper_MockCheckWithAkismet::$singleton;
 	}
 
 	public function wasCalled($function) {
-		return !empty(CommentTest_GalleryCommentHelper_MockCheckWithAkismet::doStatic()->_calls[$function]);
+		return !empty(self::$singleton->_calls[$function]);
 	}
 
 	static public function checkWithAkismet(&$comment = null, $akismet = null) {
-		CommentTest_GalleryCommentHelper_MockCheckWithAkismet::doStatic()->_calls['checkWithAkismet'] = true;
+		self::$singleton->_calls['checkWithAkismet'] = true;
 
 		return null;
 	}
