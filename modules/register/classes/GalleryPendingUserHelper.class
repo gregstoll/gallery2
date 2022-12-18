@@ -140,7 +140,7 @@ class GalleryPendingUserHelper {
      *
      * @param GalleryPendingUser $pendingUser
      * @param string $tplFile (optional) Path to the template file of the email. Defaults to
-     *                                   'ConfirmationEmail.tpl'. 
+     *                                   'ConfirmationEmail.tpl'.
      * @param string $subjectParam (optional) Name of the module parameter to use as subject of the
      *                                        email. Defaults to 'subject'.
      * @param int $userIdForLocale (optional) GalleryUser id of the recipient. Used to determine the
@@ -334,6 +334,7 @@ class GalleryPendingUserHelper {
 	if ($ret) {
 	    return $ret;
 	}
+	$user->setUserName($pendingUser->getUserName());
 
 	/* Copy all values to the new "real" user */
 	$user->setEmail($pendingUser->getEmail());
