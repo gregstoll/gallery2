@@ -187,7 +187,7 @@ class CaptchaSiteAdminControllerTest extends GalleryControllerTestCase {
 	}
 
 	public function testAdminOptions() {
-		CaptchaAdminOption::doStatic()->testOptions(
+		CaptchaAdminOption::testOptions(
 			array(
 				'testOptionId1' => new CaptchaSiteAdminTestOption(),
 				'testOptionId2' => new CaptchaSiteAdminTestOption('unittest.2.level'),
@@ -234,7 +234,7 @@ class CaptchaSiteAdminControllerTest extends GalleryControllerTestCase {
 	}
 
 	public function testBogusOptionLevel() {
-		CaptchaAdminOption::doStatic()->testOptions(
+		CaptchaAdminOption::testOptions(
 			array(
 				'testOptionId' => new CaptchaSiteAdminTestOption(),
 			)
@@ -260,19 +260,6 @@ class CaptchaSiteAdminTestOption extends CaptchaAdminOption {
 
 	public function __construct($param = 'unittest.level') {
 		$this->_param = $param;
-	}
-
-	/**
-	 * Load as Singleton
-	 */
-	public static function doStatic() {
-		static $singleton;
-
-		if (!isset($singleton)) {
-			$singleton = new CaptchaSiteAdminTestOption();
-		}
-
-		return $singleton;
 	}
 
 	public function getOptionData() {
