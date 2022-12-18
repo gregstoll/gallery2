@@ -194,6 +194,10 @@ class FfmpegToolkitTest extends GalleryTestCase {
 		'qcif cif 4cif';
 		$output[] = 'Motion estimation methods: zero(fastest) full(slowest) log phods ' .
 		'epzs(default) x1';
+		$output[] = '';
+		$output[] = 'stdout';
+		$output[] = '';
+		$output[] = 'stdout';
 
 		$this->assertEquals(
 			array(
@@ -410,6 +414,10 @@ class FfmpegToolkitTest extends GalleryTestCase {
 		$output[] = 'even though both encoding and decoding are supported for example, the h263';
 		$output[] = 'decoder corresponds to the h263 and h263p encoders, for file formats its even';
 		$output[] = 'worse';
+		$output[] = '';
+		$output[] = 'stdout';
+		$output[] = '';
+		$output[] = 'stdout';
 
 		$this->assertEquals(
 			array(
@@ -466,6 +474,10 @@ class FfmpegToolkitTest extends GalleryTestCase {
 		$output[] = 'Frame size abbreviations: sqcif qcif cif 4cif';
 		$output[] = 'Motion estimation methods: zero(fastest) full(slowest) log phods ' .
 		'epzs(default) x1';
+		$output[] = '';
+		$output[] = 'stdout';
+		$output[] = '';
+		$output[] = 'stdout';
 
 		$this->assertEquals(
 			array(
@@ -493,6 +505,11 @@ class FfmpegToolkitTest extends GalleryTestCase {
 		}
 
 		$output[] = 'Bogus stdout';
+		$output[] = '';
+		$output[] = 'stdout';
+		$output[] = '';
+		$output[] = 'stdout';
+
 		$this->assertEquals(
 			array(
 				array(
@@ -1014,6 +1031,22 @@ class FfmpegToolkitTestPlatform {
 				$stderr[]  = 'Bogus stderr';
 
 				return array(1, $results, $stderr);
+
+			case serialize(array(array($this->_ffmpegPath, '-codecs'))):
+			case serialize(array(array($this->_ffmpegPath, '-decoders'))):
+			case serialize(array(array('/validPath/ffmpeg', '-codecs'))):
+			case serialize(array(array('/validPath/ffmpeg', '-decoders'))):
+			case serialize(array(array('/validPath/ffmpeg046FormatsOutput', '-codecs'))):
+			case serialize(array(array('/validPath/ffmpeg046FormatsOutput', '-decoders'))):
+			case serialize(array(array('/validPath/ffmpeg048FormatsOutput', '-codecs'))):
+			case serialize(array(array('/validPath/ffmpeg048FormatsOutput', '-decoders'))):
+			case serialize(array(array('/validPath/bogusBinary', '-codecs'))):
+			case serialize(array(array('/validPath/bogusBinary', '-decoders'))):
+				$results[] = 'stdout';
+				$stderr[]  = 'stderr';
+
+				return array(1, $results, $stderr);
+
 		}
 
 		printf('Unexpected command for mock toolkit<pre>%s</pre>', print_r($cmd, true));
