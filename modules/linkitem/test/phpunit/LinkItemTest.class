@@ -1,0 +1,417 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Additional LinkItem tests
+ * @package LinkItem
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class LinkItemTest extends GalleryTestCase {
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_registerTestEventListener('GalleryEntity::delete', new LinkItemModule());
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+
+		list($ret, $this->_targetAlbum) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_lockId) = GalleryCoreApi::acquireReadLock(
+			array($this->_album->getId(), $this->_targetAlbum->getId())
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_link) = $this->_createLinkItem($this->_album->getId(), 'http://test.com/test.html');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function _createLinkItem($parentId, $target) {
+		list($ret, $link) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryLinkItem');
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		if (empty($link)) {
+			return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+		}
+		$ret = $link->create($parentId, $target);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+		$ret = $link->save();
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		return array(null, $link);
+	}
+
+	public function tearDown() {
+		if (isset($this->_lockId)) {
+			$ret = GalleryCoreApi::releaseLocks($this->_lockId);
+
+			if ($ret) {
+				$this->failWithStatus($ret);
+			}
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testMoveLink() {
+		// We don't really have anything on the filesystem; make sure move() works ok
+		$this->_markForCleanup($this->_targetAlbum);
+
+		$ret = $this->_link->move($this->_targetAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $parentSequence) = GalleryCoreApi::fetchParentSequence($this->_link->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($this->_targetAlbum->getId(), $this->_link->getParentId(), 'parent');
+		$this->assertEquals(
+			array($this->_getRootId(), $this->_targetAlbum->getId()),
+			$parentSequence,
+			'parent sequence'
+		);
+	}
+
+	public function testDeleteAlbum() {
+		// Verify delete of an album also deletes links that point to it
+		list($ret, $link) = $this->_createLinkItem($this->_album->getId(), $this->_targetAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::releaseLocks($this->_lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+		unset($this->_lockId);
+
+		$ret = GalleryCoreApi::deleteEntityById($this->_targetAlbum->getId(), 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $gone) = $link->refresh();
+		$this->assertFalse(isset($gone), 'link should be gone');
+
+		if ($ret) {
+			$this->assertEquals(
+				GALLERY_ERROR | ERROR_MISSING_OBJECT,
+				$ret->getErrorCode(),
+				'expected error code'
+			);
+		} else {
+			$this->assertTrue(false, 'expected error');
+		}
+	}
+
+	public function testDeleteSubalbum() {
+		// Verify delete of an album also deletes links that point to its subalbums
+		list($ret, $subalbum) = $this->_createRandomAlbum($this->_targetAlbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $link) = $this->_createLinkItem($this->_album->getId(), $subalbum->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::releaseLocks($this->_lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+		unset($this->_lockId);
+
+		$ret = GalleryCoreApi::deleteEntityById($this->_targetAlbum->getId(), 'GalleryAlbumItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $gone) = $link->refresh();
+		$this->assertFalse(isset($gone), 'link should be gone');
+
+		if ($ret) {
+			$this->assertEquals(
+				GALLERY_ERROR | ERROR_MISSING_OBJECT,
+				$ret->getErrorCode(),
+				'expected error code'
+			);
+		} else {
+			$this->assertTrue(false, 'expected error');
+		}
+	}
+
+	public function testShowLinkItemNoPersistentSession() {
+		global $gallery;
+		$backup = $gallery->_session;
+		// Make sure the redirect has no sessionId in it
+		GalleryUtilities::removeRequestVariable(SESSION_ID_PARAMETER);
+		unset($_COOKIE[SESSION_ID_PARAMETER], $_SERVER['HTTP_COOKIE']);
+
+		$session = new GallerySession();
+		$ret     = $session->init();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(false, $session->isUsingCookies(), 'isUsingCookies');
+		$this->assertEquals(SESSION_TEMP_ID, $session->getId(), 'temp session id');
+
+		$gallery->_phpVm            = $phpVm            = new LinkItemTestMockPhpVm();
+		$_REQUEST['phpVmHeaders']   = array();
+		$_REQUEST['phpVmExitCalls'] = 0;
+
+		$this->_link->setLink($this->_targetAlbum->getId());
+		$this->_markForCleanup($this->_targetAlbum);
+		$this->_lockId               = array($this->_lockId);
+		list($ret, $this->_lockId[]) = GalleryCoreApi::acquireWriteLock(array($this->_link->getId()));
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = $this->_link->save();
+
+		if ($ret) {
+			return $ret;
+		}
+		$gallery->_session = $session;
+		// Make sure it passes the onLoad conditions
+		GalleryUtilities::putRequestVariable('view', 'core.ShowItem');
+		GalleryUtilities::putRequestVariable('itemId', $this->_link->getId());
+		// Make sure onLoad is called
+		GalleryDataCache::setMemoryCachingEnabled(false);
+		// Execute the test
+		list($ret, $link) = GalleryCoreApi::loadEntitiesById($this->_link->getId(), 'GalleryLinkItem');
+
+		if ($ret) {
+			$gallery->_session = $backup;
+
+			return $ret;
+		}
+		GalleryDataCache::setMemoryCachingEnabled(true);
+		// Verify results
+		$this->assertEquals(1, $_REQUEST['phpVmExitCalls'], 'nr of exit calls');
+		$urlGenerator =& $gallery->getUrlGenerator();
+		$baseUrl      = $urlGenerator->getCurrentUrlDir();
+
+		if (!empty($_REQUEST['phpVmHeaders']['Location'])) {
+			$this->assertEquals(
+				$urlGenerator->getCurrentUrlDir() . 'main.php?g2_itemId=' .
+				  $this->_targetAlbum->getId(),
+				trim($_REQUEST['phpVmHeaders']['Location']),
+				'redirect URL'
+			);
+		} else {
+			$this->assertTrue(false, 'no Location header');
+		}
+
+		$gallery->_session = $backup;
+	}
+
+	public function testToolkit() {
+		global $gallery;
+		$this->_markForCleanup($this->_targetAlbum);
+
+		list($ret, $toolkit, $mimeType) = GalleryCoreApi::getToolkitByOperation('gallery/linkitem', 'convert-to-image/jpeg');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('image/jpeg', $mimeType);
+
+		if (!GalleryUtilities::isExactlyA($toolkit, 'LinkItemToolkit')) {
+			return $this->assertTrue(false, 'LinkItemToolkit');
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'linkitem');
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter('module', 'linkitem', 'urlSnapshot', '0');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$savePlatform =& $gallery->getPlatform();
+		$platform     = new UnitTestPlatform();
+		$platform->setReply(
+			'copy',
+			array(
+				'fuzzy' => '{/images/link.jpg$}',
+				'outputFile',
+			),
+			true
+		);
+		$gallery->setPlatform($platform);
+
+		list($ret, $mimeType, $context) = $toolkit->performOperation(
+			'gallery/linkitem',
+			'convert-to-image/jpeg',
+			'theURL',
+			'outputFile',
+			array(),
+			array()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('image/jpeg', $mimeType);
+		$this->assertEquals(
+			array(
+				'width'  => 270,
+				'height' => 224,
+			),
+			$context
+		);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'linkitem', 'urlSnapshot', '1');
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'linkitem',
+			'snapshotExec',
+			'getSnapshot'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$platform = new UnitTestPlatform();
+		$platform->setReply(
+			'tempnam',
+			array(
+				'fuzzy' => '{.}',
+				'lnk_',
+			),
+			'tmpfile'
+		);
+		$platform->setReply('getDirectorySeparator', array(), '/');
+		$platform->setReply(
+			'file_exists',
+			array(
+				'fuzzy' => '{params.txt$}',
+			),
+			true
+		);
+		$platform->setReply(
+			'file',
+			array(
+				'fuzzy' => '{params.txt$}',
+				false,
+			),
+			array('%URL% %WIDTH% %HEIGHT% --out %OUTFILE%' . "\n")
+		);
+		$platform->setReply(
+			'exec',
+			array(array(array('getSnapshot', 'theURL', 1024, 768, '--out', 'tmpfile.jpg'))),
+			array(true, '', '')
+		);
+		$platform->setReply('unlink', array('tmpfile'), true);
+		$platform->setReply('copy', array('tmpfile.jpg', 'outputFile'), true);
+		$platform->setReply('unlink', array('tmpfile.jpg'), true);
+		$gallery->setPlatform($platform);
+
+		list($ret, $mimeType, $context) = $toolkit->performOperation(
+			'gallery/linkitem',
+			'convert-to-image/jpeg',
+			'theURL',
+			'outputFile',
+			array(),
+			array()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('image/jpeg', $mimeType);
+		$this->assertEquals(
+			array(
+				'width'  => 1024,
+				'height' => 768,
+			),
+			$context
+		);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+		$gallery->setPlatform($savePlatform);
+	}
+}
+
+class LinkItemTestMockPhpVm extends GalleryPhpVm {
+	public function header($string, $replace = null) {
+		if ($pos = strpos($string, ':')) {
+			$_REQUEST['phpVmHeaders'][substr($string, 0, $pos)] = substr($string, $pos + 1);
+		}
+	}
+
+	public function exit_($status = null) {
+		$_REQUEST['phpVmExitCalls']++;
+	}
+}

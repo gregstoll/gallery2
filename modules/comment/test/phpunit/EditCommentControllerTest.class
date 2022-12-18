@@ -1,0 +1,540 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * EditComment controller tests
+ * @package Comment
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class EditCommentControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'comment.EditComment');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create two random items
+		for ($i = 0; $i < 2; $i++) {
+			list($ret, $this->_item[$i]) = $this->_createRandomDataItem($this->_getRootId());
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->_markForCleanup($this->_item[$i]);
+
+			// Create a comment in it that we can delete
+			list($ret, $this->_comment[$i]) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryComment');
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertTrue(isset($this->_comment[$i]), 'Missing comment instance');
+			$ret = $this->_comment[$i]->create($this->_item[$i]->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+			$this->_comment[$i]->setCommenterId($gallery->getActiveUserId());
+			$this->_comment[$i]->setHost('127.0.0.1');
+			$this->_comment[$i]->setSubject('this is a test subject');
+			$this->_comment[$i]->setComment('this is a test comment');
+			$this->_comment[$i]->setPublishStatus(
+				$i ? COMMENT_PUBLISH_STATUS_PUBLISHED : COMMENT_PUBLISH_STATUS_UNPUBLISHED
+			);
+
+			$ret = $this->_comment[$i]->save();
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		list($ret, $this->_anonymousUserId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.anonymousUser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_anonymousUser) = GalleryCoreApi::loadEntitiesById($this->_anonymousUserId, 'GalleryUser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_saveMarkup) = GalleryCoreApi::getPluginParameter('module', 'core', 'misc.markup');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'misc.markup',
+			$this->_saveMarkup
+		);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testEditComment() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[host]', 'hosty.host.host');
+		GalleryUtilities::putRequestVariable('form[subject]', 'This is a new subject');
+		GalleryUtilities::putRequestVariable('form[author]', 'This is a new author');
+		GalleryUtilities::putRequestVariable('form[comment]', 'This is a new comment');
+		GalleryUtilities::putRequestVariable(
+			'form[commenterName]',
+			$this->_anonymousUser->getUserName()
+		);
+		GalleryUtilities::putRequestVariable(
+			'form[publishStatus]',
+			COMMENT_PUBLISH_STATUS_PUBLISHED
+		);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'   => 'comment.CommentChangeConfirmation',
+					'itemId' => $this->_item[0]->getId(),
+				),
+				'status'   => array(
+					'changed' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Grab the comment and verify it
+		list($ret, $comment) = $this->_comment[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('hosty.host.host', $comment->getHost());
+		$this->assertEquals((int)$this->_anonymousUserId, $comment->getCommenterId());
+		$this->assertEquals('This is a new comment', $comment->getComment());
+		$this->assertEquals('This is a new subject', $comment->getSubject());
+		$this->assertEquals(COMMENT_PUBLISH_STATUS_PUBLISHED, $comment->getPublishStatus());
+	}
+
+	public function testPreviewComment() {
+		global $gallery;
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][preview]', 1);
+		GalleryUtilities::putRequestVariable('form[host]', 'hosty.host.host');
+		GalleryUtilities::putRequestVariable('form[subject]', 'This is a new subject');
+		GalleryUtilities::putRequestVariable('form[author]', 'This is a new author');
+		GalleryUtilities::putRequestVariable('form[comment]', 'This is a new comment');
+		GalleryUtilities::putRequestVariable(
+			'form[commenterName]',
+			$this->_anonymousUser->getUserName()
+		);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'comment.EditComment',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testMissingFields() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[host]', '');
+		GalleryUtilities::putRequestVariable('form[subject]', '');
+		GalleryUtilities::putRequestVariable('form[author]', '');
+		GalleryUtilities::putRequestVariable('form[comment]', '');
+		GalleryUtilities::putRequestVariable('form[commenterName]', '');
+		GalleryUtilities::putRequestVariable('form[publishStatus]', '');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'comment.EditComment',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][commenterName][missing]',
+					'form[error][comment][missing]',
+				),
+			),
+			$results
+		);
+	}
+
+	public function testInvalidCommenterName() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[host]', 'hosty.host.host');
+		GalleryUtilities::putRequestVariable('form[subject]', 'This is a new subject');
+		GalleryUtilities::putRequestVariable('form[comment]', 'This is a new comment');
+		GalleryUtilities::putRequestVariable('form[commenterName]', 'some-illegal-user-name');
+		GalleryUtilities::putRequestVariable(
+			'form[publishStatus]',
+			COMMENT_PUBLISH_STATUS_PUBLISHED
+		);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'comment.EditComment',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][commenterName][invalid]'),
+			),
+			$results
+		);
+	}
+
+	public function testPreviewInvalidCommenterName() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][preview]', 1);
+		GalleryUtilities::putRequestVariable('form[host]', 'hosty.host.host');
+		GalleryUtilities::putRequestVariable('form[subject]', 'This is a new subject');
+		GalleryUtilities::putRequestVariable('form[comment]', 'This is a new comment');
+		GalleryUtilities::putRequestVariable('form[commenterName]', 'some-illegal-user-name');
+		GalleryUtilities::putRequestVariable(
+			'form[publishStatus]',
+			COMMENT_PUBLISH_STATUS_PUBLISHED
+		);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'comment.EditComment',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][commenterName][invalid]'),
+			),
+			$results
+		);
+	}
+
+	public function testPreviewEmptyComment() {
+		global $gallery;
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][preview]', 1);
+		GalleryUtilities::putRequestVariable('form[host]', '');
+		GalleryUtilities::putRequestVariable('form[subject]', '');
+		GalleryUtilities::putRequestVariable('form[comment]', '');
+		GalleryUtilities::putRequestVariable('form[commenterName]', '');
+		GalleryUtilities::putRequestVariable(
+			'form[publishStatus]',
+			COMMENT_PUBLISH_STATUS_PUBLISHED
+		);
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view' => 'comment.EditComment',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][commenterName][missing]',
+					'form[error][comment][missing]',
+				),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Use a bogus comment id
+	 */
+	public function testMaliciousEditComment1() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', 123123123);
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		$results = $this->handleRequest(ERROR_MISSING_OBJECT);
+	}
+
+	/**
+	 * Use mismatched item id and comment id
+	 */
+	public function testMaliciousEditComment2() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[1]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+	}
+
+	/**
+	 * Use malicious content
+	 */
+	public function testMaliciousEditComment3() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'misc.markup', 'html');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[host]', 'hosty.host.host');
+		GalleryUtilities::putRequestVariable(
+			'form[subject]',
+			'<a href="javascript:alert(1)">a</a>'
+		);
+		GalleryUtilities::putRequestVariable(
+			'form[comment]',
+			'comment <applet code="bad.class"> test'
+		);
+		GalleryUtilities::putRequestVariable(
+			'form[author]',
+			'this is a author with <script>evilness</script> in it.'
+		);
+		GalleryUtilities::putRequestVariable(
+			'form[commenterName]',
+			$this->_anonymousUser->getUserName()
+		);
+		GalleryUtilities::putRequestVariable(
+			'form[publishStatus]',
+			COMMENT_PUBLISH_STATUS_PUBLISHED
+		);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'   => 'comment.CommentChangeConfirmation',
+					'itemId' => $this->_item[0]->getId(),
+				),
+				'status'   => array(
+					'changed' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Grab the comment and verify it
+		list($ret, $comment) = $this->_comment[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('&lt;a&gt;a&lt;/a&gt;', $comment->getSubject());
+		$this->assertEquals('comment  test', $comment->getComment());
+		$this->assertEquals(
+			'this is a author with &lt;script&gt;evilness&lt;/script&gt; in it.',
+			$comment->getAuthor()
+		);
+		$this->assertEquals('hosty.host.host', $comment->getHost());
+		$this->assertEquals((int)$this->_anonymousUserId, $comment->getCommenterId());
+	}
+
+	public function testCancelEdit() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+		GalleryUtilities::putRequestVariable('form[host]', 'hosty.host.host');
+		GalleryUtilities::putRequestVariable('form[subject]', 'This is a new subject');
+		GalleryUtilities::putRequestVariable('form[comment]', 'This is a new comment');
+		GalleryUtilities::putRequestVariable(
+			'form[commenterName]',
+			$this->_anonymousUser->getUserName()
+		);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'   => 'core.ShowItem',
+					'itemId' => $this->_item[0]->getId(),
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testPublishComment() {
+		// comment[1] starts off unpublished
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[1]->getId());
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[1]->getId());
+		GalleryUtilities::putRequestVariable('form[host]', 'hosty.host.host');
+		GalleryUtilities::putRequestVariable('form[comment]', 'This is a new comment');
+		GalleryUtilities::putRequestVariable(
+			'form[commenterName]',
+			$this->_anonymousUser->getUserName()
+		);
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable(
+			'form[publishStatus]',
+			COMMENT_PUBLISH_STATUS_PUBLISHED
+		);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'   => 'comment.CommentChangeConfirmation',
+					'itemId' => $this->_item[1]->getId(),
+				),
+				'status'   => array(
+					'changed' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Grab the comment and verify it
+		list($ret, $comment) = $this->_comment[1]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(COMMENT_PUBLISH_STATUS_PUBLISHED, $comment->getPublishStatus());
+	}
+
+	public function testUnpublishComment() {
+		// comment[0] starts off published
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[0]->getId());
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('form[host]', 'hosty.host.host');
+		GalleryUtilities::putRequestVariable('form[comment]', 'This is a new comment');
+		GalleryUtilities::putRequestVariable(
+			'form[commenterName]',
+			$this->_anonymousUser->getUserName()
+		);
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable(
+			'form[publishStatus]',
+			COMMENT_PUBLISH_STATUS_UNPUBLISHED
+		);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'   => 'comment.CommentChangeConfirmation',
+					'itemId' => $this->_item[0]->getId(),
+				),
+				'status'   => array(
+					'changed' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Grab the comment and verify it
+		list($ret, $comment) = $this->_comment[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(COMMENT_PUBLISH_STATUS_UNPUBLISHED, $comment->getPublishStatus());
+	}
+
+	public function testSpamifyComment() {
+		// comment[0] starts off published
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[0]->getId());
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('form[host]', 'hosty.host.host');
+		GalleryUtilities::putRequestVariable('form[comment]', 'This is a new comment');
+		GalleryUtilities::putRequestVariable(
+			'form[commenterName]',
+			$this->_anonymousUser->getUserName()
+		);
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable(
+			'form[publishStatus]',
+			COMMENT_PUBLISH_STATUS_SPAM
+		);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'   => 'comment.CommentChangeConfirmation',
+					'itemId' => $this->_item[0]->getId(),
+				),
+				'status'   => array(
+					'changed' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Grab the comment and verify it
+		list($ret, $comment) = $this->_comment[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(COMMENT_PUBLISH_STATUS_SPAM, $comment->getPublishStatus());
+	}
+}

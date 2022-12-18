@@ -1,0 +1,264 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/newitems/classes/NewItemsHelper.class');
+
+/**
+ * NewItemsSiteAdmin controller tests.
+ * Also tests NewItemsHelper::fetchAlbumCount,resetNewItemSorts
+ * @package NewItems
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class NewItemsSiteAdminControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'newitems.NewItemsSiteAdmin');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'newitems');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'default.orderBy', 'NewItems');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum(
+			$this->_getRootId(),
+			array(
+				'orderBy'        => 'NewItems',
+				'orderDirection' => ORDER_DESCENDING,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+	}
+
+	public function testNewItemsSiteAdminControllerUndo() {
+		GalleryUtilities::putRequestVariable('form[action][undo]', '1');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'newitems.NewItemsSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testNewItemsSiteAdminControllerSave() {
+		GalleryUtilities::putRequestVariable('form[days][new]', '13');
+		GalleryUtilities::putRequestVariable('form[days][updated]', '11');
+		GalleryUtilities::putRequestVariable('form[action][save]', '1');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'newitems.NewItemsSiteAdmin',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $days) = GalleryCoreApi::getPluginParameter('module', 'newitems', 'days.new');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('13', $days, 'days');
+	}
+
+	public function testNewItemsSiteAdminControllerSaveNoData() {
+		GalleryUtilities::putRequestVariable('form[action][save]', '1');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'newitems.NewItemsSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][new]', 'form[error][updated]'),
+			),
+			$results
+		);
+	}
+
+	public function testNewItemsSiteAdminControllerSaveBadData() {
+		GalleryUtilities::putRequestVariable('form[days][new]', '30');
+		GalleryUtilities::putRequestVariable('form[days][updated]', 'abc123');
+		GalleryUtilities::putRequestVariable('form[action][save]', '1');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'newitems.NewItemsSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][updated]'),
+			),
+			$results
+		);
+	}
+
+	public function testNewItemsSiteAdminControllerReset() {
+		$ret = $this->_saveNewItemSorts();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $count) = NewItemsHelper::fetchAlbumCount();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue($count > 0, 'Should be at least one NewItems sort in db');
+
+		GalleryUtilities::putRequestVariable('form[action][reset]', '1');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'newitems.NewItemsSiteAdmin',
+				),
+				'status'   => array(
+					'reset' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $count) = NewItemsHelper::fetchAlbumCount();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(0, $count, 'Should be no NewItems sorts in db after reset');
+
+		$ret = $this->_restoreNewItemSorts();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $defaultSort) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.orderBy');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('orderWeight', $defaultSort, 'default sort');
+	}
+
+	public function _saveNewItemSorts() {
+		global $gallery;
+		$query = 'SELECT [GalleryAlbumItem::id], [GalleryAlbumItem::orderDirection]
+	FROM [GalleryAlbumItem] WHERE [GalleryAlbumItem::orderBy] = \'NewItems\'';
+
+		list($ret, $results) = $gallery->search($query);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ids = array();
+
+		while ($result = $results->nextResult()) {
+			$ids[(int)$result[0]] = $result[1];
+		}
+		$this->_newItemSortIds = $ids;
+
+		return null;
+	}
+
+	public function _restoreNewItemSorts() {
+		if (empty($this->_newItemSortIds)) {
+			return null;
+		}
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock(array_keys($this->_newItemSortIds));
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $items) = GalleryCoreApi::loadEntitiesById(
+			array_keys($this->_newItemSortIds),
+			'GalleryAlbumItem'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		foreach ($items as $item) {
+			$item->setOrderBy('NewItems');
+			$item->setOrderDirection($this->_newItemSortIds[$item->getId()]);
+			$ret = $item->save();
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		return null;
+	}
+}

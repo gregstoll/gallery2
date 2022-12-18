@@ -1,0 +1,286 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test Captcha Helper
+ *
+ * @package Captcha
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class CaptchaSiteAdminControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'captcha.CaptchaSiteAdmin');
+	}
+
+	public function setUp($setup = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'captcha');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Set our threshold to a known value
+		$ret = GalleryCoreApi::setPluginParameter('module', 'captcha', 'failedAttemptThreshold', 1);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testSave() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[failedAttemptThreshold]', 3);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'captcha.CaptchaSiteAdmin',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $threshold) = GalleryCoreApi::getPluginParameter('module', 'captcha', 'failedAttemptThreshold');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(3, (int)$threshold);
+	}
+
+	public function testSaveWithMissingThreshold() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+	}
+
+	public function testSaveWithNonNumericThreshold() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[failedAttemptThreshold]', 'two');
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+	}
+
+	public function testSaveWithTooLowThreshold() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[failedAttemptThreshold]', -5);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'captcha.CaptchaSiteAdmin',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $threshold) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'captcha',
+			'failedAttemptThreshold'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, (int)$threshold);
+	}
+
+	public function testSaveWithTooHighThreshold() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[failedAttemptThreshold]', 10);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'captcha.CaptchaSiteAdmin',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $threshold) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'captcha',
+			'failedAttemptThreshold'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(5, (int)$threshold);
+	}
+
+	public function testReset() {
+		GalleryUtilities::putRequestVariable('form[action][reset]', 1);
+		GalleryUtilities::putRequestVariable('form[failedAttemptThreshold]', 3);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'captcha.CaptchaSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $threshold) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'captcha',
+			'failedAttemptThreshold'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Unchanged
+		$this->assertEquals(1, (int)$threshold);
+	}
+
+	public function testAdminOptions() {
+		CaptchaAdminOption::doStatic()->testOptions(
+			array(
+				'testOptionId1' => new CaptchaSiteAdminTestOption(),
+				'testOptionId2' => new CaptchaSiteAdminTestOption('unittest.2.level'),
+			)
+		);
+
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[failedAttemptThreshold]', 3);
+		GalleryUtilities::putRequestVariable('form[level][testOptionId1]', 'HIGH');
+		GalleryUtilities::putRequestVariable('form[level][testOptionId2]', 'LOW');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'captcha.CaptchaSiteAdmin',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'captcha');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(3, (int)$params['failedAttemptThreshold'], 'threshold');
+		$this->assertEquals('HIGH', $params['unittest.level'], 'level 1');
+		$this->assertEquals('LOW', $params['unittest.2.level'], 'level 2');
+	}
+
+	public function testBogusOptionId() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[failedAttemptThreshold]', 3);
+		GalleryUtilities::putRequestVariable('form[level][bogusOptionId]', 'LOW');
+
+		$this->handleRequest(ERROR_BAD_PARAMETER);
+	}
+
+	public function testBogusOptionLevel() {
+		CaptchaAdminOption::doStatic()->testOptions(
+			array(
+				'testOptionId' => new CaptchaSiteAdminTestOption(),
+			)
+		);
+
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[failedAttemptThreshold]', 3);
+		GalleryUtilities::putRequestVariable('form[level][testOptionId]', 'MEDIUM');
+
+		$this->handleRequest(ERROR_BAD_PARAMETER);
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/captcha/CaptchaSiteAdmin.inc');
+
+/**
+ * CaptchaAdminOption for testing.
+ * @package Captcha
+ * @subpackage PHPUnit
+ */
+class CaptchaSiteAdminTestOption extends CaptchaAdminOption {
+	public $_param;
+
+	public function __construct($param = 'unittest.level') {
+		$this->_param = $param;
+	}
+
+	/**
+	 * Load as Singleton
+	 */
+	public static function doStatic() {
+		static $singleton;
+
+		if (!isset($singleton)) {
+			$singleton = new CaptchaSiteAdminTestOption();
+		}
+
+		return $singleton;
+	}
+
+	public function getOptionData() {
+		return array(
+			null,
+			'test level',
+			array('module', 'captcha', $this->_param),
+			array('HIGH', 'LOW'),
+		);
+	}
+}

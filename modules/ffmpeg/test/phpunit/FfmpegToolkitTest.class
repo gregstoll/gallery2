@@ -1,0 +1,1099 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/ffmpeg/classes/FfmpegToolkitHelper.class');
+GalleryCoreApi::requireOnce('modules/ffmpeg/classes/FfmpegToolkit.class');
+
+/**
+ * Test FfmpegToolkit functionality
+ * @package Ffmpeg
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17614 $
+ */
+class FfmpegToolkitTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->_platform = new FfmpegToolkitTestPlatform();
+		$ret                = $gallery->_platform->init($this);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Get a toolkit to work with
+		$this->_toolkit = new FfmpegToolkit();
+	}
+
+	public function testGetProperties() {
+		list($ret, $results) = $this->_toolkit->getProperty(
+			'video/x-msvideo',
+			'dimensions',
+			'testGetProperties1.avi'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(array(200, 240), $results, 'dimensions mismatch');
+
+		list($ret, $results) = $this->_toolkit->getProperty(
+			'video/x-msvideo',
+			'dimensions-and-duration',
+			'testGetProperties1.avi'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(array(200, 240, 3.1), $results, 'dimensions-and-duration mismatch');
+
+		list($ret, $results) = $this->_toolkit->getProperty('video/x-msvideo', 'BOGUS', 'BOGUS');
+		$this->assertTrue($ret->getErrorCode() & ERROR_UNIMPLEMENTED);
+	}
+
+	public function testGetOperationsAndProperties() {
+		list($ret, $results) = FfmpegToolkitHelper::getOperationsAndProperties();
+
+		if ($ret) {
+			return $ret;
+		}
+		$expectedMimeTypes = array(
+			'video/mpeg',
+			'video/x-ms-asf',
+			'video/x-msvideo',
+			'video/quicktime',
+			'video/x-flv',
+			'video/x-ms-wmv',
+		);
+		$this->assertEquals(
+			array(
+				'convert-to-image/jpeg' => array(
+					'params'         => array(),
+					'description'    => 'Convert to a JPEG',
+					'mimeTypes'      => $expectedMimeTypes,
+					'outputMimeType' => 'image/jpeg',
+				),
+				'select-offset' => array(
+					'params'         => array(
+						array(
+							'type'        => 'float',
+							'description' => 'offset in seconds',
+						),
+					),
+					'description'    => 'Select time offset in movie file',
+					'mimeTypes'      => $expectedMimeTypes,
+					'outputMimeType' => null,
+				),
+			),
+			$results['operations'],
+			'operations'
+		);
+
+		$this->assertEquals(
+			array(
+				'dimensions' => array(
+					'type'        => 'int,int',
+					'description' => 'Get the width and height of the movie',
+					'mimeTypes'   => $expectedMimeTypes,
+				),
+				'dimensions-and-duration' => array(
+					'type'        => 'int,int,float',
+					'description' => 'Get the width, height and duration of the movie',
+					'mimeTypes'   => $expectedMimeTypes,
+				),
+				'video-framerate' => array(
+					'type'        => 'float',
+					'description' => 'Get video frames per second of the movie',
+					'mimeTypes'   => $expectedMimeTypes,
+				),
+				'audio-samplerate' => array(
+					'type'        => 'int',
+					'description' => 'Get audio samples per second of the movie',
+					'mimeTypes'   => $expectedMimeTypes,
+				),
+				'audio-channels' => array(
+					'type'        => 'int',
+					'description' => 'Get number of audio channels in movie',
+					'mimeTypes'   => $expectedMimeTypes,
+				),
+			),
+			$results['properties'],
+			'properties'
+		);
+	}
+
+	public function testBinaries() {
+		list($ret, $results, $mimeTypes, $supportsOffset) = FfmpegToolkitHelper::testBinary(
+			'/validPath/ffmpeg'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expectedMimeTypes = array(
+			'video/mpeg',
+			'video/x-ms-asf',
+			'video/x-msvideo',
+			'video/quicktime',
+			'video/x-flv',
+			'video/x-ms-wmv',
+		);
+
+		$output[] = 'Output audio/video file formats: mpeg vcd vob mpegts crc image ' .
+		'imagepipe mp2 ac3 h263 m4v h264 mpeg1video mjpeg s16le s16be u16le u16be ' .
+		's8 u8 mulaw alaw rawvideo null rm asf asf_stream avi wav swf au gif mpjpeg ' .
+		'dv flv yuv4mpegpipe ffm audio_device rtp';
+		$output[] = 'Input audio/video file formats: mpeg mpegts image imagepipe mp3 ' .
+		'ac3 h263 m4v h264 mpegvideo mjpeg s16le s16be u16le u16be s8 u8 mulaw ' .
+		'alaw rawvideo rm asf avi wav swf au gif mov dv 4xm flv yuv4mpegpipe ffm ' .
+		'video4linux audio_device rtsp redir sdp rtp';
+		$output[] = 'Output image formats: pbm pgm ppm pam pgmyuv yuv png jpeg gif';
+		$output[] = 'Input image formats: pnm pam pgmyuv yuv png jpeg gif';
+		$output[] = 'Codecs:';
+		$output[] = '  Encoders: ac3 mp2 mpeg1video h263 h263p flv rv10 mpeg4 msmpeg4v1 ' .
+		'msmpeg4v2 msmpeg4 wmv1 wmv2 mjpeg ljpeg huffyuv asv1 ffv1 rawvideo pcm_s16le ' .
+		'pcm_s16be pcm_u16le pcm_u16be pcm_s8 pcm_u8 pcm_alaw pcm_mulaw adpcm_ima_qt ' .
+		'adpcm_ima_wav adpcm_ms adpcm_4xm';
+		$output[] = '  Decoders: rawvideo h263 mpeg4 msmpeg4v1 msmpeg4v2 msmpeg4 wmv1 wmv2 ' .
+		'h263i flv rv10 svq1 svq3 wmav1 wmav2 indeo3 mpegvideo dvvideo dvaudio mjpeg ' .
+		'mjpegb mp2 mp3 mace3 mace6 huffyuv ffv1 cyuv h264 vp3 asv1 vcr1 cljr 4xm mdec ' .
+		'ac3 real_144 real_288 pcm_s16le pcm_s16be pcm_u16le pcm_u16be pcm_s8 pcm_u8 ' .
+		'pcm_alaw pcm_mulaw adpcm_ima_qt adpcm_ima_wav adpcm_ms adpcm_4xm';
+		$output[] = 'Supported file protocols: file: pipe: udp: rtp: tcp: http:';
+		$output[] = 'Frame size, frame rate abbreviations: ntsc pal film ntsc-film sqcif ' .
+		'qcif cif 4cif';
+		$output[] = 'Motion estimation methods: zero(fastest) full(slowest) log phods ' .
+		'epzs(default) x1';
+
+		$this->assertEquals(
+			array(
+				array(
+					'name'    => 'ffmpeg',
+					'success' => 1,
+					'results' => $output,
+				),
+			),
+			$results
+		);
+		$this->assertTrue($supportsOffset, 'offset');
+
+		$this->assertEquals($expectedMimeTypes, $mimeTypes);
+	}
+
+	// 0.4.8 and newer have an alternative / new output format, one video format per line
+	public function testBinariesFormat048Output() {
+		list($ret, $results, $mimeTypes) = FfmpegToolkitHelper::testBinary(
+			'/validPath/ffmpeg048FormatsOutput'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expectedMimeTypes = array(
+			'video/mpeg',
+			'video/mp4',
+			'video/x-ms-asf',
+			'video/x-msvideo',
+			'video/quicktime',
+			'video/x-flv',
+			'video/x-ms-wmv',
+		);
+		sort($expectedMimeTypes);
+
+		$output[] = 'File formats:';
+		$output[] = '  E 3gp';
+		$output[] = ' D  4xm';
+		$output[] = ' D  RoQ';
+		$output[] = ' DE ac3';
+		$output[] = ' DE alaw';
+		$output[] = ' DE asf';
+		$output[] = '  E asf_stream';
+		$output[] = ' DE au';
+		$output[] = ' DE audio_device';
+		$output[] = ' DE avi';
+		$output[] = '  E crc';
+		$output[] = ' DE dv';
+		$output[] = ' D  dv1394';
+		$output[] = ' DE ffm';
+		$output[] = ' D  film_cpk';
+		$output[] = ' D  flic';
+		$output[] = ' DE flv';
+		$output[] = ' DE gif';
+		$output[] = ' DE h263';
+		$output[] = ' DE h264';
+		$output[] = ' D  idcin';
+		$output[] = ' DE image';
+		$output[] = ' DE imagepipe';
+		$output[] = ' D  ipmovie';
+		$output[] = ' DE m4v';
+		$output[] = ' D  matroska';
+		$output[] = ' DE mjpeg';
+		$output[] = '  E mov';
+		$output[] = ' D  mov,mp4,m4a,3gp';
+		$output[] = '  E mp2';
+		$output[] = ' D  mp3';
+		$output[] = '  E mp4';
+		$output[] = ' DE mpeg';
+		$output[] = '  E mpeg1video';
+		$output[] = ' DE mpegts';
+		$output[] = ' D  mpegvideo';
+		$output[] = '  E mpjpeg';
+		$output[] = ' DE mulaw';
+		$output[] = '  E null';
+		$output[] = ' DE nut';
+		$output[] = ' D  psxstr';
+		$output[] = ' DE rawvideo';
+		$output[] = ' D  redir';
+		$output[] = ' DE rm';
+		$output[] = '  E rtp';
+		$output[] = ' D  rtsp';
+		$output[] = ' DE s16be';
+		$output[] = ' DE s16le';
+		$output[] = ' DE s8';
+		$output[] = ' D  sdp';
+		$output[] = '  E svcd';
+		$output[] = ' DE swf';
+		$output[] = ' DE u16be';
+		$output[] = ' DE u16le';
+		$output[] = ' DE u8';
+		$output[] = '  E vcd';
+		$output[] = ' D  video4linux';
+		$output[] = ' D  vmd';
+		$output[] = '  E vob';
+		$output[] = ' DE wav';
+		$output[] = ' D  wc3movie';
+		$output[] = ' D  wsaud';
+		$output[] = ' D  wsvqa';
+		$output[] = ' DE yuv4mpegpipe';
+		$output[] = '';
+		$output[] = 'Image formats:';
+		$output[] = ' D  pnm';
+		$output[] = '  E pbm';
+		$output[] = '  E pgm';
+		$output[] = '  E ppm';
+		$output[] = ' DE pam';
+		$output[] = ' DE pgmyuv';
+		$output[] = ' DE yuv';
+		$output[] = ' DE jpeg';
+		$output[] = ' DE gif';
+		$output[] = ' DE sgi';
+		$output[] = '';
+		$output[] = 'Codecs:';
+		$output[] = ' D V    4xm';
+		$output[] = ' D V D  8bps';
+		$output[] = '  EA    ac3';
+		$output[] = ' DEA    adpcm_4xm';
+		$output[] = ' DEA    adpcm_adx';
+		$output[] = ' DEA    adpcm_ea';
+		$output[] = ' DEA    adpcm_ima_dk3';
+		$output[] = ' DEA    adpcm_ima_dk4';
+		$output[] = ' DEA    adpcm_ima_qt';
+		$output[] = ' DEA    adpcm_ima_smjpeg';
+		$output[] = ' DEA    adpcm_ima_wav';
+		$output[] = ' DEA    adpcm_ima_ws';
+		$output[] = ' DEA    adpcm_ms';
+		$output[] = ' DEA    adpcm_xa';
+		$output[] = ' DEV D  asv1';
+		$output[] = ' DEV D  asv2';
+		$output[] = ' D V D  cinepak';
+		$output[] = ' D V D  cljr';
+		$output[] = ' D V    cyuv';
+		$output[] = ' DEV D  dvvideo';
+		$output[] = ' DEV D  ffv1';
+		$output[] = ' D A    flac';
+		$output[] = ' D V D  flic';
+		$output[] = ' DEVSD  flv';
+		$output[] = ' DEA    g726';
+		$output[] = ' DEVSDT h263';
+		$output[] = ' D VSD  h263i';
+		$output[] = '  EV    h263p';
+		$output[] = ' D V DT h264';
+		$output[] = ' DEVSD  huffyuv';
+		$output[] = ' D V D  idcinvideo';
+		$output[] = ' D V    indeo3';
+		$output[] = ' D A    interplay_dpcm';
+		$output[] = ' D V D  interplayvideo';
+		$output[] = '  EV    ljpeg';
+		$output[] = ' D A    mace3';
+		$output[] = ' D A    mace6';
+		$output[] = ' D V D  mdec';
+		$output[] = ' DEV D  mjpeg';
+		$output[] = ' D V D  mjpegb';
+		$output[] = ' DEA    mp2';
+		$output[] = ' D A    mp3';
+		$output[] = ' DEVSDT mpeg1video';
+		$output[] = ' DEVSDT mpeg2video';
+		$output[] = ' DEVSDT mpeg4';
+		$output[] = ' D VSDT mpegvideo';
+		$output[] = ' DEVSD  msmpeg4';
+		$output[] = ' DEVSD  msmpeg4v1';
+		$output[] = ' DEVSD  msmpeg4v2';
+		$output[] = ' D V D  msrle';
+		$output[] = ' D V D  msvideo1';
+		$output[] = ' D V D  mszh';
+		$output[] = ' DEA    pcm_alaw';
+		$output[] = ' DEA    pcm_mulaw';
+		$output[] = ' DEA    pcm_s16be';
+		$output[] = ' DEA    pcm_s16le';
+		$output[] = ' DEA    pcm_s8';
+		$output[] = ' DEA    pcm_u16be';
+		$output[] = ' DEA    pcm_u16le';
+		$output[] = ' DEA    pcm_u8';
+		$output[] = ' D V D  qtrle';
+		$output[] = ' DEV    rawvideo';
+		$output[] = ' D A    real_144';
+		$output[] = ' D A    real_288';
+		$output[] = ' D A    roq_dpcm';
+		$output[] = ' D V D  roqvideo';
+		$output[] = ' D V D  rpza';
+		$output[] = ' DEV D  rv10';
+		$output[] = ' D V D  rv20';
+		$output[] = ' D V D  smc';
+		$output[] = ' D V D  sp5x';
+		$output[] = ' D V D  svq1';
+		$output[] = ' D VSD  svq3';
+		$output[] = ' D V    theora';
+		$output[] = ' D V D  truemotion1';
+		$output[] = ' D V D  vcr1';
+		$output[] = ' D A    vmdaudio';
+		$output[] = ' D V D  vmdvideo';
+		$output[] = ' D V    vp3';
+		$output[] = ' D V D  vqavideo';
+		$output[] = ' D A    wmav1';
+		$output[] = ' D A    wmav2';
+		$output[] = ' DEVSD  wmv1';
+		$output[] = ' DEVSD  wmv2';
+		$output[] = ' D A    xan_dpcm';
+		$output[] = ' D V D  xan_wc3';
+		$output[] = ' DEV D  zlib';
+		$output[] = '';
+		$output[] = 'Supported file protocols:';
+		$output[] = ' file: pipe: udp: rtp: tcp: http:';
+		$output[] = 'Frame size, frame rate abbreviations:';
+		$output[] = ' ntsc pal qntsc qpal sntsc spal film ntsc-film sqcif qcif cif 4cif';
+		$output[] = 'Motion estimation methods:';
+		$output[] = ' zero(fastest) full(slowest) log phods epzs(default) x1';
+		$output[] = '';
+		$output[] = 'Note, the names of encoders and decoders dont always match, so there are';
+		$output[] = 'several cases where the above table shows encoder only or decoder only entries';
+		$output[] = 'even though both encoding and decoding are supported for example, the h263';
+		$output[] = 'decoder corresponds to the h263 and h263p encoders, for file formats its even';
+		$output[] = 'worse';
+
+		$this->assertEquals(
+			array(
+				array(
+					'name'    => 'ffmpeg',
+					'success' => 1,
+					'results' => $output,
+				),
+			),
+			$results
+		);
+
+		sort($mimeTypes);
+		$this->assertEquals($expectedMimeTypes, $mimeTypes);
+	}
+
+	public function testBinariesFormat046Output() {
+		list($ret, $results, $mimeTypes, $supportsOffset) = FfmpegToolkitHelper::testBinary(
+			'/validPath/ffmpeg046FormatsOutput'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expectedMimeTypes = array(
+			'video/mpeg',
+			'video/x-ms-asf',
+			'video/x-msvideo',
+			'video/quicktime',
+			'video/x-ms-wmv',
+		);
+		sort($expectedMimeTypes);
+
+		// Versions prior to 0.4.9-pre1 supported singlejpeg (which is the same as mjpeg)
+		$output   = array();
+		$output[] = 'File formats:';
+		$output[] = '  Encoding: mpeg vcd vob crc pgm pgmyuv ppm .Y.U.V pgmpipe pgmyuvpipe ' .
+		'ppmpipe yuv4mpegpipe mp2 ac3 h263 m4v mpeg1video mjpeg s16le s16be u16le u16be ' .
+		's8 u8 mulaw alaw rawvideo null rm asf asf_stream avi wav swf au gif mpjpeg ' .
+		'singlejpeg jpeg ffm audio_device rtp';
+		$output[] = '  Decoding: mpeg mpegts pgm pgmyuv ppm .Y.U.V pgmpipe pgmyuvpipe ppmpipe ' .
+		'mp3 ac3 m4v mpegvideo mjpeg s16le s16be u16le u16be s8 u8 mulaw alaw rawvideo rm ' .
+		'asf avi wav swf au mov jpeg dv ffm video_grab_device audio_device rtsp redir sdp rtp';
+		$output[] = 'Codecs:';
+		$output[] = '  Encoders: ac3 mp2 mpeg1video h263 h263p rv10 mjpeg mpeg4 msmpeg4v1 ' .
+		'msmpeg4v2 msmpeg4 wmv1 huffyuv rawvideo pcm_s16le pcm_s16be pcm_u16le pcm_u16be ' .
+		'pcm_s8 pcm_u8 pcm_alaw pcm_mulaw adpcm_ima_qt adpcm_ima_wav adpcm_ms';
+		$output[] = '  Decoders: rawvideo h263 mpeg4 msmpeg4v1 msmpeg4v2 msmpeg4 wmv1 mpegvideo ' .
+		'h263i rv10 svq1 dvvideo mjpeg mjpegb mp2 mp3 wmav1 wmav2 mace3 mace6 huffyuv ac3 ' .
+		'pcm_s16le pcm_s16be pcm_u16le pcm_u16be pcm_s8 pcm_u8 pcm_alaw pcm_mulaw ' .
+		'adpcm_ima_qt adpcm_ima_wav adpcm_ms';
+		$output[] = 'Supported file protocols: file: pipe: udp: rtp: tcp: http:';
+		$output[] = 'Frame size abbreviations: sqcif qcif cif 4cif';
+		$output[] = 'Motion estimation methods: zero(fastest) full(slowest) log phods ' .
+		'epzs(default) x1';
+
+		$this->assertEquals(
+			array(
+				array(
+					'name'    => 'ffmpeg',
+					'success' => 1,
+					'results' => $output,
+				),
+			),
+			$results
+		);
+		$this->assertFalse($supportsOffset, 'offset');
+
+		sort($mimeTypes);
+		$this->assertEquals($expectedMimeTypes, $mimeTypes);
+	}
+
+	public function testBogusBinary() {
+		list($ret, $results, $mimeTypes, $supportsOffset) = FfmpegToolkitHelper::testBinary(
+			'/validPath/bogusBinary'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$output[] = 'Bogus stdout';
+		$this->assertEquals(
+			array(
+				array(
+					'name'    => 'ffmpeg',
+					'success' => 0,
+					'results' => $output,
+				),
+			),
+			$results
+		);
+	}
+
+	public function testPerformOperation() {
+		$this->_chmodWasCalled = false;
+		list($ret, $results)   = $this->_toolkit->performOperation(
+			'video/avi',
+			'convert-to-image/jpeg',
+			'testPerformOperation1.avi',
+			'testPerformOperation2.avi',
+			array()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals($results, 'image/jpeg');
+		$this->assertTrue($this->_chmodWasCalled, 'chmod not called');
+	}
+
+	public function testPerformOperationWithOffset() {
+		$this->_chmodWasCalled         = false;
+		list($ret, $results, $context) = $this->_toolkit->performOperation(
+			'video/avi',
+			'select-offset',
+			'testPerformOperation1.avi',
+			'testPerformOperation2.avi',
+			array('1.2')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals($results, 'video/avi', 'mime after offset');
+		$this->assertEquals(
+			array(
+				'ffmpeg.offset' => '1.2',
+			),
+			$context,
+			'offset'
+		);
+
+		list($ret, $results, $context) = $this->_toolkit->performOperation(
+			'video/avi',
+			'convert-to-image/jpeg',
+			'testPerformOperation2.avi',
+			'testPerformOperation3.jpg',
+			array(),
+			$context
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals($results, 'image/jpeg', 'mime after convert');
+		$this->assertEquals(array(), $context, 'no offset');
+		$this->assertTrue($this->_chmodWasCalled, 'chmod not called');
+	}
+
+	public function testPerformSetAudioChannels() {
+		$this->_chmodWasCalled         = false;
+		list($ret, $results, $context) = $this->_toolkit->performOperation(
+			'video/avi',
+			'set-audio-channels',
+			'testPerformOperation1.avi',
+			'testPerformOperation2.avi',
+			array('2')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals($results, 'video/avi', 'mime after audiochannels');
+		$this->assertEquals(
+			array(
+				'audioChannels' => '2',
+			),
+			$context,
+			'AudioChannels'
+		);
+	}
+
+	public function testPerformSetAudioRate() {
+		$this->_chmodWasCalled         = false;
+		list($ret, $results, $context) = $this->_toolkit->performOperation(
+			'video/avi',
+			'set-audio-samplerate',
+			'testPerformOperation1.avi',
+			'testPerformOperation2.avi',
+			array('11025')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals($results, 'video/avi', 'mime after audiorate');
+		$this->assertEquals(
+			array(
+				'sampleRate' => '11025',
+			),
+			$context,
+			'audiorate'
+		);
+	}
+
+	public function testPerformConvertFlv() {
+		$this->_chmodWasCalled = false;
+		list($ret, $results)   = $this->_toolkit->performOperation(
+			'video/avi',
+			'convert-to-video/x-flv',
+			'testPerformOperation1.avi',
+			'testPerformOperation2.flv',
+			array()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals($results, 'video/x-flv');
+		$this->assertTrue($this->_chmodWasCalled, 'chmod not called');
+	}
+}
+
+/**
+ * Mock platform for this test
+ *
+ * @package Ffmpeg
+ * @subpackage PHPUnit
+ */
+class FfmpegToolkitTestPlatform {
+	public function init(&$test) {
+		$this->_test                   =& $test;
+		list($ret, $this->_ffmpegPath) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'ffmpeg',
+			'path'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		return null;
+	}
+
+	public function exec($cmd) {
+		$results = array();
+		$stderr  = array();
+
+		switch (serialize($cmd)) {
+			case serialize(
+				array(
+					array($this->_ffmpegPath, '-i', 'testGetProperties1.avi', '-vstats'),
+				)
+			):
+			case serialize(array(array($this->_ffmpegPath, '-i', 'BOGUS', '-vstats'))):
+				$stderr[] = "Input #0, mov, from '../data/Sample.mov':";
+				$stderr[] = '  Duration: 00:00:03.1, bitrate: 193 kb/s';
+				$stderr[] = '  Stream #0.0: Video: svq1, 200x240, 15.00 fps';
+				$stderr[] = '  Stream #0.1: Audio: 0x324d4451, 22050 Hz, mono';
+				$stderr[] = 'Must supply at least one output file';
+
+				/*
+				 * Ffmpeg actually fails on this call -- but we continue because we
+				 * get the data we need from stderr
+				 */
+				return array(0, $results, $stderr);
+
+			case serialize(array(array('/validPath/ffmpeg', '-formats'))):
+			case serialize(array(array($this->_ffmpegPath, '-formats'))):
+				$results[] = 'Output audio/video file formats: mpeg vcd vob mpegts crc image ' .
+				'imagepipe mp2 ac3 h263 m4v h264 mpeg1video mjpeg s16le s16be u16le u16be s8 u8 ' .
+				'mulaw alaw rawvideo null rm asf asf_stream avi wav swf au gif mpjpeg dv flv ' .
+				'yuv4mpegpipe ffm audio_device rtp';
+				$results[] = 'Input audio/video file formats: mpeg mpegts image imagepipe mp3 ac3 ' .
+				'h263 m4v h264 mpegvideo mjpeg s16le s16be u16le u16be s8 u8 mulaw alaw ' .
+				'rawvideo rm asf avi wav swf au gif mov dv 4xm flv yuv4mpegpipe ffm video4linux ' .
+				'audio_device rtsp redir sdp rtp';
+				$results[] = 'Output image formats: pbm pgm ppm pam pgmyuv yuv png jpeg gif';
+				$results[] = 'Input image formats: pnm pam pgmyuv yuv png jpeg gif';
+				$results[] = 'Codecs:';
+				$results[] = '  Encoders: ac3 mp2 mpeg1video h263 h263p flv rv10 mpeg4 msmpeg4v1 ' .
+				'msmpeg4v2 msmpeg4 wmv1 wmv2 mjpeg ljpeg huffyuv asv1 ffv1 rawvideo pcm_s16le ' .
+				'pcm_s16be pcm_u16le pcm_u16be pcm_s8 pcm_u8 pcm_alaw pcm_mulaw adpcm_ima_qt ' .
+				'adpcm_ima_wav adpcm_ms adpcm_4xm';
+				$results[] = '  Decoders: rawvideo h263 mpeg4 msmpeg4v1 msmpeg4v2 msmpeg4 wmv1 ' .
+				'wmv2 h263i flv rv10 svq1 svq3 wmav1 wmav2 indeo3 mpegvideo dvvideo dvaudio ' .
+				'mjpeg mjpegb mp2 mp3 mace3 mace6 huffyuv ffv1 cyuv h264 vp3 asv1 vcr1 cljr ' .
+				'4xm mdec ac3 real_144 real_288 pcm_s16le pcm_s16be pcm_u16le pcm_u16be pcm_s8 ' .
+				'pcm_u8 pcm_alaw pcm_mulaw adpcm_ima_qt adpcm_ima_wav adpcm_ms adpcm_4xm';
+				$results[] = 'Supported file protocols: file: pipe: udp: rtp: tcp: http:';
+				$results[] = 'Frame size, frame rate abbreviations: ntsc pal film ntsc-film sqcif ' .
+				'qcif cif 4cif';
+				$results[] = 'Motion estimation methods: zero(fastest) full(slowest) log phods ' .
+				'epzs(default) x1';
+
+				return array(1, $results, $stderr);
+
+			case serialize(array(array('/validPath/ffmpeg046FormatsOutput', '-formats'))):
+				$results[] = 'File formats:';
+				$results[] = '  Encoding: mpeg vcd vob crc pgm pgmyuv ppm .Y.U.V pgmpipe pgmyuvpipe ' .
+				'ppmpipe yuv4mpegpipe mp2 ac3 h263 m4v mpeg1video mjpeg s16le s16be u16le u16be ' .
+				's8 u8 mulaw alaw rawvideo null rm asf asf_stream avi wav swf au gif mpjpeg ' .
+				'singlejpeg jpeg ffm audio_device rtp';
+				$results[] = '  Decoding: mpeg mpegts pgm pgmyuv ppm .Y.U.V pgmpipe pgmyuvpipe ' .
+				'ppmpipe mp3 ac3 m4v mpegvideo mjpeg s16le s16be u16le u16be s8 u8 mulaw alaw ' .
+				'rawvideo rm asf avi wav swf au mov jpeg dv ffm video_grab_device audio_device ' .
+				'rtsp redir sdp rtp';
+				$results[] = 'Codecs:';
+				$results[] = '  Encoders: ac3 mp2 mpeg1video h263 h263p rv10 mjpeg mpeg4 msmpeg4v1 ' .
+				'msmpeg4v2 msmpeg4 wmv1 huffyuv rawvideo pcm_s16le pcm_s16be pcm_u16le ' .
+				'pcm_u16be pcm_s8 pcm_u8 pcm_alaw pcm_mulaw adpcm_ima_qt adpcm_ima_wav adpcm_ms';
+				$results[] = '  Decoders: rawvideo h263 mpeg4 msmpeg4v1 msmpeg4v2 msmpeg4 wmv1 ' .
+				'mpegvideo h263i rv10 svq1 dvvideo mjpeg mjpegb mp2 mp3 wmav1 wmav2 mace3 ' .
+				'mace6 huffyuv ac3 pcm_s16le pcm_s16be pcm_u16le pcm_u16be pcm_s8 pcm_u8 ' .
+				'pcm_alaw pcm_mulaw adpcm_ima_qt adpcm_ima_wav adpcm_ms';
+				$results[] = 'Supported file protocols: file: pipe: udp: rtp: tcp: http:';
+				$results[] = 'Frame size abbreviations: sqcif qcif cif 4cif';
+				$results[] = 'Motion estimation methods: zero(fastest) full(slowest) log phods ' .
+				'epzs(default) x1';
+
+				return array(1, $results, $stderr);
+
+			case serialize(array(array('/validPath/ffmpeg048FormatsOutput', '-formats'))):
+			case serialize(array(array($this->_ffmpegPath, '-formats'))):
+				$results[] = 'File formats:';
+				$results[] = '  E 3gp';
+				$results[] = ' D  4xm';
+				$results[] = ' D  RoQ';
+				$results[] = ' DE ac3';
+				$results[] = ' DE alaw';
+				$results[] = ' DE asf';
+				$results[] = '  E asf_stream';
+				$results[] = ' DE au';
+				$results[] = ' DE audio_device';
+				$results[] = ' DE avi';
+				$results[] = '  E crc';
+				$results[] = ' DE dv';
+				$results[] = ' D  dv1394';
+				$results[] = ' DE ffm';
+				$results[] = ' D  film_cpk';
+				$results[] = ' D  flic';
+				$results[] = ' DE flv';
+				$results[] = ' DE gif';
+				$results[] = ' DE h263';
+				$results[] = ' DE h264';
+				$results[] = ' D  idcin';
+				$results[] = ' DE image';
+				$results[] = ' DE imagepipe';
+				$results[] = ' D  ipmovie';
+				$results[] = ' DE m4v';
+				$results[] = ' D  matroska';
+				$results[] = ' DE mjpeg';
+				$results[] = '  E mov';
+				$results[] = ' D  mov,mp4,m4a,3gp';
+				$results[] = '  E mp2';
+				$results[] = ' D  mp3';
+				$results[] = '  E mp4';
+				$results[] = ' DE mpeg';
+				$results[] = '  E mpeg1video';
+				$results[] = ' DE mpegts';
+				$results[] = ' D  mpegvideo';
+				$results[] = '  E mpjpeg';
+				$results[] = ' DE mulaw';
+				$results[] = '  E null';
+				$results[] = ' DE nut';
+				$results[] = ' D  psxstr';
+				$results[] = ' DE rawvideo';
+				$results[] = ' D  redir';
+				$results[] = ' DE rm';
+				$results[] = '  E rtp';
+				$results[] = ' D  rtsp';
+				$results[] = ' DE s16be';
+				$results[] = ' DE s16le';
+				$results[] = ' DE s8';
+				$results[] = ' D  sdp';
+				$results[] = '  E svcd';
+				$results[] = ' DE swf';
+				$results[] = ' DE u16be';
+				$results[] = ' DE u16le';
+				$results[] = ' DE u8';
+				$results[] = '  E vcd';
+				$results[] = ' D  video4linux';
+				$results[] = ' D  vmd';
+				$results[] = '  E vob';
+				$results[] = ' DE wav';
+				$results[] = ' D  wc3movie';
+				$results[] = ' D  wsaud';
+				$results[] = ' D  wsvqa';
+				$results[] = ' DE yuv4mpegpipe';
+				$results[] = '';
+				$results[] = 'Image formats:';
+				$results[] = ' D  pnm';
+				$results[] = '  E pbm';
+				$results[] = '  E pgm';
+				$results[] = '  E ppm';
+				$results[] = ' DE pam';
+				$results[] = ' DE pgmyuv';
+				$results[] = ' DE yuv';
+				$results[] = ' DE jpeg';
+				$results[] = ' DE gif';
+				$results[] = ' DE sgi';
+				$results[] = '';
+				$results[] = 'Codecs:';
+				$results[] = ' D V    4xm';
+				$results[] = ' D V D  8bps';
+				$results[] = '  EA    ac3';
+				$results[] = ' DEA    adpcm_4xm';
+				$results[] = ' DEA    adpcm_adx';
+				$results[] = ' DEA    adpcm_ea';
+				$results[] = ' DEA    adpcm_ima_dk3';
+				$results[] = ' DEA    adpcm_ima_dk4';
+				$results[] = ' DEA    adpcm_ima_qt';
+				$results[] = ' DEA    adpcm_ima_smjpeg';
+				$results[] = ' DEA    adpcm_ima_wav';
+				$results[] = ' DEA    adpcm_ima_ws';
+				$results[] = ' DEA    adpcm_ms';
+				$results[] = ' DEA    adpcm_xa';
+				$results[] = ' DEV D  asv1';
+				$results[] = ' DEV D  asv2';
+				$results[] = ' D V D  cinepak';
+				$results[] = ' D V D  cljr';
+				$results[] = ' D V    cyuv';
+				$results[] = ' DEV D  dvvideo';
+				$results[] = ' DEV D  ffv1';
+				$results[] = ' D A    flac';
+				$results[] = ' D V D  flic';
+				$results[] = ' DEVSD  flv';
+				$results[] = ' DEA    g726';
+				$results[] = ' DEVSDT h263';
+				$results[] = ' D VSD  h263i';
+				$results[] = '  EV    h263p';
+				$results[] = ' D V DT h264';
+				$results[] = ' DEVSD  huffyuv';
+				$results[] = ' D V D  idcinvideo';
+				$results[] = ' D V    indeo3';
+				$results[] = ' D A    interplay_dpcm';
+				$results[] = ' D V D  interplayvideo';
+				$results[] = '  EV    ljpeg';
+				$results[] = ' D A    mace3';
+				$results[] = ' D A    mace6';
+				$results[] = ' D V D  mdec';
+				$results[] = ' DEV D  mjpeg';
+				$results[] = ' D V D  mjpegb';
+				$results[] = ' DEA    mp2';
+				$results[] = ' D A    mp3';
+				$results[] = ' DEVSDT mpeg1video';
+				$results[] = ' DEVSDT mpeg2video';
+				$results[] = ' DEVSDT mpeg4';
+				$results[] = ' D VSDT mpegvideo';
+				$results[] = ' DEVSD  msmpeg4';
+				$results[] = ' DEVSD  msmpeg4v1';
+				$results[] = ' DEVSD  msmpeg4v2';
+				$results[] = ' D V D  msrle';
+				$results[] = ' D V D  msvideo1';
+				$results[] = ' D V D  mszh';
+				$results[] = ' DEA    pcm_alaw';
+				$results[] = ' DEA    pcm_mulaw';
+				$results[] = ' DEA    pcm_s16be';
+				$results[] = ' DEA    pcm_s16le';
+				$results[] = ' DEA    pcm_s8';
+				$results[] = ' DEA    pcm_u16be';
+				$results[] = ' DEA    pcm_u16le';
+				$results[] = ' DEA    pcm_u8';
+				$results[] = ' D V D  qtrle';
+				$results[] = ' DEV    rawvideo';
+				$results[] = ' D A    real_144';
+				$results[] = ' D A    real_288';
+				$results[] = ' D A    roq_dpcm';
+				$results[] = ' D V D  roqvideo';
+				$results[] = ' D V D  rpza';
+				$results[] = ' DEV D  rv10';
+				$results[] = ' D V D  rv20';
+				$results[] = ' D V D  smc';
+				$results[] = ' D V D  sp5x';
+				$results[] = ' D V D  svq1';
+				$results[] = ' D VSD  svq3';
+				$results[] = ' D V    theora';
+				$results[] = ' D V D  truemotion1';
+				$results[] = ' D V D  vcr1';
+				$results[] = ' D A    vmdaudio';
+				$results[] = ' D V D  vmdvideo';
+				$results[] = ' D V    vp3';
+				$results[] = ' D V D  vqavideo';
+				$results[] = ' D A    wmav1';
+				$results[] = ' D A    wmav2';
+				$results[] = ' DEVSD  wmv1';
+				$results[] = ' DEVSD  wmv2';
+				$results[] = ' D A    xan_dpcm';
+				$results[] = ' D V D  xan_wc3';
+				$results[] = ' DEV D  zlib';
+				$results[] = '';
+				$results[] = 'Supported file protocols:';
+				$results[] = ' file: pipe: udp: rtp: tcp: http:';
+				$results[] = 'Frame size, frame rate abbreviations:';
+				$results[] = ' ntsc pal qntsc qpal sntsc spal film ntsc-film sqcif qcif cif 4cif';
+				$results[] = 'Motion estimation methods:';
+				$results[] = ' zero(fastest) full(slowest) log phods epzs(default) x1';
+				$results[] = '';
+				$results[] = 'Note, the names of encoders and decoders dont always match, so there are';
+				$results[] = 'several cases where the above table shows encoder only or decoder ' .
+				'only entries';
+				$results[] = 'even though both encoding and decoding are supported for example, ' .
+				'the h263';
+				$results[] = 'decoder corresponds to the h263 and h263p encoders, for file formats ' .
+				'its even';
+				$results[] = 'worse';
+
+				return array(1, $results, $stderr);
+
+			case serialize(
+				array(
+					array(
+						$this->_ffmpegPath,
+						'-i',
+						'testPerformOperation1.avi',
+						'-f',
+						'mjpeg',
+						'-t',
+						'0.001',
+						'-y',
+						'TEMPFILE',
+					),
+				)
+			):
+				$stderr[] = 'Input #0, avi, from \'testPerformOperation1.avi\':';
+				$stderr[] = '  Duration: 00:00:04.0, bitrate: 329 kb/s';
+				$stderr[] = '  Stream #0.0: Video: mjpeg, 160x120, 15.00 fps';
+				$stderr[] = '  Stream #0.1: Audio: pcm_u8, 8000 Hz, mono, 64 kb/s';
+				$stderr[] = 'Output #0, , to \'TEMPFILE\':';
+				$stderr[] = '  Stream #0.0: Video: mjpeg, 160x120, 15.00 fps, q=2-31, 200 kb/s';
+				$stderr[] = 'Stream mapping:';
+				$stderr[] = '  Stream #0.0 -> #0.0';
+				$stderr[] = 'Press [q] to stop encoding';
+				$stderr[] = 'frame=    1 q=0.0 size=       2kB time=0.1 bitrate= 232.4kbits/s    ';
+
+				return array(1, $results, $stderr);
+
+			case serialize(
+				array(
+					array(
+						$this->_ffmpegPath,
+						'-i',
+						'testPerformOperation2.avi',
+						'-ss',
+						'1.2',
+						'-f',
+						'mjpeg',
+						'-t',
+						'0.001',
+						'-y',
+						'TEMPFILE',
+					),
+				)
+			):
+				$stderr[] = 'Input #0, avi, from \'testPerformOperation2.avi\':';
+				$stderr[] = '  Duration: 00:00:04.0, bitrate: 329 kb/s';
+				$stderr[] = '  Stream #0.0: Video: mjpeg, 160x120, 15.00 fps';
+				$stderr[] = '  Stream #0.1: Audio: pcm_u8, 8000 Hz, mono, 64 kb/s';
+				$stderr[] = 'Output #0, mjpeg, to \'TEMPFILE\':';
+				$stderr[] = '  Stream #0.0: Video: mjpeg, 160x120, 15.00 fps, q=2-31, 200 kb/s';
+				$stderr[] = 'Stream mapping:';
+				$stderr[] = '  Stream #0.0 -> #0.0';
+				$stderr[] = 'Press [q] to stop encoding';
+				$stderr[] = 'frame=    2 q=0.0 size=       2kB time=0.1 bitrate= 232.4kbits/s    ';
+
+				return array(1, $results, $stderr);
+
+			case serialize(
+				array(
+					array(
+						$this->_ffmpegPath,
+						'-i',
+						'testPerformOperation1.avi',
+						'-y',
+						'TEMPFILE.flv',
+					),
+				)
+			):
+				$stderr[] = 'Input #0, avi, from \'testPerformOperation2.avi\':';
+				$stderr[] = '  Duration: 00:00:04.0, bitrate: 329 kb/s';
+				$stderr[] = '  Stream #0.0: Video: mjpeg, 160x120, 15.00 fps';
+				$stderr[] = '  Stream #0.1: Audio: pcm_u8, 8000 Hz, mono, 64 kb/s';
+				$stderr[] = 'Output #0, mjpeg, to \'TEMPFILE.flv\':';
+
+				return array(1, $results, $stderr);
+
+			case serialize(array(array($this->_ffmpegPath, '-h'))):
+			case serialize(array(array('/validPath/ffmpeg', '-h'))):
+			case serialize(array(array('/validPath/ffmpeg048FormatsOutput', '-h'))):
+				$results[] = '-ss time_off        set the start time offset';
+
+				return array(1, $results, $stderr);
+
+			case serialize(array(array('/validPath/ffmpeg046FormatsOutput', '-h'))):
+				return array(1, $results, $stderr);
+
+			case serialize(array(array($this->_ffmpegPath, '-version'))):
+			case serialize(array(array('/validPath/ffmpeg', '-version'))):
+			case serialize(array(array('/validPath/ffmpeg046FormatsOutput', '-version'))):
+			case serialize(array(array('/validPath/ffmpeg048FormatsOutput', '-version'))):
+				$stderr[] = 'FFmpeg version SVN-r8743, Copyright (c) 2000-2007 Fabrice Bellard, et al.';
+
+				return array(0, $results, $stderr);
+
+			case serialize(array(array('/validPath/bogusBinary', '-h'))):
+			case serialize(array(array('/validPath/bogusBinary', '-formats'))):
+			case serialize(array(array('/validPath/bogusBinary', '-version'))):
+				$results[] = 'Bogus stdout';
+				$stderr[]  = 'Bogus stderr';
+
+				return array(1, $results, $stderr);
+		}
+
+		printf('Unexpected command for mock toolkit<pre>%s</pre>', print_r($cmd, true));
+
+		return array(0, '', 'unprepared for exec()');
+	}
+
+	public function rename($oldName, $newName) {
+		return 1;
+	}
+
+	public function copy($oldFile, $newFile) {
+		return 1;
+	}
+
+	public function isRestrictedByOpenBaseDir($path) {
+		switch ($path) {
+			case $this->_ffmpegPath:
+			case '/validPath/':
+				return false;
+		}
+	}
+
+	public function file_exists($path) {
+		switch ($path) {
+			case $this->_ffmpegPath:
+			case '/validPath/ffmpeg048FormatsOutput':
+			case '/validPath/ffmpeg046FormatsOutput':
+			case '/validPath/ffmpeg':
+			case '/validPath/bogusBinary':
+				return true;
+		}
+	}
+
+	public function is_file($path) {
+		switch ($path) {
+			case $this->_ffmpegPath:
+			case '/validPath/ffmpeg048FormatsOutput':
+			case '/validPath/ffmpeg046FormatsOutput':
+			case '/validPath/ffmpeg':
+			case '/validPath/bogusBinary':
+				return true;
+		}
+
+		return false;
+	}
+
+	public function is_dir($path) {
+		list($ret, $ffmpegPath) = GalleryCoreApi::getPluginParameter('module', 'ffmpeg', 'path');
+
+		if ($ret) {
+			echo $ret->getAsHtml();
+
+			return false;
+		}
+
+		switch ($path) {
+			case $this->_ffmpegPath:
+			case '/validPath/':
+				return true;
+		}
+
+		return false;
+	}
+
+	public function unlink($path) {
+		// we don't create any files, so no need to unlink any
+	}
+
+	public function tempnam($dir, $prefix) {
+		return 'TEMPFILE';
+	}
+
+	public function realpath($path) {
+		return $path;
+	}
+
+	public function chmod($path, $mode = null) {
+		$this->_test->_chmodWasCalled = true;
+
+		return true;
+	}
+}

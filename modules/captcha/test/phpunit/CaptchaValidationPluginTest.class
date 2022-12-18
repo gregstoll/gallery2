@@ -1,0 +1,432 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test Captcha validation plugin
+ *
+ * @package Captcha
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class CaptchaValidationPluginTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_plugin) = GalleryCoreApi::newFactoryInstance(
+			'GalleryValidationPlugin',
+			'CaptchaValidationPlugin'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(isset($this->_plugin), 'init plugin');
+
+		$this->_session          =& $gallery->getSession();
+		$this->_saveSessionCount = $this->_session->get('captcha.failedAttempts');
+		$this->_session->put('captcha.failedAttempts', 0);
+		$this->_session->put('captcha.key', 1234);
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'captcha');
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'captcha',
+			'failedAttemptThreshold',
+			0
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_form = array();
+	}
+
+	public function tearDown() {
+		global $gallery;
+		$session =& $gallery->getSession();
+
+		if (isset($this->_saveSessionCount)) {
+			$session->put('captcha.failedAttempts', $this->_saveSessionCount);
+		} else {
+			$session->remove('captcha.failedAttempts');
+		}
+		$ret = GalleryCoreApi::removePluginParameter(
+			'module',
+			'captcha',
+			'failCount-captcha.UnitTest'
+		);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testLoadTemplateDefault() {
+		// With no options, level defaults to HIGH
+		$result = $this->_plugin->loadTemplate($this->_form);
+		$this->assertEquals(
+			array(
+				null,
+				'modules/captcha/templates/CaptchaValidationPlugin.tpl',
+				'modules_captcha',
+			),
+			$result
+		);
+	}
+
+	public function testLoadTemplateHigh() {
+		$result = $this->_plugin->loadTemplate(
+			$this->_form,
+			array(
+				'level' => 'HIGH',
+			)
+		);
+		$this->assertEquals(
+			array(
+				null,
+				'modules/captcha/templates/CaptchaValidationPlugin.tpl',
+				'modules_captcha',
+			),
+			$result
+		);
+		$this->assertEquals(array(), $this->_form);
+	}
+
+	public function testLoadTemplateMedium() {
+		$result = $this->_plugin->loadTemplate(
+			$this->_form,
+			array(
+				'level' => 'MEDIUM',
+				'key'   => 'captcha.UnitTest',
+			)
+		);
+		$this->assertEquals(array(null, null, null), $result);
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'captcha',
+			'failCount-captcha.UnitTest',
+			3
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$result = $this->_plugin->loadTemplate(
+			$this->_form,
+			array(
+				'level' => 'MEDIUM',
+				'key'   => 'captcha.UnitTest',
+			)
+		);
+		$this->assertEquals(
+			array(
+				null,
+				'modules/captcha/templates/CaptchaValidationPlugin.tpl',
+				'modules_captcha',
+			),
+			$result
+		);
+		$this->assertEquals(array(), $this->_form);
+	}
+
+	public function testLoadTemplateLow() {
+		global $gallery;
+		$result = $this->_plugin->loadTemplate(
+			$this->_form,
+			array(
+				'level' => 'LOW',
+			)
+		);
+		$this->assertEquals(array(null, null, null), $result);
+
+		$session =& $gallery->getSession();
+		$session->put('captcha.failedAttempts', 3);
+
+		$result = $this->_plugin->loadTemplate(
+			$this->_form,
+			array(
+				'level' => 'LOW',
+			)
+		);
+		$this->assertEquals(
+			array(
+				null,
+				'modules/captcha/templates/CaptchaValidationPlugin.tpl',
+				'modules_captcha',
+			),
+			$result
+		);
+		$this->assertEquals(array(), $this->_form);
+	}
+
+	public function testValidateMissingCode() {
+		// With no options, level defaults to HIGH
+		$result = $this->_plugin->performValidation($this->_form);
+		$this->assertEquals(
+			array(
+				null,
+				array('form[error][CaptchaValidationPlugin][missing]'),
+				false,
+			),
+			$result
+		);
+	}
+
+	public function testValidateHigh() {
+		// Test with HIGH level
+		$this->_form['CaptchaValidationPlugin']['word'] = '1234';
+
+		$result = $this->_plugin->performValidation(
+			$this->_form,
+			array(
+				'level' => 'HIGH',
+			)
+		);
+		$this->assertEquals(array(null, array(), true), $result, 'pass');
+
+		$this->_form['CaptchaValidationPlugin']['word'] = '4321';
+
+		$result = $this->_plugin->performValidation(
+			$this->_form,
+			array(
+				'level' => 'HIGH',
+			)
+		);
+		$this->assertEquals(
+			array(
+				null,
+				array('form[error][CaptchaValidationPlugin][invalid]'),
+				false,
+			),
+			$result,
+			'fail'
+		);
+	}
+
+	public function testValidateMedium() {
+		global $gallery;
+		$session =& $gallery->getSession();
+
+		// First call doesn't check given code, just increments fail count
+		$this->_form['CaptchaValidationPlugin']['word'] = '4321';
+
+		$result = $this->_plugin->performValidation(
+			$this->_form,
+			array(
+				'level' => 'MEDIUM',
+				'key'   => 'captcha.UnitTest',
+				'pass'  => false,
+			)
+		);
+		$this->assertEquals(array(null, array(), true), $result, 1);
+
+		list($ret, $count) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'captcha',
+			'failCount-captcha.UnitTest'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(1, (int)$count, 'failure count 1');
+
+		// Now we've exceeded the failure threshold and code is checked
+		$result = $this->_plugin->performValidation(
+			$this->_form,
+			array(
+				'level' => 'MEDIUM',
+				'key'   => 'captcha.UnitTest',
+				'pass'  => true,
+			)
+		);
+		$this->assertEquals(
+			array(
+				null,
+				array('form[error][CaptchaValidationPlugin][invalid]'),
+				false,
+			),
+			$result,
+			2
+		);
+
+		// Failure count not reset when captcha validation failed
+		list($ret, $count) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'captcha',
+			'failCount-captcha.UnitTest'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(1, (int)$count, 'failure count 2');
+
+		// Successful validation but invalid entry
+		$session->put('captcha.key', '1234');
+		$this->_form['CaptchaValidationPlugin']['word'] = '1234';
+
+		$result = $this->_plugin->performValidation(
+			$this->_form,
+			array(
+				'level' => 'MEDIUM',
+				'key'   => 'captcha.UnitTest',
+				'pass'  => false,
+			)
+		);
+		$this->assertEquals(array(null, array(), true), $result, 3);
+
+		list($ret, $count) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'captcha',
+			'failCount-captcha.UnitTest'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(2, (int)$count, 'failure count 3');
+
+		// Now success, failure count is cleared
+		$result = $this->_plugin->performValidation(
+			$this->_form,
+			array(
+				'level' => 'MEDIUM',
+				'key'   => 'captcha.UnitTest',
+				'pass'  => true,
+			)
+		);
+		$this->assertEquals(array(null, array(), true), $result, 4);
+
+		list($ret, $count) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'captcha',
+			'failCount-captcha.UnitTest'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(null, $count, 'failure count 4');
+	}
+
+	public function testValidateLow() {
+		global $gallery;
+		$session =& $gallery->getSession();
+
+		// First call doesn't check given code, just increments fail count
+		$this->_form['CaptchaValidationPlugin']['word'] = '4321';
+
+		$result = $this->_plugin->performValidation(
+			$this->_form,
+			array(
+				'level' => 'LOW',
+				'pass'  => false,
+			)
+		);
+		$this->assertEquals(array(null, array(), true), $result);
+
+		$this->assertEquals(1, (int)$session->get('captcha.failedAttempts'), 'failure count');
+
+		// Now we've exceeded the failure threshold and code is checked
+		$result = $this->_plugin->performValidation(
+			$this->_form,
+			array(
+				'level' => 'LOW',
+				'pass'  => true,
+			)
+		);
+		$this->assertEquals(
+			array(
+				null,
+				array('form[error][CaptchaValidationPlugin][invalid]'),
+				false,
+			),
+			$result
+		);
+	}
+
+	public function testSecurity() {
+		// Make sure to clear/repick key value on validation failure to thwart automated attacks
+		global $gallery;
+		$session =& $gallery->getSession();
+
+		$this->_form['CaptchaValidationPlugin']['word'] = '4321';
+
+		$result = $this->_plugin->performValidation(
+			$this->_form,
+			array(
+				'level' => 'HIGH',
+			)
+		);
+		$this->assertEquals(
+			array(
+				null,
+				array('form[error][CaptchaValidationPlugin][invalid]'),
+				false,
+			),
+			$result,
+			'fail'
+		);
+
+		$this->assertEquals(null, $session->get('captcha.key'), 'key should be cleared');
+
+		// Retry now fails, even with previously correct key
+		$this->_form['CaptchaValidationPlugin']['word'] = '1234';
+
+		$result = $this->_plugin->performValidation(
+			$this->_form,
+			array(
+				'level' => 'HIGH',
+			)
+		);
+		$this->assertEquals(
+			array(
+				null,
+				array('form[error][CaptchaValidationPlugin][invalid]'),
+				false,
+			),
+			$result,
+			'fail 2'
+		);
+	}
+}

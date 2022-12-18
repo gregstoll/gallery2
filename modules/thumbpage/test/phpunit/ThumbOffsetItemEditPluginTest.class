@@ -1,0 +1,178 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemEditThumbOffset controller tests
+ * @package ThumbPage
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class ThumbOffsetItemEditPluginTest extends ItemEditPluginTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'thumbpage', 'ItemEditThumbOffset');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Register a dummy toolkit and property
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'GalleryToolkit',
+			'ThumbOffsetTestToolkit',
+			'ThumbOffsetTestToolkit',
+			'modules/thumbpage/test/phpunit/ThumbOffsetItemEditPluginTest.class',
+			'thumbpageTest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markToolkitForCleanup('ThumbOffsetTestToolkit');
+
+		$ret = GalleryCoreApi::registerToolkitProperty(
+			'ThumbOffsetTestToolkit',
+			array('test/movie'),
+			'dimensions-and-duration',
+			'int,int,float',
+			'desc'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_item) = $this->_createRandomDataItem(
+			$this->_getRootId(),
+			'test/movie',
+			array(),
+			__FILE__,
+			'GalleryMovieItem'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_item);
+
+		list($ret, $this->_thumbnail) = $this->_createDerivative(
+			$this->_item,
+			$this->_item->getId(),
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testReset() {
+		GalleryUtilities::putRequestVariable('form[action][reset]', 1);
+
+		$preferred = null;
+		$results   = $this->handleRequest($this->_item, $preferred);
+		$this->assertEquals(array(array(), null), $results);
+	}
+
+	public function testSave() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[offset]', '4.8');
+
+		$preferred = null;
+		$results   = $this->handleRequest($this->_item, $preferred);
+		$this->assertEquals(
+			array(array(), $this->_translate('Changes saved successfully')),
+			$results,
+			'result'
+		);
+
+		list($ret, $item) = $this->_thumbnail->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			'select-offset|4.8;test-operation|100',
+			$item->getDerivativeOperations(),
+			'offset'
+		);
+
+		// Set back to zero, which removes select-offset operation..
+		GalleryUtilities::putRequestVariable('form[offset]', '0');
+
+		$results = $this->handleRequest($this->_item, $preferred);
+		$this->assertEquals(
+			array(array(), $this->_translate('Changes saved successfully')),
+			$results,
+			'no offset result'
+		);
+
+		list($ret, $item) = $this->_thumbnail->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			'test-operation|100',
+			$item->getDerivativeOperations(),
+			'no offset'
+		);
+	}
+
+	public function testSaveBadOffset() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[offset]', '40');
+
+		$preferred = null;
+		$results   = $this->handleRequest($this->_item, $preferred);
+		$this->assertEquals(array(array('form[error][offset][invalid]'), null), $results);
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+
+/**
+ * Test toolkit
+ * @package ThumbPage
+ * @subpackage PHPUnit
+ */
+class ThumbOffsetTestToolkit extends GalleryToolkit {
+	public function getProperty($mimeType, $propertyName, $sourceFilename) {
+		if ($propertyName != 'dimensions-and-duration') {
+			return array(
+				GalleryCoreApi::error(
+					ERROR_UNSUPPORTED_OPERATION,
+					__FILE__,
+					__LINE__,
+					"$propertyName $sourceFilename"
+				),
+				null,
+			);
+		}
+
+		return array(null, array(320, 240, 32));
+	}
+}

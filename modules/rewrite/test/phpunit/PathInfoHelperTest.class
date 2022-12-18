@@ -1,0 +1,227 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Path Info Parser tests
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 20940 $
+ */
+GalleryCoreApi::requireOnce('modules/rewrite/classes/parsers/pathinfo/PathInfoHelper.class');
+class PathInfoHelperTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'rewrite');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Set up our environment
+		$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', 'pathinfo.forced', '0');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_parser          = new PathInfoParser();
+		$_SERVER['REQUEST_URI'] = '/gallery2/phpunit_test.php?foo=1&bar=2';
+
+		// Set up our mock platform
+		$this->_platform = new PathInfoHelperMockPlatform();
+		$gallery->setPlatform($this->_platform);
+	}
+
+	public function testCheckPathInfo() {
+		GalleryUtilities::putRequestVariable('pathInfoTest', 'pass');
+		list($ret, $status, $trueStatus) = PathInfoHelper::checkPathInfo();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_OK, $status, 'status');
+		$this->assertEquals(REWRITE_STATUS_OK, $trueStatus, 'trueStatus');
+	}
+
+	public function testCheckPathInfoFail() {
+		GalleryUtilities::putRequestVariable('pathInfoTest', 'fail');
+		list($ret, $status, $trueStatus) = PathInfoHelper::checkPathInfo();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_NO_PATH_INFO, $status, 'status');
+		$this->assertEquals(REWRITE_STATUS_NO_PATH_INFO, $trueStatus, 'trueStatus');
+
+		GalleryUtilities::putRequestVariable('pathInfoTest', '404');
+		list($ret, $status, $trueStatus) = PathInfoHelper::checkPathInfo();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_NO_PATH_INFO, $status, 'status');
+		$this->assertEquals(REWRITE_STATUS_NO_PATH_INFO, $trueStatus, 'trueStatus');
+	}
+
+	public function testCheckPathInfoForced() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', 'pathinfo.forced', '1');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('pathInfoTest', 'fail');
+		list($ret, $status, $trueStatus) = PathInfoHelper::checkPathInfo();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_OK, $status, 'status');
+		$this->assertEquals(REWRITE_STATUS_NO_PATH_INFO, $trueStatus, 'trueStatus');
+	}
+}
+
+/**
+ * Test platform for this test
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ */
+class PathInfoHelperMockPlatform extends GalleryPlatform {
+	public $_readBuffer = array();
+
+	public function fsockopen($target, $port, &$errno, &$errstr, $timeout) {
+		global $gallery;
+		$urlGenerator =& $gallery->getUrlGenerator();
+		// The hostName can include the port part
+		list($host) = explode(':', $urlGenerator->getHostName());
+
+		if ($target == $host) {
+			return 'phpunit';
+		}
+
+		return parent::fsockopen($target, $port, $errno, $errstr, $timeout);
+	}
+
+	public function fwrite($handle, $string, $length = 0) {
+		$buffer = array(
+			'pass' => array(
+				'HTTP/1.1 200 OK',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				'PASS_PATH_INFO',
+			),
+			'fail' => array(
+				'HTTP/1.1 200 OK',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				'FAIL_PATH_INFO',
+			),
+			'404' => array(
+				'HTTP/1.1 404 Not Found',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				'Not Found',
+			),
+		);
+
+		if ($handle == 'phpunit') {
+			$respons           = GalleryUtilities::getRequestVariables('pathInfoTest');
+			$this->_readBuffer = $buffer[$respons];
+
+			return strlen($string);
+		}
+
+		return parent::fwrite($handle, $string, $length = 0);
+	}
+
+	public function feof($handle) {
+		if ($handle == 'phpunit') {
+			return empty($this->_readBuffer);
+		}
+
+		return parent::feof($handle);
+	}
+
+	public function fgets($handle, $length = 0) {
+		if ($handle == 'phpunit') {
+			if (empty($this->_readBuffer)) {
+				return null;
+			}
+
+			return array_shift($this->_readBuffer) . "\n";
+		}
+
+		return parent::fgets($handle, $length);
+	}
+
+	public function fread($handle, $length) {
+		if ($handle == 'phpunit') {
+			if (empty($this->_readBuffer)) {
+				return null;
+			}
+
+			if ($length >= strlen(join("\n", $this->_readBuffer))) {
+				$tmp               = join("\n", $this->_readBuffer);
+				$this->_readBuffer = array();
+
+				return $tmp;
+			}
+
+			$buf               = join("\n", $this->_readBuffer);
+			$tmp               = substr($buf, 0, $length);
+			$this->_readBuffer = explode("\n", substr($buf, $length + 1));
+
+			return $tmp;
+		}
+
+		return parent::fread($handle, $length);
+	}
+
+	public function fclose($handle) {
+		if ($handle == 'phpunit') {
+			$this->_readBuffer = array();
+
+			return true;
+		}
+
+		return parent::fclose($handle);
+	}
+
+	public function fflush($handle) {
+		if ($handle == 'phpunit') {
+			return true;
+		}
+
+		return parent::fflush($handle);
+	}
+}

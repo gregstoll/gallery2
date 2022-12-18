@@ -1,0 +1,293 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/cart/classes/CartHelper.class');
+
+/**
+ * Test Cart functionality
+ * @package Cart
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class CartHelperTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Save the existing cart
+		list($ret, $this->_saveCartItemCounts) = CartHelper::fetchCartItemCounts();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$cartItemCounts = array(
+			1 => 3,
+			2 => 3,
+		);
+		$ret            = CartHelper::setCartItemCounts($cartItemCounts);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		// Restore the existing cart
+		$ret = CartHelper::setCartItemCounts($this->_saveCartItemCounts);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testAddItemsToCart() {
+		// Create test data
+		global $gallery;
+		list($ret, $album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($album);
+
+		$ret = GalleryCoreApi::removeItemPermissions($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$album->getId(),
+			$gallery->getActiveUserId(),
+			'core.all'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $item) = $this->_createRandomDataItem($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $item2) = $this->_createRandomDataItem($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Add items to cart
+		$ret = CartHelper::addItemsToCart(array($item->getId(), $item2->getId()));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify
+		list($ret, $newCartItemCounts) = CartHelper::fetchCartItemCounts();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				1               => 3,
+				2               => 3,
+				$item->getId()  => 1,
+				$item2->getId() => 1,
+			),
+			$newCartItemCounts
+		);
+	}
+
+	public function testEmptyCart() {
+		$ret = CartHelper::setCartItemCounts(array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify
+		list($ret, $newCartItemCounts) = CartHelper::fetchCartItemCounts();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(), $newCartItemCounts);
+	}
+
+	public function testSetCartItemCounts() {
+		$ret = CartHelper::setCartItemCounts(
+			array(
+				2 => 3,
+				4 => 5,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify
+		list($ret, $newCartItemCounts) = CartHelper::fetchCartItemCounts();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				2 => 3,
+				4 => 5,
+			),
+			$newCartItemCounts
+		);
+	}
+
+	public function testSetCartItemCounts2() {
+		// Empty it out
+		$ret = CartHelper::setCartItemCounts(array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Fill it again
+		$ret = CartHelper::setCartItemCounts(
+			array(
+				2 => 3,
+				4 => 5,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify
+		list($ret, $newCartItemCounts) = CartHelper::fetchCartItemCounts();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				2 => 3,
+				4 => 5,
+			),
+			$newCartItemCounts
+		);
+	}
+
+	public function testLoadCartItems() {
+		list($ret, $item) = $this->_createRandomDataItem($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($item);
+		list($ret, $item2) = $this->_createRandomDataItem($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($item2);
+		$ret = GalleryCoreApi::removeItemPermissions($item2->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = CartHelper::setCartItemCounts(
+			array(
+				$item2->getId() => 1,
+				'1000000'       => 3,
+				$item->getId()  => 2,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Load cart items and verify invalid id and no-permission item were removed from cart
+		list($ret, $cartItems) = CartHelper::loadCartItems();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(array($item), $cartItems, 'cart items');
+
+		list($ret, $cartItemCounts) = CartHelper::fetchCartItemCounts();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			array(
+				$item->getId() => 2,
+			),
+			$cartItemCounts,
+			'deleted invalid'
+		);
+	}
+
+	// Make sure it works even when the cart is empty
+	public function testLoadEmptyCartItems() {
+		// Set an empty cart
+		$ret = CartHelper::setCartItemCounts(array());
+
+		if ($ret) {
+			return $ret;
+		}
+		// Just make sure it's really empty
+		list($ret, $cartItemCounts) = CartHelper::fetchCartItemCounts();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(array(), $cartItemCounts, 'preparation of test failed');
+
+		// Load the items
+		list($ret, $cartItems) = CartHelper::loadCartItems();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(array(), $cartItems, 'cart items');
+	}
+}

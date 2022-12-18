@@ -1,0 +1,102 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test Register module functionality
+ * @package Registration
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class RegisterModuleTest extends GalleryTestCase {
+	public function RewriteModuleTest($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_module) = GalleryCoreApi::loadPlugin('module', 'register');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testSystemLinks() {
+		global $gallery;
+		$label = $this->_module->translate('Register');
+
+		list($ret, $links) = $this->_module->getSystemLinks();
+
+		if ($ret) {
+			return $ret;
+		}
+		// None for non-guest
+		$this->assertEquals(array(), $links, 'admin');
+
+		$gallery->setConfig('anonymousUserId', $gallery->getActiveUserId());
+		list($ret, $links) = $this->_module->getSystemLinks();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			array(
+				'Register' => array(
+					'text'   => $label,
+					'params' => array(
+						'view'    => 'core.UserAdmin',
+						'subView' => 'register.UserSelfRegistration',
+						'return'  => 1,
+					),
+				),
+			),
+			$links,
+			'alternate guest'
+		);
+
+		$gallery->setConfig('anonymousUserId', null);
+		$this->_becomeGuestUser();
+		list($ret, $links) = $this->_module->getSystemLinks();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			array(
+				'Register' => array(
+					'text'   => $label,
+					'params' => array(
+						'view'    => 'core.UserAdmin',
+						'subView' => 'register.UserSelfRegistration',
+						'return'  => 1,
+					),
+				),
+			),
+			$links,
+			'guest'
+		);
+	}
+}

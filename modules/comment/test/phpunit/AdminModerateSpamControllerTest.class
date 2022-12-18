@@ -1,0 +1,138 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * AdminModerateSpam controller tests
+ * @package Comment
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminModerateSpamControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'comment.AdminModerateSpam');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'id.rootAlbum',
+			$this->_album->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testSiteAdminsOnly() {
+		$ret = $this->_becomeGuestUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->handleRequest(ERROR_PERMISSION_DENIED);
+	}
+
+	public function testDeleteAllSpam() {
+		global $gallery;
+
+		// Create a comment of each type
+		foreach (array(
+			COMMENT_PUBLISH_STATUS_PUBLISHED,
+			COMMENT_PUBLISH_STATUS_UNPUBLISHED,
+			COMMENT_PUBLISH_STATUS_SPAM,
+		) as $publishStatus) {
+			$comments[$publishStatus] = new GalleryComment();
+
+			$ret = $comments[$publishStatus]->create($this->_album->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$comments[$publishStatus]->setPublishStatus($publishStatus);
+			$comments[$publishStatus]->setCommenterId($gallery->getActiveUserId());
+			$comments[$publishStatus]->setSubject('this is a test subject');
+			$comments[$publishStatus]->setComment('this is a test comment');
+			$comments[$publishStatus]->setHost('127.0.0.1');
+			$ret = $comments[$publishStatus]->save();
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][deleteAllSpam]', 1);
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'comment.AdminModerateSpam',
+				),
+				'status'   => array(
+					'allSpamDeleted' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify that only the spam comment was deleted.
+		foreach ($comments as $publishStatus => $comment) {
+			list($ret, $comment) = $comment->refresh();
+
+			switch ($publishStatus) {
+				case COMMENT_PUBLISH_STATUS_UNPUBLISHED:
+				case COMMENT_PUBLISH_STATUS_PUBLISHED:
+					$this->assertEquals(null, $ret, 'Deleted Non Spam Comment');
+
+					break;
+
+				case COMMENT_PUBLISH_STATUS_SPAM:
+					$this->assertTrue($ret->getErrorCode() & ERROR_MISSING_OBJECT);
+
+					break;
+			}
+		}
+	}
+}

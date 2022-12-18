@@ -1,0 +1,577 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+GalleryCoreApi::requireOnce('modules/rating/classes/RatingHelper.class');
+
+/**
+ * RatingHelper tests
+ *
+ * @package Rating
+ * @subpackage PHPUnit
+ * @author Don Seiler <don@seiler.us>
+ * @version $Revision: 17580 $
+ */
+class RatingHelperTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum(
+			$this->_getRootId(),
+			array(
+				'orderBy'        => 'RatingSortOrder',
+				'orderDirection' => ORDER_DESCENDING,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+
+		list($ret, $this->_item) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'image/test',
+			array(),
+			__FILE__,
+			'GalleryPhotoItem'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$numUsers     = mt_rand(3, 10);
+		$this->_users = array();
+
+		for ($i = 0; $i < $numUsers; $i++) {
+			list($ret, $this->_users[$i]) = $this->_createRandomUser();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			// Clean up test users
+			$this->_markForCleanup($this->_users[$i]);
+		}
+
+		$this->_origSession = $gallery->_session;
+
+		GalleryUtilities::removeRequestVariable(SESSION_ID_PARAMETER);
+		unset($_COOKIE[SESSION_ID_PARAMETER], $_SERVER['HTTP_COOKIE']);
+	}
+
+	public function tearDown() {
+		global $gallery;
+		$gallery->_session = $this->_origSession;
+
+		list($ret, $languageCode) = $gallery->getActiveLanguageCode();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		} else {
+			// Init a new translator so that we reset our locale
+			$translator = GalleryTranslator::doStatic();
+			$translator->init($languageCode);
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testRateItem() {
+		global $gallery;
+		$session =& $gallery->getSession();
+		$this->assertTrue($session->isPersistent(), 'is persistent');
+		$this->assertTrue(!empty($session->_sessionId), 'session id');
+
+		$testRating = mt_rand(1, 5);
+
+		list($ret, $RatingData) = RatingHelper::rateItem(
+			$this->_item->getId(),
+			$testRating,
+			$this->_users[0]->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Check our own rating
+		$this->assertEquals($testRating, (int)$RatingData['userRating']);
+
+		// Check our one and only vote
+		$this->assertEquals(1, (int)$RatingData['votes']);
+
+		// After only one vote, our rating should be the average
+		$this->assertEquals($testRating, (int)$RatingData['rating']);
+	}
+
+	public function testRateItemAsGoogleBot() {
+		global $gallery;
+		$session =& $gallery->getSession();
+		$this->assertTrue($session->isPersistent(), 'is persistent');
+		$this->assertTrue(!empty($session->_sessionId), 'session id');
+		$testRating = mt_rand(1, 5);
+
+		$_SERVER['HTTP_USER_AGENT'] = 'Googlebot/2.1 (+http://www.googlebot.com/bot.html)';
+		list($ret, $RatingData)     = RatingHelper::rateItem($this->_item->getId(), $testRating, $this->_users[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// There should be no rating
+		$this->assertEquals(0, (int)$RatingData['userRating'], 'GoogleBot vote was counted.');
+
+		// Vote should note have counted
+		$this->assertEquals(0, (int)$RatingData['votes'], 'GoogleBot vote was counted.');
+
+		// There should be no average
+		$this->assertEquals(0, (int)$RatingData['rating'], 'GoogleBot vote was counted.');
+	}
+
+	public function testRateAsGuestWithoutPersistentCookie() {
+		global $gallery;
+		$gallery->_session = null;
+		$ret               = $gallery->initSession();
+
+		if ($ret) {
+			return $ret;
+		}
+		// It should create a new persistent session
+		$this->_becomeGuestUser();
+		$this->assertFalse($gallery->_session->isPersistent(), 'not persistent');
+
+		list($ret, $guestId) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'core',
+			'id.anonymousUser'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$anonymousUserId = (int)$guestId;
+
+		// Rate!
+		$testRating             = mt_rand(1, 5);
+		list($ret, $RatingData) = RatingHelper::rateItem(
+			$this->_item->getId(),
+			3,
+			$anonymousUserId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue($gallery->_session->isPersistent(), 'is persistent');
+		list($ret, $RatingData) = RatingHelper::rateItem(
+			$this->_item->getId(),
+			$testRating,
+			$anonymousUserId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals($testRating, (int)$RatingData['userRating']);
+		$this->assertEquals(1, (int)$RatingData['votes']);
+		$this->assertEquals($testRating, (int)$RatingData['rating']);
+	}
+
+	public function testRateBogusItem() {
+		$testRating             = mt_rand(1, 5);
+		list($ret, $RatingData) = RatingHelper::rateItem(
+			-1,
+			$testRating,
+			$this->_users[0]->getId()
+		);
+		// This *should* fail.
+		$this->assertTrue($ret, 'expected error');
+
+		if ($ret) {
+			$this->assertTrue($ret->getErrorCode() & ERROR_MISSING_OBJECT, 'Wrong error status');
+		}
+	}
+
+	public function testMultiUserRateItem() {
+		$totalRating = 0;
+		$votes       = 0;
+
+		foreach ($this->_users as $user) {
+			$testRating             = mt_rand(1, 5);
+			list($ret, $RatingData) = RatingHelper::rateItem(
+				$this->_item->getId(),
+				$testRating,
+				$user->getId()
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+			$totalRating += $testRating;
+			$votes++;
+
+			// Check our own rating
+			$this->assertEquals(
+				$testRating,
+				(int)$RatingData['userRating'],
+				'User rating test failed.'
+			);
+
+			// Check our one and only vote
+			$this->assertEquals(
+				$votes,
+				(int)$RatingData['votes'],
+				'Running vote count test failed.'
+			);
+		}
+
+		// Test average
+		$average                = round($totalRating / $votes, 3);
+		list($ret, $RatingData) = RatingHelper::fetchRatings(
+			array($this->_item->getId()),
+			$this->_users[0]->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			$average,
+			(float)$RatingData[$this->_item->getId()]['rating'],
+			'Average rating test failed.'
+		);
+
+		// Test substitution of commas as decimal separator
+		$this->assertTrue(
+			!strpos($RatingData[$this->_item->getId()]['rating'], ','),
+			'Comma found in rating: ' . $RatingData[$this->_item->getId()]['rating']
+		);
+		$this->assertTrue(
+			!strpos($RatingData[$this->_item->getId()]['averagePercent'], ','),
+			'Comma found in averagePercent: '
+			. $RatingData[$this->_item->getId()]['averagePercent']
+		);
+	}
+
+	public function testFetchRatingsForGuestWithoutPersistentSession() {
+		global $gallery;
+		$session =& $gallery->getSession();
+		$this->assertTrue($session->isPersistent(), 'is persistent');
+		$this->assertTrue(!empty($session->_sessionId), 'session id');
+
+		list($ret, $guestId) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'core',
+			'id.anonymousUser'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$anonymousUserId = (int)$guestId;
+
+		// Create a few ratings
+		$totalRating = 0;
+		$votes       = 0;
+		$testUserIds = array();
+
+		foreach ($this->_users as $user) {
+			$testUserIds[] = $user->getId();
+		}
+		$testUserIds[] = $anonymousUserId;
+
+		foreach ($testUserIds as $userId) {
+			if ($userId == $anonymousUserId) {
+				$gallery->_session = null;
+				$ret               = $gallery->initSession();
+
+				if ($ret) {
+					return $ret;
+				}
+				// It should create a new persistent session
+				$this->_becomeGuestUser();
+				$this->assertFalse($gallery->_session->isPersistent(), 'not persistent');
+			}
+
+			$testRating             = mt_rand(1, 5);
+			list($ret, $RatingData) = RatingHelper::rateItem(
+				$this->_item->getId(),
+				$testRating,
+				$userId
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+			$totalRating += $testRating;
+			$votes++;
+
+			// Check our own rating
+			$this->assertEquals(
+				$testRating,
+				(int)$RatingData['userRating'],
+				'User rating test failed.'
+			);
+
+			// Check our one and only vote
+			$this->assertEquals(
+				$votes,
+				(int)$RatingData['votes'],
+				'Running vote count test failed.'
+			);
+		}
+
+		// Test fetch as guest with a persistent session that already has rated
+		$average                = round($totalRating / $votes, 3);
+		list($ret, $RatingData) = RatingHelper::fetchRatings(
+			array($this->_item->getId()),
+			$anonymousUserId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			$average,
+			(float)$RatingData[$this->_item->getId()]['rating'],
+			'average for guest that has rated'
+		);
+		$this->assertEquals(
+			$testRating,
+			(int)$RatingData[$this->_item->getId()]['userRating'],
+			'User rating for guest that has rated'
+		);
+
+		// Fetch ratings as guest without a persistent session
+		$gallery->_session = null;
+		$ret               = $gallery->initSession();
+
+		if ($ret) {
+			return $ret;
+		}
+		// It should create a new persistent session
+		$this->_becomeGuestUser();
+		$this->assertFalse($gallery->_session->isPersistent(), 'not persistent');
+
+		list($ret, $RatingData) = RatingHelper::fetchRatings(
+			array($this->_item->getId()),
+			$anonymousUserId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			$average,
+			(float)$RatingData[$this->_item->getId()]['rating'],
+			'Average rating test failed.'
+		);
+		$this->assertTrue(!isset($RatingData['userRating']), 'no user rating');
+		$this->assertFalse($gallery->_session->isPersistent(), 'not persistent');
+
+		// Fetch as another guest with a persistent session that hasn't rated yet
+		$session = new GallerySession();
+		$ret     = $session->initEmpty(true, $anonymousUserId);
+
+		if ($ret) {
+			return $ret;
+		}
+		$gallery->_session = $session;
+		$this->assertTrue($gallery->_session->isPersistent(), 'persistent');
+		list($ret, $RatingData) = RatingHelper::fetchRatings(
+			array($this->_item->getId()),
+			$anonymousUserId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(!isset($RatingData['userRating']), 'no user rating');
+	}
+
+	public function testFetchRatingsForUser() {
+		// Used to be a bug with missing keys in data for item rated by others but not this user
+		list($ret) = RatingHelper::rateItem($this->_item->getId(), 4, $this->_users[0]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $RatingData) = RatingHelper::fetchRatings(
+			array($this->_item->getId()),
+			$this->_users[1]->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			array(
+				$this->_item->getId() => array(
+					'itemId'         => $this->_item->getId(),
+					'rating'         => '4',
+					'votes'          => 1,
+					'averagePercent' => '80',
+					'stars'          => 8,
+					'userRating'     => 'N/A',
+					'userStars'      => 0,
+				),
+			),
+			$RatingData
+		);
+	}
+
+	public function testGetItemSummaries() {
+		// Need to enable rating for our test album first
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'rating',
+			'enabled',
+			1,
+			$this->_album->getId()
+		);
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'rating');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$itemId = $this->_item->getId();
+
+		// Verify we get a non empty item summary for the item
+		$permissions[$itemId]['rating.view'] = 1;
+		$template                            = new GalleryTemplate(__DIR__ . '/../../../..');
+		list($ret, $content)                 = $module->getItemSummaries(
+			array($this->_item),
+			$permissions,
+			$template
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(
+			isset($content[$itemId]) && !empty($content[$itemId]),
+			'Did not get item summary'
+		);
+
+		// Get the item summary again, but without having the permissions
+		unset($content, $template);
+
+		$template            = new GalleryTemplate(__DIR__ . '/../../../..');
+		list($ret, $content) = $module->getItemSummaries(
+			array($this->_item),
+			array(
+				$itemId => array(),
+			),
+			$template
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(!isset($content[$itemId]), 'Got an item summary');
+	}
+
+	public function testSortOrder() {
+		$items = array($this->_item);
+
+		for ($i = 0; $i < 3; $i++) {
+			list($ret, $items[]) = $this->_createRandomDataItem(
+				$this->_album->getId(),
+				'image/test',
+				array(),
+				__FILE__,
+				'GalleryPhotoItem'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+		// Four items: *, *****, * + random votes, ***** x3; order = 4 2 3 1
+		foreach ($items as $i => $item) {
+			list($ret) = RatingHelper::rateItem(
+				$item->getId(),
+				($i % 2) ? 5 : 1,
+				$this->_users[0]->getId()
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		for ($i = 1; $i <= 2; $i++) {
+			list($ret) = RatingHelper::rateItem($items[3]->getId(), 5, $this->_users[$i]->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		for ($i = 1; $i < count($this->_users); $i++) {
+			$testRating = mt_rand(1, 5);
+			list($ret)  = RatingHelper::rateItem(
+				$items[2]->getId(),
+				$testRating,
+				$this->_users[$i]->getId()
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		list($ret, $childIds) = GalleryCoreApi::fetchChildItemIds($this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				$items[3]->getId(),
+				$items[1]->getId(),
+				$items[2]->getId(),
+				$items[0]->getId(),
+			),
+			$childIds,
+			'order of child ids'
+		);
+	}
+}

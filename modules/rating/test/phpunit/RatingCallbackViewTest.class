@@ -1,0 +1,313 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/rating/RatingCallback.inc');
+
+/**
+ * Test RatingCallback functionality
+ *
+ * @package Rating
+ * @subpackage PHPUnit
+ * @author Don Seiler <don@seiler.us>
+ * @version $Revision: 17580 $
+ */
+class RatingCallbackViewTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_userId = $gallery->getActiveUserId();
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+
+		list($ret, $this->_item) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'image/test',
+			array(),
+			__FILE__,
+			'GalleryPhotoItem'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_module) = GalleryCoreApi::loadPlugin('module', 'rating');
+
+		if ($ret || !isset($this->_module)) {
+			return $ret;
+		}
+
+		list($ret, $this->_view) = GalleryView::doStatic()->loadView('rating.RatingCallback');
+
+		if ($ret || !isset($this->_view)) {
+			return $ret;
+		}
+	}
+
+	public function testRenderImmediate() {
+		$rating = mt_rand(1, 5);
+
+		GalleryUtilities::putRequestVariable('command', 'rate');
+		GalleryUtilities::putRequestVariable('itemId', $this->_item->getId());
+		GalleryUtilities::putRequestVariable('rating', $rating);
+
+		ob_start();
+		$ret = $this->_view->renderImmediate(array(), array());
+
+		if ($ret) {
+			ob_end_clean();
+
+			return $ret;
+		}
+		$results = explode("\n", ob_get_contents());
+		ob_end_clean();
+
+		// Item id
+		$this->assertEquals($this->_item->getId(), (int)$results[0]);
+
+		// New average rating
+		$this->assertEquals($rating, (int)$results[1]);
+
+		// User rating
+		$this->assertEquals($rating, (int)$results[3]);
+
+		// Vote count
+		$votesString = $this->_module->translate(
+			array(
+				'one'   => '%d vote',
+				'many'  => '%d votes',
+				'count' => 1,
+				'arg1'  => 1,
+			)
+		);
+		$this->assertEquals($votesString, $results[2]);
+	}
+
+	public function testNoRatingPermissions() {
+		$rating = mt_rand(1, 5);
+
+		GalleryUtilities::putRequestVariable('command', 'rate');
+		GalleryUtilities::putRequestVariable('itemId', $this->_item->getId());
+		GalleryUtilities::putRequestVariable('rating', $rating);
+
+		ob_start();
+		$ret = $this->_view->renderImmediate(array(), array());
+
+		if ($ret) {
+			ob_end_clean();
+
+			return $ret;
+		}
+		$results = explode("\n", ob_get_contents());
+		ob_end_clean();
+
+		// Item id
+		$this->assertEquals($this->_item->getId(), (int)$results[0]);
+
+		// New average rating
+		$this->assertEquals($rating, (int)$results[1], 'Seed average rating is incorrect.');
+
+		// User rating
+		$this->assertEquals($rating, (int)$results[3], 'Seed user rating is incorrect.');
+
+		// Vote count
+		$votesString = $this->_module->translate(
+			array(
+				'one'   => '%d vote',
+				'many'  => '%d votes',
+				'count' => 1,
+				'arg1'  => 1,
+			)
+		);
+		$this->assertEquals($votesString, $results[2], 'Seed vote count is incorrect.');
+
+		// Remove all permissions
+		$ret = GalleryCoreApi::removeItemPermissions($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$this->_userId,
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$this->_userId,
+			'rating.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$newRating = mt_rand(1, 5);
+
+		GalleryUtilities::putRequestVariable('command', 'rate');
+		GalleryUtilities::putRequestVariable('itemId', $this->_item->getId());
+		GalleryUtilities::putRequestVariable('rating', $newRating);
+
+		ob_start();
+		$ret = $this->_view->renderImmediate(array(), array());
+
+		if ($ret) {
+			ob_end_clean();
+
+			return $ret;
+		}
+		$results = explode("\n", ob_get_contents());
+		ob_end_clean();
+
+		// Should be empty
+		$this->assertTrue(empty($results[0]), 'Results not empty.');
+
+		// Nothing should be returned past first line
+		$this->assertTrue(!isset($results[1]));
+	}
+
+	public function testRatingPermissions() {
+		$rating = mt_rand(1, 5);
+
+		GalleryUtilities::putRequestVariable('command', 'rate');
+		GalleryUtilities::putRequestVariable('itemId', $this->_item->getId());
+		GalleryUtilities::putRequestVariable('rating', $rating);
+
+		ob_start();
+		$ret = $this->_view->renderImmediate(array(), array());
+
+		if ($ret) {
+			ob_end_clean();
+
+			return $ret;
+		}
+		$results = explode("\n", ob_get_contents());
+		ob_end_clean();
+
+		// Item id
+		$this->assertEquals($this->_item->getId(), (int)$results[0]);
+
+		// New average rating
+		$this->assertEquals($rating, (int)$results[1], 'Seed average rating is incorrect.');
+
+		// User rating
+		$this->assertEquals($rating, (int)$results[3], 'Seed user rating is incorrect.');
+
+		// Vote count
+		$votesString = $this->_module->translate(
+			array(
+				'one'   => '%d vote',
+				'many'  => '%d votes',
+				'count' => 1,
+				'arg1'  => 1,
+			)
+		);
+		$this->assertEquals($votesString, $results[2], 'Seed vote count is incorrect.');
+
+		// Remove all permissions
+		$ret = GalleryCoreApi::removeItemPermissions($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$this->_userId,
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$this->_userId,
+			'rating.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$this->_userId,
+			'rating.add'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$newRating = mt_rand(1, 5);
+
+		GalleryUtilities::putRequestVariable('command', 'rate');
+		GalleryUtilities::putRequestVariable('itemId', $this->_item->getId());
+		GalleryUtilities::putRequestVariable('rating', $newRating);
+
+		ob_start();
+		$ret = $this->_view->renderImmediate(array(), array());
+
+		if ($ret) {
+			ob_end_clean();
+
+			return $ret;
+		}
+		$results = explode("\n", ob_get_contents());
+		ob_end_clean();
+
+		// Item id
+		$this->assertEquals($this->_item->getId(), (int)$results[0]);
+
+		// New average rating
+		$this->assertEquals($newRating, (int)$results[1], 'Average rating is incorrect.');
+
+		// User rating
+		$this->assertEquals($newRating, (int)$results[3], 'User rating is incorrect.');
+
+		// Vote count (should be same since duplicate user votes ignored)
+		$votesString = $this->_module->translate(
+			array(
+				'one'   => '%d vote',
+				'many'  => '%d votes',
+				'count' => 1,
+				'arg1'  => 1,
+			)
+		);
+		$this->assertEquals($votesString, $results[2], 'Vote count is incorrect.');
+	}
+}

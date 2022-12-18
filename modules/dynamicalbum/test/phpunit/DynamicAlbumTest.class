@@ -1,0 +1,569 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test DynamicAlbum views
+ *
+ * @package DynamicAlbum
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class DynamicAlbumTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+
+		$time = array(
+			1 => time() - 100,
+			2 => time(),
+			3 => time() - 50,
+		);
+
+		foreach (array(
+			1 => 5,
+			2 => 0,
+			3 => 999999999,
+		) as $i => $viewCount) {
+			list($ret, $this->_items[$i]) = $this->_createRandomDataItem(
+				$this->_album->getId(),
+				'test/item',
+				array(
+					'creationTimestamp' => $time[$i],
+				)
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+			$ret = GalleryCoreApi::setItemViewCount($this->_items[$i]->getId(), $viewCount);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		list($ret, $this->_module) = GalleryCoreApi::loadPlugin('module', 'dynamicalbum');
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $this->_updatesView) = GalleryView::doStatic()->loadView(
+			'dynamicalbum.UpdatesAlbum'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $this->_popularView) = GalleryView::doStatic()->loadView(
+			'dynamicalbum.PopularAlbum'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $this->_randomView) = GalleryView::doStatic()->loadView(
+			'dynamicalbum.RandomAlbum'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'dynamicalbum');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		foreach (array('date', 'views', 'random') as $key) {
+			$ret = GalleryCoreApi::setPluginParameter(
+				'module',
+				'dynamicalbum',
+				'size.' . $key,
+				'4'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
+		$this->_template = new GalleryTemplate(dirname(dirname(dirname(dirname(__DIR__)))));
+		$this->_class    = array(
+			'date'   => 'UpdatesAlbum',
+			'views'  => 'PopularAlbum',
+			'random' => 'RandomAlbum',
+		);
+	}
+
+	public function testLoadThemeAndSettingsForAlbum() {
+		foreach (array(
+			'date'   => $this->_updatesView,
+			'views'  => $this->_popularView,
+			'random' => $this->_randomView,
+		) as $key => $view) {
+			$ret = GalleryCoreApi::setPluginParameter(
+				'module',
+				'dynamicalbum',
+				'description.' . $key,
+				'desc ' . $key
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			list($ret, $theme, $params, $item) = $view->loadThemeAndParameters();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertTrue(
+				GalleryUtilities::isA($theme, 'GalleryTheme'),
+				$key . ': theme'
+			);
+			$this->assertTrue(
+				is_array($params),
+				$key . ': theme settings'
+			);
+			$this->assertTrue(
+				GalleryUtilities::isA($item, 'GalleryDynamicAlbum'),
+				$key . ': item'
+			);
+			$this->assertFalse(
+				isset($item->parent),
+				$key . ': item parent'
+			);
+			$this->assertEquals(
+				'desc ' . $key,
+				$item->getDescription(),
+				$key . ': description'
+			);
+		}
+	}
+
+	public function testLoadThemeAndSettingsForItem() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_items[1]->getId());
+
+		foreach (array(
+			'date'   => $this->_updatesView,
+			'views'  => $this->_popularView,
+			'random' => $this->_randomView,
+		) as $key => $view) {
+			$ret = GalleryCoreApi::setPluginParameter(
+				'module',
+				'dynamicalbum',
+				'description.' . $key,
+				'hi'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			list($ret, $theme, $params, $item) = $view->loadThemeAndParameters();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertTrue(
+				GalleryUtilities::isA($theme, 'GalleryTheme'),
+				$key . ': theme'
+			);
+			$this->assertTrue(
+				is_array($params),
+				$key . ': theme settings'
+			);
+			$this->assertTrue(
+				GalleryUtilities::isA(
+					$item,
+					'GalleryDataItem'
+				),
+				$key . ': item'
+			);
+			$this->assertTrue(
+				isset($item->parent),
+				$key . ': item parent'
+			);
+			$this->assertTrue(
+				GalleryUtilities::isA($item->parent, 'GalleryDynamicAlbum'),
+				$key . ': parent type'
+			);
+			$this->assertEquals(
+				'hi',
+				$item->parent->getDescription(),
+				$key . ': parent description'
+			);
+			$this->assertEquals(
+				array(get_class($view), 'getChildIds'),
+				$item->parent->getChildrenFunction,
+				$key . ': get children function'
+			);
+		}
+	}
+
+	public function testLoadTemplateForAlbum() {
+		global $gallery;
+
+		foreach (array(
+			'date'   => $this->_updatesView,
+			'views'  => $this->_popularView,
+			'random' => $this->_randomView,
+		) as $key => $view) {
+			$ret = GalleryCoreApi::setPluginParameter(
+				'module',
+				'dynamicalbum',
+				'type.' . $key,
+				'all'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$template              = new GalleryTemplate(dirname(dirname(dirname(dirname(__DIR__)))));
+			$theme                 =& $template->getVariableByReference('theme');
+			$theme['actingUserId'] = $gallery->getActiveUserId();
+
+			$form               = array();
+			list($ret, $result) = $view->loadTemplate($template, $form);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(
+				array(
+					'view' => 'dynamicalbum.' . $this->_class[$key],
+				),
+				$theme['pageUrl'],
+				$key . ': page url'
+			);
+			$this->assertEquals(4, count($theme['allChildIds']), $key . ': item count');
+		}
+	}
+
+	public function testLoadTemplateForAlbumTree() {
+		global $gallery;
+		GalleryUtilities::putRequestVariable('albumId', $this->_album->getId());
+		$type = array(
+			'date'   => 'all',
+			'views'  => 'data',
+			'random' => 'album',
+		);
+
+		foreach (array(
+			'date'   => $this->_updatesView,
+			'views'  => $this->_popularView,
+			'random' => $this->_randomView,
+		) as $key => $view) {
+			GalleryUtilities::putRequestVariable('show', $type[$key]);
+
+			$template = new GalleryTemplate(
+				dirname(dirname(dirname(dirname(__DIR__))))
+			);
+
+			$theme                 =& $template->getVariableByReference('theme');
+			$theme['actingUserId'] = $gallery->getActiveUserId();
+
+			$form               = array();
+			list($ret, $result) = $view->loadTemplate($template, $form);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(
+				array(
+					'view'    => 'dynamicalbum.' . $this->_class[$key],
+					'albumId' => $this->_album->getId(),
+					'show'    => $type[$key],
+				),
+				$theme['pageUrl'],
+				$key . ': page url'
+			);
+			$this->assertEquals(
+				$key == 'random' ? 0 : 3,
+				count($theme['allChildIds']),
+				$key . ': item count'
+			);
+
+			if ($key == 'date') {
+				$this->assertEquals(
+					array(
+						$this->_items[2]->getId(),
+						$this->_items[3]->getId(),
+						$this->_items[1]->getId(),
+					),
+					$theme['allChildIds'],
+					'date: child ids'
+				);
+			} elseif ($key == 'views') {
+				$this->assertEquals(
+					array(
+						$this->_items[3]->getId(),
+						$this->_items[1]->getId(),
+						$this->_items[2]->getId(),
+					),
+					$theme['allChildIds'],
+					'views: child ids'
+				);
+			}
+		}
+	}
+
+	public function testLoadTemplateForItem() {
+		list($ret, $count) = GalleryCoreApi::fetchItemViewCount($this->_items[2]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(0, $count, 'count before');
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_items[2]->getId());
+
+		$form               = array();
+		list($ret, $result) = $this->_updatesView->loadTemplate(
+			$this->_template,
+			$form
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$theme =& $this->_template->getVariableByReference('theme');
+		$this->assertEquals(
+			array(
+				'view' => 'dynamicalbum.UpdatesAlbum',
+			),
+			$theme['pageUrl'],
+			'page url'
+		);
+
+		list($ret, $count) = GalleryCoreApi::fetchItemViewCount($this->_items[2]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(1, $count, 'count after');
+	}
+
+	public function testLoadTemplateForAlbumNoPermission() {
+		global $gallery;
+		$theme                 =& $this->_template->getVariableByReference('theme');
+		$theme['actingUserId'] = $gallery->getActiveUserId();
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'dynamicalbum',
+			'size.views',
+			'0'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$form               = array();
+		list($ret, $result) = $this->_popularView->loadTemplate(
+			$this->_template,
+			$form
+		);
+
+		if ($ret) {
+			$this->assertTrue(
+				$ret->getErrorCode() & ERROR_PERMISSION_DENIED,
+				'permission denied'
+			);
+		} else {
+			$this->assertTrue(false, 'should get error');
+		}
+	}
+
+	public function testLoadTemplateForItemNoPermission() {
+		$ret = GalleryCoreApi::removeItemPermissions($this->_items[3]->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = $this->_becomeGuestUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_items[3]->getId());
+
+		$form               = array();
+		list($ret, $result) = $this->_randomView->loadTemplate(
+			$this->_template,
+			$form
+		);
+
+		if ($ret) {
+			$this->assertTrue(
+				$ret->getErrorCode() & ERROR_MISSING_OBJECT,
+				'wrong error code'
+			);
+
+			if (!($ret->getErrorCode() & ERROR_MISSING_OBJECT)) {
+				return $ret;
+			}
+		} else {
+			$this->fail('expected error');
+		}
+	}
+
+	public function testItemLinks() {
+		foreach (array('date', 'views', 'random') as $key) {
+			$ret = GalleryCoreApi::setPluginParameter(
+				'module',
+				'dynamicalbum',
+				'itemlink.' . $key,
+				'1'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+		$items = array($this->_album, $this->_items[2]);
+
+		list($ret, $links) = $this->_module->getItemLinks(
+			$items,
+			array(
+				$this->_album->getId()    => true,
+				$this->_items[2]->getId() => true,
+			),
+			array()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			array(
+				$this->_album->getId() => array(
+					array(
+						'text'   => $this->_module->translate('View Latest Updates'),
+						'params' => array(
+							'view'    => 'dynamicalbum.UpdatesAlbum',
+							'albumId' => $this->_album->getId(),
+						),
+					),
+					array(
+						'text'   => $this->_module->translate('View Popular Items'),
+						'params' => array(
+							'view'    => 'dynamicalbum.PopularAlbum',
+							'albumId' => $this->_album->getId(),
+						),
+					),
+					array(
+						'text'   => $this->_module->translate('View Random Items'),
+						'params' => array(
+							'view'    => 'dynamicalbum.RandomAlbum',
+							'albumId' => $this->_album->getId(),
+						),
+					),
+				),
+			),
+			$links,
+			'all'
+		);
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'dynamicalbum',
+			'itemlink.views',
+			'0'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $links) = $this->_module->getItemLinks(
+			$items,
+			array(
+				$this->_album->getId()    => true,
+				$this->_items[2]->getId() => true,
+			),
+			array()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			array(
+				$this->_album->getId() => array(
+					array(
+						'text'   => $this->_module->translate('View Latest Updates'),
+						'params' => array(
+							'view'    => 'dynamicalbum.UpdatesAlbum',
+							'albumId' => $this->_album->getId(),
+						),
+					),
+					array(
+						'text'   => $this->_module->translate('View Random Items'),
+						'params' => array(
+							'view'    => 'dynamicalbum.RandomAlbum',
+							'albumId' => $this->_album->getId(),
+						),
+					),
+				),
+			),
+			$links,
+			'just 2'
+		);
+
+		list($ret, $links) = $this->_module->getItemLinks(
+			$items,
+			array(
+				$this->_items[2]->getId() => true,
+			),
+			array()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(array(), $links, 'none');
+	}
+}

@@ -1,0 +1,139 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/register/classes/GalleryPendingUserHelper.class');
+
+/**
+ * Test PendingUser functionality
+ * @package Registration
+ * @subpackage PHPUnit
+ * @author Sebastian Eichner <mailsp@sebastian-eichner.de>
+ * @version $Revision: 17580 $
+ */
+class GalleryPendingUserTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'register');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testPendingUserCreation() {
+		global $gallery;
+
+		// Create a new pending user
+		list($ret, $user) = $this->_createRandomPendingUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryDataCache::reset();
+
+		// Verify it
+		$ret = $this->_verifyEntity($user);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Delete it
+		$ret = $this->_deleteAndVerifyEntity($user->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testPendingUserPassword() {
+		// Verify hashed password is created as GalleryUser would
+		list($ret, $pendingUser) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryPendingUser');
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $user) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryUser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (empty($pendingUser) || empty($user)) {
+			return $this->assertTrue(false, 'factory error');
+		}
+
+		$password = 'testpass' . mt_rand(1, 999);
+		$user->changePassword($password);
+		$pendingUser->changePassword($password);
+		$this->assertEquals(
+			strlen($user->getHashedPassword()),
+			strlen($pendingUser->getHashedPassword()),
+			'hash length'
+		);
+		$user->setHashedPassword($pendingUser->getHashedPassword());
+		$this->assertTrue($user->isCorrectPassword($password), 'check password');
+	}
+
+	public function _createRandomPendingUser() {
+		list($ret, $user) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryPendingUser');
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		if (!isset($user)) {
+			return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+		}
+
+		$username = 'testuser_' . mt_rand(1000, 1000000);
+
+		$ret = $user->create($username);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		$ret = $user->save();
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		list($ret, $user) = GalleryPendingUserHelper::fetchPendingUserByUserName($username);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		return array(null, $user);
+	}
+}

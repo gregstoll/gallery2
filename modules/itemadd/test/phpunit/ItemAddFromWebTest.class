@@ -1,0 +1,1246 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/*
+ * We need these classes around so that when the code actually tries to add
+ * a photo to an album and create a derivative, the factory won't try to go off
+ * and load these classes (which lightens the load on our dummy toolkit)
+ */
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPhotoItem.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryAlbumItem.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryDerivativeImage.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryMovieItem.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryUnknownItem.class');
+
+/**
+ * ItemAddFromWeb plugin test
+ * @package ItemAdd
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 20940 $
+ */
+class ItemAddFromWebTest extends ItemAddPluginTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'itemadd', 'ItemAddFromWeb');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum(
+			$this->_getRootId(),
+			array(
+				'orderBy' => 'orderWeight',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+
+		list($ret, $this->_lockIds) = GalleryCoreApi::acquireReadLock($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		global $gallery;
+		$this->_savePlatform =& $gallery->getPlatform();
+		$gallery->setPlatform(new ItemAddFromWebTestPlatform($this));
+
+		$this->_session        =& $gallery->getSession();
+		$this->_saveRecentUrls = $this->_session->get('itemadd.view.ItemAddFromWeb.recentUrls');
+		$this->_session->put('itemadd.view.ItemAddFromWeb.recentUrls', array());
+
+		$photo              = new GalleryPhotoItem();
+		list($this->_photo) = $photo->itemTypeName();
+		$movie              = new GalleryMovieItem();
+		list($this->_movie) = $movie->itemTypeName();
+		$audio              = new GalleryUnknownItem();
+		$audio->setMimeType('audio/mp3');
+		list($this->_audio) = $audio->itemTypeName();
+	}
+
+	public function tearDown() {
+		global $gallery;
+		$gallery->setPlatform($this->_savePlatform);
+
+		$ret = GalleryCoreApi::releaseLocks($this->_lockIds);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$session =& $gallery->getSession();
+
+		if (isset($this->_saveRecentUrls)) {
+			$session->put('itemadd.view.ItemAddFromWeb.recentUrls', $this->_saveRecentUrls);
+		} else {
+			$session->remove('itemadd.view.ItemAddFromWeb.recentUrls');
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testIsAppropriate() {
+		$ret = $this->_markPluginParametersForCleanup('module', 'itemadd');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'itemadd', 'fromweb', 'off');
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $isAppropriate) = $this->_plugin->isAppropriate();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(false, $isAppropriate, 'off');
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'itemadd', 'fromweb', 'admin');
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $isAppropriate) = $this->_plugin->isAppropriate();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(true, $isAppropriate, 'admin for admin');
+
+		$this->_becomeGuestUser();
+		list($ret, $isAppropriate) = $this->_plugin->isAppropriate();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(false, $isAppropriate, 'admin for guest');
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'itemadd', 'fromweb', 'on');
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $isAppropriate) = $this->_plugin->isAppropriate();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(true, $isAppropriate, 'on');
+	}
+
+	public function testAddFromWebPageCallsIsAppropriate() {
+		$ret = $this->_markPluginParametersForCleanup('module', 'itemadd');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'itemadd', 'fromweb', 'off');
+
+		if ($ret) {
+			return $ret;
+		}
+		$results = $this->handleRequest($this->_album, ERROR_PERMISSION_DENIED);
+		$this->assertEquals(array(null, null), $results);
+	}
+
+	public function testAddChildrenFromWebPage() {
+		global $gallery;
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][addFromWebPage]', 1);
+		GalleryUtilities::putRequestVariable(
+			'form[webPage]',
+			'http://www.test.com/index.php?foo=bar&amp;a=b'
+		);
+		GalleryUtilities::putRequestVariable('form[webPageUrls][http://www.test.com/test1.gif]', 1);
+		GalleryUtilities::putRequestVariable('form[webPageUrls][http://www.test.com/test2.jpg]', 1);
+		GalleryUtilities::putRequestVariable('form[webPageUrls][http://www.test.com/404.jpg]', 1);
+		GalleryUtilities::putRequestVariable(
+			'form[webPageUrls][http://www.test.com/test3.jpg?foo=bar]',
+			1
+		);
+		GalleryUtilities::putRequestVariable(
+			'form[webPageUrls][http://www.test.com/main.php?g2_itemId=123]',
+			1
+		);
+		GalleryUtilities::putRequestVariable(
+			'form[webPageUrls][http://www.test.com/apo\'strophe.jpg]',
+			1
+		);
+		GalleryUtilities::putRequestVariable('form[set][title]', 1);
+		GalleryUtilities::putRequestVariable('form[set][summary]', 1);
+		$basenames = array('test1', 'test2', 'test3', 'test4', 'apo\'strophe');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_album);
+		$this->assertEquals(array(), $results[0], 'errors');
+		$this->assertEquals(5, sizeof($results[1]['addedFiles']), 'number of added files');
+		$this->assertEquals(
+			'http://www.test.com/test1.gif',
+			$results[1]['addedFiles'][0]['fileName'],
+			'filename 1'
+		);
+		$this->assertTrue(isset($results[1]['addedFiles'][0]['id']), 'id 1');
+		$this->assertEquals(
+			'http://www.test.com/test2.jpg',
+			$results[1]['addedFiles'][1]['fileName'],
+			'filename 2'
+		);
+		$this->assertTrue(isset($results[1]['addedFiles'][1]['id']), 'id 2');
+		$this->assertEquals(
+			'http://www.test.com/test3.jpg?foo=bar',
+			$results[1]['addedFiles'][2]['fileName'],
+			'filename 3'
+		);
+		$this->assertTrue(isset($results[1]['addedFiles'][2]['id']), 'id 3');
+		$this->assertEquals(
+			'http://www.test.com/main.php?g2_itemId=123',
+			$results[1]['addedFiles'][3]['fileName'],
+			'filename 4'
+		);
+		$this->assertTrue(isset($results[1]['addedFiles'][3]['id']), 'id 4');
+		$this->assertEquals(
+			'http://www.test.com/apo\'strophe.jpg',
+			$results[1]['addedFiles'][4]['fileName'],
+			'filename 5'
+		);
+		$this->assertTrue(isset($results[1]['addedFiles'][4]['id']), 'id 5');
+
+		list($ret, $ids) = GalleryCoreApi::fetchChildItemIds($this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$i = 0;
+
+		foreach ($ids as $id) {
+			list($ret, $item) = GalleryCoreApi::loadEntitiesById($id, 'GalleryItem');
+
+			if ($ret) {
+				return $ret;
+			}
+			$base = $basenames[$i];
+			$this->assertEquals($base, $item->getTitle(), "title $i");
+			$this->assertEquals($base, $item->getSummary(), "summary $i");
+			$this->assertEquals('', $item->getDescription(), "description $i");
+			$i++;
+		}
+	}
+
+	public function testAddMaliciousFilename() {
+		global $gallery;
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][addFromWebPage]', 1);
+		GalleryUtilities::putRequestVariable(
+			'form[webPage]',
+			'http://www.test.com/'
+		);
+		GalleryUtilities::putRequestVariable(
+			'form[webPageUrls][http://www.test.com/evil<script>.jpg]',
+			1
+		);
+		GalleryUtilities::putRequestVariable('form[set][title]', 1);
+		GalleryUtilities::putRequestVariable('form[set][summary]', 1);
+		GalleryUtilities::putRequestVariable('form[set][description]', 1);
+		$basenames = array('test1', 'test2', 'test3', 'test4', 'apo\'strophe');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_album);
+		$this->assertEquals(array(), $results[0], 'errors');
+		$this->assertEquals(1, sizeof($results[1]['addedFiles']), 'number of added files');
+		$this->assertEquals(
+			'http://www.test.com/evil&lt;script&gt;.jpg',
+			$results[1]['addedFiles'][0]['fileName'],
+			'filename'
+		);
+		$this->assertTrue(isset($results[1]['addedFiles'][0]['id']), 'id 1');
+
+		list($ret, $ids) = GalleryCoreApi::fetchChildItemIds($this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $item) = GalleryCoreApi::loadEntitiesById($ids[0], 'GalleryItem');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('evil&lt;script&gt;', $item->getTitle(), 'title');
+		$this->assertEquals('evil&lt;script&gt;', $item->getSummary(), 'summary');
+		$this->assertEquals('evil&lt;script&gt;', $item->getDescription(), 'description');
+		$this->assertEquals('evil_script_.jpg', $item->getPathComponent(), 'path component');
+	}
+
+	// Test how the controller reacts when the Add Urls button was pushed with no items selected.
+	public function testAddEmptyListFromWebPage() {
+		global $gallery;
+
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('form[action][addFromWebPage]', 1);
+		GalleryUtilities::putRequestVariable('form[webPageUrls]', null);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest($this->_album);
+		$this->assertEquals(array(array(), array()), $results);
+
+		$this->assertEquals(
+			'1',
+			GalleryUtilities::getRequestVariables('form[error][webPage][nothingSelected]')
+		);
+	}
+
+	public function testParserHtml() {
+		$template  = new UnitTestTemplate();
+		$form      = array(
+			'formName' => 'ItemAddFromWeb',
+			'action'   => array(
+				'findFilesFromWebPage' => true,
+			),
+			'webPage'  => 'http://www.test.com/t/index.php?foo=bar',
+		);
+		list($ret) = $this->_plugin->loadTemplate($template, $form, $this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'ItemAddFromWeb' => array(
+					'webPageUrlCount' => 9,
+					'recentUrls'      => array('http://www.test.com/t/index.php?foo=bar'),
+				),
+			),
+			$template->_data,
+			'template'
+		);
+		$this->assertEquals(
+			array(
+				'http://www.test.com/t/index.php?foo=bar' => 1,
+			),
+			$this->_session->get('itemadd.view.ItemAddFromWeb.recentUrls'),
+			'session urls'
+		);
+		$this->assertEquals(
+			array(
+				'formName'    => 'ItemAddFromWeb',
+				'action'      => array(
+					'findFilesFromWebPage' => true,
+				),
+				'webPage'     => 'http://www.test.com/t/index.php?foo=bar',
+				'webPageUrls' => array(
+					array(
+						'url'      => 'http://gallery.test.com/img.jpg',
+						'itemType' => $this->_photo,
+					),
+					array(
+						'url'      => 'http://www.test.com/blah.png',
+						'itemType' => $this->_photo,
+					),
+					array(
+						'url'      => 'http://www.test.com/t/test.gif',
+						'itemType' => $this->_photo,
+					),
+					array(
+						'url'      => 'http://www.test.com/t/test.mov',
+						'itemType' => $this->_movie,
+					),
+					array(
+						'url'      => 'http://www.test.com/a.mp3',
+						'itemType' => $this->_audio,
+					),
+					array(
+						'url'      => 'ftp://test.com/b.bmp',
+						'itemType' => $this->_photo,
+					),
+					array(
+						'url'      => 'http://www.test.com/t/test.gif',
+						'itemType' => $this->_photo,
+					),
+					array(
+						'url'      => 'http://blah.com/blah.jpg',
+						'itemType' => $this->_photo,
+					),
+					array(
+						'url'      => 'https://blah.com/blah.jpg',
+						'itemType' => $this->_photo,
+					),
+				),
+				'set'         => array(
+					'title'       => 1,
+					'summary'     => 0,
+					'description' => 0,
+				),
+			),
+			$form,
+			'form data'
+		);
+	}
+
+	public function testParserNoUrls() {
+		$this->_session->put(
+			'itemadd.view.ItemAddFromWeb.recentUrls',
+			array(
+				'http://www.test.com/page.php' => 1,
+				'http://blah.com/other.html'   => 1,
+			)
+		);
+		$template  = new UnitTestTemplate();
+		$form      = array(
+			'formName' => 'ItemAddFromWeb',
+			'action'   => array(
+				'findFilesFromWebPage' => true,
+			),
+			'webPage'  => 'http://www.test.com/page.php',
+		);
+		list($ret) = $this->_plugin->loadTemplate($template, $form, $this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'ItemAddFromWeb' => array(
+					'webPageUrlCount' => 0,
+					'recentUrls'      => array(
+						'http://www.test.com/page.php',
+						'http://blah.com/other.html',
+					),
+				),
+			),
+			$template->_data,
+			'template'
+		);
+		$this->assertEquals(
+			array(
+				'http://www.test.com/page.php' => 1,
+				'http://blah.com/other.html'   => 1,
+			),
+			$this->_session->get('itemadd.view.ItemAddFromWeb.recentUrls'),
+			'session urls'
+		);
+		$this->assertEquals(
+			array(
+				'formName'    => 'ItemAddFromWeb',
+				'action'      => array(
+					'findFilesFromWebPage' => true,
+				),
+				'webPage'     => 'http://www.test.com/page.php',
+				'webPageUrls' => array(),
+				'error'       => array(
+					'webPage' => array(
+						'noUrlsFound' => 1,
+					),
+				),
+				'set'         => array(
+					'title'       => 1,
+					'summary'     => 0,
+					'description' => 0,
+				),
+			),
+			$form,
+			'form data'
+		);
+	}
+
+	public function testParserDirectToImage() {
+		$template  = new UnitTestTemplate();
+		$form      = array(
+			'formName' => 'ItemAddFromWeb',
+			'action'   => array(
+				'findFilesFromWebPage' => true,
+			),
+			'webPage'  => 'http://www.test.com/img.jpg',
+		);
+		list($ret) = $this->_plugin->loadTemplate($template, $form, $this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'ItemAddFromWeb' => array(
+					'webPageUrlCount' => 1,
+					'recentUrls'      => array(
+						'http://www.test.com/img.jpg',
+					),
+				),
+			),
+			$template->_data
+		);
+		$this->assertEquals(
+			array(
+				'formName'    => 'ItemAddFromWeb',
+				'action'      => array(
+					'findFilesFromWebPage' => true,
+				),
+				'webPage'     => 'http://www.test.com/img.jpg',
+				'webPageUrls' => array(
+					array(
+						'url'      => 'http://www.test.com/img.jpg',
+						'itemType' => $this->_photo,
+					),
+				),
+				'set'         => array(
+					'title'       => 1,
+					'summary'     => 0,
+					'description' => 0,
+				),
+			),
+			$form
+		);
+	}
+
+	public function testParserDirectToImageMalformedContentTypeHeader() {
+		$template  = new UnitTestTemplate();
+		$form      = array(
+			'formName' => 'ItemAddFromWeb',
+			'action'   => array(
+				'findFilesFromWebPage' => true,
+			),
+			'webPage'  => 'http://www.test.com/img2.jpg',
+		);
+		list($ret) = $this->_plugin->loadTemplate($template, $form, $this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'ItemAddFromWeb' => array(
+					'webPageUrlCount' => 1,
+					'recentUrls'      => array(
+						'http://www.test.com/img2.jpg',
+					),
+				),
+			),
+			$template->_data
+		);
+		$this->assertEquals(
+			array(
+				'formName'    => 'ItemAddFromWeb',
+				'action'      => array(
+					'findFilesFromWebPage' => true,
+				),
+				'webPage'     => 'http://www.test.com/img2.jpg',
+				'webPageUrls' => array(
+					array(
+						'url'      => 'http://www.test.com/img2.jpg',
+						'itemType' => $this->_photo,
+					),
+				),
+				'set'         => array(
+					'title'       => 1,
+					'summary'     => 0,
+					'description' => 0,
+				),
+			),
+			$form
+		);
+	}
+
+	public function testParserRedirectToImage() {
+		$this->_session->put(
+			'itemadd.view.ItemAddFromWeb.recentUrls',
+			array(
+				'http://blah.com/other.html' => 1,
+			)
+		);
+		$template  = new UnitTestTemplate();
+		$form      = array(
+			'formName' => 'ItemAddFromWeb',
+			'action'   => array(
+				'findFilesFromWebPage' => true,
+			),
+			'webPage'  => 'http://www.test.com/redirect.php',
+		);
+		list($ret) = $this->_plugin->loadTemplate($template, $form, $this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'ItemAddFromWeb' => array(
+					'webPageUrlCount' => 1,
+					'recentUrls'      => array(
+						'http://blah.com/other.html',
+						'http://www.test.com/image.php?id=3&amp;sn=1',
+					),
+				),
+			),
+			$template->_data,
+			'template'
+		);
+		$this->assertEquals(
+			array(
+				'http://blah.com/other.html'                  => 1,
+				'http://www.test.com/image.php?id=3&amp;sn=1' => 1,
+			),
+			$this->_session->get('itemadd.view.ItemAddFromWeb.recentUrls'),
+			'session urls'
+		);
+		$this->assertEquals(
+			array(
+				'formName'    => 'ItemAddFromWeb',
+				'action'      => array(
+					'findFilesFromWebPage' => true,
+				),
+				'webPage'     => 'http://www.test.com/image.php?id=3&amp;sn=1',
+				'webPageUrls' => array(
+					array(
+						'url'      => 'http://www.test.com/image.php?id=3&amp;sn=1',
+						'itemType' => $this->_photo,
+					),
+				),
+				'set'         => array(
+					'title'       => 1,
+					'summary'     => 0,
+					'description' => 0,
+				),
+			),
+			$form,
+			'form data'
+		);
+	}
+
+	public function testParserMissingUrl() {
+		$template  = new UnitTestTemplate();
+		$form      = array(
+			'formName' => 'ItemAddFromWeb',
+			'action'   => array(
+				'findFilesFromWebPage' => true,
+			),
+		);
+		list($ret) = $this->_plugin->loadTemplate($template, $form, $this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'formName' => 'ItemAddFromWeb',
+				'action'   => array(
+					'findFilesFromWebPage' => true,
+				),
+				'error'    => array(
+					'webPage' => array(
+						'missing' => 1,
+					),
+				),
+				'set'      => array(
+					'title'       => 1,
+					'summary'     => 0,
+					'description' => 0,
+				),
+			),
+			$form
+		);
+	}
+
+	public function testParserInvalidUrl() {
+		$template  = new UnitTestTemplate();
+		$form      = array(
+			'formName' => 'ItemAddFromWeb',
+			'action'   => array(
+				'findFilesFromWebPage' => true,
+			),
+			'webPage'  => 'bogus:url.html',
+		);
+		list($ret) = $this->_plugin->loadTemplate($template, $form, $this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'formName' => 'ItemAddFromWeb',
+				'action'   => array(
+					'findFilesFromWebPage' => true,
+				),
+				'webPage'  => 'bogus:url.html',
+				'error'    => array(
+					'webPage' => array(
+						'invalid' => 1,
+					),
+				),
+				'set'      => array(
+					'title'       => 1,
+					'summary'     => 0,
+					'description' => 0,
+				),
+			),
+			$form
+		);
+	}
+
+	public function testParserUnavailable() {
+		$template  = new UnitTestTemplate();
+		$form      = array(
+			'formName' => 'ItemAddFromWeb',
+			'action'   => array(
+				'findFilesFromWebPage' => true,
+			),
+			'webPage'  => 'http://www.test.com/404.jpg',
+		);
+		list($ret) = $this->_plugin->loadTemplate($template, $form, $this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'formName' => 'ItemAddFromWeb',
+				'action'   => array(
+					'findFilesFromWebPage' => true,
+				),
+				'webPage'  => 'http://www.test.com/404.jpg',
+				'error'    => array(
+					'webPage' => array(
+						'unavailable' => 1,
+					),
+				),
+				'set'      => array(
+					'title'       => 1,
+					'summary'     => 0,
+					'description' => 0,
+				),
+			),
+			$form
+		);
+	}
+
+	public function testParserBaseElement() {
+		$template  = new UnitTestTemplate();
+		$form      = array(
+			'formName' => 'ItemAddFromWeb',
+			'action'   => array(
+				'findFilesFromWebPage' => true,
+			),
+			'webPage'  => 'http://www.test.com/t/index.php?base=abs',
+		);
+		list($ret) = $this->_plugin->loadTemplate($template, $form, $this->_album);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'ItemAddFromWeb' => array(
+					'webPageUrlCount' => 4,
+					'recentUrls'      => array('http://www.test.com/t/index.php?base=abs'),
+				),
+			),
+			$template->_data,
+			'template'
+		);
+		$this->assertEquals(
+			array(
+				'http://www.test.com/t/index.php?base=abs' => 1,
+			),
+			$this->_session->get('itemadd.view.ItemAddFromWeb.recentUrls'),
+			'session urls'
+		);
+		$this->assertEquals(
+			array(
+				'formName'    => 'ItemAddFromWeb',
+				'action'      => array(
+					'findFilesFromWebPage' => true,
+				),
+				'webPage'     => 'http://www.test.com/t/index.php?base=abs',
+				'webPageUrls' => array(
+					array(
+						'url'      => 'http://gallery.test.com/img.jpg',
+						'itemType' => $this->_photo,
+					),
+					array(
+						'url'      => 'http://other.com/blah.png',
+						'itemType' => $this->_photo,
+					),
+					array(
+						'url'      => 'http://other.com/images/test.gif',
+						'itemType' => $this->_photo,
+					),
+					array(
+						'url'      => 'http://other.com/images/test.mov',
+						'itemType' => $this->_movie,
+					),
+				),
+				'set'         => array(
+					'title'       => 1,
+					'summary'     => 0,
+					'description' => 0,
+				),
+			),
+			$form,
+			'form data'
+		);
+	}
+}
+
+/**
+ * Test platform
+ *
+ * @package ItemAdd
+ * @subpackage PHPUnit
+ */
+class ItemAddFromWebTestPlatform {
+	public function __construct(&$testCase) {
+		$this->_testCase = $testCase;
+	}
+
+	public function tempnam($tmpDir, $base) {
+		return "/test/$base";
+	}
+
+	public function fsockopen($target, $port, &$errno, &$errstr, $timeout) {
+		if ($target == 'www.test.com' && $port == '80') {
+			return 'test-resource-1';
+		}
+
+		$errno     = 1;
+		$errstring = 'test failure';
+	}
+
+	public function fwrite($handle, $string, $length = 0) {
+		if ($handle == 'test-resource-1') {
+			switch ($string) {
+				case "GET /test1.gif HTTP/1.0\r\nHost: www.test.com\r\n" .
+				"Referer: http://www.test.com/index.php?foo=bar&a=b\r\n\r\n":
+				case "GET /test2.jpg HTTP/1.0\r\nHost: www.test.com\r\n" .
+				"Referer: http://www.test.com/index.php?foo=bar&a=b\r\n\r\n":
+				case "GET /test3.jpg?foo=bar HTTP/1.0\r\nHost: www.test.com\r\n" .
+				"Referer: http://www.test.com/index.php?foo=bar&a=b\r\n\r\n":
+				case "GET /apo'strophe.jpg HTTP/1.0\r\nHost: www.test.com\r\n" .
+				"Referer: http://www.test.com/index.php?foo=bar&a=b\r\n\r\n":
+				case "GET /main.php?g2_itemId=123 HTTP/1.0\r\nHost: www.test.com\r\n" .
+				"Referer: http://www.test.com/index.php?foo=bar&a=b\r\n\r\n":
+					$buffer   = array();
+					$buffer[] = 'HTTP/1.1 200 OK';
+					$buffer[] = 'Connection: close';
+					$buffer[] = 'Date: Mon, 24 Nov 2003 05:40:03 GMT';
+					$buffer[] = 'Accept-Ranges: bytes';
+					$buffer[] = 'ETag: "122ae4-5-3fc199b0"';
+					$buffer[] = 'Server: Apache/1.3.28 (Unix)';
+					$buffer[] = 'Content-Length: 5';
+					$buffer[] = 'Content-Type: text/html';
+
+					if ($string == "GET /main.php?g2_itemId=123 HTTP/1.0\r\nHost: www.test.com\r\n" . "Referer: http://www.test.com/index.php?foo=bar&a=b\r\n\r\n"
+					) {
+						$buffer[] = 'Content-Disposition: inline; filename="test4.jpg"';
+					}
+					$buffer[]                   = 'Last-Modified: Mon, 24 Nov 2003 05:40:00 GMT';
+					$buffer[]                   = 'Client-Date: Mon, 24 Nov 2003 05:40:03 GMT';
+					$buffer[]                   = 'Client-Peer: 209.237.226.157:80';
+					$buffer[]                   = 'Client-Response-Num: 1';
+					$buffer[]                   = '';
+					$buffer[]                   = 'test';
+					$buffer[]                   = '';
+					$this->_readBuffer[$handle] = $buffer;
+
+					return strlen($string);
+
+				case "GET /404.jpg HTTP/1.0\r\nHost: www.test.com\r\n\r\n":
+				case "GET /404.jpg HTTP/1.0\r\n" .
+				"Host: www.test.com\r\n" .
+				"Referer: http://www.test.com/index.php?foo=bar&a=b\r\n\r\n":
+					$buffer                     = array();
+					$buffer[]                   = 'HTTP/1.1 404 Not Found';
+					$buffer[]                   = 'Connection: close';
+					$buffer[]                   = 'Date: Mon, 24 Nov 2003 05:40:03 GMT';
+					$buffer[]                   = 'Accept-Ranges: bytes';
+					$buffer[]                   = 'ETag: "122ae4-5-3fc199b0"';
+					$buffer[]                   = 'Server: Apache/1.3.28 (Unix)';
+					$buffer[]                   = 'Content-Length: 5';
+					$buffer[]                   = 'Content-Type: text/html';
+					$buffer[]                   = 'Last-Modified: Mon, 24 Nov 2003 05:40:00 GMT';
+					$buffer[]                   = 'Client-Date: Mon, 24 Nov 2003 05:40:03 GMT';
+					$buffer[]                   = 'Client-Peer: 209.237.226.157:80';
+					$buffer[]                   = 'Client-Response-Num: 1';
+					$buffer[]                   = '';
+					$buffer[]                   = 'test';
+					$buffer[]                   = '';
+					$this->_readBuffer[$handle] = $buffer;
+
+					return strlen($string);
+
+				case "GET /t/index.php?foo=bar HTTP/1.0\r\nHost: www.test.com\r\n\r\n":
+					$buffer                     = array();
+					$buffer[]                   = 'HTTP/1.1 200 OK';
+					$buffer[]                   = 'Connection: close';
+					$buffer[]                   = 'Date: Mon, 13 Feb 2006 21:10:03 GMT';
+					$buffer[]                   = 'Content-type: text/html';
+					$buffer[]                   = '';
+					$buffer[]                   = '<html><body>';
+					$buffer[]                   = '<img src="http://gallery.test.com/img.jpg"/>';
+					$buffer[]                   = 'abc <img src=\'/blah.png\' alt=test/> def';
+					$buffer[]                   = 'test <img';
+					$buffer[]                   = 'src=test.gif> <a href="test.mov">hi</a><a href=/a.mp3 onclick='
+					  . '"return true">bye</a><a';
+					$buffer[]                   = ' href=\'ftp://test.com/b.bmp\'>test</a>';
+					$buffer[]                   = '<a href="/t/test.gif">repeat</a>';
+					$buffer[]                   = '<input type=text value="not_a_url"/>';
+					$buffer[]                   = '<input type=text value="http://blah.com/blah.jpg"/>';
+					$buffer[]                   = '<input type=text value=\'https://blah.com/blah.jpg\'/>';
+					$buffer[]                   = '</body></html>';
+					$this->_readBuffer[$handle] = $buffer;
+
+					return strlen($string);
+
+				case "GET /t/index.php?base=abs HTTP/1.0\r\nHost: www.test.com\r\n\r\n":
+					/*
+					 * Not testing relative base URLs, since they're not well supported in modern
+					 * browsers (Opera 9 handles them correctly, but IE7 and FF2 not).
+					 */
+					$buffer                     = array();
+					$buffer[]                   = 'HTTP/1.1 200 OK';
+					$buffer[]                   = 'Connection: close';
+					$buffer[]                   = 'Date: Mon, 13 Feb 2006 21:10:03 GMT';
+					$buffer[]                   = 'Content-type: text/html';
+					$buffer[]                   = '';
+					$buffer[]                   = '<html><head><base href="http://other.com/images/"/></head><body>';
+					$buffer[]                   = '<img src="http://gallery.test.com/img.jpg"/>';
+					$buffer[]                   = 'abc <img src=\'/blah.png\' alt=test/> def';
+					$buffer[]                   = 'test <img';
+					$buffer[]                   = 'src=test.gif> <a href="test.mov">hi</a></body></html>';
+					$this->_readBuffer[$handle] = $buffer;
+
+					return strlen($string);
+
+				case "GET /page.php HTTP/1.0\r\nHost: www.test.com\r\n\r\n":
+					$buffer                     = array();
+					$buffer[]                   = 'HTTP/1.1 200 OK';
+					$buffer[]                   = 'Connection: close';
+					$buffer[]                   = 'Date: Mon, 13 Feb 2006 21:10:05 GMT';
+					$buffer[]                   = 'Content-type: text/html';
+					$buffer[]                   = '';
+					$buffer[]                   = '<html><body>';
+					$buffer[]                   = 'no urls here</body></html>';
+					$this->_readBuffer[$handle] = $buffer;
+
+					return strlen($string);
+
+				case "GET /redirect.php HTTP/1.0\r\nHost: www.test.com\r\n\r\n":
+					$buffer                     = array();
+					$buffer[]                   = 'HTTP/1.1 302 Found';
+					$buffer[]                   = 'Location: http://www.test.com/image.php?id=3&sn=1';
+					$buffer[]                   = '';
+					$this->_readBuffer[$handle] = $buffer;
+
+					return strlen($string);
+
+				case "GET /image.php?id=3&sn=1 HTTP/1.0\r\nHost: www.test.com\r\n\r\n":
+					$buffer                     = array();
+					$buffer[]                   = 'HTTP/1.1 200 OK';
+					$buffer[]                   = 'Date: Mon, 13 Feb 2006 21:10:04 GMT';
+					$buffer[]                   = 'Content-Type: image/jpeg';
+					$buffer[]                   = 'Content-Length: 6';
+					$buffer[]                   = '';
+					$buffer[]                   = 'image';
+					$buffer[]                   = '';
+					$this->_readBuffer[$handle] = $buffer;
+
+					return strlen($string);
+
+				case "GET /img.jpg HTTP/1.0\r\nHost: www.test.com\r\n\r\n":
+					$buffer                     = array();
+					$buffer[]                   = 'HTTP/1.1 200 OK';
+					$buffer[]                   = 'Date: Mon, 13 Feb 2006 21:10:04 GMT';
+					$buffer[]                   = 'Content-Type: image/jpeg';
+					$buffer[]                   = 'Content-Length: 6';
+					$buffer[]                   = '';
+					$buffer[]                   = 'image';
+					$buffer[]                   = '';
+					$this->_readBuffer[$handle] = $buffer;
+
+					return strlen($string);
+
+				case "GET /img2.jpg HTTP/1.0\r\nHost: www.test.com\r\n\r\n":
+					$buffer                     = array();
+					$buffer[]                   = 'HTTP/1.1 200 OK';
+					$buffer[]                   = 'Date: Mon, 13 Feb 2006 21:10:04 GMT';
+					$buffer[]                   = 'Content-type: image/jpeg';
+					$buffer[]                   = 'Content-Length: 6';
+					$buffer[]                   = '';
+					$buffer[]                   = 'image';
+					$buffer[]                   = '';
+					$this->_readBuffer[$handle] = $buffer;
+
+					return strlen($string);
+
+				case "GET /evil<script>.jpg HTTP/1.0\r\nHost: www.test.com\r\n" .
+				"Referer: http://www.test.com/\r\n\r\n":
+					$buffer                     = array();
+					$buffer[]                   = 'HTTP/1.1 200 OK';
+					$buffer[]                   = 'Connection: close';
+					$buffer[]                   = 'Date: Mon, 24 Nov 2003 05:40:03 GMT';
+					$buffer[]                   = 'Content-Length: 5';
+					$buffer[]                   = 'Content-Type: text/html';
+					$buffer[]                   = '';
+					$buffer[]                   = 'test';
+					$buffer[]                   = '';
+					$this->_readBuffer[$handle] = $buffer;
+
+					return strlen($string);
+
+				default:
+					print "Unexpected write: $string";
+			}
+		}
+
+		if ($handle == '/test/add') {
+			if (!isset($this->_testCase->_outputFile[$handle])) {
+				$this->_testCase->_outputFile[$handle] = '';
+			}
+
+			$this->_testCase->_outputFile[$handle] .= $string;
+
+			return strlen($string);
+		}
+
+		return 0;
+	}
+
+	public function getDirectorySeparator() {
+		return '/';
+	}
+
+	public function legalizePathComponent($component) {
+		switch ($component) {
+			case 'test1.gif':
+			case 'test2.jpg':
+			case 'test3.jpg':
+			case 'test4.jpg':
+				return $component;
+
+			case 'apo\'strophe.jpg':
+				return 'apo_strophe.jpg';
+
+			case 'evil<script>.jpg':
+				return 'evil_script_.jpg';
+
+			default:
+				print "Unexpected legalizePathComponent($component)";
+
+				return 'UNEXPECTED';
+		}
+	}
+
+	public function copy($fromFile, $toFile) {
+		if ($fromFile == '/test/add') {
+			switch (basename($toFile)) {
+				case 'test1.gif':
+				case 'test2.jpg':
+				case 'test3.jpg':
+				case 'test4.jpg':
+				case 'evil_script_.jpg':
+				case 'apo_strophe.jpg':
+					return true;
+			}
+		}
+
+		echo "unexpected copy($fromFile, $toFile)";
+
+		return false;
+	}
+
+	public function getimagesize($filename) {
+		switch (basename($filename)) {
+			case 'test1.gif':
+			case 'test2.jpg':
+			case 'test3.jpg':
+			case 'test4.jpg':
+			case 'apo_strophe.jpg':
+			case 'evil_script_.jpg':
+				return array(100, 200);
+		}
+
+		echo "unexpected getimagesize($filename)";
+
+		return array(0, 0);
+	}
+
+	public function filesize($filename) {
+		switch (basename($filename)) {
+			case 'test1.gif':
+			case 'test2.jpg':
+			case 'test3.jpg':
+			case 'test4.jpg':
+			case 'apo_strophe.jpg':
+			case 'evil_script_.jpg':
+				return 5;
+		}
+
+		echo "unexpected filesize($filename)";
+
+		return 0;
+	}
+
+	public function mkdir($dirname) {
+		echo "unexpected mkdir($dirname)";
+
+		return false;
+	}
+
+	public function file_exists($filename) {
+		switch ($filename) {
+			case '/test/add':
+				return 1;
+		}
+
+		return 0;
+	}
+
+	public function unlink($filename) {
+		switch ($filename) {
+			case '/test/add':
+				return 1;
+		}
+
+		// Pass lock requests
+		if (preg_match("|\blocks\b|", $filename)) {
+			return unlink($filename);
+		}
+
+		echo "Attempted to unlink bogus file: $filename";
+
+		return 0;
+	}
+
+	public function fflush($handle) {
+		switch ($handle) {
+			case 'test-resource-1':
+				return true;
+
+			default:
+				return false;
+		}
+	}
+
+	public function fgets($handle, $length) {
+		if (empty($this->_readBuffer[$handle])) {
+			return null;
+		}
+
+		return array_shift($this->_readBuffer[$handle]) . "\n";
+	}
+
+	public function fread($handle, $length) {
+		if (empty($this->_readBuffer[$handle])) {
+			return null;
+		}
+
+		/*
+		 * Return the number of bytes requested, or if that exceeds what we have available return
+		 * what we have available.
+		 */
+		if ($length >= strlen(join("\n", $this->_readBuffer[$handle]))) {
+			$tmp = join("\n", $this->_readBuffer[$handle]);
+			unset($this->_readBuffer[$handle]);
+
+			return $tmp;
+		}
+		$buf                        = join("\n", $this->_readBuffer[$handle]);
+		$tmp                        = substr($buf, 0, $length);
+		$this->_readBuffer[$handle] = explode("\n", substr($buf, $length + 1));
+
+		return $tmp;
+	}
+
+	public function feof($handle) {
+		return empty($this->_readBuffer[$handle]);
+	}
+
+	public function flock($handle, $operation, &$wouldblock) {
+		// Pass lock requests
+		return flock($handle, $operation, $wouldblock);
+	}
+
+	public function fclose($handle) {
+		if ($handle == 'test-resource-1') {
+			unset($this->_readBuffer[$handle]);
+
+			return true;
+		}
+
+		// Pass locks
+		if (is_resource($handle)) {
+			return fclose($handle);
+		}
+
+		return false;
+	}
+
+	public function is_uploaded_file($filename) {
+		return false;
+	}
+
+	public function fopen($filename, $modes) {
+		if ($filename == '/test/add' && $modes == 'wb') {
+			return $filename;
+		}
+
+		// Pass lock requests
+		if (preg_match("|\blocks\b|", $filename)) {
+			return fopen($filename, $modes);
+		}
+
+		echo "Unexpected fopen($filename, $modes)";
+
+		return null;
+	}
+
+	public function realpath($path) {
+		return realpath($path);
+	}
+
+	public function exec($cmd) {
+		// In case add of jpeg tries to get 'colorspace' property
+		return array(true, array(''), array());
+	}
+}

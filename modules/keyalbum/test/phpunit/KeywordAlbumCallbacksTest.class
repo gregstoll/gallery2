@@ -1,0 +1,833 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GallerySmarty.class');
+GalleryCoreApi::requireOnce('modules/keyalbum/Callbacks.inc');
+
+/**
+ * Keyword Album callback tests
+ * @package KeyAlbum
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class KeywordAlbumCallbacksTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_userId              = $gallery->getActiveUserId();
+		$this->_originalGuestUserId = $gallery->getConfig('anonymousUserId');
+
+		list($ret, $this->_album) = $this->_createRandomAlbum(
+			$this->_getRootId(),
+			array(
+				'keywords' => 'testkeyword12345',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $everybodyGroupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.everybodyGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_album->getId(),
+			$this->_userId,
+			'core.all'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addGroupPermission(
+			$this->_album->getId(),
+			$everybodyGroupId,
+			'core.viewAll'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_item) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'test/file',
+			array(
+				'keywords' => 'testkeyword54321; testkeyword99999',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::removeGroupPermission(
+			$this->_item->getId(),
+			$everybodyGroupId,
+			'core.viewAll'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'keyalbum');
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter('module', 'keyalbum', 'allKeywords.time', 0);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'keyalbum',
+			'allKeywords.public.time',
+			0
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter('module', 'keyalbum', 'split', ';,\s');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_smarty    = new GallerySmarty();
+		$this->_callbacks = new KeyAlbumCallbacks();
+	}
+
+	public function tearDown() {
+		global $gallery;
+		$gallery->setConfig('anonymousUserId', $this->_originalGuestUserId);
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testLoadKeywords() {
+		$ret = $this->_callbacks->callback(
+			array(
+				'onlyPublic'              => false,
+				'sizeLimit'               => 0,
+				'maxCloudFontEnlargement' => 3,
+				'includeFrequency'        => false,
+			),
+			$this->_smarty,
+			'LoadKeywords',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$data = $this->_smarty->_tpl_vars['block']['keyalbum']['keywords'];
+
+		foreach ($data as $keyword) {
+			$found[$keyword['name']] = true;
+			$this->assertTrue(
+				isset($keyword['weight']) && $keyword['weight'] >= 0 && $keyword['weight'] <= 3,
+				'bad/missing weight: ' . print_r($keyword, true)
+			);
+		}
+		$this->assertTrue(isset($found['testkeyword12345']), 'album keyword');
+		$this->assertTrue(isset($found['testkeyword54321']), 'item keyword 1');
+		$this->assertTrue(isset($found['testkeyword99999']), 'item keyword 2');
+	}
+
+	public function testLoadKeywordsPublic() {
+		$ret = $this->_callbacks->callback(
+			array(
+				'onlyPublic'              => true,
+				'sizeLimit'               => 0,
+				'maxCloudFontEnlargement' => 5,
+				'includeFrequency'        => false,
+			),
+			$this->_smarty,
+			'LoadKeywords',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$data = $this->_smarty->_tpl_vars['block']['keyalbum']['keywords'];
+
+		foreach ($data as $keyword) {
+			$found[$keyword['name']] = true;
+		}
+		$this->assertTrue(isset($found['testkeyword12345']), 'album keyword');
+		$this->assertTrue(!isset($found['testkeyword54321']), 'item not public!');
+		$this->assertTrue(!isset($found['testkeyword99999']), 'item not public!');
+	}
+
+	public function testLoadKeywordsSizeLimit() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'keyalbum', 'allKeywords.3.time', '0');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'onlyPublic'              => false,
+				'sizeLimit'               => 3,
+				'maxCloudFontEnlargement' => 7,
+				'includeFrequency'        => true,
+			),
+			$this->_smarty,
+			'LoadKeywords',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$data = $this->_smarty->_tpl_vars['block']['keyalbum']['keywords'];
+		$this->assertEquals(3, count($data), '3 keywords');
+
+		list($ret, $param) = GalleryCoreApi::getPluginParameter('module', 'keyalbum', 'allKeywords.3');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(serialize($data), $param, 'param');
+	}
+
+	public function testKeywordCache() {
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'keyalbum',
+			'allKeywords',
+			serialize(array())
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter('module', 'keyalbum', 'allKeywords.time', time());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'onlyPublic'              => false,
+				'sizeLimit'               => 0,
+				'maxCloudFontEnlargement' => 5,
+				'includeFrequency'        => false,
+			),
+			$this->_smarty,
+			'LoadKeywords',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$data = $this->_smarty->_tpl_vars['block']['keyalbum']['keywords'];
+		$this->assertEquals(array(), $data, 'cached data');
+	}
+
+	public function testLoadKeywordsWithFrequency() {
+		list($ret, $ignore) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'test/file',
+			array(
+				'keywords' => 'testkeyword54321; testkeyword99999',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $ignore) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'test/file',
+			array(
+				'keywords' => 'testkeyword54321',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_makeOnlyTestItemsPublic($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'onlyPublic'              => true,
+				'sizeLimit'               => 0,
+				'maxCloudFontEnlargement' => 6,
+				'includeFrequency'        => true,
+			),
+			$this->_smarty,
+			'LoadKeywords',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$data = $this->_smarty->_tpl_vars['block']['keyalbum']['keywords'];
+
+		foreach ($data as $keyword) {
+			$found[$keyword['name']]  = true;
+			$weight[$keyword['name']] = isset($keyword['weight']) ? $keyword['weight'] : false;
+		}
+		$this->assertTrue(isset($found['testkeyword12345']), 'album keyword');
+		$this->assertTrue(isset($found['testkeyword54321']), 'item keyword 1');
+		$this->assertTrue(isset($found['testkeyword99999']), 'item keyword 2');
+
+		$this->assertEquals('1', $weight['testkeyword12345'], 'weight of singular keyword');
+		$this->assertEquals('5.18', $weight['testkeyword54321'], 'weight of triple keyword');
+		$this->assertEquals(
+			'2.48',
+			$weight['testkeyword99999'],
+			'weight of double keyword'
+		);
+	}
+
+	public function testLoadKeywordsWithoutFrequency() {
+		list($ret, $ignore) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'test/file',
+			array(
+				'keywords' => 'testkeyword54321; testkeyword99999',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $ignore) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'test/file',
+			array(
+				'keywords' => 'testkeyword54321',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_makeOnlyTestItemsPublic($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'onlyPublic'              => true,
+				'sizeLimit'               => 0,
+				'maxCloudFontEnlargement' => 2,
+				'includeFrequency'        => false,
+			),
+			$this->_smarty,
+			'LoadKeywords',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$data = $this->_smarty->_tpl_vars['block']['keyalbum']['keywords'];
+
+		foreach ($data as $keyword) {
+			$found[$keyword['name']]  = true;
+			$weight[$keyword['name']] = isset($keyword['weight']) ? $keyword['weight'] : false;
+		}
+		$this->assertTrue(isset($found['testkeyword12345']), 'album keyword');
+		$this->assertTrue(isset($found['testkeyword54321']), 'item keyword 1');
+		$this->assertTrue(isset($found['testkeyword99999']), 'item keyword 2');
+
+		$this->assertEquals('1', $weight['testkeyword12345'], 'weight of singular keyword');
+		$this->assertEquals('1.59', $weight['testkeyword54321'], 'weight of triple keyword');
+		$this->assertEquals('1', $weight['testkeyword99999'], 'weight of double keyword');
+	}
+
+	public function testLoadKeywordsCodePathsWithMockStorage() {
+		global $gallery;
+		list($ret, $guestId) = GalleryCoreApi::getAnonymousUserId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$aclCacheKey = "GalleryPermissionHelper::fetchAccessListIds(core.view, $guestId, 1)";
+
+		$this->_smarty->_tpl_vars['block']['keyalbum'] = array();
+
+		$block   =& $this->_smarty->_tpl_vars['block']['keyalbum'];
+		$queries = array(
+			array(
+				'/SELECT DISTINCT\s+\[GalleryItem::keywords\]\s+FROM\s+\[GalleryItem\]\s*$/',
+				array(
+					array('one, two'),
+					array(''),
+					array('three two'),
+					array('four&amp;five six;7'),
+				),
+			),
+			array(
+				'/SELECT\s+\[GalleryItem::keywords\]\s+FROM\s+\[GalleryItem\]\s*$/',
+				array(
+					array('one, two'),
+					array(''),
+					array('one, two'),
+					array(''),
+					array('three two'),
+					array('four&amp;five six;7'),
+					array('three two'),
+				),
+			),
+			array(
+				'/SELECT DISTINCT\s+\[GalleryItem::keywords\]\s+FROM\s+\[GalleryItem\]\s*$/',
+				array(
+					array('one, two'),
+					array('two,;7'),
+					array('three 7,,6 two'),
+					array('two;four&amp;five 6;7'),
+				),
+			),
+			array(
+				'/SELECT DISTINCT\s+\[GalleryItem::keywords\]\s+FROM\s+\[GalleryItem\]\s+'
+				. 'INNER JOIN \[GalleryAccessSubscriberMap.*IN \(\?,\?\)\s*$/s',
+				array(array('one, two'), array('three two')),
+			),
+			array(
+				'/SELECT DISTINCT\s+\[GalleryItem::keywords\]\s+FROM\s+\[GalleryItem\]\s+'
+				. 'WHERE \[GalleryItem::id\] IS NULL\s*$/',
+				array(),
+			),
+		);
+
+		$gallery->_storage = new KeywordAlbumCallbacksTestStorage(
+			$gallery->_storage,
+			$queries
+		);
+
+		$expected = array(
+			array(
+				array(
+					'name'   => 'four&amp;five',
+					'raw'    => 'four&five',
+					'weight' => '1',
+				),
+				array(
+					'name'   => 'one',
+					'raw'    => 'one',
+					'weight' => '1',
+				),
+				array(
+					'name'   => 'six',
+					'raw'    => 'six',
+					'weight' => '1',
+				),
+				array(
+					'name'   => 'three',
+					'raw'    => 'three',
+					'weight' => '1',
+				),
+				array(
+					'name'   => 'two',
+					'raw'    => 'two',
+					'weight' => '2.27',
+				),
+				array(
+					'name'   => '7',
+					'raw'    => '7',
+					'weight' => '1',
+				),
+			),
+			array(
+				array(
+					'name'   => 'four&amp;five',
+					'raw'    => 'four&five',
+					'weight' => '1',
+				),
+				array(
+					'name'   => 'one',
+					'raw'    => 'one',
+					'weight' => '1.42',
+				),
+				array(
+					'name'   => 'six',
+					'raw'    => 'six',
+					'weight' => '1',
+				),
+				array(
+					'name'   => 'three',
+					'raw'    => 'three',
+					'weight' => '1.42',
+				),
+				array(
+					'name'   => 'two',
+					'raw'    => 'two',
+					'weight' => '2.68',
+				),
+				array(
+					'name'   => '7',
+					'raw'    => '7',
+					'weight' => '1',
+				),
+			),
+			array(
+				array(
+					'name'   => 'two',
+					'raw'    => 'two',
+					'weight' => '5.43',
+				),
+				array(
+					'name'   => '6',
+					'raw'    => '6',
+					'weight' => '1.88',
+				),
+				array(
+					'name'   => '7',
+					'raw'    => '7',
+					'weight' => '3.27',
+				),
+			),
+			array(
+				array(
+					'name'   => 'one',
+					'raw'    => 'one',
+					'weight' => '1',
+				),
+				array(
+					'name'   => 'three',
+					'raw'    => 'three',
+					'weight' => '1',
+				),
+				array(
+					'name'   => 'two',
+					'raw'    => 'two',
+					'weight' => '2.27',
+				),
+			),
+			array(),
+			array(
+				array(
+					'name'   => 'two',
+					'raw'    => 'two',
+					'weight' => '5.43',
+				),
+				array(
+					'name'   => '6',
+					'raw'    => '6',
+					'weight' => '1.88',
+				),
+				array(
+					'name'   => '7',
+					'raw'    => '7',
+					'weight' => '3.27',
+				),
+			),
+		);
+
+		foreach (array(
+			// All keywords
+			array('allKeywords.time', false, 0, false, 3, array()),
+			// All keywords with frequency data
+			array('allKeywords.time', false, 0, true, 3, array()),
+			// Three most common keywords
+			array('allKeywords.3.time', false, 3, false, 6, array()),
+			// Keywords for public items
+			array('allKeywords.public.time', true, 0, false, 3, array(123, 456)),
+			// Keywords for public items but guest has no ACLs
+			array('allKeywords.public.time', true, 0, false, 3, array()),
+			// Verify cached value is used
+			array('allKeywords.public.time', false, 3, false, 3, array()),
+		) as $i => $params) {
+			$ret = GalleryCoreApi::removePluginParameter('module', 'keyalbum', $params[0]);
+
+			if ($ret) {
+				return $ret;
+			}
+			GalleryDataCache::put($aclCacheKey, $params[5]);
+			$block = array();
+			$ret   = $this->_callbacks->callback(
+				array(
+					'onlyPublic'              => $params[1],
+					'sizeLimit'               => $params[2],
+					'includeFrequency'        => $params[3],
+					'maxCloudFontEnlargement' => $params[4],
+				),
+				$this->_smarty,
+				'LoadKeywords',
+				$this->_userId
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals(
+				array(
+					'keywords' => $expected[$i],
+				),
+				$block,
+				"output $i"
+			);
+		}
+	}
+
+	public function testSplitKeywords() {
+		$this->_smarty->_tpl_vars['block']['keyalbum'] = array();
+
+		$block =& $this->_smarty->_tpl_vars['block']['keyalbum'];
+
+		foreach (array(
+			''                    => array(),
+			'test'                => array(
+				'test' => 'test',
+			),
+			'one,two;three four'  => array(
+				'one'   => 'one',
+				'two'   => 'two',
+				'three' => 'three',
+				'four'  => 'four',
+			),
+			' one ,; two; , , 3 ' => array(
+				'one' => 'one',
+				'two' => 'two',
+				'3'   => '3',
+			),
+			'B&amp;W'             => array(
+				'B&W' => 'B&amp;W',
+			),
+		) as $keywords => $split) {
+			$ret = $this->_callbacks->callback(
+				array(
+					'keywords' => $keywords,
+				),
+				$this->_smarty,
+				'SplitKeywords',
+				$this->_userId
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+			$this->assertEquals(
+				array(
+					'keywords' => $split,
+				),
+				$block,
+				$keywords
+			);
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'keyalbum', 'split', ',;');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		foreach (array(
+			''                    => array(),
+			'test'                => array(
+				'test' => 'test',
+			),
+			'one,two;three four'  => array(
+				'one'        => 'one',
+				'two'        => 'two',
+				'three four' => 'three four',
+			),
+			' one ,; two; , , 3 ' => array(
+				'one' => 'one',
+				'two' => 'two',
+				'3'   => '3',
+			),
+			'B&amp;W'             => array(
+				'B&W' => 'B&amp;W',
+			),
+		) as $keywords => $split) {
+			$ret = $this->_callbacks->callback(
+				array(
+					'keywords' => $keywords,
+				),
+				$this->_smarty,
+				'SplitKeywords',
+				$this->_userId
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+			$this->assertEquals(
+				array(
+					'keywords' => $split,
+				),
+				$block,
+				"phase 2: $keywords"
+			);
+		}
+	}
+
+	/**
+	 * Changes the Gallery-wide anonymous user to a new multiroot guest user which has only view
+	 * permissions for a subtree of items with the specified root item.
+	 * @return GalleryStatus
+	 */
+	public function _makeOnlyTestItemsPublic($itemId) {
+		global $gallery;
+
+		// Create a new multiroot guest user
+		list($ret, $user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($user);
+
+		foreach (array('id.allUserGroup', 'id.everybodyGroup') as $groupKey) {
+			list($ret, $groupId) = GalleryCoreApi::getPluginParameter('module', 'core', $groupKey);
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$ret = GalleryCoreApi::removeUserFromGroup($user->getId(), $groupId);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		// The new "public" user can only view our subtree of test items
+		$ret = GalleryCoreApi::addUserPermission($itemId, $user->getId(), 'core.viewAll', true);
+
+		if ($ret) {
+			return $ret;
+		}
+		$gallery->setConfig('anonymousUserId', $user->getId());
+
+		return null;
+	}
+}
+
+/**
+ * Mock storage for callbacks tests.
+ */
+class KeywordAlbumCallbacksTestStorage {
+	public function __construct($storage, $queries) {
+		// Avoid weird reference thing in php4 that makes _extras->_gs point to mock storage
+		$storage->_extras = null;
+
+		$this->_storage = $storage;
+		$this->_queries = $queries;
+	}
+
+	public function search($query, $data = array(), $optional = array()) {
+		if (!strpos($query, '[GalleryItem::keywords]')) {
+			return $this->_storage->search($query, $data, $optional);
+		}
+
+		if (empty($this->_queries) || !preg_match($this->_queries[0][0], $query)) {
+			return array(
+				GalleryCoreApi::error(
+					ERROR_BAD_PARAMETER,
+					__FILE__,
+					__LINE__,
+					'Unexpected query: ' . $query
+				),
+				null,
+			);
+		}
+		$result = array_shift($this->_queries);
+
+		return array(null, new UnitTestStorageSearchResults($result[1]));
+	}
+
+	public function addMapEntry($mapName, $entry, $nonTrans = false) {
+		return $this->_storage->addMapEntry($mapName, $entry, $nonTrans);
+	}
+
+	public function removeMapEntry($mapName, $entry) {
+		return $this->_storage->removeMapEntry($mapName, $entry);
+	}
+
+	public function updateMapEntry($mapName, $match, $change, $nonTrans = false) {
+		return $this->_storage->updateMapEntry($mapName, $match, $change, $nonTrans);
+	}
+
+	public function getMapEntry($mapName, $select, $match = array(), $optional = array()) {
+		return $this->_storage->getMapEntry($mapName, $select, $match, $optional);
+	}
+
+	public function isTransactional() {
+		return $this->_storage->isTransactional();
+	}
+
+	public function rollbackTransaction() {
+		return $this->_storage->rollbackTransaction();
+	}
+
+	public function _normalizeValue($value, $memberData, $fromDb = false) {
+		return $this->_storage->_normalizeValue($value, $memberData, $fromDb);
+	}
+
+	public function getFunctionSql($functionName, $args) {
+		return $this->_storage->getFunctionSql($functionName, $args);
+	}
+
+	public function convertIntToBits($intVal) {
+		return $this->_storage->convertIntToBits($intVal);
+	}
+}

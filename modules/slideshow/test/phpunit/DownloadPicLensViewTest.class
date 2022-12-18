@@ -1,0 +1,370 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * DownloadPicLens view tests
+ * @package Slideshow
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17714 $
+ */
+class DownloadPicLensViewTest extends GalleryImmediateViewTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'slideshow.DownloadPicLens');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$UnitTestPlatform = new UnitTestPlatform();
+		$gallery->setPlatform($UnitTestPlatform);
+		$gallery->_phpVm = new UnitTestPhpVm();
+		$gallery->setConfig('data.gallery.plugins_data', '/');
+		$gallery->setConfig('apacheSetenvBroken', 0);
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$this->assertTrue($gallery->_platform->isComplete(), $gallery->_platform->getRemaining());
+		$this->assertTrue($gallery->_phpVm->isComplete(), $gallery->_phpVm->getRemaining());
+
+		return parent::tearDown();
+	}
+
+	public function testDownloadBogusFile() {
+		GalleryUtilities::putRequestVariable('file', 'bogus!');
+
+		list($ret, $results) = $this->_renderImmediate(array(), array());
+		$this->assertErrorEquals(ERROR_BAD_PARAMETER, $ret);
+		$this->assertEquals('', $results);
+	}
+
+	public function testDownloadJavascript() {
+		global $gallery;
+
+		/*
+		 * Go through the complete life cycle of the view under the control of a mock VM for this
+		 * test. (Verify all header() calls, including those from loadView())
+		 */
+		GalleryCoreApi::requireOnce('modules/core/classes/GalleryView.class');
+		list($ret, $this->_view) = GalleryView::doStatic()->loadView('slideshow.DownloadPicLens');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('file', 'js');
+
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-type: application/x-javascript', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-Disposition: inline; filename="piclens.js"', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Last-Modified: Sun, 23 Sep 2001 08:00:00 GMT', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Tue, 19 Jan 2038 03:14:07 GMT', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Cache-Control: public', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-length: 1000', null),
+			null
+		);
+
+		$gallery->_platform->setReply(
+			'file_exists',
+			array('/modules/slideshow/piclens.js'),
+			true
+		);
+		$gallery->_platform->setReply(
+			'stat',
+			array('/modules/slideshow/piclens.js'),
+			array(
+				7 => 1000,
+				9 => strtotime('Sun, 23 Sep 2001 08:00:00 GMT'),
+			)
+		);
+		$gallery->_platform->setReply(
+			'fopen',
+			array('/modules/slideshow/piclens.js', 'rb', 0),
+			'FD'
+		);
+		$gallery->_platform->setReply(
+			'fread',
+			array('FD', 65535),
+			'DATA'
+		);
+		$gallery->_platform->setReply(
+			'fread',
+			array('FD', 65535),
+			null
+		);
+		$gallery->_platform->setReply(
+			'fclose',
+			array('FD'),
+			true
+		);
+
+		list($ret, $results) = $this->_renderImmediate(array(), array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('DATA', $results);
+	}
+
+	public function testHeadJavascript() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('file', 'js');
+		$_SERVER['REQUEST_METHOD'] = 'head';
+
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-type: application/x-javascript', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-Disposition: inline; filename="piclens.js"', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Last-Modified: Sun, 23 Sep 2001 08:00:00 GMT', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Tue, 19 Jan 2038 03:14:07 GMT', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Cache-Control: public', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-length: 0', null),
+			null
+		);
+
+		$gallery->_platform->setReply(
+			'file_exists',
+			array('/modules/slideshow/piclens.js'),
+			true
+		);
+		$gallery->_platform->setReply(
+			'stat',
+			array('/modules/slideshow/piclens.js'),
+			array(
+				7 => 1000,
+				9 => strtotime('Sun, 23 Sep 2001 08:00:00 GMT'),
+			)
+		);
+
+		list($ret, $results) = $this->_renderImmediate(array(), array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('', $results);
+	}
+
+	public function testDownloadShockwaveFlash() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('file', 'swf');
+
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-type: application/x-shockwave-flash', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-Disposition: inline; filename="PicLensLite.swf"', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Last-Modified: Sun, 23 Sep 2001 08:00:00 GMT', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Tue, 19 Jan 2038 03:14:07 GMT', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Cache-Control: public', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-length: 1000', null),
+			null
+		);
+
+		$gallery->_platform->setReply(
+			'file_exists',
+			array('/modules/slideshow/PicLensLite.swf'),
+			true
+		);
+		$gallery->_platform->setReply(
+			'stat',
+			array('/modules/slideshow/PicLensLite.swf'),
+			array(
+				7 => 1000,
+				9 => strtotime('Sun, 23 Sep 2001 08:00:00 GMT'),
+			)
+		);
+		$gallery->_platform->setReply(
+			'fopen',
+			array('/modules/slideshow/PicLensLite.swf', 'rb', 0),
+			'FD'
+		);
+		$gallery->_platform->setReply(
+			'fread',
+			array('FD', 65535),
+			'DATA'
+		);
+		$gallery->_platform->setReply(
+			'fread',
+			array('FD', 65535),
+			null
+		);
+		$gallery->_platform->setReply(
+			'fclose',
+			array('FD'),
+			true
+		);
+
+		list($ret, $results) = $this->_renderImmediate(array(), array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('DATA', $results);
+	}
+
+	public function testHeadShockwaveFlash() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('file', 'swf');
+		$_SERVER['REQUEST_METHOD'] = 'head';
+
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-type: application/x-shockwave-flash', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-Disposition: inline; filename="PicLensLite.swf"', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Last-Modified: Sun, 23 Sep 2001 08:00:00 GMT', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Tue, 19 Jan 2038 03:14:07 GMT', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Cache-Control: public', null),
+			null
+		);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Content-length: 0', null),
+			null
+		);
+
+		$gallery->_platform->setReply(
+			'file_exists',
+			array('/modules/slideshow/PicLensLite.swf'),
+			true
+		);
+		$gallery->_platform->setReply(
+			'stat',
+			array('/modules/slideshow/PicLensLite.swf'),
+			array(
+				7 => 1000,
+				9 => strtotime('Sun, 23 Sep 2001 08:00:00 GMT'),
+			)
+		);
+
+		list($ret, $results) = $this->_renderImmediate(array(), array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('', $results);
+	}
+
+	public function testDownloadMissingFile() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('file', 'js');
+
+		$gallery->_platform->setReply(
+			'file_exists',
+			array('/modules/slideshow/piclens.js'),
+			false
+		);
+
+		list($ret, $results) = $this->_renderImmediate(array(), array());
+		$this->assertErrorEquals(ERROR_MISSING_OBJECT, $ret);
+		$this->assertEquals('', $results);
+	}
+}
