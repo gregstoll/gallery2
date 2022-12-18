@@ -36,7 +36,7 @@ class NetPbmToolkitHelper {
      * @return GalleryStatus a status code
      *         array('operations' => ..., 'properties' => ...)
      */
-    function getOperationsAndProperties($saveParameters=false) {
+    static function getOperationsAndProperties($saveParameters=false) {
 	global $gallery;
 
 	list ($ret, $netPbmPath) =
@@ -226,11 +226,11 @@ class NetPbmToolkitHelper {
 	 * Else just hope that it's valid and use it.
 	 */
 	if ($isRestrictedPath || !@$platform->is_dir($netPbmPath)) {
-	    return array(GalleryCoreApi::error(ERROR_BAD_PATH, null, null, '"' . $netPbmPath 
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH, null, null, '"' . $netPbmPath
 		   . '" is not a directory or is not specified in open_basedir.'), null, null);
 	}
 
-	
+
 	$binaryData = array(
 	    '' => array('pnmscale', 'pnmcut|pamcut', 'pnmfile|pamfile', 'pnmcomp|pamcomp',
 			'exist' => 'pnmflip|pamflip'), /* No --version for this */
@@ -301,7 +301,7 @@ class NetPbmToolkitHelper {
      * @param array $tests testBinaries test results
      * @return GalleryStatus a status code
      */
-    function saveParameters($tests) {
+    static function saveParameters($tests) {
 	$paramList = array('pnmtojpeg' => 'p.mtojpeg', 'bmptopnm' => 'bmptop.m',
 			   'pnmcomp' => 'p.mcomp');
 	foreach ($tests as $test) {
