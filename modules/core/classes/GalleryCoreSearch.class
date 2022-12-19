@@ -169,22 +169,26 @@ class GalleryCoreSearch extends GallerySearchInterface_1_0 {
 	$searchResults = array();
 	while ($result = $results->nextResult()) {
 	    $fields = array();
-	    foreach (array('[GalleryItem::title]' => $text['title'],
-			   '[GalleryItem::summary]' => $text['summary'],
-			   '[GalleryItem::keywords]' => $text['keywords'],
-			   '[GalleryItem::description]' => $text['description'])
-		     as $columnName => $fieldText) {
+	    foreach (array('title' => $text['title'],
+			     'summary' => $text['summary'],
+			     'keywords' => $text['keywords'],
+			     'description' => $text['description'])
+			 as $optionName => $fieldText) {
+		$columnName = '[GalleryItem::' . $optionName . ']';
 		if (isset($selectMap[$columnName])) {
 		    /*
 		     * Remember that our field columns start at column index 4
 		     * (id, date, full name, username are columns 0-3)
 		     */
 		    $fields[] = array(
-			'key' => $fieldText, 'value' => $result[$selectMap[$columnName]+4]);
+			'key' => $fieldText,
+			'field' => $optionName,
+			'value' => $result[$selectMap[$columnName]+4]);
 		}
 	    }
 
 	    $fields[] = array('key' => $text['owner'],
+			      'field'=> 'owner',
 			      'value' => !empty($result[1]) ? $result[1] : $result[2]);
 	    $searchResults[] = array('itemId' => (int)$result[0], 'fields' => $fields);
 	}
