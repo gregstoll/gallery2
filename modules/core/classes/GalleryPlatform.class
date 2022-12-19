@@ -615,9 +615,30 @@ class GalleryPlatform {
      * @param string $component the path component (must not contain path separators)
      * @param boolean $forDirectory (optional) Whether the path component is for a directory.
      *        Defaults to false. Periods are allowed anywhere in directories.
+     * @return array|string
+     */
+    function legalizePathComponent($component, $forDirectory=false)
+    {
+	    list ($ret, $slugMode) = GalleryCoreApi::getPluginParameter('module', 'core', 'slug.mode');
+	    if ($ret) {
+		    return $ret;
+	    }
+	    $slugMode = $slugMode ?? 'modern';
+	    return match ($slugMode) {
+		    'modern' => self::legalizePathComponentWithSlug($component, $forDirectory),
+		    'classic' => self::legalizePathComponentClassic($component, $forDirectory),
+		    default => GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+			"Unknown slug mode $slugMode.")
+	    };
+    }
+    /**
+     * Remove any illegal characters from the path component.
+     * @param string $component the path component (must not contain path separators)
+     * @param boolean $forDirectory (optional) Whether the path component is for a directory.
+     *        Defaults to false. Periods are allowed anywhere in directories.
      * @return string the legalized path component
      */
-    function legalizePathComponent($component, $forDirectory=false) {
+    function legalizePathComponentClassic($component, $forDirectory=false) {
 	global $gallery;
 
 	$legalChars = $this->getLegalPathCharacters();

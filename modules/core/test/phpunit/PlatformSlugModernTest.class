@@ -1,0 +1,234 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test modern slug platform functionality.
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Orestes Sanchez
+ * <miceno.atreides@gmail.com>
+ */
+GalleryCoreApi::requireOnce('modules/core/test/phpunit/PlatformSlugBase.class');
+
+
+class PlatformSlugModernTest extends PlatformSlugBase
+{
+	public function setUp($x1 = null)
+	{
+		$this->_slugMode = "modern";
+		parent::setUp();
+	}
+
+	public function testSlugLegalizePathComponent()
+	{
+		$this->assertEquals(
+		    'the-quick',
+		    $this->_platform->legalizePathComponent('The!Quick$'),
+		    "Legal path with slug for 'The!Quick$' does not match"
+		);
+	}
+
+	public function testSlugLegalizePathComponentUnknownExtension()
+	{
+		$this->assertEquals(
+		    'test-zzz',
+		    $this->_platform->legalizePathComponentWithSlug('test.zzz')
+		);
+	}
+
+	public function testSlugLegalizePathComponent3()
+	{
+		$this->assertEquals(
+		    'test-php.jpg',
+		    $this->_platform->legalizePathComponentWithSlug('test.php.jpg'),
+		    "Legal path for 'test.php.jpg' does not match"
+		);
+	}
+
+	public function testSlugLegalizePathComponentI18nBadExtension()
+	{
+		$this->assertEquals(
+		    'aeiouaeiounn-php',
+		    $this->_platform->legalizePathComponentWithSlug('áéíóúÁÉÍÓÚÑñ.php'),
+		    "Legalize path for 'áéíóúÁÉÍÓÚÑñ.php' does not match"
+		);
+		$this->assertEquals(
+		    'aeiouaeiou-php',
+		    $this->_platform->legalizePathComponentWithSlug('äëïöüÄËÏÖÜ.php'),
+		    "Legalize path for 'äëïöüÄËÏÖÜ.php' does not match"
+		);
+	}
+
+	public function testSlugLegalizePathComponentI18nImage()
+	{
+		$this->assertEquals(
+		    'aeiouaeiounn.jpg',
+		    $this->_platform->legalizePathComponentWithSlug('áéíóúÁÉÍÓÚÑñ.jpg'),
+		    "Legalize path for 'áéíóúÁÉÍÓÚÑñ.jpg' does not match"
+		);
+		$this->assertEquals(
+		    'aeiouaeiou.jpg',
+		    $this->_platform->legalizePathComponentWithSlug('äëïöüÄËÏÖÜ.jpg'),
+		    "Legalize path for 'äëïöüÄËÏÖÜ.jpg' does not match"
+		);
+	}
+
+	public function testSlugLegalizePathComponentConsecutiveSpaces()
+	{
+		$this->assertEquals(
+		    'test-file-with-spaces.jpg',
+		    $this->_platform->legalizePathComponentWithSlug('test file  with  spaces.jpg'),
+		    "Legalize path for 'test file  with  spaces.jpg' does not match"
+		);
+	}
+
+	public function testSlugLegalizePathComponentForDirectory()
+	{
+		$this->assertEquals(
+		    'test-php.jpg',
+		    $this->_platform->legalizePathComponentWithSlug('test!.php.jpg$', true),
+		    "Legal path for 'test!.php.jpg$' does not match"
+		);
+	}
+
+	public function testSlugPathComponentLegalCharactersConserved()
+	{
+		$this->assertEquals(
+		    'thequickbrownfox',
+		    $this->_platform->legalizePathComponentWithSlug('TheQuickBrownFox')
+		);
+	}
+
+	public function testSlugPathComponentIllegalCharactersToUnderscores()
+	{
+		$this->assertEquals(
+		    'the-quick-brown-fox',
+		    $this->_platform->legalizePathComponentWithSlug('The Quick!Brown#Fox'),
+		    "Legal path for 'The Quick!Brown#Fox' does not match"
+		);
+	}
+
+	public function testSlugPathComponentDotInFileBaseToUnderscore()
+	{
+		$this->assertEquals(
+		    'test-php.jpg',
+		    $this->_platform->legalizePathComponentWithSlug('test.php.jpg')
+		);
+	}
+
+	public function testSlugPathComponentDotRecognizedExtensionConserved()
+	{
+		$this->assertEquals(
+		    'test.jpg',
+		    $this->_platform->legalizePathComponentWithSlug('test.jpg')
+		);
+	}
+
+	public function testSlugPathComponentDotUnrecognizedExtensionToUnderscore()
+	{
+		$this->assertEquals(
+		    'test-foo',
+		    $this->_platform->legalizePathComponentWithSlug('test.foo')
+		);
+	}
+
+	public function testSlugPathComponentDotPhpExtensionToUnderscore()
+	{
+		$this->assertEquals(
+		    'test-php',
+		    $this->_platform->legalizePathComponentWithSlug('test.php')
+		);
+	}
+
+
+	public function testSlugPathComponentDotUnderscoreToUnderscoreUnderscore()
+	{
+		$this->assertEquals(
+		    'test',
+		    $this->_platform->legalizePathComponentWithSlug('._test')
+		);
+	}
+
+	public function testSlugPathComponentAdminFileExampleConserved()
+	{
+		$this->assertEquals(
+		    'fotografia-espana-1924.jpg',
+		    $this->_platform->legalizePathComponentWithSlug('Fotografía (España) [1924].jpg')
+		);
+	}
+
+	public function testSlugPathComponentAdminFolderExampleConserved()
+	{
+		$this->assertEquals(
+		    'fotografias-1924-1950',
+		    $this->_platform->legalizePathComponentWithSlug('Fotografías [1924-1950]')
+		);
+	}
+
+	public function testSlugLegalizePathComponentWithBlacklistedExtension()
+	{
+		$this->_platform->_blacklistedFileExtensions[] = 'xxx';
+
+		$this->assertEquals('test-xxx', $this->_platform->legalizePathComponentWithSlug('test.xxx'));
+	}
+
+	public function testRemoveAccents()
+	{
+		$expected = 'aeioun AEIOUN aeiouAEIOU';
+		$test_case = 'áéíóúñ ÁÉÍÓÚÑ äëïöüÄËÏÖÜ';
+		$this->assertEquals(
+		    $expected,
+		    GalleryPlatform::remove_accents($test_case),
+		    "Remove accents for '$test_case' does not match"
+		);
+	}
+
+	public function testSanitizeFileNameWithAccents()
+	{
+		$expected = 'aeioun-aeioun-aeiouaeiou.php';
+		$test_case = 'áéíóúñ ÁÉÍÓÚÑ äëïöüÄËÏÖÜ.php';
+		$this->assertEquals(
+		    $expected,
+		    GalleryPlatform::sanitize_file_name($test_case),
+		    "Sanitize file name for '$test_case' does not match"
+		);
+	}
+
+	public function testSanitizeTitleWithAccents()
+	{
+		$expected = 'aeioun AEIOUN aeiouAEIOU';
+		$test_case = 'áéíóúñ ÁÉÍÓÚÑ äëïöüÄËÏÖÜ';
+		$this->assertEquals(
+		    $expected,
+		    GalleryPlatform::sanitize_title($test_case),
+		    "Sanitize title for '$test_case' does not match"
+		);
+	}
+
+	public function testSanitizeTitleWithDashesWithAccents()
+	{
+		$expected = 'aeioun-aeioun-aeiouaeiou';
+		$test_case = 'aeioun AEIOUN aeiouAEIOU';
+		$this->assertEquals(
+		    $expected,
+		    GalleryPlatform::sanitize_title_with_dashes($test_case),
+		    "Sanitize title with dashes for '$test_case' does not match"
+		);
+	}
+
+}

@@ -23,7 +23,7 @@
 </h2></div>
 {/if}
 {if empty($form.slug.mode)}
-    {assign var="slugMode" value=0}
+    {assign var="slugMode" value="modern"}
 {else}
     {assign var="slugMode" value=$form.slug.mode}
 {/if}
@@ -87,8 +87,8 @@
     <div
         class="gbDataTable">
 
-    <input type="radio" id="rbModernSlugMode"{if $slugMode == 0} checked="checked"{/if}
-           name="{g->formVar var="form[slug][mode]"}" value="0"/>
+    <input type="radio" id="rbModernSlugMode"{if $slugMode == 'modern'} checked="checked"{/if}
+           name="{g->formVar var="form[slug][mode]"}" value="modern"/>
     <label for="rbModernSlugMode">
         {g->text text="Modern slug mode"}
     </label>
@@ -96,14 +96,14 @@
         {g->text text="Converts a file name like 'Fotografía (España) [1924].jpg' to 'fotografia-espana-1924.jpg'"}<br/>
         {g->text text="Converts a folder name like 'Fotografías [1924-1950]' to 'fotografias-1924-1950'"}
         </p>
-    <input type="radio" id="rbClassicSlugMode"{if $slugMode == 1} checked="checked"{/if}
-           name="{g->formVar var="form[slug][mode]"}" value="1"/>
+    <input type="radio" id="rbClassicSlugMode"{if $slugMode == 'classic'} checked="checked"{/if}
+           name="{g->formVar var="form[slug][mode]"}" value="classic"/>
     <label for="rbClassicSlugMode" class="giDescription">
         {g->text text="Classic slug mode"}<br/>
     </label>
         <p class="giDescription gbDataTable">
-        {g->text text="Converts a file name like 'Fotografía (España) [1924].jpg' to 'Fotograf_a__Espa_a__1924_.jpg'"}<br/>
-        {g->text text="Converts a folder name like 'Fotografías [1924-1950]' to 'Fotograf_as_1924-1950_'"}
+        {g->text text="Converts a file name like 'Fotografía (España) [1924].jpg' to 'Fotograf__a _Espa__a_ _1924_.jpg'"}<br/>
+        {g->text text="Converts a folder name like 'Fotografías [1924-1950]' to 'Fotograf__as _1924-1950_'"}
         </p>
     </div>
 </div>
