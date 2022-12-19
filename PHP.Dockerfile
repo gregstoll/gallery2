@@ -64,3 +64,6 @@ RUN apt-get update \
 	&& docker-php-ext-install -j$(nproc) \
 		dom \
 		xsl
+
+RUN apt-get install -y gettext unzip ffmpeg netpbm
+
