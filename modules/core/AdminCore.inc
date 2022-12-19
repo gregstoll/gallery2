@@ -139,7 +139,8 @@ class AdminCoreController extends GalleryController {
 			   'lock.system',
 			   'format.date',
 			   'format.time',
-			   'format.datetime') as $key) {
+			   'format.datetime',
+			   'slug.mode') as $key) {
 		list ($outer, $inner) = explode('.', $key);
 		if (isset($form[$outer][$inner])) {
 		    $ret = GalleryCoreApi::setPluginParameter(
@@ -236,7 +237,8 @@ class AdminCoreView extends GalleryView {
 			   'lock.system',
 			   'format.date',
 			   'format.time',
-			   'format.datetime') as $key) {
+			   'format.datetime',
+			   'slug.mode') as $key) {
 
 		list ($ret, $value) =
 		    GalleryCoreApi::getPluginParameter('module', 'core', $key);
@@ -260,7 +262,6 @@ class AdminCoreView extends GalleryView {
 	}
 
 	$platform =& $gallery->getPlatform();
-	$translator =& $gallery->getTranslator();
 	$AdminCore = $can = array();
 
 	/* Set up our session time lists */

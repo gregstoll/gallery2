@@ -22,6 +22,12 @@
   {/if}
 </h2></div>
 {/if}
+{if empty($form.slug.mode)}
+    {assign var="slugMode" value=0}
+{else}
+    {assign var="slugMode" value=$form.slug.mode}
+{/if}
+
 {if !empty($form.error)}
 <div class="gbBlock"><h2 class="giError">
   {g->text text="There was a problem processing your request, see below for details."}
@@ -70,6 +76,36 @@
       {g->date format=$form.format.datetime}
     </td></tr>
   </table>
+</div>
+
+<div class="gbBlock">
+    <h3> {g->text text="Slug names"} </h3>
+
+    <p class="giDescription">
+        {g->text text="Choose the strategy to rename valid files and folders on the filesystem."}
+    </p>
+    <div
+        class="gbDataTable">
+
+    <input type="radio" id="rbModernSlugMode"{if $slugMode == 0} checked="checked"{/if}
+           name="{g->formVar var="form[slug][mode]"}" value="0"/>
+    <label for="rbModernSlugMode">
+        {g->text text="Modern slug mode"}
+    </label>
+        <p class="giDescription gbDataTable">
+        {g->text text="Converts a file name like 'Fotografía (España) [1924].jpg' to 'fotografia-espana-1924.jpg'"}<br/>
+        {g->text text="Converts a folder name like 'Fotografías [1924-1950]' to 'fotografias-1924-1950'"}
+        </p>
+    <input type="radio" id="rbClassicSlugMode"{if $slugMode == 1} checked="checked"{/if}
+           name="{g->formVar var="form[slug][mode]"}" value="1"/>
+    <label for="rbClassicSlugMode" class="giDescription">
+        {g->text text="Classic slug mode"}<br/>
+    </label>
+        <p class="giDescription gbDataTable">
+        {g->text text="Converts a file name like 'Fotografía (España) [1924].jpg' to 'Fotograf_a__Espa_a__1924_.jpg'"}<br/>
+        {g->text text="Converts a folder name like 'Fotografías [1924-1950]' to 'Fotograf_as_1924-1950_'"}
+        </p>
+    </div>
 </div>
 
 {if isset($AdminCore.can.setPermissions)}
