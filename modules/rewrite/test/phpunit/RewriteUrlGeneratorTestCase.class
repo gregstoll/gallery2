@@ -1,0 +1,1439 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Global rewrite URL generator tests.
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class RewriteUrlGeneratorTestCase extends GalleryTestCase {
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+		global $gallery;
+		$session =& $gallery->getSession();
+
+		foreach (array('rewrite', 'core') as $moduleId) {
+			$ret = $this->_markPluginParametersForCleanup('module', $moduleId);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$testUrls   = array();
+		$testUrls[] = array(
+			'match'     => array(
+				'view' => 'core.ShowItem',
+			),
+			'pattern'   => 'v/%path%',
+			'functions' => array(
+				'path' => array('rewrite', 'RewriteSimpleHelper', 'parsePath'),
+			),
+			'onLoad'    => array('rewrite', 'RewriteSimpleHelper', 'loadItemIdFromPath'),
+		);
+		$testUrls[] = array(
+			'match'     => array(
+				'view' => 'core.DownloadItem',
+			),
+			'pattern'   => 'd/%itemId%-%serialNumber%/%fileName%',
+			'functions' => array(
+				'serialNumber' => array('rewrite', 'RewriteSimpleHelper', 'parseSerialNumber'),
+				'fileName'     => array('rewrite', 'RewriteSimpleHelper', 'parseFileName'),
+			),
+		);
+		$testUrls[] = array(
+			'match'   => array(
+				'view'    => 'php.Unit',
+				'subView' => 'test.subView',
+			),
+			'pattern' => 'phpunitsub/%itemId%',
+		);
+		$testUrls[] = array(
+			'match'     => array(
+				'view'    => 'php.Unit',
+				'subView' => 'test.suffixExt',
+			),
+			'pattern'   => 't/%path%.test',
+			'functions' => array(
+				'path' => array('rewrite', 'RewriteSimpleHelper', 'parsePath'),
+			),
+		);
+		$testUrls[] = array(
+			'match'     => array(
+				'view'    => 'php.Unit',
+				'subView' => 'test.suffixPath',
+			),
+			'pattern'   => '%path%/test.html',
+			'functions' => array(
+				'path' => array('rewrite', 'RewriteSimpleHelper', 'parsePath'),
+			),
+		);
+		$testUrls[] = array(
+			'match'   => array(
+				'view'    => 'php.Unit',
+				'subView' => 'test.urlEncode',
+			),
+			'pattern' => 'phpunit/%path%',
+		);
+		$testUrls[] = array(
+			'match'   => array(
+				'view' => 'php.Unit',
+			),
+			'pattern' => 'phpunit/',
+		);
+		$testUrls[] = array(
+			'match'   => array(
+				'controller' => 'php.Unit',
+			),
+			'pattern' => 'phpunit2/',
+		);
+		$ret        = GalleryCoreApi::setPluginParameter(
+			'module',
+			'rewrite',
+			'shortUrls',
+			serialize($testUrls)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_savedSession = $gallery->_session;
+
+		// Prepare some test items
+		$ret = $this->_prepareTestItems();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_urlEncodePath = 'The Quick!Brown#Fox';
+
+		$this->_origEmbed = null;
+
+		if (GalleryDataCache::containsKey('G2_EMBED')) {
+			$this->_origEmbed = GalleryDataCache::get('G2_EMBED');
+		}
+		$session->put('core.authToken', '123456ABCDEF');
+		$ret = $session->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryDataCache::reset();
+	}
+
+	public function tearDown() {
+		global $gallery;
+		$gallery->_session = $this->_savedSession;
+
+		// Restore the embedded mode
+		if ($this->_origEmbed) {
+			GalleryDataCache::put('G2_EMBED', $this->_origEmbed, true);
+		} else {
+			GalleryDataCache::remove('G2_EMBED');
+			$this->assertTrue(!GalleryDataCache::containsKey('G2_EMBED'), 'Could not remove a GDC var');
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	// Prepare a test album / item / derivative which is needed for real short URLs
+	public function _prepareTestItems() {
+		list($ret, $this->_testAlbum) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_testAlbum);
+		list($ret, $this->_testItem) = $this->_createRandomDataItem(
+			$this->_testAlbum->getId(),
+			'application/unknown',
+			array(
+				'pathComponent' => 'foo# bar&.dat',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_derivative) = $this->_createDerivative(
+			$this->_testItem,
+			$this->_testItem->getId(),
+			DERIVATIVE_TYPE_IMAGE_RESIZE
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_testAlbumPath) = $this->_testAlbum->fetchLogicalPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_testItemPath) = $this->_testItem->fetchLogicalPath();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_testItemPath = str_replace('%2F', '/', urlencode($this->_testItemPath));
+
+		return null;
+	}
+
+	public function _urlGeneratorInit($urlGeneratorName) {
+		$this->_urlGeneratorName = $urlGeneratorName;
+		$this->_urlGenerator     = new $urlGeneratorName();
+		GalleryDataCache::reset();
+		$ret = $this->_urlGenerator->init('phpunit_test.php');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		return null;
+	}
+
+	public function testGetCurrentUrl() {
+		$this->_urlGenerator = new $this->_urlGeneratorName();
+		$ret                 = $this->_urlGenerator->init();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected = 'http://example.com/gallery2/main.php?foo=1&bar=2';
+		$this->assertEquals($expected, $this->_urlGenerator->getCurrentUrl());
+		$this->assertFalse($this->_urlGenerator->_error, 'error');
+	}
+
+	public function testGetCurrentUrlEmbedded() {
+		GalleryDataCache::put('G2_EMBED', 1, true);
+		$_SERVER['REQUEST_URI'] = '/cms/index.php?mod=gallery2';
+		unset($_SERVER['QUERY_STRING']);
+		$expectedUrl         = 'http://example.com/cms/index.php?mod=gallery2';
+		$this->_urlGenerator = new $this->_urlGeneratorName();
+		$ret                 = $this->_urlGenerator->init('/cms/index.php?mod=gallery2', '/gallery2/');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals($expectedUrl, $this->_urlGenerator->getCurrentUrl());
+		$this->assertFalse($this->_urlGenerator->_error, 'error');
+	}
+
+	public function testGetCurrentUrlDir() {
+		$this->_urlGenerator = new $this->_urlGeneratorName();
+		$ret                 = $this->_urlGenerator->init();
+
+		if ($ret) {
+			return $ret;
+		}
+		$expectedUrl = 'http://example.com/gallery2/';
+		$this->assertEquals($expectedUrl, $this->_urlGenerator->getCurrentUrlDir());
+		$this->assertFalse($this->_urlGenerator->_error, 'error');
+	}
+
+	public function testGetCurrentUrlDirEmbedded() {
+		GalleryDataCache::put('G2_EMBED', 1, true);
+		$_SERVER['REQUEST_URI'] = '/cms/index.php?mod=gallery2';
+		$expectedUrl            = 'http://example.com/cms/';
+		$this->_urlGenerator    = new $this->_urlGeneratorName();
+		$ret                    = $this->_urlGenerator->init('/cms/index.php?mod=gallery2', '/gallery2/');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals($expectedUrl, $this->_urlGenerator->getCurrentUrlDir(), 'default');
+		$this->assertFalse($this->_urlGenerator->_error, 'error');
+		$this->assertEquals(
+			'http://example.com/gallery2/',
+			$this->_urlGenerator->getCurrentUrlDir(true),
+			'forceDirect'
+		);
+		$this->assertEquals(
+			$expectedUrl,
+			$this->_urlGenerator->getCurrentUrlDir(false),
+			'no forceDirect'
+		);
+	}
+
+	public function testGetBaseUrl() {
+		$_SERVER['REQUEST_URI'] = '/gallery2/phpunit_test.php?foo=1&bar=2';
+		$urlGenerator           = new $this->_urlGeneratorName();
+		$ret                    = $urlGenerator->init('phpunit_test.php');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!$urlGenerator->_error);
+		$this->assertEquals(
+			'http://example.com/gallery2/',
+			$urlGenerator->_getBaseUrl(),
+			'baseUrl default'
+		);
+		$this->assertEquals(
+			'http://example.com/gallery2/',
+			$urlGenerator->_getBaseUrl(true),
+			'baseUrl forceDirect'
+		);
+		$this->assertEquals(
+			'http://example.com/gallery2/',
+			$urlGenerator->_getBaseUrl(false),
+			'baseUrl no forceDirect'
+		);
+
+		$this->assertTrue(!$urlGenerator->_error);
+		$this->assertEquals('', $urlGenerator->_getBaseParamString(), 'baseParamss default');
+		$this->assertEquals('', $urlGenerator->_getBaseParamString(true), 'baseParams forceDirect');
+		$this->assertEquals(
+			'',
+			$urlGenerator->_getBaseParamString(false),
+			'baseParams no forceDirect'
+		);
+	}
+
+	public function testGetBaseUrlEmbedded() {
+		GalleryDataCache::put('G2_EMBED', 1, true);
+		$urlGenerator = new $this->_urlGeneratorName();
+		$ret          = $urlGenerator->init('/cms/index.php', 'https://direct/gallery2/');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!$urlGenerator->_error);
+		$this->assertEquals(
+			'http://example.com/cms/',
+			$urlGenerator->_getBaseUrl(),
+			'baseUrl default'
+		);
+		$this->assertEquals(
+			'https://direct/gallery2/',
+			$urlGenerator->_getBaseUrl(true),
+			'baseUrl forceDirect'
+		);
+		$this->assertEquals(
+			'http://example.com/cms/',
+			$urlGenerator->_getBaseUrl(false),
+			'baseUrl no forceDirect'
+		);
+
+		$this->assertTrue(!$urlGenerator->_error);
+		$this->assertEquals('', $urlGenerator->_getBaseParamString(), 'baseParamss default');
+		$this->assertEquals('', $urlGenerator->_getBaseParamString(true), 'baseParams forceDirect');
+		$this->assertEquals(
+			'',
+			$urlGenerator->_getBaseParamString(false),
+			'baseParams no forceDirect'
+		);
+	}
+
+	public function testInitAndOnLoad() {
+		// Set something up that the _onLoad() function should handle
+		GalleryUtilities::removeRequestVariable('itemId');
+		GalleryUtilities::putRequestVariable('view', 'core.ShowItem');
+		GalleryUtilities::putRequestVariable('path', $this->_testAlbumPath);
+		$urlGenerator = new $this->_urlGeneratorName();
+
+		// Execute init and initNavigation, they should call _onLoad()
+		$ret = $urlGenerator->init();
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = $urlGenerator->initNavigation();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertFalse($urlGenerator->_error, 'error');
+		$this->assertEquals(
+			(string)$this->_testAlbum->getId(),
+			GalleryUtilities::getRequestVariables('itemId'),
+			'itemId'
+		);
+	}
+
+	/*
+	 * Drive the test environment into a specific test case.
+	 * @param array $env 'baseUri' => string
+	 *     'g2Uri' => string
+	 *     'embedSessionString' => string
+	 *     'cookiePath' => string (affects embedded session)
+	 *     'error' => true (default false)
+	 *     'galleryBaseUrl' => string (multisite Gallery codebase)
+	 *     'G2_EMBED' => boolean
+	 *     [various $_SERVER vars] => string
+	 *     'isNotUsingCookies' => true (default = false)
+	 * @param array $expectedUrl string exptectedUrl, string exptectedUrl2, ...
+	 * @param array $params array URL parameters, array URL2 parameters, ...
+	 * @param array $options generation options
+	 * @return GalleryStatus
+	 */
+	public function _runGenerateUrlTest($env, $expectedUrl, $params = null, $options = null) {
+		global $gallery;
+		GalleryDataCache::reset();
+
+		// Multisite
+		if (isset($env['galleryBaseUrl'])) {
+			$gallery->setConfig('galleryBaseUrl', $env['galleryBaseUrl']);
+		}
+
+		// Embedded
+		if (isset($env['G2_EMBED'])) {
+			GalleryDataCache::put('G2_EMBED', !empty($env['G2_EMBED']), true);
+		}
+
+		/*
+		 * Configure the cookie path:
+		 *  - if empty (not set): Gallery should append session id to embedded DownloadItem requests
+		 *  - else, no session id has to be appended
+		 */
+		$cookiePath = isset($env['cookiePath']) ? $env['cookiePath'] : '';
+		$ret        = GalleryCoreApi::setPluginParameter('module', 'core', 'cookie.path', $cookiePath);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Check if the correct value was stored
+		list($ret, $realValue) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'core',
+			'cookie.path'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals($cookiePath, $realValue, 'Could not reset cookie path');
+
+		// SERVER vars
+		foreach (array(
+			'REQUEST_URI',
+			'HTTP_HOST',
+			'SERVER_PORT',
+			'QUERY_STRING',
+			'HTTP_X_FORWARDED_HOST',
+			'SCRIPT_NAME',
+			'PATH_INFO',
+			'HTTPS',
+		) as $var) {
+			if (isset($env[$var])) {
+				$_SERVER[$var] = $env[$var];
+			}
+		}
+
+		// Let the URL generator know of the new cookie.path value
+		$baseUri             = isset($env['baseUri']) ? $env['baseUri'] : null;
+		$g2Uri               = isset($env['g2Uri']) ? $env['g2Uri'] : null;
+		$embedSessionString  = isset($env['embedSessionString']) ? $env['embedSessionString'] : null;
+		$this->_urlGenerator = new $this->_urlGeneratorName();
+		$ret                 = $this->_urlGenerator->init($baseUri, $g2Uri, $embedSessionString);
+
+		if ($ret) {
+			return $ret;
+		}
+		$gallery->setUrlGenerator($this->_urlGenerator);
+
+		// Let the session know of the new cookie.path value
+		$session = new GallerySession();
+		$ret     = $session->init();
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = $session->start();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (!empty($env['isNotUsingCookies'])) {
+			$session->_isUsingCookies = false;
+		} else {
+			$session->_isUsingCookies = true;
+		}
+		$gallery->_session = $session;
+
+		if (!empty($env['error'])) {
+			$this->_urlGenerator->_error = true;
+		} else {
+			$this->assertTrue(empty($this->_urlGenerator->_error), 'RewriteUrlGenerator error');
+		}
+
+		if (!is_array($expectedUrl)) {
+			$expectedUrl = array($expectedUrl);
+			$params      = array($params);
+
+			if (isset($this->_expectedUrl)) {
+				$exptectedUrl = array($this->_expectedUrl);
+				unset($this->_expectedUrl);
+			}
+		}
+
+		foreach ($expectedUrl as $key => $expectedUrl) {
+			// Give the URL generator implementation a chance to override the expected result
+			if (isset($this->_expectedUrl[$key])) {
+				$expectedUrl = $this->_expectedUrl[$key];
+			}
+
+			// Run the test
+			$this->assertEquals(
+				$expectedUrl,
+				$this->_urlGenerator->generateUrl($params[$key], $options),
+				"Test URL $key"
+			);
+		}
+
+		return null;
+	}
+
+	public function _getTestUrlParams() {
+		/*
+		 * These are 17 test URLs that should give a good test coverage
+		 *  0. rand164.NonShort (normal module view URL)
+		 *  1. core.DownloadItem (is very special for embedded Gallery)
+		 *  2. href (special for embedded and multisite)
+		 *  3. controller core.ShowItem (controller, else not special)
+		 *  4. themes/foo/theme.css (downloadable plugins)
+		 * --------- short URL test URLs only ---------
+		 *  5. core.ShowItem for the root album (special / no short URL)
+		 *  6. core.ShowItem for existing filesystem entity (album) (short URL)
+		 *  7. core.ShowItem for data item entity (short URL, .html suffix)
+		 *  8. core.ShowItem for non-existing filesystem entity (short URL)
+		 *  9. core.ShowItem for non-filesystem entity (e.g. derivative, short URL)
+		 * 10. php.Unit with path suffix for album item (short URL)
+		 * 11. php.Unit with path suffix for data item (short URL)
+		 * 12. php.Unit with extension suffix for album item (short URL)
+		 * 13. php.Unit with extension suffix for data item (short URL)
+		 * 14. php.Unit without any keywords (short URL)
+		 * 15. php.Unit controller (short URL)
+		 * 16. php.Unit with URL encode (short URL)
+		 */
+		$params     = array();
+		$params[0]  = array(
+			'view' => 'rand164.NonShort',
+			'foo'  => 'bar',
+		);
+		$params[1]  = array(
+			'view'         => 'core.DownloadItem',
+			'itemId'       => $this->_testItem->getId(),
+			'serialNumber' => $this->_testItem->getSerialNumber(),
+		);
+		$params[2]  = array(
+			'href' => 'http://href_website.com/foo',
+		);
+		$params[3]  = array(
+			'controller' => 'core.ShowItem',
+			'itemId'     => $this->_testItem->getId(),
+		);
+		$params[4]  = array(
+			'href' => 'themes/foo/images/bar.jpg',
+		);
+		$params[5]  = array(
+			'view' => 'core.ShowItem',
+		);
+		$params[6]  = array(
+			'view'   => 'core.ShowItem',
+			'itemId' => $this->_testAlbum->getId(),
+		);
+		$params[7]  = array(
+			'view'   => 'core.ShowItem',
+			'itemId' => $this->_testItem->getId(),
+		);
+		$params[8]  = array(
+			'view'   => 'core.ShowItem',
+			'itemId' => -5759,
+		);
+		$params[9]  = array(
+			'view'   => 'core.ShowItem',
+			'itemId' => $this->_derivative->getId(),
+		);
+		$params[10] = array(
+			'view'    => 'php.Unit',
+			'subView' => 'test.suffixPath',
+			'itemId'  => $this->_testAlbum->getId(),
+		);
+		$params[11] = array(
+			'view'    => 'php.Unit',
+			'subView' => 'test.suffixPath',
+			'itemId'  => $this->_testItem->getId(),
+		);
+		$params[12] = array(
+			'view'    => 'php.Unit',
+			'subView' => 'test.suffixExt',
+			'itemId'  => $this->_testAlbum->getId(),
+		);
+		$params[13] = array(
+			'view'    => 'php.Unit',
+			'subView' => 'test.suffixExt',
+			'itemId'  => $this->_testItem->getId(),
+		);
+		$params[14] = array(
+			'view' => 'php.Unit',
+		);
+		$params[15] = array(
+			'controller' => 'php.Unit',
+		);
+		$params[16] = array(
+			'view'    => 'php.Unit',
+			'subView' => 'test.urlEncode',
+			'path'    => $this->_urlEncodePath,
+		);
+
+		return $params;
+	}
+
+	/*
+	 * Make sure that we can generate first a URL that goes to embedded Gallery and then another URL
+	 * that goes to Gallery directly (2 base URLs)
+	 */
+	public function testGenerateUrlEmbeddedThenDirect() {
+		$env = array(
+			'REQUEST_URI'   => '/cms/otherpage/?foo=bar',
+			'G2_EMBED'      => 1,
+			'baseUri'       => '/cms/',
+			'g2Uri'         => '/gallery2/',
+			'cookiePath'    => '/',
+			'needTestItems' => 1,
+		);
+
+		// core.ShowItem on albums have the logical path, should go through the emApp
+		$params[0]       = array(
+			'view'   => 'core.ShowItem',
+			'itemId' => $this->_testAlbum->getId(),
+		);
+		$expectedUrls[0] = '/cms/v' . $this->_testAlbumPath;
+
+		// core.DownloadItem should go to Gallery directly
+		$params[1]       = array(
+			'view'   => 'core.DownloadItem',
+			'itemId' => $this->_testItem->getId(),
+		);
+		$expectedUrls[1] = sprintf(
+			'/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+
+		$ret = $this->_runGenerateUrlTest($env, $expectedUrls, $params);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlNonShortUrl() {
+		// A normal long URL
+		$expectedUrl = '/gallery2/main.php?g2_view=random3734.NoShortUrl&amp;g2_foo=bar';
+		$params      = array(
+			'view' => 'random3734.NoShortUrl',
+			'foo'  => 'bar',
+		);
+
+		$ret = $this->_runGenerateUrlTest(array(), $expectedUrl, $params);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	/*
+	 * Try to cover the following cases:
+	 *
+	 * Environment paramaters:
+	 *  1. flag: embedded
+	 *  2. flag: cookiePath set (relevant for embedded Gallery)
+	 *  3. REQUEST_URI, set according to RewriteUrlGenerator used
+	 *  4. HTTP_HOST / HTTP_X_FORWARDED_HOST
+	 *  5. HTTPS
+	 *  6. override for protocol / embedded
+	 *  7. override for host / embedded
+	 *  8. override for path
+	 *  9. override for file + query string
+	 * 10. Downloadable plugins
+	 * 11. Rewrite URL generator not configured
+	 *
+	 * generateUrl Options:
+	 *  1. baseUrl => string; implicitly tested with normal URLs
+	 *  2. forceDirect => true; tested with embedded Gallery
+	 *  3. forceFullUrl => true; to generate absolute URL instead of relative path URL
+	 *  4. forceSessionId => boolean; to force session id to be in/not in the URL
+	 *  5. htmlEntities => false; to use '&' parameter separator instead of '&amp;'
+	 *  6. urlEncode => false; to not URL encode parameter names and values
+	 *  7. forceServerRelativeUrl => (implicitly tested with normal URLs)
+	 *  8. useAuthToken => boolean; to force auth token to be in/not in the URL
+	 */
+	public function testGenerateUrl() {
+		$params = $this->_getTestUrlParams();
+
+		$expectedUrl[0]  = '/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_view=rand164.NonShort&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = $this->_signUrl(
+			'/gallery2/' . GALLERY_MAIN_PHP
+			. '?g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId()
+		);
+		$expectedUrl[4]  = '/gallery2/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = '/gallery2/' . GALLERY_MAIN_PHP;
+		$expectedUrl[6]  = '/gallery2/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = '/gallery2/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = '/gallery2/' . GALLERY_MAIN_PHP . '?g2_itemId=-5759';
+		$expectedUrl[9]  = '/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_itemId=' . $this->_derivative->getId();
+		$expectedUrl[10] = '/gallery2/' . ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$expectedUrl[11] = '/gallery2/' . ltrim($this->_testItemPath, '/') . '/test.html';
+		$expectedUrl[12] = '/gallery2/t' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$expectedUrl[13] = '/gallery2/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = '/gallery2/phpunit/';
+		$expectedUrl[15] = $this->_signUrl('/gallery2/phpunit2/');
+		$expectedUrl[16] = '/gallery2/phpunit/' . urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest(array(), $expectedUrl, $params);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlForceFullUrl() {
+		global $gallery;
+		$session =& $gallery->getSession();
+
+		$params = $this->_getTestUrlParams();
+		// forceServerRelativeUrl should have no effect, fullUrl has precedence
+		$options = array(
+			'forceFullUrl'           => true,
+			'forceServerRelativeUrl' => true,
+		);
+
+		$expectedUrl[0]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_view=rand164.NonShort&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'http://example.com/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = $this->_signUrl(
+			'http://example.com/gallery2/' . GALLERY_MAIN_PHP
+			. '?g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId()
+		);
+		$expectedUrl[4]  = 'http://example.com/gallery2/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP;
+		$expectedUrl[6]  = 'http://example.com/gallery2/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = 'http://example.com/gallery2/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP . '?g2_itemId=-5759';
+		$expectedUrl[9]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_itemId=' . $this->_derivative->getId();
+		$expectedUrl[10] = 'http://example.com/gallery2/' . ltrim($this->_testAlbumPath, '/')
+		. 'test.html';
+		$expectedUrl[11] = 'http://example.com/gallery2/' . ltrim($this->_testItemPath, '/')
+		. '/test.html';
+		$expectedUrl[12] = 'http://example.com/gallery2/t' . rtrim($this->_testAlbumPath, '/')
+		. '.test';
+		$expectedUrl[13] = 'http://example.com/gallery2/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = 'http://example.com/gallery2/phpunit/';
+		$expectedUrl[15] = $this->_signUrl('http://example.com/gallery2/phpunit2/');
+		$expectedUrl[16] = 'http://example.com/gallery2/phpunit/'
+		. urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest(array(), $expectedUrl, $params, $options);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlForceSessionId() {
+		global $gallery;
+		$session =& $gallery->getSession();
+
+		$params  = $this->_getTestUrlParams();
+		$options = array(
+			'forceSessionId' => true,
+		);
+
+		$sessionString = sprintf('g2_%s=%s', $session->getKey(), $session->getId());
+
+		$expectedUrl[0]  = '/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_view=rand164.NonShort&amp;g2_foo=bar&amp;' . $sessionString;
+		$expectedUrl[1]  = sprintf(
+			'/gallery2/d/%d-%d/%s?%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent()),
+			$sessionString
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo?' . $sessionString;
+		$expectedUrl[3]  = $this->_signUrl(
+			'/gallery2/' . GALLERY_MAIN_PHP
+			. '?g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId()
+		) . '&amp;'
+		. $sessionString;
+		$expectedUrl[4]  = '/gallery2/themes/foo/images/bar.jpg?' . $sessionString;
+		$expectedUrl[5]  = '/gallery2/' . GALLERY_MAIN_PHP . '?' . $sessionString;
+		$expectedUrl[6]  = '/gallery2/v' . $this->_testAlbumPath . '?' . $sessionString;
+		$expectedUrl[7]  = '/gallery2/v' . $this->_testItemPath . '.html?' . $sessionString;
+		$expectedUrl[8]  = '/gallery2/' . GALLERY_MAIN_PHP . '?g2_itemId=-5759&amp;'
+		. $sessionString;
+		$expectedUrl[9]  = '/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_itemId=' . $this->_derivative->getId() . '&amp;' . $sessionString;
+		$expectedUrl[10] = '/gallery2/' . ltrim($this->_testAlbumPath, '/') . 'test.html?'
+		. $sessionString;
+		$expectedUrl[11] = '/gallery2/' . ltrim($this->_testItemPath, '/') . '/test.html?'
+		. $sessionString;
+		$expectedUrl[12] = '/gallery2/t' . rtrim($this->_testAlbumPath, '/') . '.test?'
+		. $sessionString;
+		$expectedUrl[13] = '/gallery2/t' . $this->_testItemPath . '.test?' . $sessionString;
+		$expectedUrl[14] = '/gallery2/phpunit/?' . $sessionString;
+		$expectedUrl[15] = $this->_signUrl('/gallery2/phpunit2/') . '&amp;' . $sessionString;
+		$expectedUrl[16] = '/gallery2/phpunit/' . urlencode($this->_urlEncodePath) . '?'
+		. $sessionString;
+
+		$ret = $this->_runGenerateUrlTest(array(), $expectedUrl, $params, $options);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlNoHtmlEntities() {
+		$params  = $this->_getTestUrlParams();
+		$options = array(
+			'htmlEntities' => false,
+		);
+
+		$expectedUrl[0]  = '/gallery2/' . GALLERY_MAIN_PHP . '?g2_view=rand164.NonShort&g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = '/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_controller=core.ShowItem&g2_itemId=' . $this->_testItem->getId();
+		$expectedUrl[3]  = $this->_signUrl($expectedUrl[3], false);
+		$expectedUrl[4]  = '/gallery2/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = '/gallery2/' . GALLERY_MAIN_PHP;
+		$expectedUrl[6]  = '/gallery2/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = '/gallery2/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = '/gallery2/' . GALLERY_MAIN_PHP . '?g2_itemId=-5759';
+		$expectedUrl[9]  = '/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_itemId=' . $this->_derivative->getId();
+		$expectedUrl[10] = '/gallery2/' . ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$expectedUrl[11] = '/gallery2/' . ltrim($this->_testItemPath, '/') . '/test.html';
+		$expectedUrl[12] = '/gallery2/t' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$expectedUrl[13] = '/gallery2/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = '/gallery2/phpunit/';
+		$expectedUrl[15] = $this->_signUrl('/gallery2/phpunit2/', false);
+		$expectedUrl[16] = '/gallery2/phpunit/' . urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest(array(), $expectedUrl, $params, $options);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlNoUrlEncode() {
+		$params  = $this->_getTestUrlParams();
+		$options = array(
+			'urlEncode' => false,
+		);
+
+		$expectedUrl[0]  = '/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_view=rand164.NonShort&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = '/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId();
+		$expectedUrl[3]  = $this->_signUrl($expectedUrl[3]);
+		$expectedUrl[4]  = '/gallery2/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = '/gallery2/' . GALLERY_MAIN_PHP;
+		$expectedUrl[6]  = '/gallery2/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = '/gallery2/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = '/gallery2/' . GALLERY_MAIN_PHP . '?g2_itemId=-5759';
+		$expectedUrl[9]  = '/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_itemId=' . $this->_derivative->getId();
+		$expectedUrl[10] = '/gallery2/' . ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$expectedUrl[11] = '/gallery2/' . ltrim($this->_testItemPath, '/') . '/test.html';
+		$expectedUrl[12] = '/gallery2/t' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$expectedUrl[13] = '/gallery2/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = '/gallery2/phpunit/';
+		$expectedUrl[15] = $this->_signUrl('/gallery2/phpunit2/');
+		$expectedUrl[16] = '/gallery2/phpunit/' . $this->_urlEncodePath;
+
+		$ret = $this->_runGenerateUrlTest(array(), $expectedUrl, $params, $options);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlEmbeddedCookieless() {
+		$env    = array(
+			'REQUEST_URI'        => '/cms/otherpage/?foo=bar',
+			'G2_EMBED'           => true,
+			'baseUri'            => '/cms/index.php?mod=gallery2',
+			'g2Uri'              => '/gallery2/',
+			'cookiePath'         => '/',
+			'embedSessionString' => 'cmssid=12345',
+			'isNotUsingCookies'  => true,
+		);
+		$params = $this->_getTestUrlParams();
+
+		$sessionString = 'cmssid=12345';
+
+		$expectedUrl[0]  = '/cms/index.php?mod=gallery2&amp;g2_view=rand164.NonShort'
+		. '&amp;g2_foo=bar&amp;' . $sessionString;
+		$expectedUrl[1]  = sprintf(
+			'/gallery2/d/%d-%d/%s?%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent()),
+			$sessionString
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = $this->_signUrl(
+			'/cms/index.php?mod=gallery2&amp;'
+			. 'g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId()
+		)
+		. '&amp;' . $sessionString;
+		$expectedUrl[4]  = '/gallery2/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = '/cms/index.php?mod=gallery2&amp;' . $sessionString;
+		$expectedUrl[6]  = '/cms/v' . $this->_testAlbumPath . '?' . $sessionString;
+		$expectedUrl[7]  = '/cms/v' . $this->_testItemPath . '.html?' . $sessionString;
+		$expectedUrl[8]  = '/cms/index.php?mod=gallery2&amp;' . 'g2_itemId=-5759&amp;'
+		. $sessionString;
+		$expectedUrl[9]  = '/cms/index.php?mod=gallery2&amp;g2_itemId='
+		. $this->_derivative->getId() . '&amp;' . $sessionString;
+		$expectedUrl[10] = '/cms/' . ltrim($this->_testAlbumPath, '/') . 'test.html?'
+		. $sessionString;
+		$expectedUrl[11] = '/cms/' . ltrim($this->_testItemPath, '/') . '/test.html?'
+		. $sessionString;
+		$expectedUrl[12] = '/cms/t' . rtrim($this->_testAlbumPath, '/') . '.test?'
+		. $sessionString;
+		$expectedUrl[13] = '/cms/t' . $this->_testItemPath . '.test?' . $sessionString;
+		$expectedUrl[14] = '/cms/phpunit/?' . $sessionString;
+		$expectedUrl[15] = $this->_signUrl('/cms/phpunit2/') . '&amp;' . $sessionString;
+		$expectedUrl[16] = '/cms/phpunit/' . urlencode($this->_urlEncodePath) . '?'
+		. $sessionString;
+
+		$ret = $this->_runGenerateUrlTest($env, $expectedUrl, $params);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlEmbedded() {
+		$env    = array(
+			'REQUEST_URI'        => '/cms/otherpage/?foo=bar',
+			'G2_EMBED'           => true,
+			'baseUri'            => '/cms/index.php?mod=gallery2',
+			'g2Uri'              => '/gallery2/',
+			'cookiePath'         => '/',
+			'embedSessionString' => 'cmssid=12345',
+		);
+		$params = $this->_getTestUrlParams();
+
+		$expectedUrl[0]  = '/cms/index.php?mod=gallery2&amp;g2_view=rand164.NonShort&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = '/cms/index.php?mod=gallery2&amp;g2_controller=core.ShowItem'
+		. '&amp;g2_itemId=' . $this->_testItem->getId();
+		$expectedUrl[3]  = $this->_signUrl($expectedUrl[3]);
+		$expectedUrl[4]  = '/gallery2/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = '/cms/index.php?mod=gallery2';
+		$expectedUrl[6]  = '/cms/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = '/cms/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = '/cms/index.php?mod=gallery2&amp;g2_itemId=-5759';
+		$expectedUrl[9]  = '/cms/index.php?mod=gallery2&amp;g2_itemId='
+		. $this->_derivative->getId();
+		$expectedUrl[10] = '/cms/' . ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$expectedUrl[11] = '/cms/' . ltrim($this->_testItemPath, '/') . '/test.html';
+		$expectedUrl[12] = '/cms/t' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$expectedUrl[13] = '/cms/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = '/cms/phpunit/';
+		$expectedUrl[15] = $this->_signUrl('/cms/phpunit2/');
+		$expectedUrl[16] = '/cms/phpunit/' . urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest($env, $expectedUrl, $params);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlMultisite() {
+		$env    = array(
+			'galleryBaseUrl' => 'codebase/rep/',
+		);
+		$params = $this->_getTestUrlParams();
+
+		$expectedUrl[0]  = '/gallery2/main.php?g2_view=rand164.NonShort&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = $this->_signUrl(
+			'/gallery2/main.php?g2_controller=core.ShowItem'
+			. '&amp;g2_itemId=' . $this->_testItem->getId()
+		);
+		$expectedUrl[4]  = 'codebase/rep/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = '/gallery2/main.php';
+		$expectedUrl[6]  = '/gallery2/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = '/gallery2/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = '/gallery2/main.php?g2_itemId=-5759';
+		$expectedUrl[9]  = '/gallery2/main.php?g2_itemId=' . $this->_derivative->getId();
+		$expectedUrl[10] = '/gallery2/' . ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$expectedUrl[11] = '/gallery2/' . ltrim($this->_testItemPath, '/') . '/test.html';
+		$expectedUrl[12] = '/gallery2/t' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$expectedUrl[13] = '/gallery2/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = '/gallery2/phpunit/';
+		$expectedUrl[15] = $this->_signUrl('/gallery2/phpunit2/');
+		$expectedUrl[16] = '/gallery2/phpunit/' . urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest($env, $expectedUrl, $params);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlEmbeddedMultisite() {
+		$env    = array(
+			'REQUEST_URI'    => '/cms/otherpage/?foo=bar',
+			'G2_EMBED'       => true,
+			'baseUri'        => '/cms/index.php?mod=gallery2',
+			'g2Uri'          => '/gallery2/',
+			'cookiePath'     => '/',
+			'galleryBaseUrl' => 'codebase/rep/',
+		);
+		$params = $this->_getTestUrlParams();
+
+		$expectedUrl[0]  = '/cms/index.php?mod=gallery2&amp;g2_view=rand164.NonShort&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = '/cms/index.php?mod=gallery2&amp;g2_controller=core.ShowItem'
+		. '&amp;g2_itemId=' . $this->_testItem->getId();
+		$expectedUrl[3]  = $this->_signUrl($expectedUrl[3]);
+		$expectedUrl[4]  = 'codebase/rep/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = '/cms/index.php?mod=gallery2';
+		$expectedUrl[6]  = '/cms/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = '/cms/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = '/cms/index.php?mod=gallery2&amp;g2_itemId=-5759';
+		$expectedUrl[9]  = '/cms/index.php?mod=gallery2&amp;g2_itemId='
+		. $this->_derivative->getId();
+		$expectedUrl[10] = '/cms/' . ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$expectedUrl[11] = '/cms/' . ltrim($this->_testItemPath, '/') . '/test.html';
+		$expectedUrl[12] = '/cms/t' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$expectedUrl[13] = '/cms/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = '/cms/phpunit/';
+		$expectedUrl[15] = $this->_signUrl('/cms/phpunit2/');
+		$expectedUrl[16] = '/cms/phpunit/' . urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest($env, $expectedUrl, $params);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlEmbeddedCookiePathNotSet() {
+		global $gallery;
+		$session =& $gallery->getSession();
+
+		$env    = array(
+			'REQUEST_URI' => '/cms/otherpage/?foo=bar',
+			'G2_EMBED'    => true,
+			'baseUri'     => '/cms/index.php?mod=gallery2',
+			'g2Uri'       => '/gallery2/',
+			'cookiePath'  => '',
+		);
+		$params = $this->_getTestUrlParams();
+
+		$expectedUrl[0]  = '/cms/index.php?mod=gallery2&amp;g2_view=rand164.NonShort'
+		. '&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'/gallery2/d/%d-%d/%s?g2_%s=%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent()),
+			$session->getKey(),
+			$session->getId()
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = '/cms/index.php?mod=gallery2&amp;g2_controller=core.ShowItem'
+		. '&amp;g2_itemId=' . $this->_testItem->getId();
+		$expectedUrl[3]  = $this->_signUrl($expectedUrl[3]);
+		$expectedUrl[4]  = '/gallery2/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = '/cms/index.php?mod=gallery2';
+		$expectedUrl[6]  = '/cms/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = '/cms/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = '/cms/index.php?mod=gallery2&amp;g2_itemId=-5759';
+		$expectedUrl[9]  = '/cms/index.php?mod=gallery2&amp;g2_itemId='
+		. $this->_derivative->getId();
+		$expectedUrl[10] = '/cms/' . ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$expectedUrl[11] = '/cms/' . ltrim($this->_testItemPath, '/') . '/test.html';
+		$expectedUrl[12] = '/cms/t' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$expectedUrl[13] = '/cms/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = '/cms/phpunit/';
+		$expectedUrl[15] = $this->_signUrl('/cms/phpunit2/');
+		$expectedUrl[16] = '/cms/phpunit/' . urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest($env, $expectedUrl, $params);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlEmbeddedForceFullUrl() {
+		$env     = array(
+			'REQUEST_URI' => '/cms/otherpage/?foo=bar',
+			'G2_EMBED'    => true,
+			'baseUri'     => 'https://cms.com/cms/index.php?mod=gallery2',
+			'g2Uri'       => 'http://photos.com:81/gallery2/',
+			'cookiePath'  => '/',
+			'HTTP_HOST'   => 'bla',
+		);
+		$params  = $this->_getTestUrlParams();
+		$options = array(
+			'forceFullUrl' => true,
+		);
+
+		$expectedUrl[0]  = 'https://cms.com/cms/index.php?mod=gallery2&amp;g2_view=rand164.NonShort'
+		. '&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'http://photos.com:81/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = $this->_signUrl(
+			'https://cms.com/cms/index.php?mod=gallery2'
+			. '&amp;g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId()
+		);
+		$expectedUrl[4]  = 'http://photos.com:81/gallery2/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = 'https://cms.com/cms/index.php?mod=gallery2';
+		$expectedUrl[6]  = 'https://cms.com/cms/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = 'https://cms.com/cms/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = 'https://cms.com/cms/index.php?mod=gallery2&amp;g2_itemId=-5759';
+		$expectedUrl[9]  = 'https://cms.com/cms/index.php?mod=gallery2&amp;g2_itemId='
+		. $this->_derivative->getId();
+		$expectedUrl[10] = 'https://cms.com/cms/' . ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$expectedUrl[11] = 'https://cms.com/cms/' . ltrim($this->_testItemPath, '/') . '/test.html';
+		$expectedUrl[12] = 'https://cms.com/cms/t' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$expectedUrl[13] = 'https://cms.com/cms/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = 'https://cms.com/cms/phpunit/';
+		$expectedUrl[15] = $this->_signUrl('https://cms.com/cms/phpunit2/');
+		$expectedUrl[16] = 'https://cms.com/cms/phpunit/' . urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest($env, $expectedUrl, $params, $options);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlEmbeddedForceSessionIdToFalse() {
+		// Verify that all URLs are free of session ids when forceSessionId is set to false
+		$env     = array(
+			'REQUEST_URI' => '/cms/otherpage/?foo=bar',
+			'G2_EMBED'    => true,
+			'baseUri'     => 'https://cms.com/cms/index.php?mod=gallery2',
+			'g2Uri'       => 'http://photos.com:81/gallery2/',
+			'cookiePath'  => '',
+		);
+		$params  = $this->_getTestUrlParams();
+		$options = array(
+			'forceSessionId' => false,
+			'forceFullUrl'   => true,
+		);
+
+		$expectedUrl[0]  = 'https://cms.com/cms/index.php?mod=gallery2&amp;g2_view=rand164.NonShort'
+		. '&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'http://photos.com:81/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = $this->_signUrl(
+			'https://cms.com/cms/index.php?mod=gallery2'
+			. '&amp;g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId()
+		);
+		$expectedUrl[4]  = 'http://photos.com:81/gallery2/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = 'https://cms.com/cms/index.php?mod=gallery2';
+		$expectedUrl[6]  = 'https://cms.com/cms/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = 'https://cms.com/cms/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = 'https://cms.com/cms/index.php?mod=gallery2&amp;g2_itemId=-5759';
+		$expectedUrl[9]  = 'https://cms.com/cms/index.php?mod=gallery2&amp;g2_itemId='
+		. $this->_derivative->getId();
+		$expectedUrl[10] = 'https://cms.com/cms/' . ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$expectedUrl[11] = 'https://cms.com/cms/' . ltrim($this->_testItemPath, '/') . '/test.html';
+		$expectedUrl[12] = 'https://cms.com/cms/t' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$expectedUrl[13] = 'https://cms.com/cms/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = 'https://cms.com/cms/phpunit/';
+		$expectedUrl[15] = $this->_signUrl('https://cms.com/cms/phpunit2/');
+		$expectedUrl[16] = 'https://cms.com/cms/phpunit/' . urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest($env, $expectedUrl, $params, $options);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlOverrideBaseUri() {
+		$env    = array(
+			'baseUri'     => 'index.php?page=photos',
+			'REQUEST_URI' => '/gallery2/index.php?page=photos',
+		);
+		$params = $this->_getTestUrlParams();
+
+		$expectedUrl[0]  = '/gallery2/index.php?page=photos&amp;g2_view=rand164.NonShort'
+		. '&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = '/gallery2/index.php?page=photos&amp;g2_controller=core.ShowItem'
+		. '&amp;g2_itemId=' . $this->_testItem->getId();
+		$expectedUrl[3]  = $this->_signUrl($expectedUrl[3]);
+		$expectedUrl[4]  = '/gallery2/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = '/gallery2/index.php?page=photos';
+		$expectedUrl[6]  = '/gallery2/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = '/gallery2/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = '/gallery2/index.php?page=photos&amp;g2_itemId=-5759';
+		$expectedUrl[9]  = '/gallery2/index.php?page=photos&amp;g2_itemId='
+		. $this->_derivative->getId();
+		$expectedUrl[10] = '/gallery2/' . ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$expectedUrl[11] = '/gallery2/' . ltrim($this->_testItemPath, '/') . '/test.html';
+		$expectedUrl[12] = '/gallery2/t' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$expectedUrl[13] = '/gallery2/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = '/gallery2/phpunit/';
+		$expectedUrl[15] = $this->_signUrl('/gallery2/phpunit2/');
+		$expectedUrl[16] = '/gallery2/phpunit/' . urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest($env, $expectedUrl, $params);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlRewriteErrorFallback() {
+		$params = $this->_getTestUrlParams();
+		/*
+		 * Simulate an error during RewriteUrlGenerator operations, but help it to fallback
+		 * correctly by setting a REQUEST_URI that allows finding the URL dir
+		 */
+		$env = array(
+			'error'       => true,
+			'REQUEST_URI' => '/gallery2/main.php?foo=bar',
+		);
+
+		$expectedUrl[0]  = GALLERY_MAIN_PHP . '?g2_view=rand164.NonShort&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			GALLERY_MAIN_PHP . '?g2_view=core.DownloadItem' .
+				  '&amp;g2_itemId=%s&amp;g2_serialNumber=%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber()
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = $this->_signUrl(
+			GALLERY_MAIN_PHP . '?g2_controller=core.ShowItem'
+			. '&amp;g2_itemId=' . $this->_testItem->getId()
+		);
+		$expectedUrl[4]  = 'themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = GALLERY_MAIN_PHP;
+		$expectedUrl[6]  = GALLERY_MAIN_PHP . '?g2_itemId=' . $this->_testAlbum->getId();
+		$expectedUrl[7]  = GALLERY_MAIN_PHP . '?g2_itemId=' . $this->_testItem->getId();
+		$expectedUrl[8]  = GALLERY_MAIN_PHP . '?g2_itemId=-5759';
+		$expectedUrl[9]  = GALLERY_MAIN_PHP . '?g2_itemId=' . $this->_derivative->getId();
+		$expectedUrl[10] = GALLERY_MAIN_PHP . '?g2_view=php.Unit&amp;g2_subView'
+		. '=test.suffixPath&amp;g2_itemId=' . $this->_testAlbum->getId();
+		$expectedUrl[11] = GALLERY_MAIN_PHP . '?g2_view=php.Unit&amp;g2_subView'
+		. '=test.suffixPath&amp;g2_itemId=' . $this->_testItem->getId();
+		$expectedUrl[12] = GALLERY_MAIN_PHP . '?g2_view=php.Unit&amp;g2_subView'
+		. '=test.suffixExt&amp;g2_itemId=' . $this->_testAlbum->getId();
+		$expectedUrl[13] = GALLERY_MAIN_PHP . '?g2_view=php.Unit&amp;g2_subView'
+		. '=test.suffixExt&amp;g2_itemId=' . $this->_testItem->getId();
+		$expectedUrl[14] = GALLERY_MAIN_PHP . '?g2_view=php.Unit';
+		$expectedUrl[15] = $this->_signUrl(GALLERY_MAIN_PHP . '?g2_controller=php.Unit');
+		$expectedUrl[16] = GALLERY_MAIN_PHP . '?g2_view=php.Unit&amp;g2_subView'
+		. '=test.urlEncode&amp;g2_path=' . urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest($env, $expectedUrl, $params);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlUseAuthTokenTrue() {
+		$params  = $this->_getTestUrlParams();
+		$options = array(
+			'useAuthToken' => true,
+		);
+
+		$expectedUrl[0]  = $this->_signUrl(
+			'/gallery2/' . GALLERY_MAIN_PHP
+			. '?g2_view=rand164.NonShort&amp;g2_foo=bar'
+		);
+		$expectedUrl[1]  = $this->_signUrl(
+			sprintf(
+				'/gallery2/d/%d-%d/%s',
+				$this->_testItem->getId(),
+				$this->_testItem->getSerialNumber(),
+				urlencode($this->_testItem->getPathComponent())
+			)
+		);
+		$expectedUrl[2]  = $this->_signUrl('http://href_website.com/foo');
+		$expectedUrl[3]  = $this->_signUrl(
+			'/gallery2/' . GALLERY_MAIN_PHP
+			. '?g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId()
+		);
+		$expectedUrl[4]  = $this->_signUrl('/gallery2/themes/foo/images/bar.jpg');
+		$expectedUrl[5]  = $this->_signUrl('/gallery2/' . GALLERY_MAIN_PHP);
+		$expectedUrl[6]  = $this->_signUrl('/gallery2/v' . $this->_testAlbumPath);
+		$expectedUrl[7]  = $this->_signUrl('/gallery2/v' . $this->_testItemPath . '.html');
+		$expectedUrl[8]  = $this->_signUrl('/gallery2/' . GALLERY_MAIN_PHP . '?g2_itemId=-5759');
+		$expectedUrl[9]  = $this->_signUrl(
+			'/gallery2/' . GALLERY_MAIN_PHP
+			. '?g2_itemId=' . $this->_derivative->getId()
+		);
+		$expectedUrl[10] = $this->_signUrl(
+			'/gallery2/' . ltrim($this->_testAlbumPath, '/')
+			. 'test.html'
+		);
+		$expectedUrl[11] = $this->_signUrl(
+			'/gallery2/' . ltrim($this->_testItemPath, '/')
+			. '/test.html'
+		);
+		$expectedUrl[12] = $this->_signUrl(
+			'/gallery2/t' . rtrim($this->_testAlbumPath, '/')
+			. '.test'
+		);
+		$expectedUrl[13] = $this->_signUrl('/gallery2/t' . $this->_testItemPath . '.test');
+		$expectedUrl[14] = $this->_signUrl('/gallery2/phpunit/');
+		$expectedUrl[15] = $this->_signUrl('/gallery2/phpunit2/');
+		$expectedUrl[16] = $this->_signUrl('/gallery2/phpunit/' . urlencode($this->_urlEncodePath));
+
+		$ret = $this->_runGenerateUrlTest(array(), $expectedUrl, $params, $options);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlUseAuthTokenFalse() {
+		$params  = $this->_getTestUrlParams();
+		$options = array(
+			'useAuthToken' => false,
+		);
+
+		$expectedUrl[0]  = '/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_view=rand164.NonShort&amp;g2_foo=bar';
+		$expectedUrl[1]  = sprintf(
+			'/gallery2/d/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$expectedUrl[2]  = 'http://href_website.com/foo';
+		$expectedUrl[3]  = '/gallery2/' . GALLERY_MAIN_PHP
+		. '?g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId();
+		$expectedUrl[4]  = '/gallery2/themes/foo/images/bar.jpg';
+		$expectedUrl[5]  = '/gallery2/' . GALLERY_MAIN_PHP;
+		$expectedUrl[6]  = '/gallery2/v' . $this->_testAlbumPath;
+		$expectedUrl[7]  = '/gallery2/v' . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = '/gallery2/' . GALLERY_MAIN_PHP . '?g2_itemId=-5759';
+		$expectedUrl[9]  = '/gallery2/' . GALLERY_MAIN_PHP . '?g2_itemId='
+		. $this->_derivative->getId();
+		$expectedUrl[10] = '/gallery2/' . ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$expectedUrl[11] = '/gallery2/' . ltrim($this->_testItemPath, '/') . '/test.html';
+		$expectedUrl[12] = '/gallery2/t' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$expectedUrl[13] = '/gallery2/t' . $this->_testItemPath . '.test';
+		$expectedUrl[14] = '/gallery2/phpunit/';
+		$expectedUrl[15] = '/gallery2/phpunit2/';
+		$expectedUrl[16] = '/gallery2/phpunit/' . urlencode($this->_urlEncodePath);
+
+		$ret = $this->_runGenerateUrlTest(array(), $expectedUrl, $params, $options);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+}

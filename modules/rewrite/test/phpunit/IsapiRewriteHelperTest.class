@@ -1,0 +1,399 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Isapi Rewrite Helper tests
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 20940 $
+ */
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
+GalleryCoreApi::requireOnce(
+	'modules/rewrite/classes/parsers/isapirewrite/IsapiRewriteHelper.class'
+);
+class IsapiRewriteHelperTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$_SERVER['REQUEST_URI'] = '/gallery2/phpunit.php';
+
+		$urlGenerator = new GalleryUrlGenerator();
+		$ret          = $urlGenerator->init('phpunit.php');
+
+		if ($ret) {
+			return $ret;
+		}
+		$gallery->setUrlGenerator($urlGenerator);
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'rewrite');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Set up our environment
+		foreach (array(
+			'isapirewrite.forced'           => '0',
+			'isapirewrite.galleryLocation'  => '/gallery2/',
+			'isapirewrite.httpdini'         => 'C:\phpunit\gallery2',
+			'isapirewrite.embeddedLocation' => '/embedded/',
+		) as $key => $value) {
+			$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', $key, $value);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		// Set up our mock platform
+		$this->_platform = new IsapiRewriteHelperMockPlatform();
+		$this->_platform->init($this);
+		unset($this->_fileContent);
+		$gallery->setPlatform($this->_platform);
+	}
+
+	public function testHttpdiniPath() {
+		list($ret, $path) = IsapiRewriteHelper::getHttpdiniPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('C:\phpunit\gallery2\httpd.ini', $path);
+	}
+
+	public function testCheckFile() {
+		list($ret, $code) = IsapiRewriteHelper::checkFile();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_OK, $code, 'success');
+
+		$this->_platform->_isWriteable = false;
+		list($ret, $code)              = IsapiRewriteHelper::checkFile();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_HTTPDINI_CANT_WRITE, $code, 'writeable');
+
+		$this->_platform->_isReadable = false;
+		list($ret, $code)             = IsapiRewriteHelper::checkFile();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_HTTPDINI_CANT_READ, $code, 'readable');
+
+		$this->_platform->_fileExists = false;
+		list($ret, $code)             = IsapiRewriteHelper::checkFile();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_HTTPDINI_MISSING, $code, 'exists');
+	}
+
+	public function testWriteFile() {
+		list($ret, $code) = IsapiRewriteHelper::writeFile(array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_OK, $code, 'success');
+		$this->assertTrue(!empty($this->_fileContent), 'success fileContent');
+		unset($this->_fileContent);
+
+		$this->_platform->_isReadable = false;
+		list($ret, $code)             = IsapiRewriteHelper::writeFile(array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_HTTPDINI_CANT_READ, $code, 'readable');
+		$this->assertTrue(!isset($this->_fileContent), 'readable fileContent');
+
+		$this->_platform->_isReadable  = true;
+		$this->_platform->_isWriteable = false;
+		list($ret, $code)              = IsapiRewriteHelper::writeFile(array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_HTTPDINI_CANT_WRITE, $code, 'writeable');
+		$this->assertTrue(!isset($this->_fileContent), 'writeable fileContent');
+	}
+
+	public function testCheckIsapiRewrite() {
+		GalleryUtilities::putRequestVariable('isapiRewriteTest', 'pass');
+		list($ret, $status, $trueStatus) = IsapiRewriteHelper::checkIsapiRewrite();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_OK, $status, 'status, pass');
+		$this->assertEquals(REWRITE_STATUS_OK, $trueStatus, 'truestatus, pass');
+
+		GalleryUtilities::putRequestVariable('isapiRewriteTest', 'fail');
+		list($ret, $status, $trueStatus) = IsapiRewriteHelper::checkIsapiRewrite();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_NO_ISAPI_REWRITE, $status, 'status, fail');
+		$this->assertEquals(REWRITE_STATUS_NO_ISAPI_REWRITE, $trueStatus, 'truestatus, fail');
+
+		GalleryUtilities::putRequestVariable('isapiRewriteTest', '404');
+		list($ret, $status, $trueStatus) = IsapiRewriteHelper::checkIsapiRewrite();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_NO_ISAPI_REWRITE, $status, 'status, 404');
+		$this->assertEquals(REWRITE_STATUS_NO_ISAPI_REWRITE, $trueStatus, 'truestatus, 404');
+	}
+
+	public function testCheckIsapiRewriteForced() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', 'isapirewrite.forced', '1');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('isapiRewriteTest', 'fail');
+		list($ret, $status, $trueStatus) = IsapiRewriteHelper::checkIsapiRewrite();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_OK, $status);
+		$this->assertEquals(REWRITE_STATUS_NO_ISAPI_REWRITE, $trueStatus);
+	}
+}
+
+/**
+ * Test platform for this test
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ */
+class IsapiRewriteHelperMockPlatform extends GalleryPlatform {
+	public $_isWriteable     = true;
+	public $_isReadable      = true;
+	public $_fileExists      = true;
+	public $_previousContent = array();
+
+	public function init(&$test) {
+		$this->_test =& $test;
+	}
+
+	public function fsockopen($target, $port, &$errno, &$errstr, $timeout) {
+		global $gallery;
+		$urlGenerator =& $gallery->getUrlGenerator();
+		// The hostName can include the port part
+		list($host) = explode(':', $urlGenerator->getHostName());
+
+		if ($target == $host) {
+			return 'phpunit';
+		}
+
+		return parent::fsockopen($target, $port, $errno, $errstr, $timeout);
+	}
+
+	public function file_exists($file) {
+		if (strpos($file, 'httpd.ini') !== false) {
+			return $this->_fileExists;
+		}
+
+		return parent::file_exists($file);
+	}
+
+	public function is_dir($path) {
+		if ($path == 'phpunit/test') {
+			return true;
+		}
+
+		return parent::is_dir($path);
+	}
+
+	public function fwrite($handle, $string, $length = 0) {
+		$buffer = array(
+			'pass' => array(
+				'HTTP/1.1 200 OK',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				'PASS_ISAPI_REWRITE',
+			),
+			'fail' => array(
+				'HTTP/1.1 200 OK',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				'FAIL_NO_ISAPI_REWRITE',
+			),
+			'404' => array(
+				'HTTP/1.1 404 Not Found',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				'Not Found',
+			),
+		);
+
+		if ($handle == 'phpunit') {
+			$respons           = GalleryUtilities::getRequestVariables('isapiRewriteTest');
+			$this->_readBuffer = $buffer[$respons];
+
+			return strlen($string);
+		}
+
+		if ($handle == 'httpd.ini') {
+			$this->_test->_fileContent .= $string;
+
+			return strlen($string);
+		}
+
+		return parent::fwrite($handle, $string, $length = 0);
+	}
+
+	public function feof($handle) {
+		if ($handle == 'phpunit') {
+			return empty($this->_readBuffer);
+		}
+
+		return parent::feof($handle);
+	}
+
+	public function fgets($handle, $length = 0) {
+		if ($handle == 'phpunit') {
+			if (empty($this->_readBuffer)) {
+				return null;
+			}
+
+			return array_shift($this->_readBuffer) . "\n";
+		}
+
+		return parent::fgets($handle, $length);
+	}
+
+	public function fread($handle, $length) {
+		if ($handle == 'phpunit') {
+			if (empty($this->_readBuffer)) {
+				return null;
+			}
+
+			if ($length >= strlen(join("\n", $this->_readBuffer))) {
+				$tmp               = join("\n", $this->_readBuffer);
+				$this->_readBuffer = array();
+
+				return $tmp;
+			}
+
+			$buf               = join("\n", $this->_readBuffer);
+			$tmp               = substr($buf, 0, $length);
+			$this->_readBuffer = explode("\n", substr($buf, $length + 1));
+
+			return $tmp;
+		}
+
+		return parent::fread($handle, $length);
+	}
+
+	public function fflush($handle) {
+		if ($handle == 'phpunit') {
+			return true;
+		}
+
+		return parent::fflush($handle);
+	}
+
+	public function is_readable($file) {
+		if (strpos($file, 'httpd.ini') !== false) {
+			return $this->_isReadable;
+		}
+
+		return parent::is_readable($file);
+	}
+
+	public function is_writeable($file) {
+		if (strpos($file, 'httpd.ini') !== false) {
+			return $this->_isWriteable;
+		}
+
+		if ($file == 'phpunit/gallery2') {
+			return false;
+		}
+
+		return parent::is_writeable($file);
+	}
+
+	public function file($file, $use_include_path = false) {
+		if (strpos($file, 'httpd.ini') !== false) {
+			return $passCodeAudit = array();
+		}
+
+		return parent::file($file);
+	}
+
+	public function fopen($file, $mode, $useIncludePath = null, $zcontext = null) {
+		if (strpos($file, 'httpd.ini') !== false) {
+			if ($this->_isWriteable) {
+				$this->_test->_fileContent = '';
+
+				return 'httpd.ini';
+			}
+
+			return null;
+		}
+
+		return parent::fopen($file, $mode, $useIncludePath, $zcontext);
+	}
+
+	public function fclose($handle) {
+		if ($handle == 'httpd.ini') {
+			return true;
+		}
+
+		if ($handle == 'phpunit') {
+			$this->_readBuffer = array();
+
+			return true;
+		}
+
+		return fclose($handle);
+	}
+}

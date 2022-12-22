@@ -1,0 +1,631 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
+GalleryCoreApi::requireOnce('modules/rewrite/classes/parsers/isapirewrite/parser.inc');
+GalleryCoreApi::requireOnce('modules/rewrite/test/phpunit/RewriteParserTestCase.class');
+
+/**
+ * ISAPI rewrite parser tests
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class IsapiRewriteParserTest extends RewriteParserTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, null);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp('IsapiRewriteParser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Set up our environment
+		foreach (array(
+			'isapirewrite.forced'           => '0',
+			'isapirewrite.galleryLocation'  => '/gallery2/',
+			'isapirewrite.httpdini'         => '/phpunit/gallery2',
+			'isapirewrite.embeddedLocation' => '/embedded/',
+		) as $key => $value) {
+			$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', $key, $value);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$this->_testPassString = 'PASS_ISAPI_REWRITE';
+	}
+
+	public function testSaveAccessList() {
+		$accessList       = array('phpunit.test1', 'phpunit.test2');
+		$ourParser        = $this->_parser;
+		list($ret, $code) = $ourParser->saveAccessList($accessList, true, $ourParser);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		list($ret, $savedList) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'accessList'
+		);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		list($ret, $allowEmptyReferer) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'allowEmptyReferer'
+		);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		$this->assertEquals(REWRITE_STATUS_OK, $code);
+		$this->assertEquals($accessList, unserialize($savedList));
+		$this->assertEquals('1', $allowEmptyReferer);
+		$this->assertTrue(!empty($this->_fileContent), 'fileContent');
+	}
+
+	public function testSaveAccessListEmbedded() {
+		GalleryDataCache::put('G2_EMBED', 1, true);
+		$accessList       = array('phpunit.test1', 'phpunit.test2');
+		$ourParser        = $this->_parser;
+		list($ret, $code) = $ourParser->saveAccessList($accessList, false, $ourParser);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		list($ret, $savedList) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'accessList'
+		);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		list($ret, $allowEmptyReferer) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'allowEmptyReferer'
+		);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		$this->assertEquals(REWRITE_STATUS_OK, $code);
+		$this->assertEquals($accessList, unserialize($savedList));
+		$this->assertEquals('0', $allowEmptyReferer);
+		$this->assertTrue(!empty($this->_fileContent), 'fileContent');
+
+		GalleryDataCache::remove('G2_EMBED');
+	}
+
+	public function testSaveAccessListCantWrite() {
+		$this->_platform->_isWriteable = false;
+		$accessList                    = array('phpunit.test1', 'phpunit.test2');
+		$ourParser                     = $this->_parser;
+		list($ret, $code)              = $ourParser->saveAccessList($accessList, true, $ourParser);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		list($ret, $savedList) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'accessList'
+		);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		list($ret, $allowEmptyReferer) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'allowEmptyReferer'
+		);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		$this->assertEquals(REWRITE_STATUS_HTTPDINI_CANT_WRITE, $code);
+		$this->assertEquals(array('phpunit.test'), unserialize($savedList));
+		$this->assertEquals('0', $allowEmptyReferer);
+		$this->assertTrue(!isset($this->_fileContent), 'fileContent');
+
+		$this->_platform->_isWriteable = true;
+	}
+
+	public function testSaveAccessListEmbeddedCantWrite() {
+		$this->_platform->_isWriteable = false;
+		GalleryDataCache::put('G2_EMBED', 1, true);
+		$accessList       = array('phpunit.test1', 'phpunit.test2');
+		$ourParser        = $this->_parser;
+		list($ret, $code) = $ourParser->saveAccessList($accessList, true, $ourParser);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		list($ret, $savedList) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'accessList'
+		);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		list($ret, $allowEmptyReferer) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'allowEmptyReferer'
+		);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+
+		$this->assertEquals(REWRITE_STATUS_HTTPDINI_CANT_WRITE, $code);
+		$this->assertEquals(array('phpunit.test'), unserialize($savedList));
+		$this->assertEquals('0', $allowEmptyReferer);
+		$this->assertTrue(!isset($this->_fileContent), 'fileContent');
+
+		GalleryDataCache::remove('G2_EMBED');
+	}
+
+	public function testNeedsConfigurationForced() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', 'isapirewrite.forced', '1');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('pathInfoTest', 'fail');
+		list($ret, $status) = $this->_parser->needsConfiguration();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!$status, 'forced');
+	}
+
+	public function testNeedsConfigurationEmbedded() {
+		GalleryDataCache::put('G2_EMBED', 1, true);
+
+		GalleryUtilities::putRequestVariable('rewriteTest', 'pass');
+		list($ret, $status) = $this->_parser->needsConfiguration();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(!$status, 'pass');
+
+		GalleryDataCache::remove('G2_EMBED');
+	}
+
+	public function testHandleTestResultsRequest1() {
+		$form = array();
+
+		$form['force']['test']      = 1;
+		list($ret, $error, $status) = $this->_parser->handleTestResultsRequest($form);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $forced) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'isapirewrite.forced'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('1', $forced);
+		$this->assertEquals(
+			array(
+				'saved' => 1,
+			),
+			$status
+		);
+		$this->assertEquals(array(), $error);
+	}
+
+	public function testHandleTestResultsRequest2() {
+		$form = array();
+
+		list($ret, $error, $status) = $this->_parser->handleTestResultsRequest($form);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $forced) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'isapirewrite.forced'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('0', $forced);
+		$this->assertEquals(
+			array(
+				'saved' => 1,
+			),
+			$status
+		);
+		$this->assertEquals(array(), $error);
+	}
+
+	public function testHandleAdminParserRequest1() {
+		$form = array();
+		GalleryDataCache::put('G2_EMBED', 1, true);
+
+		$form['embeddedLocation']   = 'test';
+		$form['httpdini']           = '/phpunit/test';
+		list($ret, $error, $status) = $this->_parser->handleAdminParserRequest($form);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $embeddedLocation) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'isapirewrite.embeddedLocation'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $httpdini) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'isapirewrite.httpdini'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('/phpunit/test', $httpdini);
+		$this->assertEquals('/test/', $embeddedLocation);
+		$this->assertEquals(
+			array(
+				'saved' => 1,
+			),
+			$status
+		);
+		$this->assertEquals(array(), $error);
+		$this->assertTrue(!empty($this->_fileContent), 'file');
+
+		GalleryDataCache::remove('G2_EMBED');
+	}
+
+	public function testHandleAdminParserRequest2() {
+		$form = array();
+		GalleryDataCache::put('G2_EMBED', 1, true);
+
+		$form['embeddedLocation']   = '/';
+		$form['httpdini']           = '/phpunit/test';
+		list($ret, $error, $status) = $this->_parser->handleAdminParserRequest($form);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $embeddedLocation) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'isapirewrite.embeddedLocation'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $httpdini) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'isapirewrite.httpdini'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('/phpunit/test', $httpdini);
+		$this->assertEquals('/', $embeddedLocation);
+		$this->assertEquals(
+			array(
+				'saved' => 1,
+			),
+			$status
+		);
+		$this->assertEquals(array(), $error);
+		$this->assertTrue(!empty($this->_fileContent), 'file');
+
+		GalleryDataCache::remove('G2_EMBED');
+		$this->_platform->_isWriteable = true;
+	}
+
+	public function testHandleAdminParserRequest3() {
+		$form = array();
+		GalleryDataCache::put('G2_EMBED', 1, true);
+		$this->_platform->_isWriteable = false;
+
+		$form['embeddedLocation']   = '/test/';
+		$form['httpdini']           = '/phpunit/test';
+		list($ret, $error, $status) = $this->_parser->handleAdminParserRequest($form);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $embeddedLocation) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'isapirewrite.embeddedLocation'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $httpdini) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'isapirewrite.httpdini'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('/phpunit/gallery2', $httpdini);
+		$this->assertEquals('/embedded/', $embeddedLocation);
+		$this->assertEquals(array(), $status);
+		$this->assertEquals(array('form[error][34]'), $error);
+		$this->assertTrue(!isset($this->_fileContent), 'file');
+
+		GalleryDataCache::remove('G2_EMBED');
+		$this->_platform->_isWriteable = true;
+	}
+
+	public function testHandleAdminParserRequest4() {
+		$form = array();
+		GalleryDataCache::put('G2_EMBED', 1, true);
+
+		list($ret, $error, $status) = $this->_parser->handleAdminParserRequest($form);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $embeddedLocation) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'isapirewrite.embeddedLocation'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $httpdini) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'isapirewrite.httpdini'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('/phpunit/gallery2', $httpdini);
+		$this->assertEquals('/embedded/', $embeddedLocation);
+		$this->assertEquals(array(), $status);
+		$this->assertEquals(array('form[error][5]'), $error);
+		$this->assertTrue(!isset($this->_fileContent), 'file');
+
+		GalleryDataCache::remove('G2_EMBED');
+	}
+
+	public function testNeedsEmbedConfig1() {
+		list($ret, $status) = $this->_parser->needsEmbedConfig();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!$status, 'status');
+	}
+
+	public function testNeedsEmbedConfig2() {
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'rewrite',
+			'isapirewrite.embeddedLocation',
+			''
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $status) = $this->_parser->needsEmbedConfig();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($status, 'status');
+	}
+
+	public function testFetchEmbedConfig() {
+		list($ret, $params) = $this->_parser->fetchEmbedConfig();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'embeddedLocation' => '/embedded/',
+			),
+			$params
+		);
+	}
+
+	public function testSaveEmbedConfig1() {
+		$params = array(
+			'embeddedLocation' => '/test/',
+		);
+
+		list($ret, $code, $errstr) = $this->_parser->saveEmbedConfig($params);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_OK, $code);
+		$this->assertEquals(null, $errstr);
+	}
+
+	public function testSaveEmbedConfig2() {
+		$this->_platform->_isWriteable = false;
+		$params                        = array(
+			'embeddedLocation' => '/test/',
+		);
+
+		list($ret, $code, $errstr) = $this->_parser->saveEmbedConfig($params);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_HTTPDINI_CANT_WRITE, $code);
+		$this->assertTrue(!empty($errstr), 'errstr');
+		$this->_platform->_isWriteable = true;
+	}
+
+	public function testSaveEmbedConfig3() {
+		$this->_platform->_isWriteable = false;
+		$params                        = array();
+
+		list($ret, $code, $errstr) = $this->_parser->saveEmbedConfig($params);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_EMPTY_VALUE, $code);
+		$this->assertTrue(!empty($errstr), 'errstr');
+		$this->_platform->_isWriteable = true;
+	}
+
+	public function testSaveBadTestCondition() {
+		$testRules['rewriteparsermock'][4] = array();
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules(
+			$this->_parser,
+			$testRules
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'activeRules'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array(
+			'pattern' => 'bogus',
+		);
+		$this->assertEquals(REWRITE_STATUS_INVALID_PATTERN, $code);
+		$this->assertEquals(array('rewriteparsermock', 4), $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+	}
+
+	public function testSavePercentSignPattern() {
+		$testRules['rewriteparsermock'][0] = array(
+			'pattern' => '%foo',
+		);
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules(
+			$this->_parser,
+			$testRules
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'activeRules'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array(
+			'pattern' => 'bogus',
+		);
+		$this->assertEquals(REWRITE_STATUS_INVALID_PATTERN, $code);
+		$this->assertEquals(array('rewriteparsermock', 0), $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+	}
+}

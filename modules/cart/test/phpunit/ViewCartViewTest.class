@@ -1,0 +1,372 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ViewCart test.
+ * @package Cart
+ * @subpackage PHPUnit
+ * @author Andy Staudacher <ast@gmx.ch>
+ * @version $Revision: 17580 $
+ */
+class ViewCartViewTest extends GalleryViewTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'cart.ViewCart');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// create an album to hold all of the test items
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_album->getId(),
+			$gallery->getActiveUserId(),
+			'core.all'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_photoItem) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'image/testimage',
+			array(),
+			__FILE__,
+			'GalleryPhotoItem'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_movieItem) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'video/testvideo',
+			array(),
+			__FILE__,
+			'GalleryMovieItem'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Save the existing cart
+		list($ret, $this->_saveCartItemCounts) = CartHelper::fetchCartItemCounts();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$cartItemCounts = array(
+			$this->_photoItem->getId() => 3,
+			$this->_movieItem->getId() => 2,
+		);
+		$ret            = CartHelper::setCartItemCounts($cartItemCounts);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_unregisterFactoryImplementationForTest('CartPluginInterface_1_1');
+		$this->_unregisterFactoryImplementationForTest('CartPluginInterface_1_0');
+	}
+
+	public function tearDown() {
+		// Restore the existing cart
+		$ret = CartHelper::setCartItemCounts($this->_saveCartItemCounts);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testLoadTemplate() {
+		$this->_registerFactoryImplementationForTest(
+			'CartPluginInterface_1_1',
+			'ViewCartTestCartPlugin',
+			'ViewCartTestCartPlugin',
+			__FILE__,
+			'cart'
+		);
+		$this->_registerFactoryImplementationForTest(
+			'CartPluginInterface_1_0',
+			'ViewCartTestCartPlugin1_0',
+			'ViewCartTestCartPlugin1_0',
+			__FILE__,
+			'cart'
+		);
+
+		$results = $this->loadTemplate();
+
+		$this->assertEquals(
+			array(
+				'body' => 'modules/cart/templates/ViewCart.tpl',
+			),
+			$results
+		);
+
+		$templateData = $this->_template->getVariable('ViewCart');
+
+		$this->assertEquals('cart.ModifyCart', $templateData['controller'], 'controller');
+		$this->assertEquals(
+			array($this->_photoItem->getId(), $this->_movieItem->getId()),
+			array_keys($templateData['items']),
+			'item ids'
+		);
+		$this->assertEquals(
+			array(
+				'ViewCartTestCartPlugin1_0' => array(
+					'actionDisplayName' => 'cart plugin 1.0',
+					'isAvailable'       => 1,
+				),
+				'ViewCartTestCartPlugin' => array(
+					'actionDisplayName' => 'cart plugin',
+					'isAvailable'       => 1,
+				),
+			),
+			$this->_filterRelevantPluginData($templateData['plugins']),
+			'plugins'
+		);
+	}
+
+	public function testFilterAvailableActionsByRequiredPermission() {
+		global $gallery;
+
+		$this->_registerFactoryImplementationForTest(
+			'CartPluginInterface_1_1',
+			'ViewCartTestCartPlugin',
+			'ViewCartTestCartPlugin',
+			__FILE__,
+			'cart'
+		);
+		$this->_registerFactoryImplementationForTest(
+			'CartPluginInterface_1_0',
+			'ViewCartTestCartPlugin1_0',
+			'ViewCartTestCartPlugin1_0',
+			__FILE__,
+			'cart'
+		);
+		$this->_registerFactoryImplementationForTest(
+			'CartPluginInterface_1_1',
+			'ViewCartTestCartPlugin1_1',
+			'ViewCartTestCartPlugin1_1',
+			__FILE__,
+			'cart'
+		);
+
+		$ret = GalleryCoreApi::removeUserPermission(
+			$this->_album->getId(),
+			$gallery->getActiveUserId(),
+			'core.edit',
+			true
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->loadTemplate();
+
+		$this->assertEquals(
+			array(
+				'body' => 'modules/cart/templates/ViewCart.tpl',
+			),
+			$results
+		);
+
+		$templateData = $this->_template->getVariable('ViewCart');
+
+		$this->assertEquals(
+			array($this->_photoItem->getId(), $this->_movieItem->getId()),
+			array_keys($templateData['items']),
+			'item ids'
+		);
+		$this->assertEquals(
+			array(
+				'ViewCartTestCartPlugin1_0' => array(
+					'actionDisplayName' => 'cart plugin 1.0',
+					'isAvailable'       => 1,
+				),
+				'ViewCartTestCartPlugin' => array(
+					'actionDisplayName' => 'cart plugin',
+					'isAvailable'       => 1,
+				),
+				'ViewCartTestCartPlugin1_1' => array(
+					'actionDisplayName' => 'cart plugin 1.1',
+				),
+			),
+			$this->_filterRelevantPluginData($templateData['plugins']),
+			'plugins'
+		);
+	}
+
+	public function testFilterAvailableActionsByItemType() {
+		$this->_registerFactoryImplementationForTest(
+			'CartPluginInterface_1_1',
+			'ViewCartTestCartPlugin',
+			'ViewCartTestCartPlugin',
+			__FILE__,
+			'cart'
+		);
+		$this->_registerFactoryImplementationForTest(
+			'CartPluginInterface_1_0',
+			'ViewCartTestCartPlugin1_0',
+			'ViewCartTestCartPlugin1_0',
+			__FILE__,
+			'cart'
+		);
+		$this->_registerFactoryImplementationForTest(
+			'CartPluginInterface_1_1',
+			'ViewCartTestCartPlugin1_1',
+			'ViewCartTestCartPlugin1_1',
+			__FILE__,
+			'cart'
+		);
+
+		// Only photo items specified
+		$ret = CartHelper::setCartItemCounts(
+			array(
+				$this->_photoItem->getId() => 3,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->loadTemplate();
+
+		$this->assertEquals(
+			array(
+				'body' => 'modules/cart/templates/ViewCart.tpl',
+			),
+			$results
+		);
+
+		$templateData = $this->_template->getVariable('ViewCart');
+
+		$this->assertEquals(
+			array($this->_photoItem->getId()),
+			array_keys($templateData['items']),
+			'item ids'
+		);
+		$this->assertEquals(
+			array(
+				'ViewCartTestCartPlugin1_0' => array(
+					'actionDisplayName' => 'cart plugin 1.0',
+				),
+				'ViewCartTestCartPlugin' => array(
+					'actionDisplayName' => 'cart plugin',
+					'isAvailable'       => 1,
+				),
+				'ViewCartTestCartPlugin1_1' => array(
+					'actionDisplayName' => 'cart plugin 1.1',
+					'isAvailable'       => 1,
+				),
+			),
+			$this->_filterRelevantPluginData($templateData['plugins']),
+			'plugins'
+		);
+	}
+
+	public function _filterRelevantPluginData($plugins) {
+		foreach ($plugins as $id => $data) {
+			foreach (array('supported', 'requiredPermissions', 'supportedItemTypes') as $key) {
+				if (isset($data[$key])) {
+					unset($plugins[$id][$key]);
+				}
+			}
+		}
+
+		return $plugins;
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/cart/classes/CartPluginInterface_1_1.class');
+class ViewCartTestCartPlugin extends CartPluginInterface_1_1 {
+	public function getSupportedItemTypes() {
+		return array('*');
+	}
+
+	public function getActionDisplayName() {
+		return array(null, 'cart plugin', null);
+	}
+
+	public function fulfillCart($cartItemIds) {
+		return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/cart/classes/CartPluginInterface_1_0.class');
+class ViewCartTestCartPlugin1_0 extends CartPluginInterface_1_0 {
+	public function getSupportedItemTypes() {
+		return array('GalleryMovieItem');
+	}
+
+	public function getActionDisplayName() {
+		return array(null, 'cart plugin 1.0', null);
+	}
+
+	public function fulfillCart($cartItemIds) {
+		return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+	}
+}
+
+class ViewCartTestCartPlugin1_1 extends CartPluginInterface_1_1 {
+	public function getSupportedItemTypes() {
+		return array('GalleryPhotoItem');
+	}
+
+	public function getRequiredPermissions() {
+		return array('core.edit', 'core.delete');
+	}
+
+	public function getActionDisplayName() {
+		return array(null, 'cart plugin 1.1', null);
+	}
+
+	public function fulfillCart($cartItemIds) {
+		return array(GalleryCoreApi::error(ERROR_UNIMPLEMENTED), null);
+	}
+}

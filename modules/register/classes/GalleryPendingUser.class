@@ -40,7 +40,7 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryEntity.class');
  * @author Sebastian Eichner <mailsp@sebastian-eichner.de>
  * @version $Revision: 17580 $
  */
-class GalleryPendingUser extends GalleryEntity {
+class GalleryPendingUser extends GalleryUser {
 
     /**
      * The User's username
@@ -135,7 +135,7 @@ class GalleryPendingUser extends GalleryEntity {
      *
      * @return GalleryStatus a status code
      */
-    function create($userName) {
+    function createPendingUser($userName) {
 	global $gallery;
 
 	/* first check for a collision in the pending users table */
@@ -157,8 +157,10 @@ class GalleryPendingUser extends GalleryEntity {
 	}
 
 	$result = $results->nextResult();
-	if ($result[0] > 0) {
-	    return GalleryCoreApi::error(ERROR_COLLISION);
+	if($result){
+		if ($result[0] > 0) {
+		    return GalleryCoreApi::error(ERROR_COLLISION);
+		}
 	}
 
 	/* then check for a collision in the real user table */
@@ -180,8 +182,10 @@ class GalleryPendingUser extends GalleryEntity {
 	}
 
 	$result = $results->nextResult();
-	if ($result[0] > 0) {
-	    return GalleryCoreApi::error(ERROR_COLLISION);
+	if($result){
+		if ($result[0] > 0) {
+		    return GalleryCoreApi::error(ERROR_COLLISION);
+		}
 	}
 
 	/* okay, we don't have any collisions, so go on */

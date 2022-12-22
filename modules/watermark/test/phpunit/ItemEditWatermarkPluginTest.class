@@ -1,0 +1,617 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/watermark/classes/WatermarkImage.class');
+
+/**
+ * Watermark ItemEditPlugin tests
+ * @package Watermark
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class ItemEditWatermarkPluginTest extends ItemEditPluginTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'watermark', 'ItemEditWatermark');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create a watermark
+		$this->_watermark = new WatermarkImage();
+		$ret              = $this->_watermark->create(
+			GalleryCoreApi::getCodeBasePath('modules/core/test/data/test1.gif'),
+			'image/gif',
+			'phpunit_' . mt_rand() . '.gif'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_watermark->save();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_watermark);
+
+		/*
+		 * Test data: album / item+PRT, item+RRT, item+T, item+none, item-notoolkit,
+		 *            subalbum / item+RT, item+T
+		 */
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+		$albumId = $this->_album->getId();
+
+		list($ret, $this->_subalbum) = $this->_createRandomAlbum($albumId);
+
+		if ($ret) {
+			return $ret;
+		}
+		$subalbumId = $this->_subalbum->getId();
+
+		foreach (array(
+			array($albumId, 'test/file', true, 1, true),
+			array($albumId, 'test/file', false, 2, true),
+			array($albumId, 'test/file', false, 0, true),
+			array($albumId, 'test/file', false, 0, false),
+			array($albumId, 'test/blah', false, 0, true),
+			array($subalbumId, 'test/file', false, 1, true),
+			array($subalbumId, 'test/file', false, 0, true),
+		) as $info) {
+			list($ret,
+			$this->_items[], $this->_preferreds[], $this->_resizes[], $this->_thumbnails[]) = call_user_func_array(array($this, '_createItem'), $info);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		list($this->_item, $this->_preferred, $this->_resize, $this->_thumbnail) = array(
+			$this->_items[0],
+			$this->_preferreds[0],
+			$this->_resizes[0][0],
+			$this->_thumbnails[0],
+		);
+
+		$this->_templateAdapter    = new MockTemplateAdapter();
+		$gallery->_templateAdapter =& $this->_templateAdapter;
+	}
+
+	public function _createItem($parentId, $mimeType, $usePreferred, $numResizes, $useThumbnail) {
+		// Initialize with watermark for remove tests
+		$field = (strpos($this->name(), 'emove') === false || $mimeType != 'test/file') ? array() : array(
+			'postFilterOperations' => 'composite|plugins_data/modules/watermark/'
+							. $this->_watermark->getFileName() . ',image/gif,62,75,manual,25.000,50.000',
+		);
+
+		list($ret, $item) = $this->_createRandomDataItem($parentId, $mimeType);
+
+		if ($ret) {
+			return array($ret, null, null, null, null);
+		}
+
+		$preferred = $thumbnail = null;
+		$resizes   = array();
+		$sourceId  = $item->getId();
+
+		if ($usePreferred) {
+			list($ret, $preferred) = $this->_createDerivative(
+				$item,
+				$sourceId,
+				DERIVATIVE_TYPE_IMAGE_PREFERRED,
+				'rotate|90',
+				'test/file2',
+				$field
+			);
+
+			if ($ret) {
+				return array($ret, null, null, null, null);
+			}
+			$sourceId = $preferred->getId();
+		}
+
+		for ($i = 0; $i < $numResizes; $i++) {
+			list($ret, $resizes[$i]) = $this->_createDerivative(
+				$item,
+				$sourceId,
+				DERIVATIVE_TYPE_IMAGE_RESIZE,
+				'scale|' . (500 + $i * 200),
+				'test/file',
+				$field
+			);
+
+			if ($ret) {
+				return array($ret, null, null, null, null);
+			}
+		}
+
+		if ($useThumbnail) {
+			list($ret, $thumbnail) = $this->_createDerivative(
+				$item,
+				$sourceId,
+				DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+				'crop|10,10,30,40;scale|200',
+				'test/file',
+				$field
+			);
+
+			if ($ret) {
+				return array($ret, null, null, null, null);
+			}
+		}
+
+		return array(null, $item, $preferred, $resizes, $thumbnail);
+	}
+
+	public function testWatermarkEverything() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[whichDerivative][thumbnail]', 1);
+		GalleryUtilities::putRequestVariable('form[whichDerivative][resize]', 1);
+		GalleryUtilities::putRequestVariable('form[whichDerivative][preferred]', 1);
+		GalleryUtilities::putRequestVariable('form[watermarkId]', $this->_watermark->getId());
+		GalleryUtilities::putRequestVariable('form[xPercent]', 25);
+		GalleryUtilities::putRequestVariable('form[yPercent]', 50);
+
+		$results = $this->handleRequest($this->_item, $this->_preferred);
+		$this->assertEquals(
+			array(
+				array(),
+				$this->_translate('Watermark applied successfully'),
+			),
+			$results
+		);
+
+		// Verify the postfilters were applied successfully
+		foreach (array($this->_preferred, $this->_resize, $this->_thumbnail) as $derivative) {
+			list($ret, $derivative) = $derivative->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+			$this->assertEquals(
+				sprintf(
+					'composite|plugins_data/modules/watermark/' .
+					'%s,image/gif,62,75,manual,25.000,50.000',
+					$this->_watermark->getFileName()
+				),
+				$derivative->getPostFilterOperations(),
+				'Post filter mismatch'
+			);
+		}
+	}
+
+	public function testWatermarkNothingSelected() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[watermarkId]', $this->_watermark->getId());
+		GalleryUtilities::putRequestVariable('form[xPercent]', 25);
+		GalleryUtilities::putRequestVariable('form[yPercent]', 50);
+
+		$results = $this->handleRequest($this->_item, $this->_preferred);
+		$this->assertEquals(
+			array(array('form[error][versions][missing]'), null),
+			$results
+		);
+	}
+
+	public function testRemoveWatermark() {
+		GalleryUtilities::putRequestVariable('form[action][remove]', 1);
+
+		$results = $this->handleRequest($this->_item, $this->_preferred);
+		$this->assertEquals(
+			array(array(), $this->_translate('Watermark removed successfully')),
+			$results
+		);
+
+		// And verify that they're all gone
+		foreach (array($this->_preferred, $this->_resize, $this->_thumbnail) as $derivative) {
+			list($ret, $derivative) = $derivative->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+			$this->assertEquals(
+				'',
+				$derivative->getPostFilterOperations(),
+				'Post filter mismatch'
+			);
+		}
+	}
+
+	public function testWatermarkCreatePreferred() {
+		// Remap and get rid of the preferred to start
+		$ret = GalleryCoreApi::remapSourceIds($this->_preferred->getId(), $this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::deleteEntityById($this->_preferred->getId(), 'GalleryDerivative');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[whichDerivative][thumbnail]', 1);
+		GalleryUtilities::putRequestVariable('form[whichDerivative][resize]', 1);
+		GalleryUtilities::putRequestVariable('form[whichDerivative][preferred]', 1);
+		GalleryUtilities::putRequestVariable('form[watermarkId]', $this->_watermark->getId());
+		GalleryUtilities::putRequestVariable('form[xPercent]', 25);
+		GalleryUtilities::putRequestVariable('form[yPercent]', 50);
+
+		$results = $this->handleRequest($this->_item, $this->_preferred);
+		$this->assertEquals(
+			array(
+				array(),
+				$this->_translate('Watermark applied successfully'),
+			),
+			$results
+		);
+
+		// Verify that we now have a preferred and that it has the right postfilter
+		list($ret, $preferredTable) = GalleryCoreApi::fetchPreferredsByItemIds(array($this->_item->getId()));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$preferred = $preferredTable[$this->_item->getId()];
+
+		if (!isset($preferred)) {
+			$this->assertTrue(false, 'Missing preferred');
+		} else {
+			$this->assertEquals(
+				sprintf(
+					'composite|plugins_data/modules/watermark/' .
+					'%s,image/gif,62,75,manual,25.000,50.000',
+					$this->_watermark->getFileName()
+				),
+				$preferred->getPostFilterOperations(),
+				'Post filter mismatch'
+			);
+
+			// Verify that the thumbnail and resize point to the preferred now
+			foreach (array($this->_resize, $this->_thumbnail) as $derivative) {
+				list($ret, $derivative) = $derivative->refresh();
+
+				if ($ret) {
+					return $ret;
+				}
+				$this->assertEquals(
+					$preferred->getId(),
+					$derivative->getDerivativeSourceId(),
+					'Derivative not remapped to point to item'
+				);
+			}
+		}
+	}
+
+	public function testRemoveWatermarkDeletePreferred() {
+		// Give our preferred a watermark but no operation
+		list($ret, $lockId) = GalleryCoreApi::acquireWriteLock($this->_preferred->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_preferred->setDerivativeOperations(null);
+		$this->_preferred->setPostFilterOperations(
+			'composite|plugins_data/modules/watermark/' . $this->_watermark->getFileName()
+			. ',image/gif,62,75,manual,25.000,50.000'
+		);
+		$ret = $this->_preferred->save();
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Now tell the controller to remove watermarks
+		GalleryUtilities::putRequestVariable('form[action][remove]', 1);
+
+		$results = $this->handleRequest($this->_item, $this->_preferred);
+		$this->assertEquals(
+			array(
+				array(),
+				$this->_translate('Watermark removed successfully'),
+			),
+			$results
+		);
+
+		// Verify that the preferred is gone
+		list($ret, $preferredTable) = GalleryCoreApi::fetchPreferredsByItemIds(array($this->_item->getId()));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(empty($preferredTable), 'Preferred should be gone, but isn\'t');
+
+		// Verify that the thumbnail and resize point to the item now
+		foreach (array($this->_resize, $this->_thumbnail) as $derivative) {
+			list($ret, $derivative) = $derivative->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+			$this->assertEquals(
+				$this->_item->getId(),
+				$derivative->getDerivativeSourceId(),
+				'Derivative not remapped to point to item'
+			);
+		}
+	}
+
+	public function testBulkWatermark() {
+		$this->_registerTestToolkit('test/file');
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[whichDerivative][thumbnail]', 1);
+		GalleryUtilities::putRequestVariable('form[whichDerivative][resize]', 1);
+		GalleryUtilities::putRequestVariable('form[whichDerivative][preferred]', 1);
+		GalleryUtilities::putRequestVariable('form[watermarkId]', $this->_watermark->getId());
+		GalleryUtilities::putRequestVariable('form[xPercent]', 75);
+		GalleryUtilities::putRequestVariable('form[yPercent]', 25);
+
+		$this->_runBulkTest('Watermark applied successfully', false, true, '75.000,25.000');
+	}
+
+	public function testBulkWatermarkRecursive() {
+		$this->_registerTestToolkit('test/file');
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[whichDerivative][resize]', 1);
+		GalleryUtilities::putRequestVariable('form[whichDerivative][preferred]', 1);
+		GalleryUtilities::putRequestVariable('form[watermarkId]', $this->_watermark->getId());
+		GalleryUtilities::putRequestVariable('form[xPercent]', 100);
+		GalleryUtilities::putRequestVariable('form[yPercent]', 0);
+		GalleryUtilities::putRequestVariable('form[recursive]', 1);
+
+		$this->_runBulkTest('Watermark applied successfully', true, false, '100.000,0.000');
+	}
+
+	public function _runBulkTest($message, $recursive, $applyToThumbnail, $location, $isApply = true) {
+		$preferred = null;
+		$results   = $this->handleRequest($this->_album, $preferred);
+		$this->assertEquals(array(array(), $this->_translate($message)), $results);
+		$this->assertEquals(1, $this->_templateAdapter->getCallbackCount(), 'Callback count');
+		$ret = $this->_templateAdapter->runCallbacks();
+
+		if ($ret) {
+			return $ret;
+		}
+		$progress = $this->_templateAdapter->getProgressBarDump();
+		$this->assertTrue(
+			preg_match(
+				'/0.*core.ItemEdit.*' . $this->_album->getId() . '/',
+				implode(' ', $progress)
+			),
+			'Progress bar output'
+		);
+
+		// Verify the postfilters were applied successfully
+		foreach ($this->_items as $i => $item) {
+			$getsWatermark = ($item->getMimeType() == 'test/file')
+			&& $isApply == ($recursive || $item->getParentId() == $this->_album->getId());
+
+			if (!isset($this->_preferreds[$i])) {
+				list($ret, $preferred) = GalleryCoreApi::fetchPreferredsByItemIds(array($item->getId()));
+
+				if ($ret) {
+					return $ret;
+				}
+
+				if (isset($preferred[$item->getId()])) {
+					$this->_preferreds[$i] = $preferred[$item->getId()];
+				} elseif ($isApply && $getsWatermark) {
+					$this->assertTrue(false, 'Missing newly created preferred ' . $i);
+				}
+			}
+
+			foreach (array_merge(
+				$this->_resizes[$i],
+				array($this->_preferreds[$i], $this->_thumbnails[$i])
+			) as $derivative) {
+				if (!isset($derivative)) {
+					continue;
+				}
+				list($ret, $derivative) = $derivative->refresh();
+
+				if ($ret) {
+					return $ret;
+				}
+				$expected = $getsWatermark && ($applyToThumbnail
+				|| $derivative->getDerivativeType() != DERIVATIVE_TYPE_IMAGE_THUMBNAIL) ? 'composite|plugins_data/modules/watermark/'
+				. $this->_watermark->getFileName() . ',image/gif,62,75,manual,' . $location : '';
+				$this->assertEquals(
+					$expected,
+					(string)$derivative->getPostFilterOperations(),
+					'Post filter mismatch ' . $i
+				);
+			}
+		}
+	}
+
+	public function testBulkRemoveWatermark() {
+		GalleryUtilities::putRequestVariable('form[action][remove]', 1);
+
+		$this->_runBulkTest('Watermark removed successfully', false, true, '25.000,50.000', false);
+	}
+
+	public function testBulkRemoveWatermarkRecursive() {
+		GalleryUtilities::putRequestVariable('form[action][remove]', 1);
+		GalleryUtilities::putRequestVariable('form[recursive]', 1);
+
+		$this->_runBulkTest('Watermark removed successfully', true, true, '25.000,50.000', false);
+	}
+
+	public function testIsSupportedItem() {
+		$this->_registerTestToolkit('test/file');
+		$this->assertTrue(
+			$this->_plugin->isSupported($this->_item, $this->_thumbnail),
+			'test/file should be supported because we registered a toolkit for it'
+		);
+	}
+
+	public function testIsNotSupportedItem() {
+		$this->assertTrue(
+			!$this->_plugin->isSupported($this->_item, $this->_thumbnail),
+			'test/file should not be a supported mime type'
+		);
+	}
+
+	public function testIsNotSupportedItemButSupportedPreferred() {
+		$this->_registerTestToolkit('test/file2');
+		$this->assertTrue(
+			$this->_plugin->isSupported($this->_item, $this->_thumbnail),
+			'test/file2 should be a supported mime type'
+		);
+	}
+
+	public function testIsSupportedAlbum() {
+		list($ret, $toolkit) = GalleryCoreApi::getToolkitByOperation('image/jpeg', 'composite');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			isset($toolkit),
+			$this->_plugin->isSupported($this->_album, null),
+			'album should be supported if we can watermark image/jpeg'
+		);
+	}
+
+	public function testPermission() {
+		global $gallery;
+		$ret = $this->_markPluginParametersForCleanup('module', 'watermark');
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'watermark',
+			'forceDefaultWatermark',
+			1
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter('module', 'watermark', 'defaultWatermarkId', 27);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_registerTestToolkit('test/file');
+		$this->assertTrue($this->_plugin->isSupported($this->_item, $this->_thumbnail), 'admin');
+
+		$this->_becomeGuestUser();
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$gallery->getActiveUserId(),
+			'core.all'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!$this->_plugin->isSupported($this->_item, $this->_thumbnail), 'non admin');
+
+		GalleryUtilities::putRequestVariable('form[action][remove]', 1);
+		$results = $this->handleRequest($this->_item, $this->_preferred, ERROR_PERMISSION_DENIED);
+	}
+
+	public function _registerTestToolkit($mimeType) {
+		// Register a composite operation for test/file
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'GalleryToolkit',
+			'ItemEditWatermarkPluginTestToolkit',
+			'ItemEditWatermarkPluginTestToolkit',
+			'modules/watermark/test/phpunit/ItemEditWatermarkPluginTest.class',
+			'watermarkTest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markToolkitForCleanup('ItemEditWatermarkPluginTestToolkit');
+
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'ItemEditWatermarkPluginTestToolkit',
+			array($mimeType),
+			'composite',
+			array(
+				array(
+					'type'        => 'string',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'string',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'string',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'test',
+				),
+			),
+			'test-description'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+}
+
+class ItemEditWatermarkPluginTestToolkit {
+}

@@ -1,0 +1,227 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/sitemap/Sitemap.inc');
+
+/**
+ * Test Sitemap output
+ *
+ * @package Sitemap
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 20940 $
+ */
+class SitemapViewTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = NULL) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_start_of_2005 = 1104566400; // 2005-01-01T08:00:00+00:00
+		$this->_start_of_2006 = 1136102400; // 2006-01-01T08:00:00+00:00
+
+		$gallery->_phpVm = new SitemapViewTestVm();
+		$gallery->_phpVm->setTime($this->_start_of_2006);
+
+		// Our data was created in 2005 and modified now (2006+)
+		list($ret, $this->_root) = $this->_createRandomAlbum(
+			$this->_getRootId(),
+			array(
+				'creationTimestamp' => $this->_start_of_2005,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_root);
+
+		$serials = array(
+			365 * 24, // change every hour
+			365,      // change every day
+			53,       // change every week  (not exactly 52 -- round up)
+			13,       // change every month (not exactly 12 -- round up)
+			1,
+		);       // change every year
+
+		for ($i = 0; $i < count($serials); $i++) {
+			$gallery->_phpVm->setTime($this->_start_of_2006 + $i + 1);
+			list($ret, $this->_item[$i]) = $this->_createRandomDataItem(
+				$this->_root->getId(),
+				'application/unknown',
+				array(
+					'serialNumber'      => $serials[$i] - 1, // it will get incremented internally
+					'creationTimestamp' => $this->_start_of_2005,
+				)
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+		$gallery->_phpVm->setTime($this->_start_of_2006);
+
+		$this->_view            = new SiteMapView();
+		$gallery->_urlGenerator = new SitemapViewTestUrlGenerator();
+	}
+
+	public function testRenderSitemap() {
+		ob_start();
+		$ret = $this->_view->renderSitemap($this->_root->getId());
+
+		if ($ret) {
+			ob_end_clean();
+
+			return $ret;
+		}
+
+		$results = ob_get_contents();
+		ob_end_clean();
+
+		$ids = array($this->_root->getId());
+
+		foreach ($this->_item as $item) {
+			$ids[] = $item->getId();
+		}
+
+		$expected = "Header: Content-type: application/xhtml+xml\n" .
+		"<?xml version='1.0' encoding='UTF-8'?>\n" .
+		'<urlset xmlns="http://www.google.com/schemas/sitemap/0.84" ' .
+		'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' .
+		'xsi:schemaLocation="http://www.google.com/schemas/sitemap/0.84 ' .
+		"http://www.google.com/schemas/sitemap/0.84/sitemap.xsd\">\n" .
+		("<url><loc>url:$ids[0]</loc><lastmod>2006-01-01T08:00:00+00:00</lastmod>" .
+		 "<changefreq>yearly</changefreq></url>\n") .
+		("<url><loc>url:$ids[1]</loc><lastmod>2006-01-01T08:00:01+00:00</lastmod>" .
+		 "<changefreq>hourly</changefreq></url>\n") .
+		("<url><loc>url:$ids[2]</loc><lastmod>2006-01-01T08:00:02+00:00</lastmod>" .
+		 "<changefreq>daily</changefreq></url>\n") .
+		("<url><loc>url:$ids[3]</loc><lastmod>2006-01-01T08:00:03+00:00</lastmod>" .
+		 "<changefreq>weekly</changefreq></url>\n") .
+		("<url><loc>url:$ids[4]</loc><lastmod>2006-01-01T08:00:04+00:00</lastmod>" .
+		 "<changefreq>monthly</changefreq></url>\n") .
+		("<url><loc>url:$ids[5]</loc><lastmod>2006-01-01T08:00:05+00:00</lastmod>" .
+		 "<changefreq>yearly</changefreq></url>\n") .
+		'</urlset>';
+
+		$this->assertEquals(
+			explode("\n", $expected),
+			explode("\n", $results)
+		);
+	}
+
+	public function testRenderImmediate() {
+		global $gallery;
+		$storage =& $gallery->getStorage();
+
+		// Precache ACLs and clear locks before using mock storage
+		list($ret) = GalleryCoreApi::fetchAccessListIds('core.view', $gallery->getActiveUserId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = $storage->checkPoint();
+
+		if ($ret) {
+			return $ret;
+		}
+		$gallery->_storage = new SitemapViewTestStorage($storage);
+
+		ob_start();
+		$ret = $this->_view->renderImmediate(array(), array());
+
+		if ($ret) {
+			ob_end_clean();
+
+			return $ret;
+		}
+
+		$results = ob_get_contents();
+		ob_end_clean();
+
+		$this->assertEquals(false, strpos($results, 'GalleryItemAttributesMap'), 'no join');
+		$this->assertEquals(
+			'Header: Content-type: application/xhtml+xml',
+			substr($results, 0, 43),
+			'header'
+		);
+		$this->assertTrue(strpos($results, '<?xml'), 'xml');
+		$this->assertTrue(strpos($results, '</urlset>'), 'end');
+	}
+}
+
+class SitemapViewTestUrlGenerator {
+	public function generateUrl($params) {
+		return sprintf('url:%d', $params['itemId']);
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPhpVm.class');
+
+class SitemapViewTestVm extends GalleryPhpVm {
+	public function header($string, $replace = NULL) {
+		echo "Header: $string\n";
+	}
+
+	public function setTime($time) {
+		$this->_time = $time;
+	}
+
+	public function time() {
+		return $this->_time;
+	}
+}
+
+class SitemapViewTestStorage {
+	public function __construct($storage) {
+		$this->_storage = $storage;
+	}
+
+	public function search($query, $data = array()) {
+		if (strpos($query, 'as SecondsPerChange') === false) {
+			return $this->_storage->search($query, $data);
+		}
+		echo $query;
+
+		return array(null, new SitemapViewTestSearchResults());
+	}
+
+	public function getMapEntry($map, $select, $match) {
+		return $this->_storage->getMapEntry($map, $select, $match);
+	}
+
+	public function _normalizeValue($value, $memberData, $fromDb = false) {
+		return $this->_storage->_normalizeValue($value, $memberData, $fromDb);
+	}
+}
+
+class SitemapViewTestSearchResults {
+	public function nextResult() {
+		return null;
+	}
+}

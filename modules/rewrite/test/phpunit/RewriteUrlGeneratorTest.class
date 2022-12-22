@@ -1,0 +1,142 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteUrlGenerator.class');
+
+/**
+ * Generic rewrite URL generator tests.
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class RewriteUrlGeneratorTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'rewrite');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'rewrite',
+			'shortUrls',
+			serialize(
+				array(
+					'php.Unit' => array(
+						'pattern' => 'p/%test%',
+					),
+				)
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$_SERVER['HTTP_HOST']    = 'example.com';
+		$_SERVER['REQUEST_URI']  = '/gallery2/phpunit_test.php?foo=1&bar=2';
+		$_SERVER['SERVER_PORT']  = 80;
+		$_SERVER['QUERY_STRING'] = '';
+
+		$this->_urlGenerator = new RewriteUrlGenerator();
+		$ret                 = $this->_urlGenerator->init('phpunit_test.php');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryDataCache::reset();
+	}
+
+	public function testGetCurrentUrl() {
+		$expected = 'http://example.com/gallery2/phpunit_test.php?foo=1&bar=2';
+		$this->assertEquals($expected, $this->_urlGenerator->getCurrentUrl());
+		$this->assertFalse($this->_urlGenerator->_error, 'error');
+	}
+
+	public function testGetCurrentUrlDir() {
+		$expected = 'http://example.com/gallery2/';
+		$this->assertEquals($expected, $this->_urlGenerator->getCurrentUrlDir());
+		$this->assertFalse($this->_urlGenerator->_error, 'error');
+	}
+
+	public function testInit() {
+		$urlGenerator = new RewriteUrlGenerator();
+		$ret          = $urlGenerator->init('phpunit_test.php');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!$urlGenerator->_error);
+		$this->assertEquals(
+			array(
+				'php.Unit' => array(
+					'pattern' => 'p/%test%',
+				),
+			),
+			$urlGenerator->_shortUrls
+		);
+	}
+
+	public function testParseShortUrl1() {
+		$params            = $options            = $functions            = array();
+		$url               = 't/%phpunit%';
+		$params['phpunit'] = 'test';
+
+		$ret = $this->_urlGenerator->_parseShortUrl($url, $params, $options, $functions);
+		$this->assertTrue($ret, 'status');
+		$this->assertEquals('t/test', $url, 'url');
+		$this->assertEquals(array(), $params, 'params');
+	}
+
+	public function testParseShortUrl2() {
+		$params = $options = $functions = array();
+		$url    = 't/%phpunit%';
+
+		$ret = $this->_urlGenerator->_parseShortUrl($url, $params, $options, $functions);
+		$this->assertTrue(!$ret, 'status');
+	}
+
+	public function testParseShortUrlNoUrlEncode() {
+		$params               = $options               = $functions               = array();
+		$url                  = 't/%phpunit%';
+		$params['phpunit']    = 'The Quick!Brown#Fox';
+		$options['urlEncode'] = false;
+
+		$ret = $this->_urlGenerator->_parseShortUrl($url, $params, $options, $functions);
+		$this->assertTrue($ret, 'status');
+		$this->assertEquals('t/The Quick!Brown#Fox', $url, 'url');
+		$this->assertEquals(array(), $params, 'params');
+	}
+}

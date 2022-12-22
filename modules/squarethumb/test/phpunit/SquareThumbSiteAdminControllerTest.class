@@ -1,0 +1,171 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * SquareThumbSiteAdmin controller tests
+ *
+ * @package SquareThumb
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class SquareThumbSiteAdminControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'squarethumb.SquareThumbSiteAdmin');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'squarethumb');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testSquareThumbSiteAdminControllerReset() {
+		GalleryUtilities::putRequestVariable('form[action][reset]', '1');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'squarethumb.SquareThumbSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testSquareThumbSiteAdminControllerSave() {
+		GalleryUtilities::putRequestVariable('form[mode]', 'crop');
+		GalleryUtilities::putRequestVariable('form[color]', '159cE0');
+		GalleryUtilities::putRequestVariable('form[action][save]', '1');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'squarethumb.SquareThumbSiteAdmin',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testSquareThumbSiteAdminControllerSaveFitNoColor() {
+		GalleryUtilities::putRequestVariable('form[mode]', 'fit');
+		GalleryUtilities::putRequestVariable('form[action][save]', '1');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'squarethumb.SquareThumbSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][color][missing]'),
+			),
+			$results
+		);
+	}
+
+	public function testSquareThumbSiteAdminControllerSaveCropColorNotSaved() {
+		GalleryUtilities::putRequestVariable('form[mode]', 'crop');
+		GalleryUtilities::putRequestVariable('form[action][save]', '1');
+		GalleryUtilities::removeRequestVariable('form[color]');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'squarethumb.SquareThumbSiteAdmin',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testSquareThumbSiteAdminControllerSaveBadColor() {
+		GalleryUtilities::putRequestVariable('form[mode]', 'fit');
+		GalleryUtilities::putRequestVariable('form[color]', '123Q45');
+		GalleryUtilities::putRequestVariable('form[action][save]', '1');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'squarethumb.SquareThumbSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][color][invalid]'),
+			),
+			$results
+		);
+
+		GalleryUtilities::putRequestVariable('form[color]', '1234567');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'squarethumb.SquareThumbSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][color][invalid]'),
+			),
+			$results
+		);
+	}
+
+	public function testSquareThumbSiteAdminControllerSaveFitButNotAvailable() {
+		GalleryUtilities::putRequestVariable('form[mode]', 'fit');
+		GalleryUtilities::putRequestVariable('form[action][save]', '1');
+		GalleryUtilities::putRequestVariable('form[color]', '123456');
+
+		$cacheKey = 'GalleryToolkitHelper::getToolkitByOperation(image/x-portable-pixmap, '
+		. 'convert-to-image/jpeg)';
+		GalleryDataCache::put($cacheKey, array(null, null));
+
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+		$this->assertEquals(null, $results);
+	}
+}

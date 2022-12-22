@@ -1,0 +1,135 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * DeleteComment controller tests
+ * @package Comment
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class DeleteCommentControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'comment.DeleteComment');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create two random items
+		for ($i = 0; $i < 2; $i++) {
+			list($ret, $this->_item[$i]) = $this->_createRandomDataItem($this->_getRootId());
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->_markForCleanup($this->_item[$i]);
+
+			// Create a comment in it that we can delete
+			list($ret, $this->_comment[$i]) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryComment');
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertTrue(isset($this->_comment[$i]), 'Missing comment instance');
+			$this->_comment[$i]->create($this->_item[$i]->getId());
+			$this->_comment[$i]->setCommenterId($gallery->getActiveUserId());
+			$this->_comment[$i]->setHost('127.0.0.1');
+			$this->_comment[$i]->setComment('this is a test comment');
+			$this->_comment[$i]->setDate(time());
+			$ret = $this->_comment[$i]->save();
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+	}
+
+	public function testDeleteComment() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[0]->getId());
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'   => 'comment.CommentChangeConfirmation',
+					'itemId' => $this->_item[0]->getId(),
+				),
+				'status'   => array(
+					'deleted' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Use a bogus comment id
+	 */
+	public function testMaliciousDeleteComment1() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', 123123123);
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		$results = $this->handleRequest(ERROR_MISSING_OBJECT);
+	}
+
+	/**
+	 * Use mismatched item id and comment id
+	 */
+	public function testMaliciousDeleteComment2() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[1]->getId());
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+
+		$results = $this->handleRequest(ERROR_BAD_PARAMETER);
+	}
+
+	public function testCancelDelete() {
+		// Use valid inputs
+		GalleryUtilities::putRequestVariable('itemId', $this->_item[0]->getId());
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment[1]->getId());
+		GalleryUtilities::putRequestVariable('form[action][cancel]', 1);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'   => 'core.ShowItem',
+					'itemId' => $this->_item[0]->getId(),
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+}

@@ -1,0 +1,576 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Mod Rewrite Helper tests
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 20940 $
+ */
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
+GalleryCoreApi::requireOnce(
+	'modules/rewrite/classes/parsers/modrewrite/ModRewriteHelper.class'
+);
+class ModRewriteHelperTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$urlGenerator = new GalleryUrlGenerator();
+		$ret          = $urlGenerator->init('http://www.test.server/gallery2/main.php');
+
+		if ($ret) {
+			return $ret;
+		}
+		$gallery->setUrlGenerator($urlGenerator);
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'rewrite');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Set up our environment
+		foreach (array(
+			'modrewrite.status'           => serialize(
+				array(
+					'needOptions' => true,
+				)
+			),
+			'modrewrite.galleryLocation'  => '/gallery2/',
+			'modrewrite.embeddedHtaccess' => '/phpunit/embedded',
+			'modrewrite.embeddedLocation' => '/embedded/',
+		) as $key => $value) {
+			$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', $key, $value);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		// Set up our mock platform
+		$this->_platform = new ModRewriteHelperMockPlatform();
+		$this->_platform->init($this);
+		unset($this->_fileContent, $this->_embeddedFileContent);
+
+		$gallery->setPlatform($this->_platform);
+	}
+
+	public function testHtaccessPath() {
+		list($ret, $path) = ModRewriteHelper::getHtaccessPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(GALLERY_CONFIG_DIR . '/.htaccess', $path, 'standalone');
+
+		list($ret, $path) = ModRewriteHelper::getHtaccessPath(true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('/phpunit/embedded/.htaccess', $path, 'embedded');
+	}
+
+	public function testCheckFile() {
+		list($ret, $code) = ModRewriteHelper::checkFile();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_OK, $code, 'success');
+
+		$this->_platform->_isWriteable = false;
+		list($ret, $code)              = ModRewriteHelper::checkFile();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_HTACCESS_CANT_WRITE, $code, 'writeable');
+
+		$this->_platform->_isReadable = false;
+		list($ret, $code)             = ModRewriteHelper::checkFile();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_HTACCESS_CANT_READ, $code, 'readable');
+
+		$this->_platform->_fileExists = false;
+		list($ret, $code)             = ModRewriteHelper::checkFile();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_HTACCESS_MISSING, $code, 'exists');
+	}
+
+	public function testCheckFileEmbedded() {
+		list($ret, $code) = ModRewriteHelper::checkFile(true);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_OK, $code, 'success');
+
+		$this->_platform->_isWriteableEmbed = false;
+		list($ret, $code)                   = ModRewriteHelper::checkFile(true);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_EMBED_HTACCESS_CANT_WRITE, $code, 'writeable');
+
+		$this->_platform->_isReadableEmbed = false;
+		list($ret, $code)                  = ModRewriteHelper::checkFile(true);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_EMBED_HTACCESS_CANT_READ, $code, 'readable');
+
+		$this->_platform->_fileExistsEmbed = false;
+		list($ret, $code)                  = ModRewriteHelper::checkFile(true);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(REWRITE_STATUS_EMBED_HTACCESS_MISSING, $code, 'exists');
+	}
+
+	public function testWriteFile() {
+		list($ret, $code) = ModRewriteHelper::writeFile(array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_OK, $code, 'success');
+		$this->assertTrue(!empty($this->_fileContent), 'success fileContent');
+		unset($this->_fileContent);
+
+		$this->_platform->_isReadable = false;
+		list($ret, $code)             = ModRewriteHelper::writeFile(array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_HTACCESS_CANT_READ, $code, 'readable');
+		$this->assertTrue(!isset($this->_fileContent), 'readable fileContent');
+
+		$this->_platform->_isReadable  = true;
+		$this->_platform->_isWriteable = false;
+		list($ret, $code)              = ModRewriteHelper::writeFile(array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_HTACCESS_CANT_WRITE, $code, 'writeable');
+		$this->assertTrue(!isset($this->_fileContent), 'writeable fileContent');
+	}
+
+	public function testWriteFileEmbedded() {
+		list($ret, $code) = ModRewriteHelper::writeFile(array(), true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_OK, $code, 'success');
+		$this->assertTrue(!empty($this->_embeddedFileContent), 'success fileContent');
+		unset($this->_embeddedFileContent);
+
+		$this->_platform->_isReadableEmbed = false;
+		list($ret, $code)                  = ModRewriteHelper::writeFile(array(), true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_EMBED_HTACCESS_CANT_READ, $code, 'readable');
+		$this->assertTrue(!isset($this->_embeddedFileContent), 'readable fileContent');
+
+		$this->_platform->_isReadableEmbed  = true;
+		$this->_platform->_isWriteableEmbed = false;
+		list($ret, $code)                   = ModRewriteHelper::writeFile(array(), true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_EMBED_HTACCESS_CANT_WRITE, $code, 'writeable');
+		$this->assertTrue(!isset($this->_embeddedFileContent), 'writeable fileContent');
+	}
+
+	public function testGetHtaccessContentForEmbeddedDownloadItemRule() {
+		/*
+		 * Bug 1693956 - Verify that embedded core.DownloadItem rules don't have a session id in
+		 * the RewriteRule.
+		 */
+		GalleryDataCache::put('G2_EMBED', 1, true);
+		$testRules[0]         = array(
+			'pattern'     => 'd/Test-Download-Rule',
+			'keywords'    => array(),
+			'queryString' => array(
+				'view' => 'core.DownloadItem',
+			),
+			'options'     => array(
+				'forceDirect'            => true,
+				'forceSessionId'         => false,
+				'forceServerRelativeUrl' => true,
+				'htmlEntities'           => false,
+				'urlEncode'              => false,
+				'useAuthToken'           => false,
+			),
+		);
+		list($ret, $htaccess) = ModRewriteHelper::getHtaccessContent($testRules, true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			preg_match(
+				'{RewriteRule \.   /gallery2/main.php\?g2_view=core\.DownloadItem\s*$}m',
+				$htaccess
+			),
+			'<pre>' . $htaccess . '</pre>'
+		);
+	}
+
+	public function testCheckModRewrite() {
+		GalleryUtilities::putRequestVariable('modRewriteTest', 'pass');
+		list($ret, $status, $trueStatus) = ModRewriteHelper::checkModRewrite();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_OK, $status);
+		$this->assertEquals(REWRITE_STATUS_OK, $trueStatus);
+
+		GalleryUtilities::putRequestVariable('modRewriteTest', 'fail');
+		list($ret, $status, $trueStatus) = ModRewriteHelper::checkModRewrite();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_APACHE_NO_MOD_REWRITE, $status, 'fail');
+		$this->assertEquals(REWRITE_STATUS_APACHE_NO_MOD_REWRITE, $trueStatus, 'fail');
+
+		GalleryUtilities::putRequestVariable('modRewriteTest', '404');
+		list($ret, $status, $trueStatus) = ModRewriteHelper::checkModRewrite();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_APACHE_NO_MOD_REWRITE, $status, '404');
+		$this->assertEquals(REWRITE_STATUS_APACHE_NO_MOD_REWRITE, $trueStatus, '404');
+	}
+
+	public function testCheckModRewriteUnableToTest() {
+		global $gallery;
+		// Prepare the URL Generator
+		$urlGenerator = new GalleryUrlGenerator();
+		$ret          = $urlGenerator->init('http://www.test.server/bogus/main.php');
+
+		if ($ret) {
+			return $ret;
+		}
+		$gallery->setUrlGenerator($urlGenerator);
+
+		// Execute the test
+		GalleryUtilities::putRequestVariable('modRewriteTest', 'fail');
+		list($ret, $status, $trueStatus) = ModRewriteHelper::checkModRewrite();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_APACHE_UNABLE_TO_TEST, $status, 'unable to test');
+		$this->assertEquals(REWRITE_STATUS_APACHE_UNABLE_TO_TEST, $trueStatus, 'unable to test');
+	}
+
+	public function testCheckModRewriteForced() {
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'rewrite',
+			'modrewrite.status',
+			serialize(
+				array(
+					'needOptions' => true,
+					'forced'      => 1,
+				)
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('modRewriteTest', 'fail');
+		list($ret, $status, $trueStatus) = ModRewriteHelper::checkModRewrite();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_OK, $status);
+		$this->assertEquals(REWRITE_STATUS_APACHE_NO_MOD_REWRITE, $trueStatus);
+	}
+}
+
+/**
+ * Test platform for this test
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ */
+class ModRewriteHelperMockPlatform extends GalleryPlatform {
+	public $_isWriteable             = true;
+	public $_isReadable              = true;
+	public $_fileExists              = true;
+	public $_isWriteableEmbed        = true;
+	public $_isReadableEmbed         = true;
+	public $_fileExistsEmbed         = true;
+	public $_embeddedPreviousContent = array();
+	public $_previousContent         = array();
+
+	public function init(&$test) {
+		$this->_test =& $test;
+	}
+
+	public function fsockopen($target, $port, &$errno, &$errstr, $timeout) {
+		if ($target == 'www.test.server') {
+			return 'phpunit';
+		}
+
+		return parent::fsockopen($target, $port, $errno, $errstr, $timeout);
+	}
+
+	public function file_exists($file) {
+		if (strpos($file, 'embedded/.htaccess') !== false) {
+			return $this->_fileExistsEmbed;
+		}
+
+		if (strpos($file, '/.htaccess') !== false) {
+			return $this->_fileExists;
+		}
+
+		return parent::file_exists($file);
+	}
+
+	public function is_dir($path) {
+		if ($path == '/phpunit/test') {
+			return true;
+		}
+
+		return parent::is_dir($path);
+	}
+
+	public function fwrite($handle, $string, $length = 0) {
+		$buffer = array(
+			'pass' => array(
+				'HTTP/1.1 200 OK',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				'PASS_REWRITE',
+			),
+			'fail' => array(
+				'HTTP/1.1 200 OK',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				'FAIL_NO_REWRITE',
+			),
+			'404' => array(
+				'HTTP/1.1 404 Not Found',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				'Not Found',
+			),
+		);
+
+		if ($handle == 'phpunit') {
+			$respons           = GalleryUtilities::getRequestVariables('modRewriteTest');
+			$this->_readBuffer = $buffer[$respons];
+
+			return strlen($string);
+		}
+
+		if ($handle == '.htaccess') {
+			$this->_test->_fileContent .= $string;
+
+			return strlen($string);
+		}
+
+		if ($handle == '.embedded') {
+			$this->_test->_embeddedFileContent .= $string;
+
+			return strlen($string);
+		}
+
+		return parent::fwrite($handle, $string, $length = 0);
+	}
+
+	public function feof($handle) {
+		if ($handle == 'phpunit') {
+			return empty($this->_readBuffer);
+		}
+
+		return parent::feof($handle);
+	}
+
+	public function fgets($handle, $length = 0) {
+		if ($handle == 'phpunit') {
+			if (empty($this->_readBuffer)) {
+				return null;
+			}
+
+			return array_shift($this->_readBuffer) . "\n";
+		}
+
+		return parent::fgets($handle, $length);
+	}
+
+	public function fread($handle, $length) {
+		if ($handle == 'phpunit') {
+			if (empty($this->_readBuffer)) {
+				return null;
+			}
+
+			if ($length >= strlen(join("\n", $this->_readBuffer))) {
+				$tmp               = join("\n", $this->_readBuffer);
+				$this->_readBuffer = array();
+
+				return $tmp;
+			}
+
+			$buf               = join("\n", $this->_readBuffer);
+			$tmp               = substr($buf, 0, $length);
+			$this->_readBuffer = explode("\n", substr($buf, $length + 1));
+
+			return $tmp;
+		}
+
+		return parent::fread($handle, $length);
+	}
+
+	public function fflush($handle) {
+		if ($handle == 'phpunit') {
+			return true;
+		}
+
+		return parent::fflush($handle);
+	}
+
+	public function is_readable($file) {
+		if (strpos($file, 'embedded/.htaccess') !== false) {
+			return $this->_isReadableEmbed;
+		}
+
+		if (strpos($file, '/.htaccess') !== false) {
+			return $this->_isReadable;
+		}
+
+		return parent::is_readable($file);
+	}
+
+	public function is_writeable($file) {
+		if (strpos($file, 'embedded/.htaccess') !== false) {
+			return $this->_isWriteableEmbed;
+		}
+
+		if (strpos($file, '/.htaccess') !== false) {
+			return $this->_isWriteable;
+		}
+
+		if ($file == GALLERY_CONFIG_DIR || $file == '/phpunit/embedded') {
+			return false;
+		}
+
+		return parent::is_writeable($file);
+	}
+
+	public function file($file, $use_include_path = false) {
+		if (strpos($file, '.htaccess') !== false) {
+			return $passCodeAudit = array();
+		}
+
+		return parent::file($file);
+	}
+
+	public function fopen($file, $mode, $useIncludePath = null, $zcontext = null) {
+		if (strpos($file, 'embedded/.htaccess') !== false) {
+			if ($this->_isWriteableEmbed) {
+				$this->_test->_embeddedFileContent = '';
+
+				return '.embedded';
+			}
+
+			return null;
+		}
+
+		if (strpos($file, '/.htaccess') !== false) {
+			if ($this->_isWriteable) {
+				$this->_test->_fileContent = '';
+
+				return '.htaccess';
+			}
+
+			return null;
+		}
+
+		return parent::fopen($file, $mode, $useIncludePath, $zcontext);
+	}
+
+	public function fclose($handle) {
+		if ($handle == '.htaccess') {
+			return true;
+		}
+
+		if ($handle == '.embedded') {
+			return true;
+		}
+
+		if ($handle == 'phpunit') {
+			$this->_readBuffer = array();
+
+			return true;
+		}
+
+		return fclose($handle);
+	}
+}

@@ -517,7 +517,7 @@ class GalleryCommentHelper /* implements GalleryEventListener */ {
      * @param AkismetApi $akismet an instance of AkismetApi
      * @return GalleryStatus a status code
      */
-    function checkWithAkismet(&$comment, $akismet) {
+    static function checkWithAkismet(&$comment, $akismet) {
 	$logError = false;
 	if ($comment->testPersistentFlag(STORAGE_FLAG_NEWLY_CREATED)) {
 	    list ($ret, $isSpam) = $akismet->checkComment($comment);
