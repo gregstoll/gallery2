@@ -1,0 +1,625 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/slideshow/classes/SlideshowHelper.class');
+
+/**
+ * SlideshowHelper tests
+ * @package Slideshow
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17587 $
+ */
+class SlideshowHelperTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	/**
+	 * Utility function to create a simple album hierarchy for testing.  Call it with an option
+	 * string that's colon delimited where each delimited section creates one item in the album
+	 *  'thumbnail:thumbnail,preferred:nonphoto,thumbnail:thumbnail:resize_100'
+	 *
+	 * The above example will create an album containing:
+	 *   a GalleryPhotoItem with a thumbnail
+	 *   a GalleryPhotoItem with a thumbnail and a preferred
+	 *   a GalleryUnknownItem with a thumbnail
+	 *   a GalleryPhotoItem with a thumbnail and a 100x100 resized
+	 */
+	public function _createAlbumHierarchy($optionListString = '') {
+		list($ret, $album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return array($ret, null, null, null);
+		}
+
+		$this->_markForCleanup($album);
+
+		$optionList = explode(':', $optionListString);
+
+		$info    = array();
+		$itemIds = array();
+
+		foreach ($optionList as $options) {
+			$options          = explode(',', $options);
+			$entityType       = in_array('nonphoto', $options) ? 'GalleryUnknownItem' : 'GalleryPhotoItem';
+			list($ret, $item) = $this->_createRandomDataItem(
+				$album->getId(),
+				'image/png',
+				array(),
+				GalleryCoreApi::getCodeBasePath('modules/slideshow/data/images/close_blue.png'),
+				$entityType
+			);
+
+			if ($ret) {
+				return array($ret, null, null, null);
+			}
+
+			$preferred = null;
+			$thumbnail = null;
+			$resizes   = null;
+
+			foreach ($options as $option) {
+				if (!$option) {
+					continue;
+				}
+
+				switch ($option) {
+					case 'thumbnail':
+						list($ret, $thumbnail) = $this->_createDerivative(
+							$item,
+							$item->getId(),
+							DERIVATIVE_TYPE_IMAGE_THUMBNAIL
+						);
+
+						if ($ret) {
+							return array($ret, null, null, null);
+						}
+
+						break;
+
+					case 'preferred':
+						list($ret, $preferred) = $this->_createDerivative(
+							$item,
+							$item->getId(),
+							DERIVATIVE_TYPE_IMAGE_PREFERRED
+						);
+
+						if ($ret) {
+							return array($ret, null, null, null);
+						}
+
+						break;
+
+					case 'resize_100':
+					case 'resize_200':
+						$size                  = $option == 'resize_100' ? 100 : 200;
+						list($ret, $resizes[]) = $this->_createDerivative(
+							$item,
+							$item->getId(),
+							DERIVATIVE_TYPE_IMAGE_RESIZE,
+							'test-operation|100',
+							'test/file',
+							array(
+								'width'  => $size,
+								'height' => $size,
+							)
+						);
+
+						if ($ret) {
+							return array($ret, null, null, null);
+						}
+
+						break;
+
+					case 'nonphoto':
+						// Already handled
+						break;
+
+					default:
+						return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null, null, null);
+				}
+			}
+
+			$info[] = array(
+				'item'      => $item,
+				'thumbnail' => $thumbnail,
+				'preferred' => $preferred,
+				'resizes'   => $resizes,
+			);
+
+			$itemIds[] = $item->getId();
+		}
+
+		return array(null, $album, $info, $itemIds);
+	}
+
+	public function testBuildAlbumSlideshow_StartingFromAlbum() {
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy(
+			'thumbnail:thumbnail'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result, $start) = SlideshowHelper::buildAlbumSlideshow($album, $itemIds[1]);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				array(
+					'item'      => (array)$itemInfo[0]['item'],
+					'image'     => (array)$itemInfo[0]['item'],
+					'thumbnail' => (array)$itemInfo[0]['thumbnail'],
+				),
+				array(
+					'item'      => (array)$itemInfo[1]['item'],
+					'image'     => (array)$itemInfo[1]['item'],
+					'thumbnail' => (array)$itemInfo[1]['thumbnail'],
+				),
+			),
+			$result
+		);
+		$this->assertEquals(1, $start, 'Should start at second photo');
+	}
+
+	public function testBuildAlbumSlideshow_ItemInsideAlbum() {
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy(
+			'thumbnail:thumbnail'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result, $start) = SlideshowHelper::buildAlbumSlideshow($itemInfo[1]['item']);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				array(
+					'item'      => (array)$itemInfo[0]['item'],
+					'image'     => (array)$itemInfo[0]['item'],
+					'thumbnail' => (array)$itemInfo[0]['thumbnail'],
+				),
+				array(
+					'item'      => (array)$itemInfo[1]['item'],
+					'image'     => (array)$itemInfo[1]['item'],
+					'thumbnail' => (array)$itemInfo[1]['thumbnail'],
+				),
+			),
+			$result
+		);
+		$this->assertEquals(1, $start, 'Should start at second photo');
+	}
+
+	public function testBuildAlbumSlideshow_WithoutPermissionToViewAlbum() {
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy('thumbnail');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result, $start) = SlideshowHelper::buildAlbumSlideshow($album, $itemIds[0]);
+		$this->assertErrorEquals(ERROR_MISSING_OBJECT, $ret);
+	}
+
+	public function testBuildAlbumSlideshow_WithoutPermissionToViewItem() {
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy(
+			'thumbnail:thumbnail'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($itemInfo[1]['item']->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result, $start) = SlideshowHelper::buildAlbumSlideshow($itemInfo[1]['item']);
+		$this->assertErrorEquals(ERROR_MISSING_OBJECT, $ret);
+	}
+
+	public function testBuildAlbumSlideshow_ItemInsideAlbumWithoutPermissionToViewParentAlbum() {
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy(
+			'thumbnail:thumbnail'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result, $start) = SlideshowHelper::buildAlbumSlideshow($itemInfo[1]['item']);
+		$this->assertErrorEquals(ERROR_MISSING_OBJECT, $ret);
+	}
+
+	public function testBuildItemsSlideshow_Basic() {
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy(
+			'thumbnail:thumbnail'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result, $start) = SlideshowHelper::buildItemsSlideshow($itemIds, $itemIds[1]);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				array(
+					'item'      => (array)$itemInfo[0]['item'],
+					'image'     => (array)$itemInfo[0]['item'],
+					'thumbnail' => (array)$itemInfo[0]['thumbnail'],
+				),
+				array(
+					'item'      => (array)$itemInfo[1]['item'],
+					'image'     => (array)$itemInfo[1]['item'],
+					'thumbnail' => (array)$itemInfo[1]['thumbnail'],
+				),
+			),
+			$result
+		);
+		$this->assertEquals(1, $start, 'Should start at second photo');
+	}
+
+	public function testBuildItemsSlideshow_PhotosWithoutCoreViewCauseMissingObjectError() {
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy(
+			'thumbnail:thumbnail'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($itemInfo[0]['item']->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = SlideshowHelper::buildItemsSlideshow($itemIds);
+		$this->assertErrorEquals(ERROR_MISSING_OBJECT, $ret);
+	}
+
+	public function testBuildItemsSlideshow_IgnorePhotoWithNoThumbnail() {
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy(
+			'thumbnail:resize_100:thumbnail'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = SlideshowHelper::buildItemsSlideshow($itemIds);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Second photo has no thumbnail, get skipped
+		$this->assertEquals(
+			array(
+				array(
+					'item'      => (array)$itemInfo[0]['item'],
+					'image'     => (array)$itemInfo[0]['item'],
+					'thumbnail' => (array)$itemInfo[0]['thumbnail'],
+				),
+				array(
+					'item'      => (array)$itemInfo[2]['item'],
+					'image'     => (array)$itemInfo[2]['item'],
+					'thumbnail' => (array)$itemInfo[2]['thumbnail'],
+				),
+			),
+			$result
+		);
+	}
+
+	public function testBuildItemsSlideshow_IgnoreNonPhotos() {
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy(
+			'nonphoto,thumbnail:thumbnail'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = SlideshowHelper::buildItemsSlideshow($itemIds);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// First item is not a photo, get skipped
+		$this->assertEquals(
+			array(
+				array(
+					'item'      => (array)$itemInfo[1]['item'],
+					'image'     => (array)$itemInfo[1]['item'],
+					'thumbnail' => (array)$itemInfo[1]['thumbnail'],
+				),
+			),
+			$result
+		);
+	}
+
+	public function testBuildItemsSlideshow_ShowPreferredWhenAvailable() {
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy(
+			'thumbnail,preferred:thumbnail'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = SlideshowHelper::buildItemsSlideshow($itemIds);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// First photo has a preferred image
+		$this->assertEquals(
+			array(
+				array(
+					'item'      => (array)$itemInfo[0]['item'],
+					'image'     => (array)$itemInfo[0]['preferred'],
+					'thumbnail' => (array)$itemInfo[0]['thumbnail'],
+				),
+				array(
+					'item'      => (array)$itemInfo[1]['item'],
+					'image'     => (array)$itemInfo[1]['item'],
+					'thumbnail' => (array)$itemInfo[1]['thumbnail'],
+				),
+			),
+			$result
+		);
+	}
+
+	public function testBuildItemsSlideshow_ShowBiggestResize() {
+		global $gallery;
+
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy(
+			'thumbnail,resize_100,resize_200'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($itemInfo[0]['item']->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$itemInfo[0]['item']->getId(),
+			$gallery->getActiveUserId(),
+			array('core.view', 'core.viewResizes')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = SlideshowHelper::buildItemsSlideshow($itemIds);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Photo has two resizes, we expect to see the second one since it's larger.
+		$this->assertEquals(
+			array(
+				array(
+					'item'      => (array)$itemInfo[0]['item'],
+					'image'     => (array)$itemInfo[0]['resizes'][1],
+					'thumbnail' => (array)$itemInfo[0]['thumbnail'],
+				),
+			),
+			$result
+		);
+	}
+
+	public function testBuildItemsSlideshow_FallbackToThumbnail() {
+		global $gallery;
+
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy('thumbnail');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeItemPermissions($itemInfo[0]['item']->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$itemInfo[0]['item']->getId(),
+			$gallery->getActiveUserId(),
+			array('core.view', 'core.viewResizes')
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result) = SlideshowHelper::buildItemsSlideshow($itemIds);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// All the user can see is the thumbnail
+		$this->assertEquals(
+			array(
+				array(
+					'item'      => (array)$itemInfo[0]['item'],
+					'image'     => (array)$itemInfo[0]['thumbnail'],
+					'thumbnail' => (array)$itemInfo[0]['thumbnail'],
+				),
+			),
+			$result
+		);
+	}
+
+	public function testBuildAlbumSlideshow_Offset() {
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy(
+			'thumbnail:thumbnail:thumbnail'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $result, $start) = SlideshowHelper::buildAlbumSlideshow($album, null, 2);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				array(
+					'item'      => (array)$itemInfo[2]['item'],
+					'image'     => (array)$itemInfo[2]['item'],
+					'thumbnail' => (array)$itemInfo[2]['thumbnail'],
+				),
+			),
+			$result,
+			'Photo data should match'
+		);
+		$this->assertEquals(0, $start, 'Should start at first photo');
+	}
+
+	/** @todo make this test run faster by overriding SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE */
+	public function testPaginateItemSlideshow_NextOffsetOnly() {
+		// Create three pages of items in the album (3 * SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE + 1)
+		$options = str_repeat(
+			'thumbnail:preferred,nonphoto:thumbnail:',
+			SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE
+		) . 'thumbnail';
+
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy($options);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $prevOffset, $nextOffset) = SlideshowHelper::paginateItemSlideshow($album->getId(), 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(null, $prevOffset, 'Should not be a previous page');
+		$this->assertEquals(
+			SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE,
+			$nextOffset,
+			'Next page offset should match'
+		);
+	}
+
+	public function testPaginateItemSlideshow_PrevOffsetOnly() {
+		// Create three pages of items in the album (3 * SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE + 1)
+		$options = str_repeat(
+			'thumbnail:preferred,nonphoto:thumbnail:',
+			SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE
+		) . 'thumbnail';
+
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy($options);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $prevOffset, $nextOffset) = SlideshowHelper::paginateItemSlideshow(
+			$album->getId(),
+			SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE * 3 + 1
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			(SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE * 3 + 1) - SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE,
+			$prevOffset,
+			'Previous page offset should match'
+		);
+		$this->assertEquals(null, $nextOffset, 'Should be no next page');
+	}
+
+	public function testPaginateItemSlideshow_PrevOffsetAndNextOffset() {
+		// Create three pages of items in the album (3 * SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE + 1)
+		$options = str_repeat(
+			'thumbnail:preferred,nonphoto:thumbnail:',
+			SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE
+		) . 'thumbnail';
+
+		list($ret, $album, $itemInfo, $itemIds) = $this->_createAlbumHierarchy($options);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $prevOffset, $nextOffset) = SlideshowHelper::paginateItemSlideshow(
+			$album->getId(),
+			SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, $prevOffset, 'Previous page offset should match');
+		$this->assertEquals(
+			SLIDESHOW_MEDIARSS_ITEMS_PER_PAGE * 2,
+			$nextOffset,
+			'Next page offset should match'
+		);
+	}
+}

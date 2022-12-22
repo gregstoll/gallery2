@@ -134,7 +134,7 @@ class KeyAlbumCallbacks {
 	}
 	$maxCount = 1;
 	while ($result = $searchResults->nextResult()) {
-	    foreach ($module->splitKeywords($result[0], $split) as $rawKeyword => $keyword) {
+	    foreach ($module->splitKeywords($result[0] ?? '', $split) as $rawKeyword => $keyword) {
 		if (!isset($keywords[$keyword])) {
 		    $keywords[$keyword] =
 			array('name' => $keyword, 'raw' => $rawKeyword, 'count' => 1);

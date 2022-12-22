@@ -1,0 +1,633 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/squarethumb/classes/SquareThumbToolkit.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPhotoItem.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryDerivativeImage.class');
+
+/**
+ * Test SquareThumbToolkit functionality
+ * @package SquareThumb
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class SquareThumbToolkitTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'squarethumb');
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter('module', 'squarethumb', 'mode', 'crop');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Register a dummy toolkit, property and operations
+		$ret = GalleryCoreApi::registerFactoryImplementation(
+			'GalleryToolkit',
+			'SquareThumbTestToolkit',
+			'SquareThumbTestToolkit',
+			'modules/squarethumb/test/phpunit/SquareThumbToolkitTest.class',
+			'squarethumbTest',
+			null
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markToolkitForCleanup('SquareThumbTestToolkit');
+
+		$ret = GalleryCoreApi::registerToolkitProperty(
+			'SquareThumbTestToolkit',
+			array('test/dim', 'test/crop', 'test/composite', 'test/thumbnail', 'test/image'),
+			'dimensions',
+			'int,int',
+			'desc'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'SquareThumbTestToolkit',
+			array('test/crop', 'test/image'),
+			'crop',
+			array(
+				array(
+					'type'        => 'float',
+					'description' => 'left edge %',
+				),
+				array(
+					'type'        => 'float',
+					'description' => 'top edge %',
+				),
+				array(
+					'type'        => 'float',
+					'description' => 'width %',
+				),
+				array(
+					'type'        => 'float',
+					'description' => 'height %',
+				),
+			),
+			'desc'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'SquareThumbTestToolkit',
+			array('test/composite', 'test/image'),
+			'composite',
+			array(
+				array(
+					'type'        => 'string',
+					'description' => 'path',
+				),
+				array(
+					'type'        => 'string',
+					'description' => 'mime',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'width',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'height',
+				),
+				array(
+					'type'        => 'string',
+					'description' => 'align',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'x%',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'y%',
+				),
+			),
+			'desc'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::registerToolkitOperation(
+			'SquareThumbTestToolkit',
+			array('test/thumbnail', 'test/image'),
+			'thumbnail',
+			array(
+				array(
+					'type'        => 'int',
+					'description' => 'width',
+				),
+				array(
+					'type'        => 'int',
+					'description' => 'height',
+				),
+			),
+			'desc'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Get a toolkit to work with
+		$this->_toolkit = new SquareThumbToolkit();
+	}
+
+	public function testWrongOperation() {
+		list($ret, $mimeType) = $this->_toolkit->performOperation(
+			'test/image',
+			'crop',
+			'wrongOpSrc',
+			'wrongOpDest',
+			array()
+		);
+		$this->assertEquals(
+			GALLERY_ERROR | ERROR_UNSUPPORTED_OPERATION,
+			$ret->getErrorCode(),
+			'Error expected for bad operation'
+		);
+	}
+
+	public function testNoDimensions() {
+		list($ret, $mimeType) = $this->_toolkit->performOperation(
+			'test/nothing',
+			'thumbnail',
+			'noDimSrc',
+			'noDimDest',
+			array(150)
+		);
+		$this->assertEquals(
+			GALLERY_ERROR | ERROR_UNSUPPORTED_OPERATION,
+			$ret->getErrorCode(),
+			'Error expected due to missing dimensions toolkit'
+		);
+	}
+
+	public function testNoCropOrComposite() {
+		list($ret, $mimeType) = $this->_toolkit->performOperation(
+			'test/dim',
+			'thumbnail',
+			'noCCSrc',
+			'noCCDest',
+			array(150)
+		);
+		$this->assertEquals(
+			GALLERY_ERROR | ERROR_UNSUPPORTED_OPERATION,
+			$ret->getErrorCode(),
+			'Error expected due to missing crop toolkit'
+		);
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'squarethumb', 'mode', 'fit');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $mimeType) = $this->_toolkit->performOperation(
+			'test/dim',
+			'thumbnail',
+			'noCCSrc',
+			'noCCDest',
+			array(150)
+		);
+		$this->assertEquals(
+			GALLERY_ERROR | ERROR_UNSUPPORTED_OPERATION,
+			$ret->getErrorCode(),
+			'Error expected due to missing composite toolkit'
+		);
+	}
+
+	public function testNoThumbnail() {
+		list($ret, $mimeType) = $this->_toolkit->performOperation(
+			'test/crop',
+			'thumbnail',
+			'noThumbnailSrc',
+			'noThumbnailDest',
+			array(150)
+		);
+		$this->assertEquals(
+			GALLERY_ERROR | ERROR_UNSUPPORTED_OPERATION,
+			$ret->getErrorCode(),
+			'Error expected due to missing thumbnail toolkit'
+		);
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'squarethumb', 'mode', 'fit');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $mimeType) = $this->_toolkit->performOperation(
+			'test/composite',
+			'thumbnail',
+			'noThumbnailSrc',
+			'noThumbnailDest',
+			array(150)
+		);
+		$this->assertEquals(
+			GALLERY_ERROR | ERROR_UNSUPPORTED_OPERATION,
+			$ret->getErrorCode(),
+			'Error expected due to missing thumbnail toolkit 2'
+		);
+	}
+
+	public function testAlreadySquare() {
+		// Already square
+		list($ret, $mimeType) = $this->_toolkit->performOperation(
+			'test/thumbnail',
+			'thumbnail',
+			'squareSrc',
+			'squareDest',
+			array(150)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('test/thumbnail', $mimeType, 'Output mime type');
+	}
+
+	public function testCrop() {
+		global $gallery;
+
+		// Valid operation
+		$gallery->_squareQueue = array();
+		list($ret, $mimeType)  = $this->_toolkit->performOperation(
+			'test/image',
+			'thumbnail',
+			'cropSrc',
+			'cropDest',
+			array(150)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			'test/image',
+			$mimeType,
+			'Output mime type'
+		);
+		$this->assertEquals(
+			array('queue:crop', 'thumbnail'),
+			$gallery->_squareQueue,
+			'operations'
+		);
+
+		// Already small
+		$gallery->_squareQueue = array();
+		list($ret, $mimeType)  = $this->_toolkit->performOperation(
+			'test/crop',
+			'thumbnail',
+			'smallCropSrc',
+			'smallCropDest',
+			array(700)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('test/crop', $mimeType, 'Output mime type 2');
+		$this->assertEquals(array('crop'), $gallery->_squareQueue, 'operations 2');
+
+		unset($gallery->_squareQueue);
+	}
+
+	public function testFit() {
+		global $gallery;
+		$platform = GalleryUtilities::isA($gallery->getPlatform(), 'WinNtPlatform') ? new SquareThumbTestWinNtPlatform() : new SquareThumbTestUnixPlatform();
+		$gallery->setPlatform($platform);
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'squarethumb', 'mode', 'fit');
+
+		if ($ret) {
+			return $ret;
+		}
+		$destFile = $gallery->getConfig('data.gallery.tmp') . 'squareThumbTestFit';
+
+		// Valid operation
+		$gallery->_squareQueue = array();
+		list($ret, $mimeType)  = $this->_toolkit->performOperation(
+			'test/image',
+			'thumbnail',
+			'compositeSrc',
+			$destFile,
+			array(300)
+		);
+		@$platform->unlink($destFile);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('image/jpeg', $mimeType, 'Output mime type');
+		$this->assertEquals(array('thumbnail', 'composite'), $gallery->_squareQueue, 'operations');
+
+		// Already small
+		$gallery->_squareQueue = array();
+		list($ret, $mimeType)  = $this->_toolkit->performOperation(
+			'test/composite',
+			'thumbnail',
+			'smallCompositeSrc',
+			$destFile,
+			array(100)
+		);
+		@$platform->unlink($destFile);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('image/jpeg', $mimeType, 'Output mime type 2');
+		$this->assertEquals(array('composite'), $gallery->_squareQueue, 'operations 2');
+
+		unset($gallery->_squareQueue);
+	}
+
+	public function testFallbackToComposite() {
+		// Want to crop, but no toolkit support
+		global $gallery;
+		$platform = GalleryUtilities::isA($gallery->getPlatform(), 'WinNtPlatform') ? new SquareThumbTestWinNtPlatform() : new SquareThumbTestUnixPlatform();
+		$gallery->setPlatform($platform);
+		$destFile = $gallery->getConfig('data.gallery.tmp') . 'squareThumbTestFit';
+
+		$gallery->_squareQueue = array();
+		list($ret, $mimeType)  = $this->_toolkit->performOperation(
+			'test/composite',
+			'thumbnail',
+			'smallCompositeSrc',
+			$destFile,
+			array(100)
+		);
+		@$platform->unlink($destFile);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('image/jpeg', $mimeType, 'Output mime type');
+		$this->assertEquals(array('composite'), $gallery->_squareQueue, 'operations');
+
+		unset($gallery->_squareQueue);
+	}
+
+	public function testFallbackToCrop() {
+		// Want to fit, but no toolkit support
+		global $gallery;
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'squarethumb', 'mode', 'fit');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$gallery->_squareQueue = array();
+		list($ret, $mimeType)  = $this->_toolkit->performOperation(
+			'test/crop',
+			'thumbnail',
+			'smallCropSrc',
+			'smallCropDest',
+			array(700)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('test/crop', $mimeType, 'Output mime type');
+		$this->assertEquals(array('crop'), $gallery->_squareQueue, 'operations');
+
+		unset($gallery->_squareQueue);
+	}
+
+	public function testEstimateDimensions1() {
+		$item = new GalleryPhotoItem();
+		$item->setWidth(100);
+		$item->setHeight(300);
+
+		$derivative = new GalleryDerivativeImage();
+		$derivative->setWidth(0);
+		$derivative->setHeight(0);
+
+		// Operation is smaller than the smallest side
+		$derivative->setDerivativeOperations('thumbnail|50');
+
+		$this->_toolkit->estimateDimensions($derivative, $item);
+
+		$this->assertEquals(50, $derivative->getWidth());
+		$this->assertEquals(50, $derivative->getHeight());
+	}
+
+	public function testEstimateDimensions2() {
+		$item = new GalleryPhotoItem();
+		$item->setWidth(100);
+		$item->setHeight(300);
+
+		$derivative = new GalleryDerivativeImage();
+		$derivative->setWidth(0);
+		$derivative->setHeight(0);
+
+		// Operation is bigger than the smallest side
+		$derivative->setDerivativeOperations('thumbnail|200');
+
+		$this->_toolkit->estimateDimensions($derivative, $item);
+
+		$this->assertEquals(100, $derivative->getWidth());
+		$this->assertEquals(100, $derivative->getHeight());
+	}
+
+	public function testEstimateDimensions3() {
+		$item = new GalleryPhotoItem();
+		$item->setWidth(100);
+		$item->setHeight(300);
+
+		$derivative = new GalleryDerivativeImage();
+		$derivative->setWidth(0);
+		$derivative->setHeight(0);
+
+		// Operation is bigger than the biggest side
+		$derivative->setDerivativeOperations('thumbnail|400');
+
+		$this->_toolkit->estimateDimensions($derivative, $item);
+
+		$this->assertEquals(100, $derivative->getWidth());
+		$this->assertEquals(100, $derivative->getHeight());
+	}
+
+	public function testEstimateDimensions4() {
+		$source = new GalleryDerivativeImage();
+		$source->setWidth(100);
+		$source->setHeight(150);
+
+		$derivative = new GalleryDerivativeImage();
+		$derivative->setWidth(0);
+		$derivative->setHeight(0);
+
+		// Operation is bigger than the biggest side, but source is a derivative
+		$derivative->setDerivativeOperations('thumbnail|400');
+
+		$this->_toolkit->estimateDimensions($derivative, $source);
+
+		$this->assertEquals(400, $derivative->getWidth());
+		$this->assertEquals(400, $derivative->getHeight());
+	}
+}
+
+/**
+ * Test toolkit
+ * @package SquareThumb
+ * @subpackage PHPUnit
+ */
+class SquareThumbTestToolkit extends GalleryToolkit {
+	public function getProperty($mimeType, $propertyName, $sourceFilename) {
+		if ($propertyName != 'dimensions') {
+			return array(
+				GalleryCoreApi::error(ERROR_UNSUPPORTED_OPERATION),
+				null,
+			);
+		}
+
+		switch ($sourceFilename) {
+			case 'noCCSrc':
+			case 'noThumbnailSrc':
+			case 'cropSrc':
+			case 'compositeSrc':
+				return array(null, array(800, 600));
+
+			case 'squareSrc':
+				return array(null, array(700, 700));
+
+			case 'smallCropSrc':
+				return array(null, array(500, 1000));
+
+			case 'smallCompositeSrc':
+				return array(null, array(40, 60));
+
+			default:
+				return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null);
+		}
+	}
+
+	public function performOperation(
+		$mimeType,
+		$operationName,
+		$sourceFilename,
+		$destFilename,
+		$parameters,
+		$context = array()
+	) {
+		global $gallery;
+
+		if (isset($context['next.toolkit']) && $context['next.toolkit'] == $this) {
+			$gallery->_squareQueue[] = 'queue:' . $operationName;
+		} else {
+			$gallery->_squareQueue[] = $operationName;
+		}
+
+		switch ($operationName) {
+			case 'crop':
+				switch ($sourceFilename) {
+					case 'noThumbnailSrc':
+					case 'cropSrc':
+					case 'smallCropSrc':
+						$context['width'] = $context['height'] = min($context['width'], $context['height']);
+
+						return array(null, $mimeType, $context);
+				}
+
+				break;
+
+			case 'thumbnail':
+				if ($sourceFilename == 'squareSrc' || $sourceFilename == 'cropDest'
+					|| $sourceFilename == 'compositeSrc'
+				) {
+					return array(null, $mimeType, $context);
+				}
+
+				break;
+
+			case 'composite':
+				if (basename($sourceFilename) == 'squareThumbTestFit') {
+					return array(null, $mimeType, $context);
+				}
+
+				break;
+		}
+
+		return array(
+			GalleryCoreApi::error(
+				ERROR_BAD_PARAMETER,
+				__FILE__,
+				__LINE__,
+				"$operationName $sourceFilename"
+			),
+			null,
+			null,
+		);
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPlatform/WinNtPlatform.class');
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryPlatform/UnixPlatform.class');
+
+/**
+ * Test platforms
+ * @package SquareThumb
+ * @subpackage PHPUnit
+ */
+class SquareThumbTestWinNtPlatform extends WinNtPlatform {
+	public function copy($src, $dest) {
+		if ($src == 'smallCompositeSrc' || basename($src) == 'squareThumbTestFit') {
+			return true;
+		}
+
+		return parent::copy($src, $dest);
+	}
+}
+
+class SquareThumbTestUnixPlatform extends UnixPlatform {
+	public function copy($src, $dest) {
+		if ($src == 'smallCompositeSrc' || basename($src) == 'squareThumbTestFit') {
+			return true;
+		}
+
+		return parent::copy($src, $dest);
+	}
+}

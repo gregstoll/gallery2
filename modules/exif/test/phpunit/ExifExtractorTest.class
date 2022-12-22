@@ -1,0 +1,263 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test ExifExtractor functionality
+ *
+ * @package Exif
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @author Georg Rehfeld <rehfeld@georg-rehfeld.de>
+ * @version $Revision: 17580 $
+ */
+class ExifExtractorTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	/**
+	 * Create an album for testing
+	 */
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+		global $gallery;
+
+		// Create a new subalbum and add some jpegs
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		list($ret, $lockId) = GalleryCoreApi::acquireReadLock($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$photoIds   = array();
+		$g2Base     = GalleryCoreApi::getCodeBasePath();
+		$imagePaths = array(
+			$g2Base . 'modules/exif/test/data/CanonS30.small.jpg',
+			$g2Base . 'modules/core/test/data/test2.gif',
+			$g2Base . 'modules/exif/test/data/CanonS30.small.jpg',
+			$g2Base . 'modules/exif/test/data/iptc-irfanview.jpg',
+			$g2Base . 'modules/core/test/data/test1.jpg',
+		);
+
+		for ($i = 0; $i < count($imagePaths); $i++) {
+			list($ret, $photoId) = $this->_addPhoto(
+				$this->_album->getId(),
+				$imagePaths[$i],
+				$i + 1
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+			$photoIds[] = $photoId;
+		}
+		$ret = GalleryCoreApi::releaseLocks($lockId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'exif');
+
+		if ($ret || !isset($module)) {
+			return $ret;
+		}
+		list($ret, $exif) = GalleryCoreApi::newFactoryInstance(
+			'ExifInterface_1_0',
+			'ExifExtractor'
+		);
+
+		if ($ret || !isset($exif)) {
+			return $ret;
+		}
+
+		$this->_photoIds = $photoIds;
+		$this->_exif     = $exif;
+	}
+
+	public function _addPhoto($parentId, $imagePath, $index) {
+		list($ret, $photo) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryPhotoItem');
+
+		if ($ret) {
+			return array($ret, null);
+		}
+		list($ret, $mimeType) = GalleryCoreApi::getMimeType($imagePath);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+		$ret = $photo->create(
+			$parentId,
+			$imagePath,
+			$mimeType,
+			'testitem_' . time() . substr($imagePath, -4)
+		);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+		$photo->setTitle("Item #$index");
+		$photo->setSummary("Summary $index");
+		$photo->setDescription("Description $index");
+		$ret = $photo->save();
+
+		if ($ret) {
+			return array($ret, null);
+		}
+		// add thumbnail
+		list($ret, $thumbId) = $this->_addDerivative(
+			$photo,
+			'thumbnail',
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+			'thumbnail|150'
+		);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		return array(null, $photo->getId());
+	}
+
+	public function _addDerivative(
+		$photo,
+		$toolkitType,
+		$derivativeType,
+		$derivativeOperation
+	) {
+		list($ret, $toolkit, $outputMimeType) = GalleryCoreApi::getToolkitByOperation($photo->getMimeType(), $toolkitType);
+
+		if ($ret || !isset($toolkit)) {
+			return array($ret, null);
+		}
+		list($ret, $derivative) = GalleryCoreApi::newFactoryInstanceByHint('GalleryDerivative', $photo->getEntityType());
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		if (!isset($derivative)) {
+			return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
+		}
+
+		$ret = $derivative->create($photo->getId(), $derivativeType);
+
+		if ($ret) {
+			return array($ret, null);
+		}
+		$derivative->setDerivativeSourceId($photo->getId());
+		$derivative->setDerivativeOperations($derivativeOperation);
+		$derivative->setMimeType($outputMimeType);
+		$ret = $derivative->save();
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		return array(null, $derivative->getId());
+	}
+
+	public function testOneItemAllDataExif() {
+		list($ret, $data) = $this->_exif->getMetaData($this->_photoIds[0]);
+		$this->assertTrue(!$ret && isset($data[$this->_photoIds[0]]));
+		$this->assertEquals(
+			'1/60 sec',
+			$data[$this->_photoIds[0]]['ShutterSpeedValue']['value']
+		);
+	}
+
+	public function testOneItemAllDataIptc() {
+		list($ret, $data) = $this->_exif->getMetaData($this->_photoIds[3]);
+		$this->assertTrue(!$ret && isset($data[$this->_photoIds[3]]));
+		$this->assertEquals(
+			'Caption: IPTC/Caption',
+			$data[$this->_photoIds[3]]['IPTC/Caption']['value']
+		);
+	}
+
+	public function testMultiItemAllData() {
+		list($ret, $data) = $this->_exif->getMetaData(
+			array($this->_photoIds[0], $this->_photoIds[2], $this->_photoIds[3])
+		);
+		$this->assertTrue(!$ret && isset($data));
+		$this->assertEquals(3, count($data), 'Data size');
+		$this->assertEquals(
+			'1/60 sec',
+			$data[$this->_photoIds[0]]['ShutterSpeedValue']['value']
+		);
+		$this->assertEquals(
+			sprintf('%.2f mm', 21.31),
+			$data[$this->_photoIds[2]]['FocalLength']['value']
+		);
+		$this->assertEquals(
+			'Caption: IPTC/Caption',
+			$data[$this->_photoIds[3]]['IPTC/Caption']['value']
+		);
+	}
+
+	public function testMultiItemMixedTypeAllData() {
+		list($ret, $data) = $this->_exif->getMetaData($this->_photoIds);
+		$this->assertTrue(!$ret && isset($data));
+		$this->assertEquals(4, count($data), 'Data size');
+		$this->assertEquals(
+			'1/60 sec',
+			$data[$this->_photoIds[0]]['ShutterSpeedValue']['value']
+		);
+		$this->assertEquals(
+			sprintf('%.2f mm', 21.31),
+			$data[$this->_photoIds[2]]['FocalLength']['value']
+		);
+		$this->assertEquals(
+			'Caption: IPTC/Caption',
+			$data[$this->_photoIds[3]]['IPTC/Caption']['value']
+		);
+	}
+
+	public function testMultiItemSomeData() {
+		list($ret, $data) = $this->_exif->getMetaData(
+			$this->_photoIds,
+			array('DateTime', 'ShutterSpeedValue', 'IPTC/Byline')
+		);
+		$this->assertTrue(!$ret && isset($data));
+		$this->assertEquals(4, count($data), 'Data size');
+		$this->assertEquals(
+			'1/60 sec',
+			$data[$this->_photoIds[0]]['ShutterSpeedValue']['value']
+		);
+		$this->assertTrue(!isset($data[$this->_photoIds[2]]['FocalLength']));
+		$this->assertTrue(!isset($data[$this->_photoIds[2]]['IPTC/Byline']));
+		$this->assertEquals(
+			'Byline: IPTC/Byline',
+			$data[$this->_photoIds[3]]['IPTC/Byline']['value']
+		);
+		$this->assertTrue(!isset($data[$this->_photoIds[3]]['FocalLength']));
+	}
+}

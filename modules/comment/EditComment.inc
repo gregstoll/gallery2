@@ -90,7 +90,7 @@ class EditCommentController extends GalleryController {
 		$error[] = 'form[error][comment][missing]';
 	    }
 
-	    if (!in_array($form['publishStatus'],
+	    if (!in_array((int)$form['publishStatus'],
 			  array(COMMENT_PUBLISH_STATUS_PUBLISHED,
 				COMMENT_PUBLISH_STATUS_UNPUBLISHED,
 				COMMENT_PUBLISH_STATUS_SPAM))) {

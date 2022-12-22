@@ -1,0 +1,397 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test the ShowAllComments view
+ *
+ * @package Comment
+ * @subpackage PHPUnit
+ * @author Andy Staudacher <ast@gmx.ch>
+ * @version $Revision: 17679 $
+ */
+class ShowAllCommentsViewTest extends GalleryViewTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'comment.ShowAllComments');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'comment');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'comment', 'comments.moderate', 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_album->getId(),
+			$gallery->getActiveUserId(),
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_album->getId(),
+			$gallery->getActiveUserId(),
+			'comment.all'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_item) = $this->_createRandomDataItem($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $this->_item2) = $this->_createRandomDataItem($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create 4 comments
+		for ($i = 0; $i < 4; $i++) {
+			$itemId = $i < 2 ? $this->_item->getId() : $this->_item2->getId();
+
+			list($ret, $this->_comment[$i]) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryComment');
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertTrue(isset($this->_comment[$i]), 'Missing comment instance');
+			$this->_comment[$i]->create($itemId);
+			$this->_comment[$i]->setCommenterId($gallery->getActiveUserId());
+			$this->_comment[$i]->setHost('127.0.0.1');
+			$this->_comment[$i]->setComment('this is a test comment #' . $i);
+			$this->_comment[$i]->setDate(time() + $i);
+
+			if ($i == 3) {
+				$this->_comment[$i]->setPublishStatus(COMMENT_PUBLISH_STATUS_UNPUBLISHED);
+			}
+			$ret = $this->_comment[$i]->save();
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$ret = GalleryCoreApi::removeUserPermission(
+			$this->_item2->getId(),
+			$gallery->getActiveUserId(),
+			'comment.delete'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testShowAllComments() {
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+
+		$results = $this->loadTemplate();
+
+		if (empty($results)) {
+			$this->fail('No results returned');
+
+			return null;
+		}
+
+		$this->assertEquals(
+			array(
+				'body' => 'modules/comment/templates/ShowAllComments.tpl',
+			),
+			$results
+		);
+
+		$data = $this->_template->getVariable('ShowAllComments');
+		$this->assertEquals(3, count($data['comments']), 'comment count');
+		$this->assertEquals((array)$this->_album, $data['item'], 'item');
+
+		foreach ($this->_comment as $comment) {
+			foreach (array('delete', 'edit', 'markSpam') as $canFlag) {
+				$can[$comment->getid()][$canFlag] = true;
+			}
+		}
+		$can[$this->_comment[2]->getId()]['delete'] = false;
+		$can[$this->_comment[3]->getId()]['delete'] = false;
+
+		$this->assertEquals(sort($can), sort($data['can']), 'permissions');
+	}
+
+	public function testShowAllCommentsFailsWithoutViewItemPermission() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+
+		$ret = GalleryCoreApi::removeUserPermission(
+			$this->_album->getId(),
+			$gallery->getActiveUserId(),
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->loadTemplate(ERROR_MISSING_OBJECT);
+	}
+
+	public function testShowAllCommentsRequiresViewItemPermissionForComments() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+
+		$ret = GalleryCoreApi::removeUserPermission(
+			$this->_item->getId(),
+			$gallery->getActiveUserId(),
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->loadTemplate();
+
+		if (empty($results)) {
+			$this->fail('No results returned');
+
+			return null;
+		}
+
+		$this->assertEquals(
+			array(
+				'body' => 'modules/comment/templates/ShowAllComments.tpl',
+			),
+			$results
+		);
+
+		$data = $this->_template->getVariable('ShowAllComments');
+		$this->assertEquals(1, count($data['comments']), 'comment count');
+		$this->assertEquals($this->_comment[2]->getId(), $data['comments'][0]['id'], 'comment id');
+		$this->assertEquals((array)$this->_album, $data['item'], 'item');
+	}
+
+	public function testShowAllCommentsAddsNoCacheWithoutViewPermission() {
+		global $gallery;
+		$gallery->_phpVm = new UnitTestPhpVm();
+		$gallery->_phpVm->setReply('time', array(), strtotime('Sun, 16 Mar 2008 21:00:00 GMT'));
+		$gallery->_phpVm->setReply('headers_sent', array(), false);
+		$gallery->_phpVm->setReply('header', array('Cache-Control: no-cache', ''), true);
+		$gallery->_phpVm->setReply('header', array('Pragma: no-cache', ''), true);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Sun, 09 Mar 2008 21:00:00 GMT', ''),
+			true
+		);
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+
+		$template = new UnitTestTemplate();
+		$template->setVariable(
+			'head',
+			array(
+				'meta' => array(),
+			)
+		);
+		$this->_template =& $template;
+		$results         = $this->loadTemplate();
+
+		if (empty($results)) {
+			$this->fail('No results returned');
+
+			return null;
+		}
+
+		$head = $template->getVariable('head');
+		$this->assertEquals(
+			array(
+				array(
+					'name'        => 'Cache-Control',
+					'content'     => 'no-cache',
+					'isHttpEquiv' => true,
+				),
+				array(
+					'name'        => 'Pragma',
+					'content'     => 'no-cache',
+					'isHttpEquiv' => true,
+				),
+				array(
+					'name'        => 'Expires',
+					'content'     => 'Sun, 09 Mar 2008 21:00:00 GMT',
+					'isHttpEquiv' => true,
+				),
+			),
+			$head['meta']
+		);
+		$this->assertTrue($gallery->_phpVm->isComplete(), $gallery->_phpVm->getRemaining());
+	}
+
+	public function testShowAllCommentsAddsNoCacheWithoutCoreViewPermission() {
+		global $gallery;
+		$gallery->_phpVm = new UnitTestPhpVm();
+		$gallery->_phpVm->setReply('time', array(), strtotime('Sun, 16 Mar 2008 21:00:00 GMT'));
+		$gallery->_phpVm->setReply('headers_sent', array(), false);
+		$gallery->_phpVm->setReply('header', array('Cache-Control: no-cache', ''), true);
+		$gallery->_phpVm->setReply('header', array('Pragma: no-cache', ''), true);
+		$gallery->_phpVm->setReply(
+			'header',
+			array('Expires: Sun, 09 Mar 2008 21:00:00 GMT', ''),
+			true
+		);
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+
+		list($ret, $anonymousUserId) = GalleryCoreApi::getAnonymousUserId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::removeUserPermission(
+			$this->_item->getId(),
+			$anonymousUserId,
+			'core.view',
+			true
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$template = new UnitTestTemplate();
+		$template->setVariable(
+			'head',
+			array(
+				'meta' => array(),
+			)
+		);
+		$this->_template =& $template;
+		$results         = $this->loadTemplate();
+
+		if (empty($results)) {
+			$this->fail('No results returned');
+
+			return null;
+		}
+
+		$head = $template->getVariable('head');
+		$this->assertEquals(
+			array(
+				array(
+					'name'        => 'Cache-Control',
+					'content'     => 'no-cache',
+					'isHttpEquiv' => true,
+				),
+				array(
+					'name'        => 'Pragma',
+					'content'     => 'no-cache',
+					'isHttpEquiv' => true,
+				),
+				array(
+					'name'        => 'Expires',
+					'content'     => 'Sun, 09 Mar 2008 21:00:00 GMT',
+					'isHttpEquiv' => true,
+				),
+			),
+			$head['meta']
+		);
+		$this->assertTrue($gallery->_phpVm->isComplete(), $gallery->_phpVm->getRemaining());
+	}
+
+	public function testShowAllCommentsDoesNotAddNoCacheWithViewPermission() {
+		global $gallery;
+		$gallery->_phpVm = new UnitTestPhpVm();
+		GalleryUtilities::putRequestVariable('itemId', $this->_item->getId());
+		list($ret, $anonymousUserId) = GalleryCoreApi::getAnonymousUserId();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$anonymousUserId,
+			'comment.view',
+			true
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$anonymousUserId,
+			'core.view',
+			true
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$template = new UnitTestTemplate();
+		$template->setVariable(
+			'head',
+			array(
+				'meta' => array(),
+			)
+		);
+		$this->_template =& $template;
+		$results         = $this->loadTemplate();
+
+		if (empty($results)) {
+			$this->fail('No results returned');
+
+			return null;
+		}
+
+		$head = $template->getVariable('head');
+		$this->assertEquals(array(), $head['meta']);
+		$this->assertTrue($gallery->_phpVm->isComplete(), $gallery->_phpVm->getRemaining());
+	}
+}

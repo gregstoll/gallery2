@@ -1,0 +1,681 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/exif/classes/ExifHelper.class');
+
+/**
+ * AdminExif controller tests
+ * @package Exif
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @author Georg Rehfeld <rehfeld@georg-rehfeld.de>
+ * @version $Revision: 17580 $
+ */
+class AdminExifControllerTest extends GalleryControllerTestCase {
+	public $_save = array();
+
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'exif.AdminExif');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_save['summary']) = ExifHelper::getProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_save['detailed']) = ExifHelper::getProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'exif');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = ExifHelper::setDefaultProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = ExifHelper::setDefaultProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$ret = ExifHelper::setProperties(EXIF_SUMMARY, $this->_save['summary']);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = ExifHelper::setProperties(EXIF_DETAILED, $this->_save['detailed']);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testSaveAvailableToSummary() {
+		GalleryUtilities::putRequestVariable('form[available][0]', 'SubjectLocation');
+		GalleryUtilities::putRequestVariable('form[available][1]', 'Sharpness');
+		GalleryUtilities::putRequestVariable('form[available][2]', 'IPTC/Keywords');
+		GalleryUtilities::putRequestVariable('form[action][availableToSummary]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'added' => array(
+						'summary' => 3,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Make sure they're there
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(in_array('SubjectLocation', $properties));
+		$this->assertTrue(in_array('Sharpness', $properties));
+		$this->assertTrue(in_array('IPTC/Keywords', $properties));
+	}
+
+	public function testRemoveFromSummary() {
+		GalleryUtilities::putRequestVariable('form[summary][0]', 'Make');
+		GalleryUtilities::putRequestVariable('form[summary][1]', 'ISO');
+		GalleryUtilities::putRequestVariable('form[summary][2]', 'IPTC/CopyrightNotice');
+		GalleryUtilities::putRequestVariable('form[action][removeFromSummary]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'removed' => array(
+						'summary' => 3,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Make sure they're gone
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!in_array('Make', $properties));
+		$this->assertTrue(!in_array('ISO', $properties));
+		$this->assertTrue(!in_array('IPTC/CopyrightNotice', $properties));
+	}
+
+	public function testRemoveFromSummaryMissing() {
+		GalleryUtilities::putRequestVariable('form[action][removeFromSummary]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][summary][missing]'),
+			),
+			$results
+		);
+	}
+
+	public function testMoveUpSummary() {
+		// The first summary entry, can not be moved up.
+		GalleryUtilities::putRequestVariable('form[summary][0]', 'Make');
+		// A summary entry from the middle.
+		GalleryUtilities::putRequestVariable('form[summary][1]', 'ISO');
+		// The last summary entry.
+		GalleryUtilities::putRequestVariable('form[summary][2]', 'IPTC/CopyrightNotice');
+		GalleryUtilities::putRequestVariable('form[action][moveUpSummary]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'movedUp' => array(
+						'summary' => 2,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify the new positions
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// check for the first entry to be still the first entry.
+		$this->assertEquals('Make', $properties[0], 'first entry moved up/disappeared???');
+		// ISO should have been moved up.
+		$this->assertEquals('ISO', $properties[7], 'middle entry did not move up???');
+		// The previous next to last item shall be our last item now.
+		$this->assertEquals('IPTC/Caption', $properties[count($properties) - 1]);
+	}
+
+	public function testMoveUpSummaryMissing() {
+		GalleryUtilities::putRequestVariable('form[action][moveUpSummary]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][summary][missing]'),
+			),
+			$results
+		);
+	}
+
+	public function testMoveDownSummary() {
+		// The first summary entry.
+		GalleryUtilities::putRequestVariable('form[summary][0]', 'Make');
+		// A summary entry from the middle.
+		GalleryUtilities::putRequestVariable('form[summary][1]', 'ISO');
+		// The last summary entry, cannot be moved down.
+		GalleryUtilities::putRequestVariable('form[summary][2]', 'IPTC/CopyrightNotice');
+		GalleryUtilities::putRequestVariable('form[action][moveDownSummary]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'movedDown' => array(
+						'summary' => 2,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify the new positions
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Count summary entries, must be equal to before the move, one has to adapt.
+		$this->assertEquals(14, count($properties));
+		// Must have been moved down.
+		$this->assertEquals('Make', $properties[1]);
+		// Ditto.
+		$this->assertEquals('ISO', $properties[9]);
+		// Last entry must be the same.
+		$this->assertEquals('IPTC/CopyrightNotice', $properties[count($properties) - 1]);
+	}
+
+	public function testMoveDownSummaryMissing() {
+		GalleryUtilities::putRequestVariable('form[action][moveDownSummary]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][summary][missing]'),
+			),
+			$results
+		);
+	}
+
+	public function testResetSummary() {
+		// Remove all properties
+		$ret = ExifHelper::setProperties(EXIF_SUMMARY, array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][resetSummary]', 1);
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'restored' => array(
+						'summary' => 1,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Make sure they're all back again
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(14, sizeof($properties));
+		$this->assertEquals('Make', $properties[0]);
+		$this->assertEquals('ISO', $properties[8]);
+		$this->assertEquals('IPTC/CopyrightNotice', $properties[count($properties) - 1]);
+	}
+
+	public function testSaveAvailableToDetailed() {
+		GalleryUtilities::putRequestVariable('form[available][0]', 'SubjectLocation');
+		GalleryUtilities::putRequestVariable('form[available][1]', 'FocusMode');
+		GalleryUtilities::putRequestVariable(
+			'form[available][2]',
+			'IPTC/OriginalTransmissionReference'
+		);
+		GalleryUtilities::putRequestVariable('form[action][availableToDetailed]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'added' => array(
+						'detailed' => 3,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Make sure they're there
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(in_array('SubjectLocation', $properties));
+		$this->assertTrue(in_array('Sharpness', $properties));
+		$this->assertTrue(in_array('IPTC/Keywords', $properties));
+	}
+
+	public function testRemoveFromDetailed() {
+		GalleryUtilities::putRequestVariable('form[detailed][0]', 'Make');
+		GalleryUtilities::putRequestVariable('form[detailed][1]', 'ISO');
+		GalleryUtilities::putRequestVariable('form[detailed][2]', 'IPTC/CopyrightNotice');
+		GalleryUtilities::putRequestVariable('form[action][removeFromDetailed]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'removed' => array(
+						'detailed' => 3,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Make sure they're gone
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!in_array('Make', $properties));
+		$this->assertTrue(!in_array('ISO', $properties));
+		$this->assertTrue(!in_array('IPTC/CopyrightNotice', $properties));
+	}
+
+	public function testRemoveFromDetailedMissing() {
+		GalleryUtilities::putRequestVariable('form[action][removeFromDetailed]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][detailed][missing]'),
+			),
+			$results
+		);
+	}
+
+	public function testMoveUpDetailed() {
+		// The very first entry, which can't be moved up.
+		GalleryUtilities::putRequestVariable('form[detailed][0]', 'Make');
+		// Entries from the middle.
+		GalleryUtilities::putRequestVariable('form[detailed][1]', 'ISO');
+		GalleryUtilities::putRequestVariable('form[detailed][2]', 'IPTC/CopyrightNotice');
+		// The very last entry.
+		GalleryUtilities::putRequestVariable('form[detailed][3]', 'SubjectDistance');
+		GalleryUtilities::putRequestVariable('form[action][moveUpDetailed]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'movedUp' => array(
+						'detailed' => 3,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify the new positions
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('Make', $properties[0], 'First entry moved up/disappeared???');
+		$this->assertEquals('ISO', $properties[7], 'ISO did not move up???');
+		$this->assertEquals(
+			'IPTC/CopyrightNotice',
+			$properties[12],
+			'IPTC/CopyrightNotice did not move up???'
+		);
+		$this->assertEquals(
+			'SubjectDistance',
+			$properties[28],
+			'SubjectDistance is not the last entry anymore???'
+		);
+	}
+
+	public function testMoveUpDetailedMissing() {
+		GalleryUtilities::putRequestVariable('form[action][moveUpDetailed]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][detailed][missing]'),
+			),
+			$results
+		);
+	}
+
+	public function testMoveDownDetailed() {
+		// The very first entry.
+		GalleryUtilities::putRequestVariable('form[detailed][0]', 'Make');
+		// Entries from the middle.
+		GalleryUtilities::putRequestVariable('form[detailed][1]', 'ISO');
+		GalleryUtilities::putRequestVariable('form[detailed][2]', 'IPTC/CopyrightNotice');
+		// The very last entry, which can't be moved down.
+		GalleryUtilities::putRequestVariable('form[detailed][3]', 'SubjectDistance');
+		GalleryUtilities::putRequestVariable('form[action][moveDownDetailed]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'movedDown' => array(
+						'detailed' => 3,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify the new positions
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('Make', $properties[1], 'Make should have been moved down???');
+		$this->assertEquals('ISO', $properties[9], 'ISO should have been moved down???');
+		$this->assertEquals(
+			'IPTC/CopyrightNotice',
+			$properties[14],
+			'IPTC/CopyrightNotice should have been moved down???'
+		);
+		$this->assertEquals(
+			'SubjectDistance',
+			$properties[29],
+			'SubjectDistance is not the last entry anymore???'
+		);
+	}
+
+	public function testMoveDownDetailedMissing() {
+		GalleryUtilities::putRequestVariable('form[action][moveDownDetailed]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][detailed][missing]'),
+			),
+			$results
+		);
+	}
+
+	public function testResetDetailed() {
+		// Remove all properties
+		$ret = ExifHelper::setProperties(EXIF_DETAILED, array());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][resetDetailed]', 1);
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'restored' => array(
+						'detailed' => 1,
+					),
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Make sure they're all back again
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Spot check
+		$this->assertEquals(
+			30,
+			sizeof($properties),
+			'Reset did not return the right number of entries???'
+		);
+		$this->assertEquals('Make', $properties[0]);
+		$this->assertEquals('ISO', $properties[8]);
+		$this->assertEquals('IPTC/CopyrightNotice', $properties[13]);
+		$this->assertEquals('SubjectDistance', $properties[29]);
+	}
+
+	public function testSaveAddOptionExif() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[item][description]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $addOption) = GalleryCoreApi::getPluginParameter('module', 'exif', 'addOption');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(EXIF_ITEM_DESCRIPTION, (int)$addOption);
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'exif', 'addOption', 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $addOption) = GalleryCoreApi::getPluginParameter('module', 'exif', 'addOption');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(0, (int)$addOption);
+	}
+
+	public function testSaveAddOptionExifIptcAndRotate() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[item][description]', 1);
+		GalleryUtilities::putRequestVariable('form[item][keywords]', 1);
+		GalleryUtilities::putRequestVariable('form[item][exifrotate]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'exif.AdminExif',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $addOption) = GalleryCoreApi::getPluginParameter('module', 'exif', 'addOption');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			(EXIF_ITEM_DESCRIPTION | IPTC_ITEM_KEYWORDS | EXIF_ITEM_ROTATE),
+			(int)$addOption
+		);
+	}
+}

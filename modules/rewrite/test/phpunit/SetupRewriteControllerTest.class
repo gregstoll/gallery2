@@ -1,0 +1,362 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * SetupRewrite controller tests
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class SetupRewriteControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'rewrite.SetupRewrite');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'rewrite');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_controller->_parserIds = array('setuprewritemock');
+
+		// Set up our mock parser
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'rewrite',
+			'parserId',
+			'setuprewritemock'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		GalleryUtilities::putRequestVariable('phpunit[config]', 1);
+
+		// Make sure we use the mock parser
+		GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
+		list($ret, $parser) = RewriteHelper::getRewriteParser(true);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('setuprewritemock', $parser->getParserId(), 'parserId');
+	}
+
+	public function testSave1() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', 'parserId', '');
+
+		if ($ret) {
+			return $ret;
+		}
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[parser]', 'setuprewritemock');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminPlugins',
+				),
+				'error'    => array(),
+				'status'   => array(
+					'saved' => 1,
+				),
+			),
+			$results,
+			'handleRequest'
+		);
+
+		list($ret, $parserId) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'parserId'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('setuprewritemock', $parserId, 'parserId');
+
+		list($ret, $parser) = RewriteHelper::getRewriteParser();
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $result) = $parser->needsConfiguration();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertFalse($result, 'testSave');
+	}
+
+	public function testSave2() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', 'parserId', '');
+
+		if ($ret) {
+			return $ret;
+		}
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[parser]', 'setuprewritemock');
+		GalleryUtilities::putRequestVariable('phpunit[config]', 0);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'rewrite.SetupRewrite',
+				),
+				'error'    => array(),
+				'status'   => array(
+					'saved' => 1,
+				),
+			),
+			$results,
+			'handleRequest'
+		);
+
+		list($ret, $parserId) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'parserId'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('setuprewritemock', $parserId, 'parserId');
+
+		list($ret, $parser) = RewriteHelper::getRewriteParser();
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $result) = $parser->needsConfiguration();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue($result);
+	}
+
+	public function testBack() {
+		GalleryUtilities::putRequestVariable('form[action][back]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'rewrite.SetupRewrite',
+				),
+				'error'    => array(),
+				'status'   => array(),
+			),
+			$results,
+			'handleRequest'
+		);
+
+		list($ret, $parserId) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'parserId'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('', $parserId, 'parserId');
+	}
+
+	public function testDone() {
+		GalleryUtilities::putRequestVariable('form[action][done]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'core.AdminPlugins',
+				),
+				'error'    => array(),
+				'status'   => array(),
+			),
+			$results,
+			'handleRequest'
+		);
+	}
+
+	public function testRefresh() {
+		GalleryUtilities::putRequestVariable('form[action][refresh]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'rewrite.SetupRewrite',
+				),
+				'error'    => array(),
+				'status'   => array(),
+			),
+			$results,
+			'handleRequest'
+		);
+	}
+
+	public function testTestParser1() {
+		GalleryUtilities::putRequestVariable('form[action][testParser]', 1);
+		GalleryUtilities::putRequestVariable('form[phpunit]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'rewrite.SetupRewrite',
+				),
+				'error'    => array(),
+				'status'   => array(
+					'testSaved' => 1,
+				),
+			),
+			$results,
+			'handleRequest'
+		);
+	}
+
+	public function testTestParser2() {
+		GalleryUtilities::putRequestVariable('form[action][testParser]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'rewrite.SetupRewrite',
+				),
+				'error'    => array('form[error][test]'),
+				'status'   => array(),
+			),
+			$results,
+			'handleRequest'
+		);
+	}
+
+	public function testAdminParser1() {
+		GalleryUtilities::putRequestVariable('form[action][adminParser]', 1);
+		GalleryUtilities::putRequestVariable('form[phpunit]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'rewrite.SetupRewrite',
+				),
+				'error'    => array(),
+				'status'   => array(
+					'adminSaved' => 1,
+				),
+			),
+			$results,
+			'handleRequest'
+		);
+
+		GalleryUtilities::removeRequestVariable('form[action][adminParser]');
+		GalleryUtilities::removeRequestVariable('form[phpunit]');
+	}
+
+	public function testAdminParser2() {
+		GalleryUtilities::putRequestVariable('form[action][adminParser]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'rewrite.SetupRewrite',
+				),
+				'error'    => array('form[error][admin]'),
+				'status'   => array(),
+			),
+			$results,
+			'handleRequest'
+		);
+	}
+}
+
+/**
+ * Mock rewrite parser for this test
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ */
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteParser.class');
+class SetupRewriteMockParser extends RewriteParser {
+	public function __construct() {
+		$this->_setParserId('setuprewritemock');
+		$this->_setParserType('mock');
+	}
+
+	public function needsConfiguration() {
+		return array(
+			null,
+			GalleryUtilities::getRequestVariables('phpunit[config]') == 0,
+		);
+	}
+
+	public function handleTestResultsRequest($form) {
+		$error = $status = array();
+
+		if (isset($form['phpunit'])) {
+			$status['testSaved'] = 1;
+		} else {
+			$error[] = 'form[error][test]';
+		}
+
+		return array(null, $error, $status);
+	}
+
+	public function handleAdminParserRequest($form) {
+		$error = $status = array();
+
+		if (isset($form['phpunit'])) {
+			$status['adminSaved'] = 1;
+		} else {
+			$error[] = 'form[error][admin]';
+		}
+
+		return array(null, $error, $status);
+	}
+}

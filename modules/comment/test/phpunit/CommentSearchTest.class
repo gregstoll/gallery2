@@ -1,0 +1,430 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test CommentSearch functionality
+ *
+ * @package Comment
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class CommentSearchTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $moduleStatusList) = GalleryCoreApi::fetchPluginStatus('module');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (empty($moduleStatusList['search']['active'])) {
+			return $this->skip();
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'comment');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'comment', 'comments.moderate', 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $groupId) = GalleryCoreApi::getPluginParameter('module', 'core', 'id.everybodyGroup');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_randomKey = 'a' . mt_rand(1, 100000) . 'z';
+
+		$this->_item = array();
+
+		for ($j = 0; $j < 4; $j++) {
+			list($ret, $this->_item[$j]) = $this->_createRandomDataItem($this->_getRootId());
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->_markForCleanup($this->_item[$j]);
+
+			// Create 3 comments.  The 3rd one is unpublished.
+			for ($i = 0; $i < 3; $i++) {
+				list($ret, $this->_comment[$j][$i]) = GalleryCoreApi::newFactoryInstance('GalleryEntity', 'GalleryComment');
+
+				if ($ret) {
+					return $ret;
+				}
+
+				$this->assertTrue(isset($this->_comment[$j][$i]), 'Missing comment instance');
+				$this->_comment[$j][$i]->create($this->_item[$j]->getId());
+				$this->_comment[$j][$i]->setCommenterId($gallery->getActiveUserId());
+				$this->_comment[$j][$i]->setHost('127.0.0.1');
+				$this->_comment[$j][$i]->setSubject($this->_randomKey . ": test subject($j,$i)");
+				$this->_comment[$j][$i]->setComment($this->_randomKey . ": test comment($j,$i)");
+
+				if ($j == 3 && $i == 1) {
+					$this->_comment[$j][$i]->setAuthor($this->_randomKey . ": test author($j,$i)");
+				}
+				$this->_comment[$j][$i]->setDate(time());
+
+				if ($i == 2) {
+					$this->_comment[$j][$i]->setPublishStatus(COMMENT_PUBLISH_STATUS_UNPUBLISHED);
+				}
+				$ret = $this->_comment[$j][$i]->save();
+
+				if ($ret) {
+					return $ret;
+				}
+			}
+
+			$ret = GalleryCoreApi::removeItemPermissions($this->_item[$j]->getId());
+
+			if ($ret) {
+				return $ret;
+			}
+
+			switch ($j) {
+				case 0:
+					$ret = GalleryCoreApi::addUserPermission(
+						$this->_item[$j]->getId(),
+						$gallery->getActiveUserId(),
+						'core.view'
+					);
+
+					if ($ret) {
+						return $ret;
+					}
+
+					break;
+
+				case 1:
+					$ret = GalleryCoreApi::addGroupPermission(
+						$this->_item[$j]->getId(),
+						$groupId,
+						'comment.view'
+					);
+
+					if ($ret) {
+						return $ret;
+					}
+
+					break;
+
+				case 2:
+					$ret = GalleryCoreApi::addUserPermission(
+						$this->_item[$j]->getId(),
+						$gallery->getActiveUserId(),
+						'comment.view'
+					);
+
+					if ($ret) {
+						return $ret;
+					}
+					$ret = GalleryCoreApi::addUserPermission(
+						$this->_item[$j]->getId(),
+						$gallery->getActiveUserId(),
+						'core.view'
+					);
+
+					if ($ret) {
+						return $ret;
+					}
+
+					break;
+
+				case 3:
+					$ret = GalleryCoreApi::addGroupPermission(
+						$this->_item[$j]->getId(),
+						$groupId,
+						'comment.view'
+					);
+
+					if ($ret) {
+						return $ret;
+					}
+					$ret = GalleryCoreApi::addGroupPermission(
+						$this->_item[$j]->getId(),
+						$groupId,
+						'core.view'
+					);
+
+					if ($ret) {
+						return $ret;
+					}
+
+					break;
+			}
+		}
+
+		list($ret, $this->_commentSearch) = GalleryCoreApi::newFactoryInstance(
+			'GallerySearchInterface_1_0',
+			'GalleryCommentSearch'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(isset($this->_commentSearch), 'Missing GalleryCommentSearch instance');
+
+		list($ret, $this->_module) = GalleryCoreApi::loadPlugin('module', 'comment');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_user = $gallery->getActiveUser();
+	}
+
+	public function testFetchSearchModuleInfo() {
+		list($ret, $info) = $this->_commentSearch->getSearchModuleInfo();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(isset($info['name']), 'name missing');
+		$this->assertTrue(isset($info['description']), 'description missing');
+		$this->assertTrue(isset($info['options']), 'options missing');
+		$this->assertTrue(is_array($info['options']), 'options not an array');
+		$this->assertTrue(
+			isset($info['options']['comments']['description']),
+			'options:comments description missing'
+		);
+		$this->assertTrue(
+			!empty($info['options']['comments']['enabled']),
+			'options:comments not enabled'
+		);
+	}
+
+	public function testSearchAll() {
+		list($ret, $results) = $this->_commentSearch->search(
+			array(
+				'comments' => 1,
+			),
+			$this->_randomKey
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$subject          = $this->_module->translate('Subject');
+		$comment          = $this->_module->translate('Comment');
+		$commenter        = $this->_module->translate('Commenter');
+		$text['guest']    = $this->_module->translate('guest');
+		$authorCheckValue = $this->_comment[3][1]->getAuthor() . '(' . $text['guest'] . ')';
+
+		$userName = $this->_user->getFullName();
+
+		if (empty($userName)) {
+			$userName = $this->_user->getUserName();
+		}
+
+		$this->assertEquals(
+			array(
+				'start'   => 1,
+				'end'     => 4,
+				'count'   => 4,
+				'results' => array(
+					array(
+						'itemId' => $this->_item[3]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $subject,
+								'value' => $this->_comment[3][1]->getSubject(),
+							),
+							array(
+								'key'   => $comment,
+								'value' => $this->_comment[3][1]->getComment(),
+							),
+							array(
+								'key'   => $commenter,
+								'value' => $authorCheckValue,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[3]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $subject,
+								'value' => $this->_comment[3][0]->getSubject(),
+							),
+							array(
+								'key'   => $comment,
+								'value' => $this->_comment[3][0]->getComment(),
+							),
+							array(
+								'key'   => $commenter,
+								'value' => $userName,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[2]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $subject,
+								'value' => $this->_comment[2][1]->getSubject(),
+							),
+							array(
+								'key'   => $comment,
+								'value' => $this->_comment[2][1]->getComment(),
+							),
+							array(
+								'key'   => $commenter,
+								'value' => $userName,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[2]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $subject,
+								'value' => $this->_comment[2][0]->getSubject(),
+							),
+							array(
+								'key'   => $comment,
+								'value' => $this->_comment[2][0]->getComment(),
+							),
+							array(
+								'key'   => $commenter,
+								'value' => $userName,
+							),
+						),
+					),
+				),
+			),
+			$results
+		);
+	}
+
+	public function testLimitedSearch() {
+		list($ret, $results) = $this->_commentSearch->search(
+			array(
+				'comments' => 1,
+			),
+			$this->_randomKey,
+			1,
+			2
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$subject   = $this->_module->translate('Subject');
+		$comment   = $this->_module->translate('Comment');
+		$commenter = $this->_module->translate('Commenter');
+
+		$userName = $this->_user->getFullName();
+
+		if (empty($userName)) {
+			$userName = $this->_user->getUserName();
+		}
+
+		$this->assertEquals(
+			array(
+				'start'   => 2,
+				'end'     => 3,
+				'count'   => 4,
+				'results' => array(
+					array(
+						'itemId' => $this->_item[3]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $subject,
+								'value' => $this->_comment[3][0]->getSubject(),
+							),
+							array(
+								'key'   => $comment,
+								'value' => $this->_comment[3][0]->getComment(),
+							),
+							array(
+								'key'   => $commenter,
+								'value' => $userName,
+							),
+						),
+					),
+					array(
+						'itemId' => $this->_item[2]->getId(),
+						'fields' => array(
+							array(
+								'key'   => $subject,
+								'value' => $this->_comment[2][1]->getSubject(),
+							),
+							array(
+								'key'   => $comment,
+								'value' => $this->_comment[2][1]->getComment(),
+							),
+							array(
+								'key'   => $commenter,
+								'value' => $userName,
+							),
+						),
+					),
+				),
+			),
+			$results
+		);
+	}
+
+	public function testEmptySearch() {
+		list($ret, $results) = $this->_commentSearch->search(
+			array(
+				'comments' => 1,
+			),
+			'some string that will never show up'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'start'   => 0,
+				'end'     => 0,
+				'count'   => 0,
+				'results' => array(),
+			),
+			$results
+		);
+	}
+}

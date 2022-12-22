@@ -1,0 +1,762 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Global URL rewrite parser tests.
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 20940 $
+ */
+class RewriteParserTestCase extends GalleryTestCase {
+	public function setUp($rewriteParserName = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'rewrite');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Set up our environment
+		$activeRules['rewriteparsermock'][0] = array('pattern' => 'bogus');
+
+		foreach (array('activeRules' => serialize($activeRules),
+			   'allowEmptyReferer'   => '0',
+			   'accessList'          => serialize(array('phpunit.test')), )
+		as $key => $value) {
+			$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', $key, $value);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$this->_parser = new $rewriteParserName();
+		GalleryUtilities::putRequestVariable('rewriteTest', 'pass');
+
+		// Set up our mock platform
+		$this->_platform = new RewriteParserMockPlatform();
+		$this->_platform->init($this);
+		unset($this->_fileContent, $this->_embeddedFileContent);
+
+		$gallery->setPlatform($this->_platform);
+
+		// Register a new module
+		GalleryDataCache::reset();
+		list($ret, $this->_module) = GalleryCoreApi::loadPlugin('module', 'rewriteparsermock');
+
+		if ($ret) {
+			return $ret;
+		}
+		// Install it
+		$ret = $this->_module->installOrUpgrade();
+
+		if ($ret) {
+			return $ret;
+		}
+		// Activate the module
+		list($ret, $redirect) = $this->_module->activate();
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		list($ret, $redirect) = $this->_module->deactivate();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = GalleryCoreApi::removePlugin('module', 'rewriteparsermock');
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testRefreshActiveRules() {
+		list($ret, $code, $errno) = $this->_parser->saveActiveRules($this->_parser);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array('pattern' => 'bogus');
+		$this->assertEquals(REWRITE_STATUS_OK, $code);
+		$this->assertEquals(null, $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+	}
+
+	public function testSaveActiveRules() {
+		$testRules['rewriteparsermock'][0] = array('pattern' => 'bogus1');
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array('pattern' => 'bogus1');
+		$this->assertEquals(REWRITE_STATUS_OK, $code);
+		$this->assertEquals(null, $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+	}
+
+	public function testSaveBadKeyword() {
+		$testRules['rewriteparsermock'][0] = array('pattern' => 'p/%bogus%');
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array('pattern' => 'bogus');
+		$this->assertEquals(REWRITE_STATUS_BAD_KEYWORD, $code);
+		$this->assertEquals(array('rewriteparsermock', 0), $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+	}
+
+	public function testSaveDupeShortUrl() {
+		// It might be desirable to activate two rules for one Gallery view
+		$testRules['rewriteparsermock'][0] = array('pattern' => 'bogus1');
+		$testRules['rewriteparsermock'][1] = array('pattern' => 'bogus2');
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array('pattern' => 'bogus1');
+		$expected['rewriteparsermock'][1] = array('pattern' => 'bogus2');
+		$this->assertEquals(REWRITE_STATUS_OK, $code);
+		$this->assertEquals(null, $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+	}
+
+	public function testSaveBadParser() {
+		$testRules['rewriteparsermock'][2] = array('pattern' => 'bogus3');
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array('pattern' => 'bogus');
+		$this->assertEquals(REWRITE_STATUS_INVALID_PATTERN, $code);
+		$this->assertEquals(array('rewriteparsermock', 2), $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+	}
+
+	public function testSaveConditions() {
+		$testRules['rewriteparsermock'][3] = array();
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if ($this->_parser->getParserType() != 'preGallery') {
+			$expected['rewriteparsermock'][0] = array('pattern' => 'bogus');
+			$this->assertEquals(REWRITE_STATUS_INVALID_PATTERN, $code);
+			$this->assertEquals(array('rewriteparsermock', 3), $errno);
+			$this->assertEquals($expected, unserialize($activeRules));
+		} else {
+			$expected['rewriteparsermock'][3] = array();
+			$this->assertEquals(REWRITE_STATUS_OK, $code);
+			$this->assertEquals(null, $errno);
+			$this->assertEquals($expected, unserialize($activeRules));
+		}
+	}
+
+	public function testSaveRestrict() {
+		$testRules['rewriteparsermock'][5] = array();
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if ($this->_parser->getParserType() != 'preGallery') {
+			$expected['rewriteparsermock'][0] = array('pattern' => 'bogus');
+			$this->assertEquals(REWRITE_STATUS_INVALID_PATTERN, $code);
+			$this->assertEquals(array('rewriteparsermock', 5), $errno);
+			$this->assertEquals($expected, unserialize($activeRules));
+		} else {
+			$expected['rewriteparsermock'][5] = array();
+			$this->assertEquals(REWRITE_STATUS_OK, $code);
+			$this->assertEquals(null, $errno);
+			$this->assertEquals($expected, unserialize($activeRules));
+		}
+	}
+
+	public function testSaveEmptyPattern() {
+		$testRules['rewriteparsermock'][0] = array();
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array('pattern' => 'bogus');
+		$this->assertEquals(REWRITE_STATUS_INVALID_PATTERN, $code);
+		$this->assertEquals(array('rewriteparsermock', 0), $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+	}
+
+	public function testSaveEmptyPatternRule() {
+		$testRules['rewriteparsermock'][6] = array();
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][6] = array();
+		$this->assertEquals(REWRITE_STATUS_OK, $code);
+		$this->assertEquals(null, $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+	}
+
+	public function testSavePatternEmptyPatternRule() {
+		$testRules['rewriteparsermock'][6] = array('pattern' => 'bogus7');
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array('pattern' => 'bogus');
+		$this->assertEquals(REWRITE_STATUS_INVALID_PATTERN, $code);
+		$this->assertEquals(array('rewriteparsermock', 6), $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+	}
+
+	public function testSaveInvalidPattern() {
+		$testRules['rewriteparsermock'][0] = array('pattern' => '!foo');
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array('pattern' => 'bogus');
+		$this->assertEquals(REWRITE_STATUS_INVALID_PATTERN, $code);
+		$this->assertEquals(array('rewriteparsermock', 0), $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+	}
+
+	public function testSaveActiveRulesEmbedded() {
+		GalleryDataCache::put('G2_EMBED', 1, true);
+		$testRules['rewriteparsermock'][0] = array('pattern' => 'bogus1');
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array('pattern' => 'bogus1');
+		$this->assertEquals(REWRITE_STATUS_OK, $code);
+		$this->assertEquals(null, $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+
+		if ($this->_parser->getParserType() == 'preGallery') {
+			$this->assertTrue(!empty($this->_fileContent), 'fileContent');
+		}
+
+		GalleryDataCache::remove('G2_EMBED');
+	}
+
+	public function testSaveBadActiveRulesEmbedded() {
+		GalleryDataCache::put('G2_EMBED', 1, true);
+		$testRules['rewriteparsermock'][0] = array('pattern' => 'p/%bogus%');
+		list($ret, $code, $errno)          = $this->_parser->saveActiveRules($this->_parser, $testRules);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
+		'module',
+		'rewrite',
+		'activeRules'
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$expected['rewriteparsermock'][0] = array('pattern' => 'bogus');
+		$this->assertEquals(REWRITE_STATUS_BAD_KEYWORD, $code);
+		$this->assertEquals(array('rewriteparsermock', 0), $errno);
+		$this->assertEquals($expected, unserialize($activeRules));
+
+		if ($this->_parser->getParserType() == 'preGallery') {
+			$this->assertTrue(!isset($this->_fileContent), 'fileContent');
+		}
+
+		GalleryDataCache::remove('G2_EMBED');
+	}
+
+	public function testNeedsConfiguration() {
+		list($ret, $status) = $this->_parser->needsConfiguration();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(!$status, 'pass');
+
+		GalleryUtilities::putRequestVariable('rewriteTest', 'fail');
+		list($ret, $status) = $this->_parser->needsConfiguration();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue($status, 'fail');
+
+		GalleryUtilities::putRequestVariable('rewriteTest', '404');
+		list($ret, $status) = $this->_parser->needsConfiguration();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue($status, '404');
+	}
+}
+
+class RewriteParserMockModule extends GalleryModule {
+	public function __construct() {
+		global $gallery;
+
+		$this->setId('rewriteparsermock');
+		$this->setName('RewriteParser Test Module');
+		$this->setDescription('Unit test module');
+		$this->setVersion('1');
+		$this->setGroup('gallery', 'Gallery');
+		$this->setRequiredCoreApi(GalleryCoreApi::getApiVersion());
+		$this->setRequiredModuleApi(GalleryModule::getApiVersion());
+	}
+
+	public function getRewriteRules() {
+		$rules = array();
+
+		$rules[0] = array('pattern' => 'bogus1',
+			  'match'               => array('view' => 'php.Unit'), );
+
+		// Rule 1: Duplicate match
+		$rules[1] = array('pattern' => 'bogus2',
+			  'match'               => array('view' => 'php.Unit'), );
+
+		// Rule 2: Bad parser
+		$rules[2] = array('pattern' => 'bogus3',
+			  'parser'              => 'bogus', );
+
+		// Rule 3: Conditions
+		$rules[3] = array('conditions' => array(array('test' => 'REQUEST_METHOD',
+							  'pattern'                      => 'OPTIONS', ),
+						array('test'    => 'HTTP:Authorization',
+							  'pattern' => '%authorization', ), ),
+			  'keywords'               => array('authorization' => array('pattern' => '(.+)')), );
+
+		// Rule 4: Bad test condition
+		$rules[4] = array('conditions' => array(array('test' => 'REQUEST_FILENAME',
+							  'pattern'                      => '/foo/bar', )));
+
+		// Rule 5: Restrict
+		$rules[5] = array('restrict' => array('view' => 'php.Unit'));
+
+		// Rule 6: Empty pattern
+		$rules[6] = array('match' => array('view' => 'php.Unit'));
+
+		return $rules;
+	}
+}
+
+class RewriteParserMockPlatform extends GalleryPlatform {
+	public $_readBuffer              = array();
+	public $_isWriteable             = true;
+	public $_isReadable              = true;
+	public $_fileExists              = true;
+	public $_embeddedPreviousContent = array();
+	public $_previousContent         = array();
+
+	public function init(&$test) {
+		$this->_test =& $test;
+	}
+
+	public function file_exists($file) {
+		if (strpos($file, 'modules/rewriteparsermock/module.inc') !== false) {
+			return true;
+		}
+
+		if (strpos($file, '/.htaccess') !== false ||
+		strpos($file, '\httpd.ini') !== false) {
+			return $this->_fileExists;
+		}
+
+		return parent::file_exists($file);
+	}
+
+	public function opendir($path) {
+		if (strpos($path, 'modules/') !== false) {
+			$this->_list = array();
+
+			if ($dir = parent::opendir($path)) {
+				while (false !== ($file = parent::readdir($dir))) {
+					array_push($this->_list, $file);
+				}
+			}
+			array_push($this->_list, 'rewriteparsermock');
+
+			return 'rewriteparsermock';
+		}
+
+		return parent::opendir($path);
+	}
+
+	public function is_dir($path) {
+		if (strpos($path, 'modules/rewriteparsermock') !== false || $path == '/phpunit/test') {
+			return true;
+		}
+
+		return parent::is_dir($path);
+	}
+
+	public function readdir($handle) {
+		if ($handle == 'rewriteparsermock') {
+			return array_shift($this->_list);
+		}
+
+		return parent::readdir($handle);
+	}
+
+	public function closedir($handle) {
+		if ($handle == 'rewriteparsermock') {
+			unset($this->_list);
+
+			return true;
+		}
+
+		return parent::closedir($handle);
+	}
+
+	public function recursiveRmdir($path) {
+		return parent::recursiveRmdir($path);
+	}
+
+	public function fsockopen($target, $port, &$errno, &$errstr, $timeout) {
+		global $gallery;
+		$urlGenerator =& $gallery->getUrlGenerator();
+		// The hostName can include the port part
+		list($host) = explode(':', $urlGenerator->getHostName());
+
+		if ($target == $host) {
+			return 'phpunit';
+		}
+
+		return parent::fsockopen($target, $port, $errno, $errstr, $timeout);
+	}
+
+	public function fwrite($handle, $string, $length=0) {
+		$buffer = array(
+		'pass' => array('HTTP/1.1 200 OK',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				$this->_test->_testPassString, ),
+		'fail' => array('HTTP/1.1 200 OK',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				'FAIL_NO_REWRITE', ),
+		'404' => array('HTTP/1.1 404 Not Found',
+				'Content-Type: text/html; charset=ISO-8859-1',
+				'',
+				'Not Found', ), );
+
+		if ($handle == 'phpunit') {
+			$response          = GalleryUtilities::getRequestVariables('rewriteTest');
+			$this->_readBuffer = $buffer[$response];
+
+			return strlen($string);
+		}
+
+		if ($handle == '.htaccess') {
+			$this->_test->_fileContent .= $string;
+
+			return strlen($string);
+		}
+
+		if ($handle == '.embedded') {
+			$this->_test->_embeddedFileContent .= $string;
+
+			return strlen($string);
+		}
+
+		return parent::fwrite($handle, $string, $length =0);
+	}
+
+	public function feof($handle) {
+		if ($handle == 'phpunit') {
+			return empty($this->_readBuffer);
+		}
+
+		return parent::feof($handle);
+	}
+
+	public function fgets($handle, $length = 0) {
+		if ($handle == 'phpunit') {
+			if (empty($this->_readBuffer)) {
+				return null;
+			}
+
+			return array_shift($this->_readBuffer) . "\n";
+		}
+
+		return parent::fgets($handle, $length);
+	}
+
+	public function fread($handle, $length) {
+		if ($handle == 'phpunit') {
+			if (empty($this->_readBuffer)) {
+				return null;
+			}
+
+			if ($length >= strlen(join("\n", $this->_readBuffer))) {
+				$tmp               = join("\n", $this->_readBuffer);
+				$this->_readBuffer = array();
+
+				return $tmp;
+			}
+
+			$buf               = join("\n", $this->_readBuffer);
+			$tmp               = substr($buf, 0, $length);
+			$this->_readBuffer = explode("\n", substr($buf, $length + 1));
+
+			return $tmp;
+		}
+
+		return parent::fread($handle, $length);
+	}
+
+	public function fflush($handle) {
+		if ($handle == 'phpunit') {
+			return true;
+		}
+
+		return parent::fflush($handle);
+	}
+
+	public function is_readable($file) {
+		if (strpos($file, '/.htaccess') !== false || strpos($file, '\httpd.ini') !== false) {
+			return $this->_isReadable;
+		}
+
+		return parent::is_readable($file);
+	}
+
+	public function is_writeable($file) {
+		$pluginBaseDir = GalleryCoreApi::getCodeBasePath();
+
+		if (strpos($file, '/.htaccess') !== false ||
+		$file == $pluginBaseDir  || strpos($file, '\httpd.ini') !== false) {
+			return $this->_isWriteable;
+		}
+
+		return parent::is_writeable($file);
+	}
+
+	public function file($file, $use_include_path = false) {
+		if (strpos($file, '.htaccess') !== false || strpos($file, '\httpd.ini') !== false) {
+			return $passCodeAudit = array();
+		}
+
+		return parent::file($file);
+	}
+
+	public function fopen($file, $mode, $useIncludePath=null, $zcontext=null) {
+		if (strpos($file, 'embedded/.htaccess') !== false) {
+			if ($this->_isWriteable) {
+				$this->_test->_embeddedFileContent = '';
+
+				return '.embedded';
+			}
+
+			return null;
+		}
+
+		if (strpos($file, '/.htaccess') !== false ||
+		strpos($file, '\httpd.ini') !== false) {
+			if ($this->_isWriteable) {
+				$this->_test->_fileContent = '';
+
+				return '.htaccess';
+			}
+
+			return null;
+		}
+
+		return parent::fopen($file, $mode, $useIncludePath, $zcontext);
+	}
+
+	public function fclose($handle) {
+		if ($handle == '.htaccess' || $handle == '.embedded') {
+			return true;
+		}
+
+		if ($handle == 'phpunit') {
+			$this->_readBuffer = array();
+
+			return true;
+		}
+
+		return fclose($handle);
+	}
+}

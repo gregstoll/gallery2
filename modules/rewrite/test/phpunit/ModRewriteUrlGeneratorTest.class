@@ -1,0 +1,178 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+
+GalleryCoreApi::requireOnce(
+	'modules/rewrite/classes/parsers/modrewrite/ModRewriteUrlGenerator.class'
+);
+GalleryCoreApi::requireOnce('modules/rewrite/test/phpunit/RewriteUrlGeneratorTestCase.class');
+
+/**
+ * Apache mod_rewrite URL generator tests.
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class ModRewriteUrlGeneratorTest extends RewriteUrlGeneratorTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, null);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Set up our environment
+		foreach (array(
+			'modrewrite.galleryLocation'  => '/gallery2/',
+			'modrewrite.embeddedLocation' => '/cms/',
+		) as $key => $value) {
+			$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', $key, $value);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$_SERVER['HTTP_HOST']    = 'example.com';
+		$_SERVER['REQUEST_URI']  = '/gallery2/foo/bar.jpg.html';
+		$_SERVER['SERVER_PORT']  = 80;
+		$_SERVER['QUERY_STRING'] = 'foo=1&bar=2';
+
+		$ret = $this->_urlGeneratorInit('ModRewriteUrlGenerator');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testGenerateUrlOverrideBaseUri() {
+		// Override the expected URLs, not server-relative, but with relative ones
+		$this->_expectedUrl[0]  = 'index.php?page=photos&amp;g2_view=rand164.NonShort'
+		. '&amp;g2_foo=bar';
+		$this->_expectedUrl[1]  = sprintf(
+			'd/%d-%d/%s',
+			$this->_testItem->getId(),
+			$this->_testItem->getSerialNumber(),
+			urlencode($this->_testItem->getPathComponent())
+		);
+		$this->_expectedUrl[2]  = 'http://href_website.com/foo';
+		$this->_expectedUrl[3]  = $this->_signUrl(
+			'index.php?page=photos'
+			. '&amp;g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId()
+		);
+		$this->_expectedUrl[4]  = 'themes/foo/images/bar.jpg';
+		$this->_expectedUrl[5]  = 'index.php?page=photos';
+		$this->_expectedUrl[6]  = 'v' . $this->_testAlbumPath;
+		$this->_expectedUrl[7]  = 'v' . $this->_testItemPath . '.html';
+		$this->_expectedUrl[8]  = 'index.php?page=photos&amp;g2_itemId=-5759';
+		$this->_expectedUrl[9]  = 'index.php?page=photos&amp;g2_itemId=' .
+		$this->_derivative->getId();
+		$this->_expectedUrl[10] = ltrim($this->_testAlbumPath, '/') . 'test.html';
+		$this->_expectedUrl[11] = ltrim($this->_testItemPath, '/') . '/test.html';
+		$this->_expectedUrl[12] = 't' . rtrim($this->_testAlbumPath, '/') . '.test';
+		$this->_expectedUrl[13] = 't' . $this->_testItemPath . '.test';
+		$this->_expectedUrl[14] = 'phpunit/';
+		$this->_expectedUrl[15] = $this->_signUrl('phpunit2/');
+		$this->_expectedUrl[16] = 'phpunit/' . urlencode($this->_urlEncodePath);
+
+		parent::testGenerateUrlOverrideBaseUri();
+	}
+
+	public function testGetCurrentUrlEmbeddedQueryString() {
+		GalleryDataCache::put('G2_EMBED', 1, true);
+		// ModRewrite constructs url from baseUri and QUERY_STRING
+		$_SERVER['REQUEST_URI'] = '/not/used';
+		$expectedUrl            = 'http://example.com/cms/index.php?mod=gallery2&foo=1&bar=2';
+		$this->_urlGenerator    = new $this->_urlGeneratorName();
+		$ret                    = $this->_urlGenerator->init('/cms/index.php?mod=gallery2', '/gallery2/');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals($expectedUrl, $this->_urlGenerator->getCurrentUrl());
+		$this->assertFalse($this->_urlGenerator->_error, 'error');
+	}
+
+	public function testDisablesShortUrlsInEmbeddedModeWhenNotConfigured() {
+		$ret = GalleryCoreApi::removePluginParameter(
+			'module',
+			'rewrite',
+			'modrewrite.embeddedLocation'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryDataCache::put('G2_EMBED', false, true);
+		$ret = $this->_urlGeneratorInit('ModRewriteUrlGenerator');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!$this->_urlGenerator->_error, 'init error in non-embedded');
+
+		GalleryDataCache::put('G2_EMBED', true, true);
+		$ret = $this->_urlGeneratorInit('ModRewriteUrlGenerator');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($this->_urlGenerator->_error, 'no init error when embedded');
+	}
+
+	public function testDisablesShortUrlsInStandaloneModeWhenNotConfigured() {
+		$ret = GalleryCoreApi::removePluginParameter(
+			'module',
+			'rewrite',
+			'modrewrite.galleryLocation'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryDataCache::put('G2_EMBED', false, true);
+		$ret = $this->_urlGeneratorInit('ModRewriteUrlGenerator');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($this->_urlGenerator->_error, 'no init error in standalone mode');
+
+		GalleryDataCache::put('G2_EMBED', true, true);
+		$ret = $this->_urlGeneratorInit('ModRewriteUrlGenerator');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!$this->_urlGenerator->_error, 'init error when embedded');
+	}
+}

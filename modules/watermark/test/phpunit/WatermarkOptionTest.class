@@ -1,0 +1,443 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('lib/tools/phpunit/ItemAddOptionTestCase.class');
+GalleryCoreApi::requireOnce('modules/watermark/classes/WatermarkImage.class');
+
+
+/**
+ * WatermarkOption tests
+ * @package Watermark
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class WatermarkOptionTest extends ItemAddOptionTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'watermark', 'WatermarkOption');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+		$this->_images                = array();
+		list($ret, $this->_images[0]) = $this->_createRandomDataItem($this->_album->getId(), 'image/test');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_thumbnails                = array();
+		list($ret, $this->_thumbnails[0]) = $this->_createDerivative(
+			$this->_images[0],
+			$this->_images[0]->getId(),
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+			'crop|10,10,30,40;scale|200'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_resizes                = array();
+		list($ret, $this->_resizes[0]) = $this->_createDerivative(
+			$this->_images[0],
+			$this->_images[0]->getId(),
+			DERIVATIVE_TYPE_IMAGE_RESIZE,
+			'rotate|90'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_items                = array();
+		list($ret, $this->_items[0]) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'test/file'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_itemThumbnails                = array();
+		list($ret, $this->_itemThumbnails[0]) = $this->_createDerivative(
+			$this->_items[0],
+			$this->_items[0]->getId(),
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+			'convert-to-image/jpeg;thumbnail|150'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create a watermark
+		$this->_watermark = new WatermarkImage();
+		$ret              = $this->_watermark->create(
+			GalleryCoreApi::getCodeBasePath('modules/core/test/data/test1.gif'),
+			'image/gif',
+			'phpunit_' . mt_rand() . '.gif'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_watermark->setApplyToPreferred(false);
+		$this->_watermark->setApplyToResizes(true);
+		$this->_watermark->setApplyToThumbnail(true);
+		$this->_watermark->setXPercentage('1.2');
+		$this->_watermark->setYPercentage('2.3');
+		$ret = $this->_watermark->save();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_watermark);
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'watermark');
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'watermark',
+			'forceDefaultWatermark',
+			0
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_noWarnings = array();
+		$this->_noErrors   = array();
+	}
+
+	public function testWatermarkItem() {
+		$form['WatermarkOption']['watermarkId'] = $this->_watermark->getId();
+		$result                                 = $this->_handleRequestAfterAdd($form, $this->_images);
+		$this->assertEquals(array($this->_noErrors, $this->_noWarnings), $result);
+
+		$expected = sprintf(
+			'composite|plugins_data/modules/watermark/' .
+				'%s,image/gif,62,75,manual,1.200,2.300',
+			$this->_watermark->getFileName()
+		);
+
+		foreach (array($this->_thumbnails[0], $this->_resizes[0]) as $derivative) {
+			list($ret, $derivative) = $derivative->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals($expected, $derivative->getPostFilterOperations());
+		}
+	}
+
+	public function testMultipleWatermarkItem() {
+		$totalTestItems = 3;
+
+		for ($j = 1; $j < $totalTestItems; $j++) {
+			list($ret, $this->_images[$j]) = $this->_createRandomDataItem($this->_album->getId(), 'image/test');
+
+			if ($ret) {
+				return $ret;
+			}
+			list($ret, $this->_thumbnails[$j]) = $this->_createDerivative(
+				$this->_images[$j],
+				$this->_images[$j]->getId(),
+				DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+				'crop|10,10,30,40;scale|200'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+			list($ret, $this->_resizes[$j]) = $this->_createDerivative(
+				$this->_images[$j],
+				$this->_images[$j]->getId(),
+				DERIVATIVE_TYPE_IMAGE_RESIZE,
+				'rotate|90'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+			list($ret, $this->_items[$j]) = $this->_createRandomDataItem(
+				$this->_album->getId(),
+				'test/file'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+			list($ret, $this->_itemThumbnails[$j]) = $this->_createDerivative(
+				$this->_items[$j],
+				$this->_items[$j]->getId(),
+				DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+				'convert-to-image/jpeg;thumbnail|150'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$form['WatermarkOption']['watermarkId'] = $this->_watermark->getId();
+		$result                                 = $this->_handleRequestAfterAdd($form, $this->_images);
+		$this->assertEquals(array($this->_noErrors, $this->_noWarnings), $result);
+
+		$expected = sprintf(
+			'composite|plugins_data/modules/watermark/' .
+				'%s,image/gif,62,75,manual,1.200,2.300',
+			$this->_watermark->getFileName()
+		);
+
+		for ($j = 0; $j < $totalTestItems; $j++) {
+			foreach (array($this->_thumbnails[$j], $this->_resizes[$j]) as $derivative) {
+				list($ret, $derivative) = $derivative->refresh();
+
+				if ($ret) {
+					return $ret;
+				}
+				$this->assertEquals($expected, $derivative->getPostFilterOperations());
+			}
+		}
+	}
+
+	public function testWatermarkItemWithNoWatermark() {
+		$form['WatermarkOption']['watermarkId'] = '';
+		$result                                 = $this->_handleRequestAfterAdd($form, $this->_images);
+		$this->assertEquals(array($this->_noErrors, $this->_noWarnings), $result);
+
+		foreach (array($this->_thumbnails[0], $this->_resizes[0]) as $derivative) {
+			list($ret, $derivative) = $derivative->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			// For Oracle, null is replaced with '' when loading data from the database
+			$this->assertTrue(
+				in_array($derivative->getPostFilterOperations(), array(null, '')),
+				'postFilterOperations not empty'
+			);
+			$this->assertEquals(1, $derivative->getSerialNumber());
+		}
+	}
+
+	public function testMultipleWatermarkItemWithNoWatermark() {
+		$totalTestItems = 3;
+
+		for ($j = 1; $j < $totalTestItems; $j++) {
+			list($ret, $this->_images[$j]) = $this->_createRandomDataItem($this->_album->getId(), 'image/test');
+
+			if ($ret) {
+				return $ret;
+			}
+			list($ret, $this->_thumbnails[$j]) = $this->_createDerivative(
+				$this->_images[$j],
+				$this->_images[$j]->getId(),
+				DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+				'crop|10,10,30,40;scale|200'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+			list($ret, $this->_resizes[$j]) = $this->_createDerivative(
+				$this->_images[$j],
+				$this->_images[$j]->getId(),
+				DERIVATIVE_TYPE_IMAGE_RESIZE,
+				'rotate|90'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		$form['WatermarkOption']['watermarkId'] = '';
+		$result                                 = $this->_handleRequestAfterAdd($form, $this->_images);
+		$this->assertEquals(array($this->_noErrors, $this->_noWarnings), $result);
+
+		for ($j = 0; $j < $totalTestItems; $j++) {
+			foreach (array($this->_thumbnails[$j], $this->_resizes[$j]) as $derivative) {
+				list($ret, $derivative) = $derivative->refresh();
+
+				if ($ret) {
+					return $ret;
+				}
+				// For Oracle, null is replaced with '' when loading data from the database
+				$this->assertTrue(
+					in_array($derivative->getPostFilterOperations(), array(null, '')),
+					"postFilterOperations not empty for test item $j"
+				);
+				$this->assertEquals(1, $derivative->getSerialNumber());
+			}
+		}
+	}
+
+	public function testWatermarkNonImage() {
+		$form['WatermarkOption']['watermarkId'] = $this->_watermark->getId();
+		$result                                 = $this->_handleRequestAfterAdd($form, $this->_items);
+		$this->assertEquals(array($this->_noErrors, $this->_noWarnings), $result);
+
+		list($ret, $derivative) = $this->_itemThumbnails[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// For Oracle, null is replaced with '' when loading data from the database
+		$this->assertTrue(
+			in_array($derivative->getPostFilterOperations(), array(null, '')),
+			'postFilterOperations not empty'
+		);
+		$this->assertEquals(1, $derivative->getSerialNumber());
+	}
+
+	public function testMultipleWatermarkNonImage() {
+		$totalTestItems = 3;
+
+		for ($j = 1; $j < $totalTestItems; $j++) {
+			list($ret, $this->_items[$j]) = $this->_createRandomDataItem(
+				$this->_album->getId(),
+				'test/file'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+			list($ret, $this->_itemThumbnails[$j]) = $this->_createDerivative(
+				$this->_items[$j],
+				$this->_items[$j]->getId(),
+				DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+				'convert-to-image/jpeg;thumbnail|150'
+			);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+		$form['WatermarkOption']['watermarkId'] = $this->_watermark->getId();
+		$result                                 = $this->_handleRequestAfterAdd($form, $this->_items);
+		$this->assertEquals(array($this->_noErrors, $this->_noWarnings), $result);
+
+		for ($j = 0; $j < $totalTestItems; $j++) {
+			list($ret, $derivative) = $this->_itemThumbnails[$j]->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+			// For Oracle, null is replaced with '' when loading data from the database
+			$this->assertTrue(
+				in_array($derivative->getPostFilterOperations(), array(null, '')),
+				"postFilterOperations not empty for test item $j"
+			);
+			$this->assertEquals(1, $derivative->getSerialNumber());
+		}
+	}
+
+	public function testForceWatermark() {
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'watermark',
+			'forceDefaultWatermark',
+			1
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'watermark',
+			'defaultWatermarkId',
+			$this->_watermark->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$result = $this->_handleRequestAfterAdd(array(), $this->_images);
+		$this->assertEquals(array($this->_noErrors, $this->_noWarnings), $result);
+
+		$expected = sprintf(
+			'composite|plugins_data/modules/watermark/' .
+				'%s,image/gif,62,75,manual,1.200,2.300',
+			$this->_watermark->getFileName()
+		);
+
+		foreach (array($this->_thumbnails[0], $this->_resizes[0]) as $derivative) {
+			list($ret, $derivative) = $derivative->refresh();
+
+			if ($ret) {
+				return $ret;
+			}
+
+			$this->assertEquals($expected, $derivative->getPostFilterOperations());
+		}
+	}
+
+	public function testWatermarkWatermarkIdInvalid() {
+		list($ret, $module) = GalleryCoreApi::loadPlugin('module', 'watermark');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$form['WatermarkOption']['watermarkId'] = -1;
+		$result                                 = $this->_handleRequestAfterAdd($form, $this->_items);
+
+		$message = $module->translate(
+			'Error: Missing watermark. Please see the Event Logs page in '
+			. 'the Site Admin.'
+		);
+
+		$this->assertEquals(array(array($message), $this->_noWarnings), $result);
+
+		list($ret, $derivative) = $this->_itemThumbnails[0]->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// For Oracle, null is replaced with '' when loading data from the database
+		$this->assertTrue(
+			in_array($derivative->getPostFilterOperations(), array(null, '')),
+			'postFilterOperations not empty'
+		);
+		$this->assertEquals(1, $derivative->getSerialNumber());
+	}
+}

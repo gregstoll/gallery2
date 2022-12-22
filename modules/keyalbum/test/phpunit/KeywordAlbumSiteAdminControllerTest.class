@@ -1,0 +1,208 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * KeywordAlbumSiteAdmin controller tests
+ *
+ * @package KeyAlbum
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class KeywordAlbumSiteAdminControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'keyalbum.KeywordAlbumSiteAdmin');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'keyalbum');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_entity) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_entity);
+
+		foreach (array(
+			'themeId'         => 'keyalbumTest',
+			'themeSettingsId' => $this->_entity->getId(),
+		) as $key => $value) {
+			$ret = GalleryCoreApi::setPluginParameter('module', 'keyalbum', $key, $value);
+
+			if ($ret) {
+				return $ret;
+			}
+		}
+
+		list($ret, $this->_defaultThemeId) = GalleryCoreApi::getPluginParameter('module', 'core', 'default.theme');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testKeywordAlbumSiteAdminControllerReset() {
+		GalleryUtilities::putRequestVariable('form[action][reset]', '1');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'keyalbum.KeywordAlbumSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testKeywordAlbumSiteAdminControllerSave() {
+		GalleryUtilities::putRequestVariable('form[action][save]', '1');
+		GalleryUtilities::putRequestVariable('form[summaryLinks]', 'album');
+		GalleryUtilities::putRequestVariable('form[split][comma]', '1');
+		GalleryUtilities::putRequestVariable('form[split][space]', '1');
+		GalleryUtilities::putRequestVariable('form[orderBy]', 'originationTimestamp');
+		GalleryUtilities::putRequestVariable('form[orderDirection]', ORDER_DESCENDING);
+		GalleryUtilities::putRequestVariable('form[presort]', 'albumsFirst');
+		GalleryUtilities::putRequestVariable('form[description]', 'test desc');
+		GalleryUtilities::putRequestVariable('form[themeId]', $this->_defaultThemeId);
+		GalleryUtilities::putRequestVariable('form[currentThemeId]', 'keyalbumTest');
+		GalleryUtilities::putRequestVariable('form[key][perPage]', '5');
+
+		list($ret, $core) = GalleryCoreApi::loadPlugin('module', 'core');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'keyalbum.KeywordAlbumSiteAdmin',
+				),
+				'status'   => array(
+					'statusMessage' => $core->translate(
+						'Successfully saved theme settings'
+					),
+					'saved'         => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		// Verify the information in the DB
+		list($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'keyalbum');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		foreach ($params as $key => $value) {
+			if (in_array($key[0], array('_', 'a'))) {
+				unset($params[$key]);
+			}
+		}
+		ksort($params);
+		$this->assertEquals(
+			array(
+				'description'     => 'test desc',
+				'orderBy'         => 'albumsFirst|originationTimestamp',
+				'orderDirection'  => ORDER_DESCENDING,
+				'split'           => ',\s',
+				'summaryLinks'    => 'album',
+				'themeId'         => $this->_defaultThemeId,
+				'themeSettingsId' => $this->_entity->getId(),
+			),
+			$params,
+			'Verify DB Data'
+		);
+
+		list($ret, $themeParam) = GalleryCoreApi::getPluginParameter(
+			'theme',
+			'keyalbumTest',
+			'perPage',
+			$this->_entity->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('5', $themeParam, 'Theme param');
+	}
+
+	public function testKeywordAlbumSiteAdminControllerNoSplit() {
+		GalleryUtilities::putRequestVariable('form[action][save]', '1');
+		GalleryUtilities::putRequestVariable('form[summaryLinks]', 'none');
+		GalleryUtilities::putRequestVariable('form[orderBy]', 'title');
+		GalleryUtilities::putRequestVariable('form[orderDirection]', ORDER_ASCENDING);
+		GalleryUtilities::putRequestVariable('form[presort]', '');
+		GalleryUtilities::putRequestVariable('form[description]', 'test desc');
+		GalleryUtilities::putRequestVariable('form[themeId]', 'keyalbumTest');
+		GalleryUtilities::putRequestVariable('form[currentThemeId]', 'keyalbumTest');
+		GalleryUtilities::putRequestVariable('form[key][perPage]', '5');
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'keyalbum.KeywordAlbumSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][split]'),
+			),
+			$results
+		);
+	}
+}
+
+GalleryCoreApi::requireOnce('modules/core/classes/GalleryTheme.class');
+
+/**
+ * Test theme
+ */
+class KeyAlbumTestTheme extends GalleryTheme {
+	public function __construct() {
+		$this->setId('keyalbumTest');
+		$this->setStandardSettings(
+			array(
+				'perPage' => 9,
+			)
+		);
+	}
+}

@@ -1,0 +1,256 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/comment/CommentCallback.inc');
+GalleryCoreApi::requireOnce('modules/comment/classes/GalleryComment.class');
+
+/**
+ * Test CommentCallback functionality
+ *
+ * @package Comment
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class CommentCallbackViewTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_item) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_item);
+
+		list($ret, $this->_user) = $this->_createRandomUser();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_user);
+
+		$this->_comment = new GalleryComment();
+		$ret            = $this->_comment->create($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_comment->setCommenterId($this->_user->getId());
+		$this->_comment->setHost('127.0.0.1');
+		$this->_comment->setDate(time());
+		$this->_comment->setPublishStatus(COMMENT_PUBLISH_STATUS_UNPUBLISHED);
+
+		$ret = $this->_comment->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_view = new CommentCallbackView();
+	}
+
+	public function _renderImmediate() {
+		ob_start();
+		$ret     = $this->_view->renderImmediate(array(), array());
+		$results = ob_get_contents();
+		ob_end_clean();
+
+		return array($ret, $results);
+	}
+
+	public function testDeleteComment() {
+		GalleryUtilities::putRequestVariable('command', 'delete');
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment->getId());
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		return $this->_verifyMissing($this->_comment->getId());
+	}
+
+	public function testDeleteNonComment() {
+		GalleryUtilities::putRequestVariable('command', 'delete');
+		GalleryUtilities::putRequestVariable('commentId', $this->_item->getId());
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('{"status":"error"}', $results);
+
+		return $this->_verifyEntity($this->_comment);
+	}
+
+	public function testDeleteCommentMissingCommentId() {
+		GalleryUtilities::putRequestVariable('command', 'delete');
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		return $this->_verifyEntity($this->_comment);
+	}
+
+	public function testDeleteCommentNoPermissions() {
+		GalleryUtilities::putRequestVariable('command', 'delete');
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment->getId());
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('{"status":"error"}', $results);
+
+		return $this->_verifyEntity($this->_comment);
+	}
+
+	public function testNoCommand() {
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('{"status":"error"}', $results);
+
+		return $this->_verifyEntity($this->_comment);
+	}
+
+	public function testMarkCommentAsSpam() {
+		GalleryUtilities::putRequestVariable('command', 'spam');
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment->getId());
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('{"status":"success"}', $results);
+
+		list($ret, $this->_comment) = $this->_comment->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(COMMENT_PUBLISH_STATUS_SPAM, $this->_comment->getPublishStatus());
+	}
+
+	public function testMarkCommentAsSpamNoPermissions() {
+		GalleryUtilities::putRequestVariable('command', 'spam');
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment->getId());
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('{"status":"error"}', $results);
+
+		list($ret, $this->_comment) = $this->_comment->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			COMMENT_PUBLISH_STATUS_UNPUBLISHED,
+			$this->_comment->getPublishStatus()
+		);
+	}
+
+	public function testMarkCommentAsNotSpam() {
+		GalleryUtilities::putRequestVariable('command', 'despam');
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment->getId());
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('{"status":"success"}', $results);
+
+		list($ret, $this->_comment) = $this->_comment->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(COMMENT_PUBLISH_STATUS_PUBLISHED, $this->_comment->getPublishStatus());
+	}
+
+	public function testMarkCommentAsNotSpamNoPermissions() {
+		GalleryUtilities::putRequestVariable('command', 'despam');
+		GalleryUtilities::putRequestVariable('commentId', $this->_comment->getId());
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $results) = $this->_renderImmediate();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('{"status":"error"}', $results);
+
+		list($ret, $this->_comment) = $this->_comment->refresh();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			COMMENT_PUBLISH_STATUS_UNPUBLISHED,
+			$this->_comment->getPublishStatus()
+		);
+	}
+}

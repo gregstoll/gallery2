@@ -1,0 +1,159 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/icons/classes/IconsImpl.class');
+
+/**
+ * Iconpack tests
+ *
+ * @package Icons
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class IconsTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'icons');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_icons                         = new IconsImpl();
+		$this->_saveRtl                       = $gallery->_translator->_isRightToLeft;
+		$gallery->_translator->_isRightToLeft = false;
+	}
+
+	public function tearDown() {
+		global $gallery;
+		$gallery->_translator->_isRightToLeft = $this->_saveRtl;
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testGetIconPacks() {
+		list($ret, $list) = $this->_icons->getIconPacks();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(
+			isset($list['paularmstrongdesigns']),
+			'paularmstrongdesigns iconpack not found'
+		);
+	}
+
+	public function testNewFactoryInstance() {
+		list($ret, $iconpack) = GalleryCoreApi::newFactoryInstance('IconsInterface_1_0');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(isset($iconpack), 'Icon pack was not set');
+		$this->assertTrue(
+			GalleryUtilities::isA($iconpack, 'IconsImpl'),
+			'The factory instance was not an IconsImpl'
+		);
+	}
+
+	public function testSetupTemplateNone() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'icons', 'iconpack', '');
+
+		if ($ret) {
+			return $ret;
+		}
+		$template = new IconsDummyGalleryTemplate();
+		$ret      = $this->_icons->init($template);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(null, $template->style);
+	}
+
+	public function testSetupTemplateIcons() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'icons', 'iconpack', '_phpunitfoo');
+
+		if ($ret) {
+			return $ret;
+		}
+		$template = new IconsDummyGalleryTemplate();
+		$ret      = $this->_icons->init($template);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('modules/icons/iconpacks/_phpunitfoo/icons.css', $template->style);
+	}
+
+	public function testRightToLeft() {
+		global $gallery;
+		$gallery->_translator->_isRightToLeft = true;
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'icons', 'iconpack', '_phpunitfoo');
+
+		if ($ret) {
+			return $ret;
+		}
+		$template = new IconsDummyGalleryTemplate();
+		$ret      = $this->_icons->init($template);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('modules/icons/iconpacks/_phpunitfoo/icons-rtl.css', $template->style);
+	}
+}
+
+/**
+ * @package Icons
+ * @subpackage PHPUnit
+ */
+class IconsDummyGalleryTemplate {
+	public $data = array();
+	public $style;
+
+	public function setVariable($key, $value) {
+		$this->data[$key] = $value;
+	}
+
+	public function style($path) {
+		$this->style = $path;
+	}
+
+	public function javascript($path) {
+	}
+}

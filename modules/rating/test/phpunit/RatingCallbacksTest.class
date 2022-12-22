@@ -1,0 +1,430 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/core/classes/GallerySmarty.class');
+GalleryCoreApi::requireOnce('modules/rating/Callbacks.inc');
+
+/**
+ * Rating callback tests
+ * @package Rating
+ * @subpackage PHPUnit
+ * @author Don Seiler <don@seiler.us>
+ * @version $Revision: 17580 $
+ */
+class RatingCallbacksTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	/**
+	 * Create an album for testing
+	 */
+	public function setUp($x1 = null) {
+		global $gallery;
+		$session =& $gallery->getSession();
+		$ret     = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'rating');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_userId    = $gallery->getActiveUserId();
+		$this->_authToken = $session->getAuthToken();
+
+		list($ret, $this->_module) = GalleryCoreApi::loadPlugin('module', 'rating');
+
+		if ($ret || !isset($this->_module)) {
+			return $ret;
+		}
+
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_album);
+
+		list($ret, $this->_item) = $this->_createRandomDataItem(
+			$this->_album->getId(),
+			'image/test',
+			array(),
+			__FILE__,
+			'GalleryPhotoItem'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'rating',
+			'enabled',
+			1,
+			$this->_album->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_smarty    = new GallerySmarty();
+		$this->_callbacks = new RatingCallbacks();
+	}
+
+	public function testRatingBlocks() {
+		$ret = $this->_callbacks->callback(
+			array(
+				'itemId' => $this->_item->getId(),
+			),
+			$this->_smarty,
+			'LoadRating',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$data    = $this->_smarty->_tpl_vars['block']['rating']['RatingData'];
+		$summary = $this->_smarty->_tpl_vars['block']['rating']['RatingSummary'];
+		$this->assertEquals(
+			array(
+				'ratingValues' => array(1, 2, 3, 4, 5),
+				'firstCall'    => true,
+				'authToken'    => $this->_authToken,
+			),
+			$summary,
+			'Rating summary array does not match.'
+		);
+		$this->assertTrue(isset($data['rating']), 'Missing rating');
+		$this->assertTrue(isset($data['userRating']), 'Missing userRating');
+		$this->assertTrue(isset($data['stars']), 'Missing stars');
+		$this->assertTrue(isset($data['userStars']), 'Missing userStars');
+		$this->assertTrue(isset($data['votes']), 'Missing votes');
+		$this->assertTrue(isset($data['averagePercent']), 'Missing average percent');
+	}
+
+	public function testAllowAlbumRating() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'rating', 'allowAlbumRating', 1);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'itemId' => $this->_album->getId(),
+			),
+			$this->_smarty,
+			'LoadRating',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$data    = $this->_smarty->_tpl_vars['block']['rating']['RatingData'];
+		$summary = $this->_smarty->_tpl_vars['block']['rating']['RatingSummary'];
+		$this->assertEquals(
+			array(
+				'ratingValues' => array(1, 2, 3, 4, 5),
+				'firstCall'    => true,
+				'authToken'    => $this->_authToken,
+			),
+			$summary,
+			'Rating summary array does not match.'
+		);
+		$this->assertTrue(isset($data['rating']), 'Missing rating');
+		$this->assertTrue(isset($data['userRating']), 'Missing userRating');
+		$this->assertTrue(isset($data['stars']), 'Missing stars');
+		$this->assertTrue(isset($data['userStars']), 'Missing userStars');
+		$this->assertTrue(isset($data['votes']), 'Missing votes');
+		$this->assertTrue(isset($data['averagePercent']), 'Missing average percent');
+	}
+
+	public function testDoNotAllowAlbumRating() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'rating', 'allowAlbumRating', 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'itemId' => $this->_album->getId(),
+			),
+			$this->_smarty,
+			'LoadRating',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!isset($this->_smarty->_tpl_vars['block']), 'Received rating block.');
+	}
+
+	public function testRatingNoViewPermissionPermissionNone() {
+		$ret = GalleryCoreApi::removeItemPermissions($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'itemId' => $this->_item->getId(),
+			),
+			$this->_smarty,
+			'LoadRating',
+			$this->_userId
+		);
+
+		if ($ret) {
+			if (!($ret->getErrorCode() & ERROR_MISSING_OBJECT)) {
+				$this->assertEquals(
+					ERROR_MISSING_OBJECT,
+					$ret->getErrorCode(),
+					'Wrong error code, expected ERROR_MISSING_OBJECT'
+				);
+			}
+		} else {
+			$this->fail('Expected ERROR_MISSING_OBJECT');
+		}
+	}
+
+	public function testRatingNoRatingPermission() {
+		global $gallery;
+
+		$ret = GalleryCoreApi::removeItemPermissions($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$this->_userId,
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'itemId' => $this->_item->getId(),
+			),
+			$this->_smarty,
+			'LoadRating',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!isset($this->_smarty->_tpl_vars['block']), 'Received rating block.');
+	}
+
+	public function testRatingPermissionViewOnly() {
+		$ret = GalleryCoreApi::removeItemPermissions($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$this->_userId,
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$this->_userId,
+			'rating.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'itemId' => $this->_item->getId(),
+			),
+			$this->_smarty,
+			'LoadRating',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$data    = $this->_smarty->_tpl_vars['block']['rating']['RatingData'];
+		$summary = $this->_smarty->_tpl_vars['block']['rating']['RatingSummary'];
+		$this->assertEquals(
+			array(
+				'ratingValues' => array(1, 2, 3, 4, 5),
+				'firstCall'    => true,
+				'authToken'    => $this->_authToken,
+			),
+			$summary,
+			'Rating summary array does not match.'
+		);
+		$this->assertTrue(isset($data['rating']), 'Missing rating');
+		$this->assertTrue(isset($data['userRating']), 'Missing userRating');
+		$this->assertTrue(isset($data['stars']), 'Missing stars');
+		$this->assertTrue(isset($data['userStars']), 'Missing userStars');
+		$this->assertTrue(isset($data['votes']), 'Missing votes');
+		$this->assertTrue(isset($data['averagePercent']), 'Missing average percent');
+		$this->assertFalse($data['canRate'], 'canRate is true.');
+	}
+
+	public function testRatingPermissionFull() {
+		$ret = GalleryCoreApi::removeItemPermissions($this->_item->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$this->_userId,
+			'core.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$this->_userId,
+			'rating.view'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::addUserPermission(
+			$this->_item->getId(),
+			$this->_userId,
+			'rating.add'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'itemId' => $this->_item->getId(),
+			),
+			$this->_smarty,
+			'LoadRating',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$data    = $this->_smarty->_tpl_vars['block']['rating']['RatingData'];
+		$summary = $this->_smarty->_tpl_vars['block']['rating']['RatingSummary'];
+		$this->assertEquals(
+			array(
+				'ratingValues' => array(1, 2, 3, 4, 5),
+				'firstCall'    => true,
+				'authToken'    => $this->_authToken,
+			),
+			$summary,
+			'Rating summary array does not match.'
+		);
+		$this->assertTrue(isset($data['rating']), 'Missing rating');
+		$this->assertTrue(isset($data['userRating']), 'Missing userRating');
+		$this->assertTrue(isset($data['stars']), 'Missing stars');
+		$this->assertTrue(isset($data['userStars']), 'Missing userStars');
+		$this->assertTrue(isset($data['votes']), 'Missing votes');
+		$this->assertTrue(isset($data['averagePercent']), 'Missing average percent');
+		$this->assertTrue($data['canRate'], 'canRate is false.');
+	}
+
+	public function testRatingForItemInDisabledAlbum() {
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'rating',
+			'enabled',
+			0,
+			$this->_album->getId()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'itemId' => $this->_item->getId(),
+			),
+			$this->_smarty,
+			'LoadRating',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(!isset($this->_smarty->_tpl_vars['block']), 'Received rating block.');
+	}
+
+	public function testRatingForDisabledAlbum() {
+		list($ret, $subalbum) = $this->_createRandomAlbum($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_callbacks->callback(
+			array(
+				'itemId' => $subalbum->getId(),
+			),
+			$this->_smarty,
+			'LoadRating',
+			$this->_userId
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(!isset($this->_smarty->_tpl_vars['block']), 'Received rating block.');
+	}
+}

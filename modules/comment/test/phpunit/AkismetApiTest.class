@@ -1,0 +1,437 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/comment/classes/GalleryComment.class');
+GalleryCoreApi::requireOnce('modules/comment/classes/AkismetApi.class');
+
+/**
+ * Test AkismetApi functionality
+ *
+ * @package Comment
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17989 $
+ */
+class AkismetApiTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_comment = new GalleryComment();
+		$this->_comment->setPersistentFlag(STORAGE_FLAG_NEWLY_CREATED);
+		$this->_akismet = new AkismetApiTest_AkismetApiWithMockRequest();
+
+		$this->_platform = new UnitTestPlatform();
+		$gallery->setPlatform($this->_platform);
+		$AkismetApiTest_MockUrlGenerator = new AkismetApiTest_MockUrlGenerator();
+		$gallery->setUrlGenerator($AkismetApiTest_MockUrlGenerator);
+	}
+
+	public function tearDown() {
+		$this->assertTrue($this->_platform->isComplete(), $this->_platform->getRemaining());
+
+		return parent::tearDown();
+	}
+
+	public function testCheckComment_NotSpam() {
+		$this->_akismet->setReply(
+			'_request',
+			array('comment-check', $this->_comment, true),
+			array(null, 'false', 'HTTP/1.0 200 OK', 'headers')
+		);
+
+		$this->assertEquals(
+			array(null, false),
+			$this->_akismet->checkComment($this->_comment)
+		);
+	}
+
+	public function testCheckComment_Spam() {
+		$this->_akismet->setReply(
+			'_request',
+			array('comment-check', $this->_comment, true),
+			array(null, 'true', 'HTTP/1.0 200 OK', 'headers')
+		);
+
+		$this->assertEquals(
+			array(null, true),
+			$this->_akismet->checkComment($this->_comment)
+		);
+	}
+
+	public function testCheckComment_BadStatus() {
+		$this->_akismet->setReply(
+			'_request',
+			array('comment-check', $this->_comment, true),
+			array(null, 'false', 'HTTP/1.0 404 Not Found', 'headers')
+		);
+
+		$this->assertEquals(
+			array(null, false),
+			$this->_akismet->checkComment($this->_comment)
+		);
+	}
+
+	public function testCheckComment_RecheckExistingComment() {
+		$this->_comment->clearPersistentFlag(STORAGE_FLAG_NEWLY_CREATED);
+		$this->_akismet->setReply(
+			'_request',
+			array('comment-check', $this->_comment, false),
+			array(null, 'false', 'HTTP/1.0 200 OK', 'headers')
+		);
+
+		$this->assertEquals(
+			array(null, false),
+			$this->_akismet->checkComment($this->_comment)
+		);
+	}
+
+	public function testSubmitSpam() {
+		$this->_akismet->setReply(
+			'_request',
+			array('submit-spam', $this->_comment, false),
+			array(null, 'body', 'HTTP/1.0 200 OK', 'headers')
+		);
+
+		$this->assertEquals(null, $this->_akismet->submitSpam($this->_comment));
+	}
+
+	public function testSubmitHam() {
+		$this->_akismet->setReply(
+			'_request',
+			array('submit-ham', $this->_comment, false),
+			array(null, 'body', 'HTTP/1.0 200 OK', 'headers')
+		);
+
+		$this->assertEquals(null, $this->_akismet->submitHam($this->_comment));
+	}
+
+	/**
+	 * Convenience method to digest an HTTP response and put it into the form that
+	 * GalleryCoreApi::postToWebPage can digest when it's talking to our mock platform.
+	 * @todo This should get refactored up into UnitTestPlatform so that other tests can use it.
+	 * @access private
+	 */
+	public function _setHttpRequestResponse(&$platform, $host, $port, $requestArray, $response) {
+		$request = $requestArray[0] . "\r\n";
+		$tmp     = array();
+
+		foreach ($requestArray[1] as $key => $value) {
+			$tmp[] = str_replace('%2B', '+', urlencode($key)) . '=' .
+			str_replace('%2B', '+', urlencode($value));
+		}
+		$request .= join('&', $tmp);
+
+		$platform->setReply('fsockopen', array($host, $port, null, null, 5), 'HANDLE');
+		$platform->setReply('fwrite', array('HANDLE', $request, null), true);
+		$platform->setReply('fflush', array('HANDLE'), true);
+		$platform->setReply('fgets', array('HANDLE', 4096), $response[0]);
+		$platform->setReply('feof', array('HANDLE'), false);
+		$platform->setReply('fgets', array('HANDLE', 4096), $response[1]);
+		$platform->setReply('feof', array('HANDLE'), false);
+		$platform->setReply('fgets', array('HANDLE', 4096), "\r\n");
+		$platform->setReply('feof', array('HANDLE'), false);
+		$platform->setReply('fread', array('HANDLE', 4096), $response[2]);
+		$platform->setReply('feof', array('HANDLE'), true);
+		$platform->setReply('fclose', array('HANDLE'), true);
+	}
+
+	public function testVerifyApiKey_Valid() {
+		$this->_akismet->setReply('_getUserAgent', array(), array(null, 'USER_AGENT'));
+		$this->_setHttpRequestResponse(
+			$this->_platform,
+			'rest.akismet.com',
+			80,
+			array(
+				"POST /1.1/verify-key HTTP/1.0\r\n" .
+					"Host: rest.akismet.com\r\n" .
+					"User-Agent: USER_AGENT\r\n" .
+					"Content-Type: application/x-www-form-urlencoded\r\n" .
+					"Content-Length: 58\r\n",
+				array(
+					'key'  => 'GOOD_key',
+					'blog' => 'http://gallery2|forceFullUrl:1',
+				),
+			),
+			array(
+				"HTTP/1.0 200 OK\r\n",
+				"Header: value\r\n",
+				'valid',
+			)
+		);
+
+		$this->assertEquals(
+			array(null, true),
+			$this->_akismet->verifyApiKey('GOOD_key')
+		);
+	}
+
+	public function testVerifyApiKey_Invalid() {
+		$this->_akismet->setReply('_getUserAgent', array(), array(null, 'USER_AGENT'));
+		$this->_setHttpRequestResponse(
+			$this->_platform,
+			'rest.akismet.com',
+			80,
+			array(
+				"POST /1.1/verify-key HTTP/1.0\r\n" .
+							"Host: rest.akismet.com\r\n" .
+							"User-Agent: USER_AGENT\r\n" .
+							"Content-Type: application/x-www-form-urlencoded\r\n" .
+							"Content-Length: 57\r\n",
+				array(
+					'key'  => 'BAD_key',
+					'blog' => 'http://gallery2|forceFullUrl:1',
+				),
+			),
+			array(
+				"HTTP/1.0 200 OK\r\n",
+				"Header: value\r\n",
+				'invalid',
+			)
+		);
+
+		$this->assertEquals(
+			array(null, false),
+			$this->_akismet->verifyApiKey('BAD_key')
+		);
+	}
+
+	public function testRequest() {
+		$this->_markPluginParametersForCleanup('module', 'comment');
+		$ret = GalleryCoreApi::setPluginParameter('module', 'comment', 'akismet.apiKey', 'API_KEY');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_comment->setParentId(0);
+		$this->_comment->setHost('USER_IP');
+		$this->_comment->setEntityType('COMMENT_TYPE');
+		$this->_comment->setAuthor('COMMENT_AUTHOR');
+		$this->_comment->setSubject('SUBJECT');
+		$this->_comment->setComment('COMMENT');
+
+		foreach (array(
+			'HTTP_ACCEPT',
+			'HTTP_ACCEPT_CHARSET',
+			'HTTP_ACCEPT_ENCODING',
+			'HTTP_ACCEPT_LANGUAGE',
+			'HTTP_CONNECTION',
+			'HTTP_HOST',
+			'HTTP_KEEP_ALIVE',
+			'HTTP_REFERER',
+			'HTTP_USER_AGENT',
+			'REMOTE_ADDR',
+			'REMOTE_HOST',
+			'REMOTE_PORT',
+			'QUERY_STRING',
+		) as $key) {
+			$_SERVER[$key] = $key;
+		}
+
+		$this->_setHttpRequestResponse(
+			$this->_platform,
+			'API_KEY.rest.akismet.com',
+			80,
+			array(
+				"POST /1.1/AKISMET_REQUEST HTTP/1.0\r\n" .
+							"Host: API_KEY.rest.akismet.com\r\n" .
+							"User-Agent: USER_AGENT\r\n" .
+							"Content-Type: application/x-www-form-urlencoded\r\n" .
+							"Content-Length: 711\r\n",
+				array(
+					'blog'                 => 'http://gallery2|forceFullUrl:1',
+					'user_ip'              => 'USER_IP',
+					'user_agent'           => 'HTTP_USER_AGENT',
+					'comment_type'         => 'COMMENT_TYPE',
+					'comment_author'       => 'COMMENT_AUTHOR',
+					'comment_author_email' => '',
+					'comment_author_url'   => '',
+					'comment_content'      => 'SUBJECT+COMMENT',
+					'HTTP_ACCEPT'          => 'HTTP_ACCEPT',
+					'HTTP_ACCEPT_CHARSET'  => 'HTTP_ACCEPT_CHARSET',
+					'HTTP_ACCEPT_ENCODING' => 'HTTP_ACCEPT_ENCODING',
+					'HTTP_ACCEPT_LANGUAGE' => 'HTTP_ACCEPT_LANGUAGE',
+					'HTTP_CONNECTION'      => 'HTTP_CONNECTION',
+					'HTTP_HOST'            => 'HTTP_HOST',
+					'HTTP_KEEP_ALIVE'      => 'HTTP_KEEP_ALIVE',
+					'HTTP_REFERER'         => 'HTTP_REFERER',
+					'HTTP_USER_AGENT'      => 'HTTP_USER_AGENT',
+					'QUERY_STRING'         => 'QUERY_STRING',
+					'REMOTE_ADDR'          => 'REMOTE_ADDR',
+					'REMOTE_HOST'          => 'REMOTE_HOST',
+					'REMOTE_PORT'          => 'REMOTE_PORT',
+					'permalink'            => ('http://gallery2|view=core.ShowItem|' .
+							'itemId=0|htmlEntities:|forceFullUrl:1'),
+				),
+			),
+			array(
+				"HTTP/1.0 200 OK\r\n",
+				"Header: value\r\n",
+				'body',
+			)
+		);
+
+		$akismet = new AkismetApiTest_AkismetApiWithMockUserAgent();
+		$this->assertEquals(
+			array(
+				null,
+				'body',
+				'HTTP/1.0 200 OK',
+				array(
+					'Header' => 'value',
+				),
+			),
+			$akismet->_request('AKISMET_REQUEST', $this->_comment, true)
+		);
+	}
+
+	public function testRequest_WithoutRequestSpecificDetails() {
+		$this->_markPluginParametersForCleanup('module', 'comment');
+		$ret = GalleryCoreApi::setPluginParameter('module', 'comment', 'akismet.apiKey', 'API_KEY');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_comment->setParentId(0);
+		$this->_comment->setHost('USER_IP');
+		$this->_comment->setEntityType('COMMENT_TYPE');
+		$this->_comment->setAuthor('COMMENT_AUTHOR');
+		$this->_comment->setSubject('SUBJECT');
+		$this->_comment->setComment('COMMENT');
+
+		foreach (array(
+			'HTTP_ACCEPT',
+			'HTTP_ACCEPT_CHARSET',
+			'HTTP_ACCEPT_ENCODING',
+			'HTTP_ACCEPT_LANGUAGE',
+			'HTTP_CONNECTION',
+			'HTTP_HOST',
+			'HTTP_KEEP_ALIVE',
+			'HTTP_REFERER',
+			'HTTP_USER_AGENT',
+			'REMOTE_ADDR',
+			'REMOTE_HOST',
+			'REMOTE_PORT',
+			'QUERY_STRING',
+		) as $key) {
+			$_SERVER[$key] = $key;
+		}
+
+		$this->_setHttpRequestResponse(
+			$this->_platform,
+			'API_KEY.rest.akismet.com',
+			80,
+			array(
+				"POST /1.1/AKISMET_REQUEST HTTP/1.0\r\n" .
+							"Host: API_KEY.rest.akismet.com\r\n" .
+							"User-Agent: USER_AGENT\r\n" .
+							"Content-Type: application/x-www-form-urlencoded\r\n" .
+							"Content-Length: 296\r\n",
+				array(
+					'blog'                 => 'http://gallery2|forceFullUrl:1',
+					'user_ip'              => 'USER_IP',
+					'comment_type'         => 'COMMENT_TYPE',
+					'comment_author'       => 'COMMENT_AUTHOR',
+					'comment_author_email' => '',
+					'comment_author_url'   => '',
+					'comment_content'      => 'SUBJECT+COMMENT',
+					'permalink'            => ('http://gallery2|view=core.ShowItem|' .
+							'itemId=0|htmlEntities:|forceFullUrl:1'),
+				),
+			),
+			array(
+				"HTTP/1.0 200 OK\r\n",
+				"Header: value\r\n",
+				'body',
+			)
+		);
+
+		$akismet = new AkismetApiTest_AkismetApiWithMockUserAgent();
+		$this->assertEquals(
+			array(
+				null,
+				'body',
+				'HTTP/1.0 200 OK',
+				array(
+					'Header' => 'value',
+				),
+			),
+			$akismet->_request('AKISMET_REQUEST', $this->_comment, false)
+		);
+	}
+
+	public function testResponseHandledIndependentOfHttpVersion() {
+		$this->_akismet->setReply(
+			'_request',
+			array('submit-ham', $this->_comment, false),
+			// The HTTP status 200 message should processed independently of the HTTP version
+			array(null, 'body', 'HTTP/1.0 200 OK', 'headers')
+		);
+
+		$this->assertEquals(null, $this->_akismet->submitHam($this->_comment));
+	}
+}
+
+class AkismetApiTest_MockUrlGenerator {
+	public function generateUrl($args = array(), $options = array()) {
+		$url = 'http://gallery2';
+
+		foreach ($args as $key => $val) {
+			$url .= "|$key=$val";
+		}
+
+		foreach ($options as $key => $val) {
+			$url .= "|$key:$val";
+		}
+
+		return $url;
+	}
+}
+
+class AkismetApiTest_AkismetApiWithMockUserAgent extends AkismetApi {
+	public function _getUserAgent() {
+		return array(null, 'USER_AGENT');
+	}
+}
+
+class AkismetApiTest_AkismetApiWithMockRequest extends AkismetApi {
+	public function setReply($function, $args, $reply) {
+		$_REQUEST['mock'][$function][serialize($args)] = $reply;
+	}
+
+	public function _request($type, &$comment, $includeBrowserSpecificDetails) {
+		return $_REQUEST['mock']['_request'][serialize(array($type, $comment, $includeBrowserSpecificDetails))];
+	}
+
+	public function _getUserAgent() {
+		return $_REQUEST['mock']['_getUserAgent'][serialize(array())];
+	}
+}

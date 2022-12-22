@@ -1,0 +1,652 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/exif/classes/ExifHelper.class');
+
+/**
+ * Test Exif Helper functionality
+ * @todo (xlerb) more tests, to be really sure, that our new underlying lib/JPEG does it's job well.
+ *      This will ensure a working G2 even in case, lib/JPEG changes (especially because
+ *      the lib/JPEG author has delegated some work on the lib to me). Also, there are plans to
+ *      reduce include penalties for lib/JPEG. Let us protect against failures before
+ *      actually changing the lib. And, by definition/specs, IPTC data may be spread
+ *      throughout JPEG files, responsible to follow specs is the application writing IPTC data.
+ *      Theoretically one could create mock files to test all variants of allowed (per spec)
+ *      meta data distribution ... when I someday will be able to do that, I'll do for G2 (then
+ *      as the author of the "final" EXIF/IPTC/XMP application and surely senior developer
+ *      at Adobe Inc. :).
+ *      Until then I'm happy to "keep G2 running" and fall back to just test common IPTC
+ *      apps around and the correctness of lib/exifer and lib/JPEG to handle the resulting
+ *      binaries.
+ *      Tests to add are especially JPEG files manipulated by more than one IPTC capable
+ *      application in turn, e.g. PS->Exifer->IrfanView. Also the current jpeg files are
+ *      all produced on little endian machines. Small jpeg files produced on big endian
+ *      machines and stored as big endian would provide for another neccessary test.
+ *
+ * @package Exif
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @author Georg Rehfeld <rehfeld@georg-rehfeld.de>
+ * @version $Revision: 17580 $
+ */
+class ExifHelperTest extends GalleryTestCase {
+	public $_save = array();
+
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_save['summary']) = ExifHelper::getProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_save['detailed']) = ExifHelper::getProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = ExifHelper::setDefaultProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = ExifHelper::setDefaultProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $this->_saveFormat) = GalleryCoreApi::getPluginParameter('module', 'core', 'format.datetime');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'core',
+			'format.datetime',
+			$this->_saveFormat
+		);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = ExifHelper::setProperties(EXIF_SUMMARY, $this->_save['summary']);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = ExifHelper::setProperties(EXIF_DETAILED, $this->_save['detailed']);
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	/**
+	 * Test getting EXIF data from a test file.
+	 */
+	public function testGetExifData() {
+		list($ret, $exifData) = ExifHelper::getExifData(
+			__DIR__ . '/../data/CanonS30.small.jpg',
+			EXIF_SUMMARY
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		/*
+		 * What we get back depends on what options we've set for our mode, which will vary
+		 * depending on the current settings of the database.  Even if we request a specific field,
+		 * we still may not get it back if its not in the image.  Doh.  Let's do a quick and dirty
+		 * test for now and just check for 'Make' and 'Model' to make sure that we got something.
+		 */
+		$verifiedCount = 0;
+
+		for ($i = 0; $i < sizeof($exifData); $i++) {
+			if ($exifData[$i]['title'] == 'Make') {
+				$this->assertEquals('Canon', $exifData[$i]['value']);
+				$verifiedCount++;
+			}
+
+			if ($exifData[$i]['title'] == 'Model') {
+				$this->assertEquals('Canon PowerShot S30', $exifData[$i]['value']);
+				$verifiedCount++;
+			}
+		}
+		$this->assertEquals(2, $verifiedCount);
+
+		// Make sure there are no duplicates in the list
+		$seen = array();
+
+		for ($i = 0; $i < sizeof($exifData); $i++) {
+			$title = $exifData[$i]['title'];
+			$this->assertTrue(!isset($seen[$title]), "$title is duplicated");
+			$seen[$title] = 1;
+		}
+	}
+
+	/**
+	 * Make sure that we sanitize EXIF data as if it were any other input data
+	 */
+	public function testGetExifDataWithEmbeddedScript() {
+		$ret = ExifHelper::setProperties(EXIF_SUMMARY, array('Copyright'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $exifData) = ExifHelper::getExifData(
+			__DIR__ . '/../data/exif-embedded-script.jpg',
+			EXIF_SUMMARY
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('Copyright', $exifData[0]['title']);
+		$this->assertEquals('&lt;script&gt;&lt;/script&gt;', $exifData[0]['value']);
+	}
+
+	/**
+	 * Test getting all the EXIF keys
+	 */
+	public function testGetExifKeys() {
+		// There are a bajillion keys.  Do a quick sanity check
+		$exifKeys = ExifHelper::getExifKeys();
+		$this->assertEquals(199, sizeof($exifKeys));
+		$this->assertTrue(isset($exifKeys['ImageType']));
+		$this->assertTrue(isset($exifKeys['IPTC/Keywords']));
+		$this->assertTrue(isset($exifKeys['GPS/Latitude']));
+	}
+
+	/**
+	 * Test getting IPTC data from an Adobe test file, actually having real IPTC data (as opposed
+	 * to only XMP data, which is not distinguishable in current Adobe products).
+	 */
+	public function testGetRawIptcDataAdobe() {
+		list($ret, $iptcObj) = ExifHelper::getIptcObject(__DIR__ . '/../data/exif-iptc-xmp-ps.jpg');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(isset($iptcObj));
+
+		$data      = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Keywords'));
+		$dataArray = explode('; ', $data);
+		$this->assertEquals(3, count($dataArray), 'keyword count');
+		$this->assertTrue(in_array('keyword0', $dataArray), 'IPTC/Keywords keyword0 missing');
+		$this->assertTrue(in_array('keyword1', $dataArray), 'IPTC/Keywords keyword1 missing');
+		$this->assertTrue(in_array('keyword2', $dataArray), 'IPTC/Keywords keyword2 missing');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Caption'));
+		$this->assertEquals('Caption, Beschreibung', $data, 'IPTC/Caption mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'CaptionWriter'));
+		// Truncated in IPTC data, XMP data is 'CaptionWriter, Verfasser der Beschreibung'
+		$this->assertEquals(
+			'CaptionWriter, Verfasser der Bes',
+			$data,
+			'IPTC/CaptionWriter mismatch'
+		);
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Headline'));
+		$this->assertEquals('Headline, Ueberschrift', $data, 'IPTC/Headline mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'SpecialInstructions'));
+		$this->assertEquals(
+			'SpecialInstructions, Anweisungen',
+			$data,
+			'IPTC/SpecialInstructions mismatch'
+		);
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Category'));
+		$this->assertEquals('c1', $data, 'IPTC/Category mismatch');
+
+		$data      = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'SupplementalCategories'));
+		$dataArray = explode('; ', $data);
+		$this->assertEquals(2, count($dataArray));
+		$this->assertTrue(in_array('c2', $dataArray), 'IPTC/SupplementalCategories c2 missing');
+		$this->assertTrue(in_array('c3', $dataArray), 'IPTC/SupplementalCategories c3 missing');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Byline'));
+		$this->assertEquals('Byline, Autor', $data, 'IPTC/Byline mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'BylineTitle'));
+		$this->assertEquals('BylineTitle, Autorentitel', $data, 'IPTC/BylineTitle mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Credit'));
+		$this->assertEquals('Credit, Mitwirkende', $data, 'IPTC/Credit mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Source'));
+		$this->assertEquals('Source, Quelle', $data, 'IPTC/Source mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'CopyrightNotice'));
+		$this->assertEquals(
+			'CopyrightNotice, Copyright-Informationen',
+			$data,
+			'IPTC/CopyrightNotice mismatch'
+		);
+
+		/*
+		 * TODO(xlerb) This test fails. Adobe PS does not set the field CopyrightFlag into
+		 * any true IPTC value. Also, 'CopyrightFlag' is named 'Urgency' in the IPTC specification.
+		 * Other IPTC apps partly seem to support 'Urgency'.
+		 */
+		/*
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'CopyrightFlag'));
+		$this->assertEquals('c1', $data, 'IPTC/CopyrightFlag mismatch');
+		*/
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'ObjectName'));
+		$this->assertEquals('ObjectName, Dokumenttitel', $data, 'IPTC/ObjectName mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'City'));
+		$this->assertEquals('City, Ort', $data, 'IPTC/City mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'ProvinceState'));
+		$this->assertEquals(
+			'ProvinceState, Bundesland/Kanton',
+			$data,
+			'IPTC/ProvinceState mismatch'
+		);
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'CountryName'));
+		$this->assertEquals('CountryName, Land', $data, 'IPTC/CountryName mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'OriginalTransmissionReference'));
+		// shortened in IPTC, is 'OriginalTransmissionReference, Uebertragungsreferenz' in XMP
+		$this->assertEquals(
+			'OriginalTransmissionReference, U',
+			$data,
+			'IPTC/OriginalTransmissionReference mismatch'
+		);
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'DateCreated'));
+		$this->assertEquals('20050402', $data, 'IPTC/DateCreated mismatch');
+	}
+
+	/**
+	 * Test getting IPTC data from an Exifer for Windows test file, see
+	 * (http://www.exifer.friedemann.info/) which does not know about XMP data. The author reports
+	 * problems with some PHP software, so let's make sure, we are doing things right.
+	 */
+	public function testGetRawIptcDataExifer() {
+		list($ret, $iptcObj) = ExifHelper::getIptcObject(__DIR__ . '/../data/iptc-exifer.jpg');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(isset($iptcObj));
+
+		$data      = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Keywords'));
+		$dataArray = explode('; ', $data);
+		$this->assertEquals(4, count($dataArray), 'keyword count');
+		$this->assertTrue(in_array('keyword0', $dataArray), 'IPTC/Keywords keyword0 missing');
+		$this->assertTrue(in_array('keyword1', $dataArray), 'IPTC/Keywords keyword1 missing');
+		$this->assertTrue(in_array('keyword2', $dataArray), 'IPTC/Keywords keyword2 missing');
+		$this->assertTrue(in_array('keyword3', $dataArray), 'IPTC/Keywords keyword3 missing');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'CopyrightNotice'));
+		$this->assertEquals('copyright notice', $data, 'IPTC/CopyrightNotice mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'CaptionWriter'));
+		$this->assertEquals('Author', $data, 'IPTC/CaptionWriter mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'DateCreated'));
+		$this->assertEquals('20050421', $data, 'IPTC/DateCreated mismatch');
+
+		// Exifer can set a TimeCreated, does the timezone thing wrong
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'TimeCreated'));
+		$this->assertEquals('120000+0000', $data, 'IPTC/TimeCreated mismatch');
+	}
+
+	/**
+	 * Test getting IPTC data from an IrfanView test file, see (http://www.irfanview.com/)
+	 * which does not know about XMP data.
+	 */
+	public function testGetRawIptcDataIrfanView() {
+		list($ret, $iptcObj) = ExifHelper::getIptcObject(__DIR__ . '/../data/iptc-irfanview.jpg');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(isset($iptcObj));
+
+		$data      = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Keywords'));
+		$dataArray = explode('; ', $data);
+		$this->assertEquals(5, count($dataArray), 'keyword count');
+		$this->assertTrue(in_array('keyword0', $dataArray), 'IPTC/Keywords keyword0 missing');
+		$this->assertTrue(in_array('keyword1', $dataArray), 'IPTC/Keywords keyword1 missing');
+		$this->assertTrue(in_array('keyword2', $dataArray), 'IPTC/Keywords keyword2 missing');
+		$this->assertTrue(in_array('keyword3', $dataArray), 'IPTC/Keywords keyword3 missing');
+		$this->assertTrue(in_array('keyword4', $dataArray), 'IPTC/Keywords keyword4 missing');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Caption'));
+		$this->assertEquals('Caption: IPTC/Caption', $data, 'IPTC/Caption mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'CaptionWriter'));
+		// SHOULD be truncated in IPTC data, IrfanView doesn't respect hat, can we read it?
+		$this->assertEquals(
+			'Caption writer: IPTC/CaptionWriter, much toooooo looong',
+			$data,
+			'IPTC/CaptionWriter mismatch'
+		);
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Headline'));
+		$this->assertEquals('Headline: IPTC/Headline', $data, 'IPTC/Headline mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'SpecialInstructions'));
+		$this->assertEquals(
+			'Special instructions: IPTC/SpecialInstructions',
+			$data,
+			'IPTC/SpecialInstructions mismatch'
+		);
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Category'));
+		// IPTC limits this to 3, PS to 2 chars. IrfanView doesn't respect that, can we read it?
+		$this->assertEquals(
+			'Category: IPTC/Category, muuuch tooo loooooong',
+			$data,
+			'IPTC/Category mismatch'
+		);
+
+		$data      = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'SupplementalCategories'));
+		$dataArray = explode('; ', $data);
+		$this->assertEquals(3, count($dataArray), 'SupplementalCategories count');
+		// IPTC limits this to 3, PS to 2 chars. IrfanView doesn't respect that, can we read it?
+		$this->assertTrue(
+			in_array('Supplemental categories', $dataArray),
+			'IPTC/SupplementalCategories 0 missing'
+		);
+		$this->assertTrue(
+			in_array('IPTC/SupplementalCategories 1', $dataArray),
+			'IPTC/SupplementalCategories 1 missing'
+		);
+		$this->assertTrue(
+			in_array('IPTC/SupplementalCategories 2', $dataArray),
+			'IPTC/SupplementalCategories 2 missing'
+		);
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Byline'));
+		$this->assertEquals('Byline: IPTC/Byline', $data, 'IPTC/Byline mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'BylineTitle'));
+		$this->assertEquals('Byline title: IPTC/BylineTitle', $data, 'IPTC/BylineTitle mismatch');
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'CopyrightNotice'));
+		$this->assertEquals(
+			'Copyright: IPTC/CopyrightNotice',
+			$data,
+			'IPTC/CopyrightNotice mismatch'
+		);
+	}
+
+	/**
+	 * Test getting IPTC data from a test file with ISO-8859-1 german umlauts inside. These must be
+	 * converted to UTF-8.
+	 */
+	public function testGetRawIptcDataISO_8859_1() {
+		list($ret, $iptcObj) = ExifHelper::getIptcObject(__DIR__ . '/../data/iptc-iso-8859-1.jpg');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(isset($iptcObj));
+
+		$data = ExifHelper::getIptcValue($iptcObj, array('IPTC', 'Caption'), 'ISO-8859-1');
+		$this->assertEquals(
+			'caption with german umlauts and sharp s: ' .
+			"\xC3\xA4\xC3\xB6\xC3\xBC\xC3\x84\xC3\x96\xC3\x9C\xC3\x9F",
+			$data,
+			'IPTC/Caption ISO-8859-1 mismatch'
+		);
+	}
+
+	/**
+	 * Make sure that we sanitize IPTC data as if it were any other input data
+	 */
+	public function testGetIptcDataWithEmbeddedScript() {
+		$ret = ExifHelper::setProperties(EXIF_SUMMARY, array('IPTC/Keywords'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $exifData) = ExifHelper::getExifData(
+			__DIR__ . '/../data/iptc-embedded-script.jpg',
+			EXIF_SUMMARY
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('IPTC: Keywords', $exifData[0]['title']);
+		$this->assertEquals('&lt;script&gt;&lt;/script&gt;', $exifData[0]['value']);
+	}
+
+	/**
+	 * Check post processing code.
+	 */
+	public function testPostProcessKeys() {
+		global $gallery;
+		$platform =& $gallery->getPlatform();
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'core', 'format.datetime', '%x %X');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			'f/2.8',
+			ExifHelper::postProcessValue('ApertureValue', 'f 2.8')
+		);
+
+		// Check for locale formatting of dates in different input formats.
+		$this->assertEquals(
+			$platform->strftime('%x %X', mktime(14, 18, 7, 4, 11, 2005)),
+			ExifHelper::postProcessValue('DateTime', '2005-04-11T14:18:07'),
+			'Mismatch on date without a timezone'
+		);
+		// Check negative and incomplete timezone.
+		$this->assertEquals(
+			$platform->strftime('%x %X', mktime(13, 18, 7, 4, 11, 2005)),
+			ExifHelper::postProcessValue('DateTime', '2005-04-11T14:18:07-01'),
+			'Mismatch on date with timezone -01'
+		);
+		// Check positive and complete timezone, turn around to next year (happy new year there).
+		$this->assertEquals(
+			$platform->strftime('%x %X', mktime(0, 31, 7, 1, 1, 2006)),
+			ExifHelper::postProcessValue('DateTime', '2005-12-31T22:01:07+02:30'),
+			'Mismatch on date with timezone +02:30'
+		);
+		/*
+		 * Check for possible charset problems. E.g. march is M&auml;rz in german.
+		 * This test is expected to fail for some locales depending on strftime defaults (e.g. when
+		 * months are formatted as string instad of number). If it breaks on your system please
+		 * notify me with details at rehfeld@georg-rehfeld.de.
+		 */
+		$months = array(
+			'january',
+			'february',
+			'march',
+			'april',
+			'may',
+			'june',
+			'july',
+			'august',
+			'september',
+			'october',
+			'november',
+			'december',
+		);
+
+		for ($i = 0; $i < 12; $i++) {
+			$this->assertEquals(
+				$platform->strftime('%x %X', mktime(12, 18, 7, $i + 1, 11, 2005)),
+				ExifHelper::postProcessValue(
+					'DateTime',
+					'2005-' . sprintf('%.2d', $i + 1) . '-11T14:18:07-02:00'
+				),
+				'Mismatch on localized date for ' . $months[$i]
+			);
+		}
+	}
+
+	public function testPostProcessValueDoesSanitize() {
+		$originalValue = 'A text with \ some backslashes \\.';
+		$this->assertEquals(
+			$originalValue,
+			ExifHelper::postProcessValue('SomeValue', $originalValue),
+			'backslash'
+		);
+
+		$this->assertEquals(
+			'&lt;ScRiPt foo=bar&gt;blah&lt;/SCRIPT&gt;',
+			ExifHelper::postProcessValue(
+				'SomeValue',
+				'<ScRiPt foo=bar>blah</SCRIPT>'
+			),
+			'html'
+		);
+	}
+
+	/**
+	 * Test adding default summary IPTC properties, as used on upgrade.
+	 */
+	public function testAddDefaultIptcPropertiesSummary() {
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Remove all IPTC values.
+		array_splice($properties, array_search('IPTC/Caption', $properties), 1);
+		array_splice($properties, array_search('IPTC/CopyrightNotice', $properties), 1);
+		$ret = ExifHelper::setProperties(EXIF_SUMMARY, $properties);
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Make sure they are gone.
+		$this->assertTrue(!in_array('IPTC/Caption', $properties), 'Caption not gone');
+		$this->assertTrue(!in_array('IPTC/CopyrightNotice', $properties), 'CopyrightNotice not gone');
+
+		// Add them back with the function to test.
+		$ret = ExifHelper::addDefaultIptcProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_SUMMARY);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Make sure they are back again.
+		$this->assertTrue(in_array('IPTC/Caption', $properties), 'Caption not back');
+		$this->assertTrue(in_array('IPTC/CopyrightNotice', $properties), 'CopyrightNotice not back');
+	}
+
+	/**
+	 * Test adding default detailed IPTC properties, as used on upgrade.
+	 */
+	public function testAddDefaultIptcPropertiesDetailed() {
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Remove all IPTC values.
+		array_splice($properties, array_search('IPTC/Caption', $properties), 1);
+		array_splice($properties, array_search('IPTC/CopyrightNotice', $properties), 1);
+		array_splice($properties, array_search('IPTC/Keywords', $properties), 1);
+
+		$ret = ExifHelper::setProperties(EXIF_DETAILED, $properties);
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Make sure they are gone.
+		$this->assertTrue(!in_array('IPTC/Caption', $properties), 'Caption not gone');
+		$this->assertTrue(!in_array('IPTC/CopyrightNotice', $properties), 'CopyrightNotice not gone');
+		$this->assertTrue(!in_array('IPTC/Keywords', $properties), 'Keywords not gone');
+
+		// Add them back with the function to test.
+		$ret = ExifHelper::addDefaultIptcProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $properties) = ExifHelper::getProperties(EXIF_DETAILED);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Make sure they are back again.
+		$this->assertTrue(in_array('IPTC/Caption', $properties), 'Caption not back');
+		$this->assertTrue(in_array('IPTC/CopyrightNotice', $properties), 'CopyrightNotice not back');
+		$this->assertTrue(in_array('IPTC/Keywords', $properties), 'Keywords not back');
+	}
+}

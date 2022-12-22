@@ -1,0 +1,123 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Path Info Parser tests
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
+GalleryCoreApi::requireOnce('modules/rewrite/classes/parsers/pathinfo/parser.inc');
+GalleryCoreApi::requireOnce('modules/rewrite/test/phpunit/RewriteParserTestCase.class');
+class PathInfoParserTest extends RewriteParserTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, null);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp('PathInfoParser');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_testPassString = 'PASS_PATH_INFO';
+	}
+
+	public function testHandleTestResultsRequest1() {
+		$form = array();
+
+		$form['force']['test']      = 1;
+		list($ret, $error, $status) = $this->_parser->handleTestResultsRequest($form);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $forced) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'pathinfo.forced'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('1', $forced);
+		$this->assertEquals(
+			array(
+				'saved' => 1,
+			),
+			$status
+		);
+		$this->assertEquals(array(), $error);
+	}
+
+	public function testHandleTestResultsRequest2() {
+		$form = array();
+
+		list($ret, $error, $status) = $this->_parser->handleTestResultsRequest($form);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $forced) = GalleryCoreApi::getPluginParameter(
+			'module',
+			'rewrite',
+			'pathinfo.forced'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals('0', $forced);
+		$this->assertEquals(
+			array(
+				'saved' => 1,
+			),
+			$status
+		);
+		$this->assertEquals(array(), $error);
+	}
+
+	public function testNeedsConfigurationForced() {
+		$ret = GalleryCoreApi::setPluginParameter('module', 'rewrite', 'pathinfo.forced', '1');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('pathInfoTest', 'fail');
+		list($ret, $status) = $this->_parser->needsConfiguration();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(!$status, 'forced');
+	}
+}
