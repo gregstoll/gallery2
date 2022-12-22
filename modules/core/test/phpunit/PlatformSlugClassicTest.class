@@ -1,0 +1,209 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program;
+ * if not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+ * Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Test classic slug platform functionality.
+ * @package GalleryCore
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @author Orestes Sanchez <miceno.atreides@gmail.com>
+ */
+
+GalleryCoreApi::requireOnce('modules/core/test/phpunit/PlatformSlugBase.class');
+
+class PlatformSlugClassicTest extends PlatformSlugBase
+{
+	public function setUp($x1 = null)
+	{
+		$this->_slugMode = "classic";
+		parent::setUp();
+	}
+
+	public function testIsLegalPathComponentClassic()
+	{
+		$this->assertTrue($this->_platform->isLegalPathComponent('TheQuickBrownFox'));
+		$this->assertFalse($this->_platform->isLegalPathComponent('The!QuickBrownFox'));
+	}
+
+	public function testLegalizePathComponentClassic()
+	{
+		$this->assertEquals(
+		    'The_Quick_',
+		    $this->_platform->legalizePathComponent('The!Quick$'),
+		    "Legal path for 'The!Quick$' does not match"
+		);
+	}
+
+	public function testLegalizePathComponentUnknownExtensionClassic()
+	{
+		$this->assertEquals(
+		    'test_zzz',
+		    $this->_platform->legalizePathComponent('test.zzz')
+		);
+	}
+
+	public function testLegalizePathComponent3Classic()
+	{
+		$this->assertEquals(
+		    'test_php.jpg',
+		    $this->_platform->legalizePathComponent('test.php.jpg'),
+		    "Legal path for 'test.php.jpg' does not match"
+
+		);
+	}
+
+	public function testLegalizePathComponentForDirectoryClassic()
+	{
+		$this->assertEquals(
+		    'test_.php.jpg_',
+		    $this->_platform->legalizePathComponent('test!.php.jpg$', true),
+		    "Legal path for 'test!.php.jpg$' does not match"
+		);
+	}
+
+	public function testPathComponentLegalCharactersConservedClassic()
+	{
+		$this->assertTrue(
+		    $this->_platform->isLegalPathComponent('TheQuickBrownFox')
+		);
+		$this->assertEquals(
+		    'TheQuickBrownFox',
+		    $this->_platform->legalizePathComponent('TheQuickBrownFox')
+		);
+	}
+
+	public function testPathComponentIllegalCharactersToUnderscoresClassic()
+	{
+		$this->assertFalse(
+		    $this->_platform->isLegalPathComponent('The Quick!Brown#Fox'),
+		    'The Quick!Brown@Fox is legal path component'
+		);
+		$this->assertEquals(
+		    'The Quick_Brown#Fox',
+		    $this->_platform->legalizePathComponent('The Quick!Brown#Fox'),
+		    "Legal path for 'The Quick!Brown#Fox' does not match"
+		);
+	}
+
+	public function testPathComponentDotInFileBaseToUnderscoreClassic()
+	{
+		$this->assertFalse(
+		    $this->_platform->isLegalPathComponent('test.php.jpg'),
+		    'test.php.jpg is legal pathcomponent'
+		);
+		$this->assertEquals(
+		    'test_php.jpg',
+		    $this->_platform->legalizePathComponent('test.php.jpg')
+		);
+	}
+
+	public function testPathComponentDotRecognizedExtensionConservedClassic()
+	{
+		$this->assertEquals(
+		    true,
+		    $this->_platform->isLegalPathComponent('test.jpg')
+		);
+		$this->assertEquals(
+		    'test.jpg',
+		    $this->_platform->legalizePathComponent('test.jpg')
+		);
+	}
+
+	public function testPathComponentDotUnrecognizedExtensionToUnderscoreClassic()
+	{
+		$this->assertFalse(
+		    $this->_platform->isLegalPathComponent('test.foo'),
+		    'test.foo is legal pathcomponent'
+		);
+		$this->assertEquals(
+		    'test_foo',
+		    $this->_platform->legalizePathComponent('test.foo')
+		);
+	}
+
+	public function testPathComponentDotPhpExtensionToUnderscoreClassic()
+	{
+		$this->assertFalse(
+		    $this->_platform->isLegalPathComponent('test.php'),
+		    'test.php is legal pathcomponent'
+		);
+		$this->assertEquals(
+		    'test_php',
+		    $this->_platform->legalizePathComponent('test.php')
+		);
+	}
+
+	public function testSlugPathComponentAdminFileExampleConserved()
+	{
+		$this->assertEquals(
+		    'Fotograf__a _Espa__a_ _1924_.jpg',
+		    $this->_platform->legalizePathComponentClassic('Fotografía (España) [1924].jpg')
+		);
+	}
+
+	public function testSlugPathComponentAdminFolderExampleConserved()
+	{
+		$this->assertEquals(
+		    'Fotograf__as _1924-1950_',
+		    $this->_platform->legalizePathComponentClassic('Fotografías [1924-1950]')
+		);
+	}
+
+
+	public function testPathComponentDotUnderscoreToUnderscoreUnderscoreClassic()
+	{
+		$this->assertFalse(
+		    $this->_platform->isLegalPathComponent('._test'),
+		    '._test is legal pathcomponent'
+		);
+		$this->assertEquals(
+		    '__test',
+		    $this->_platform->legalizePathComponent('._test')
+		);
+	}
+
+	public function testIsLegalPathComponentWithDotForDirectoryClassic()
+	{
+		$this->assertEquals(
+		    true,
+		    $this->_platform->isLegalPathComponent('some._test', true)
+		);
+	}
+
+	public function testLegalizePathComponentWithBlacklistedExtensionClassic()
+	{
+		$this->_platform->_blacklistedFileExtensions[] = 'xxx';
+
+		$this->assertEquals('test_xxx', $this->_platform->legalizePathComponent('test.xxx'));
+	}
+
+	public function testIsLegalPathComponentForAllowedExtensionClassic()
+	{
+		$this->assertFalse($this->_platform->isLegalPathComponent('test.xxx'));
+		$this->assertFalse($this->_platform->isLegalPathComponent('test.XxX'), 'mixed case');
+	}
+
+	public function testIsLegalPathComponentForBlacklistedExtensionClassic()
+	{
+		$this->_platform->_blacklistedFileExtensions[] = 'wmv';
+
+		$this->assertFalse($this->_platform->isLegalPathComponent('test.wmv'));
+		$this->assertFalse($this->_platform->isLegalPathComponent('test.WmV'), 'upper case');
+	}
+
+}
