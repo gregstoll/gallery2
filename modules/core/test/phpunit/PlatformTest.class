@@ -25,6 +25,13 @@
  * @version $Revision: 17961 $
  */
 class PlatformTest extends GalleryTestCase {
+
+	/**
+	 * Internal platform
+	 * @var object
+	 */
+	var $_platform = null;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -240,140 +247,6 @@ class PlatformTest extends GalleryTestCase {
 	public function testMkdir() {
 		$this->assertTrue($this->_platform->mkdir($this->_destFile), 'mkdir');
 		$this->assertTrue($this->_platform->recursiveRmdir($this->_destFile));
-	}
-
-	public function testIsLegalPathComponent() {
-		$this->assertTrue($this->_platform->isLegalPathComponent('TheQuickBrownFox'));
-		$this->assertFalse($this->_platform->isLegalPathComponent('The!QuickBrownFox'));
-	}
-
-	public function testLegalizePathComponent() {
-		$this->assertEquals(
-			'The_Quick_',
-			$this->_platform->legalizePathComponent('The!Quick$')
-		);
-	}
-
-	public function testLegalizePathComponentUnknownExtension() {
-		$this->assertEquals(
-			'test_zzz',
-			$this->_platform->legalizePathComponent('test.zzz')
-		);
-	}
-
-	public function testLegalizePathComponent3() {
-		$this->assertEquals(
-			'test_php.jpg',
-			$this->_platform->legalizePathComponent('test.php.jpg')
-		);
-	}
-
-	public function testLegalizePathComponentForDirectory() {
-		$this->assertEquals(
-			'test_.php.jpg_',
-			$this->_platform->legalizePathComponent('test!.php.jpg$', true)
-		);
-	}
-
-	public function testPathComponentLegalCharactersConserved() {
-		$this->assertTrue(
-			$this->_platform->isLegalPathComponent('TheQuickBrownFox')
-		);
-		$this->assertEquals(
-			'TheQuickBrownFox',
-			$this->_platform->legalizePathComponent('TheQuickBrownFox')
-		);
-	}
-
-	public function testPathComponentIllegalCharactersToUnderscores() {
-		$this->assertFalse(
-			$this->_platform->isLegalPathComponent('The Quick!Brown#Fox'),
-			'The Quick!Brown@Fox is legal path component'
-		);
-		$this->assertEquals(
-			'The Quick_Brown#Fox',
-			$this->_platform->legalizePathComponent('The Quick!Brown#Fox')
-		);
-	}
-
-	public function testPathComponentDotInFileBaseToUnderscore() {
-		$this->assertFalse(
-			$this->_platform->isLegalPathComponent('test.php.jpg'),
-			'test.php.jpg is legal pathcomponent'
-		);
-		$this->assertEquals(
-			'test_php.jpg',
-			$this->_platform->legalizePathComponent('test.php.jpg')
-		);
-	}
-
-	public function testPathComponentDotRecognizedExtensionConserved() {
-		$this->assertEquals(
-			true,
-			$this->_platform->isLegalPathComponent('test.jpg')
-		);
-		$this->assertEquals(
-			'test.jpg',
-			$this->_platform->legalizePathComponent('test.jpg')
-		);
-	}
-
-	public function testPathComponentDotUnrecognizedExtensionToUnderscore() {
-		$this->assertFalse(
-			$this->_platform->isLegalPathComponent('test.foo'),
-			'test.foo is legal pathcomponent'
-		);
-		$this->assertEquals(
-			'test_foo',
-			$this->_platform->legalizePathComponent('test.foo')
-		);
-	}
-
-	public function testPathComponentDotPhpExtensionToUnderscore() {
-		$this->assertFalse(
-			$this->_platform->isLegalPathComponent('test.php'),
-			'test.php is legal pathcomponent'
-		);
-		$this->assertEquals(
-			'test_php',
-			$this->_platform->legalizePathComponent('test.php')
-		);
-	}
-
-	public function testPathComponentDotUnderscoreToUnderscoreUnderscore() {
-		$this->assertFalse(
-			$this->_platform->isLegalPathComponent('._test'),
-			'._test is legal pathcomponent'
-		);
-		$this->assertEquals(
-			'__test',
-			$this->_platform->legalizePathComponent('._test')
-		);
-	}
-
-	public function testIsLegalPathComponentWithDotForDirectory() {
-		$this->assertEquals(
-			true,
-			$this->_platform->isLegalPathComponent('some._test', true)
-		);
-	}
-
-	public function testLegalizePathComponentWithBlacklistedExtension() {
-		$this->_platform->_blacklistedFileExtensions[] = 'xxx';
-
-		$this->assertEquals('test_xxx', $this->_platform->legalizePathComponent('test.xxx'));
-	}
-
-	public function testIsLegalPathComponentForAllowedExtension() {
-		$this->assertTrue($this->_platform->isLegalPathComponent('test.xxx'));
-		$this->assertTrue($this->_platform->isLegalPathComponent('test.XxX'), 'mixed case');
-	}
-
-	public function testIsLegalPathComponentForBlacklistedExtension() {
-		$this->_platform->_blacklistedFileExtensions[] = 'xxx';
-
-		$this->assertFalse($this->_platform->isLegalPathComponent('test.xxx'));
-		$this->assertFalse($this->_platform->isLegalPathComponent('test.XXX'), 'upper case');
 	}
 
 	/**

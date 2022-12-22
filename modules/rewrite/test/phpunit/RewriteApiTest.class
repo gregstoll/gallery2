@@ -1,0 +1,546 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
+
+/**
+ * Test RewriteApi functionality
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+class RewriteApiTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'rewrite');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Set up our mock parser
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'rewrite',
+			'parserId',
+			'rewriteapimock'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Make sure we use the mock parser
+		GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
+		list($ret, $parser) = RewriteHelper::getRewriteParser(true);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('rewriteapimock', $parser->getParserId(), 'parserId');
+
+		// Load the api class
+		list($ret, $this->_rewriteApi) = GalleryCoreApi::newFactoryInstance('RewriteApi');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Set gallery in embedded mode
+		GalleryDataCache::put('G2_EMBED', 1, true);
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		GalleryDataCache::remove('G2_EMBED');
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testIsCompatibleWithApi() {
+		$currentVersion = $this->_rewriteApi->getApiVersion();
+
+		list($ret, $isCompatible) = $this->_rewriteApi->isCompatibleWithApi($currentVersion);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue($isCompatible, 'same version');
+
+		$compatibleVersion        = array($currentVersion[0], 0);
+		list($ret, $isCompatible) = $this->_rewriteApi->isCompatibleWithApi($compatibleVersion);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue($isCompatible, 'should be compatible, requiring same or lower minor version');
+
+		$incompatibleVersion      = array(--$currentVersion[0], 0);
+		list($ret, $isCompatible) = $this->_rewriteApi->isCompatibleWithApi($incompatibleVersion);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(!$isCompatible, 'should be incompatible, requiring lower major version');
+	}
+
+	public function testGetParserId() {
+		$this->assertEquals('rewriteapimock', $this->_rewriteApi->getParserId());
+	}
+
+	public function testGetParserType() {
+		$this->assertEquals('mock', $this->_rewriteApi->getParserType());
+	}
+
+	public function testNeedsEmbedConfig1() {
+		list($ret, $needsConfiguration) = $this->_rewriteApi->needsEmbedConfig();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue($needsConfiguration);
+	}
+
+	public function testNeedsEmbedConfig2() {
+		GalleryDataCache::remove('G2_EMBED');
+		list($ret, $needsConfiguration) = $this->_rewriteApi->needsEmbedConfig();
+
+		if ($ret && !($ret->getErrorCode() & ERROR_UNSUPPORTED_OPERATION)) {
+			return $ret;
+		}
+
+		$this->assertTrue(ERROR_UNSUPPORTED_OPERATION & $ret->getErrorCode());
+	}
+
+	public function testFetchEmbedConfig1() {
+		list($ret, $params) = $this->_rewriteApi->fetchEmbedConfig();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(
+			array(
+				'phpunit' => 'test',
+			),
+			$params
+		);
+	}
+
+	public function testFetchEmbedConfig2() {
+		GalleryDataCache::remove('G2_EMBED');
+		list($ret, $params) = $this->_rewriteApi->fetchEmbedConfig();
+
+		if ($ret && !($ret->getErrorCode() & ERROR_UNSUPPORTED_OPERATION)) {
+			return $ret;
+		}
+
+		$this->assertTrue(ERROR_UNSUPPORTED_OPERATION & $ret->getErrorCode());
+	}
+
+	public function testSaveEmbedConfig1() {
+		list($ret, $code, $errstr) = $this->_rewriteApi->saveEmbedConfig(
+			array(
+				'phpunit' => 1,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_OK, $code, 'code');
+		$this->assertEquals(null, $errstr, 'errstr');
+
+		list($ret, $code, $errstr) = $this->_rewriteApi->saveEmbedConfig(
+			array(
+				'phpunit' => 0,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(REWRITE_STATUS_INVALID_PATTERN, $code, 'code');
+		$this->assertEquals('Bad pattern', $errstr, 'errstr');
+	}
+
+	public function testSaveEmbedConfig2() {
+		GalleryDataCache::remove('G2_EMBED');
+		list($ret, $params) = $this->_rewriteApi->saveEmbedConfig(array());
+
+		if ($ret && !($ret->getErrorCode() & ERROR_UNSUPPORTED_OPERATION)) {
+			return $ret;
+		}
+
+		$this->assertTrue(ERROR_UNSUPPORTED_OPERATION & $ret->getErrorCode());
+	}
+
+	public function testFetchActiveRulesForModule() {
+		list($ret, $expectedRules, $moduleId) = $this->_prepareActivateRewriteRulesForModule(REWRITE_STATUS_OK, true, true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Execute the method under test
+		list($ret, $activeRules) = $this->_rewriteApi->fetchActiveRulesForModule($moduleId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify the results
+		$this->assertEquals(array_keys($expectedRules[$moduleId]), $activeRules, 'active rules');
+	}
+
+	public function testFetchActiveRulesForModuleUsesHistory() {
+		list($ret, $expectedRules, $moduleId) = $this->_prepareActivateRewriteRulesForModule(REWRITE_STATUS_OK, false, true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Execute the method under test
+		list($ret, $activeRules) = $this->_rewriteApi->fetchActiveRulesForModule($moduleId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify the results
+		$this->assertEquals(array('rule2', 'rule0'), $activeRules, 'active rules');
+	}
+
+	public function testActivateRewriteRulesForModule() {
+		list($ret, $expectedRules, $moduleId) = $this->_prepareActivateRewriteRulesForModule();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Execute the method under test
+		list($ret, $success) = $this->_rewriteApi->activateRewriteRulesForModule($moduleId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify the results
+		$this->assertTrue($success, 'should have succeeded');
+
+		$expectedRules[$moduleId]['rule1'] = array(
+			'pattern' => 'abc',
+		);
+		$expectedRules[$moduleId]['rule2'] = array(
+			'pattern' => '123',
+		);
+		$this->assertEquals($expectedRules, $_SERVER['saveActiveRules'], 'saved rules');
+	}
+
+	public function testActivateRewriteRulesForModuleOnlySpecificRule() {
+		list($ret, $expectedRules, $moduleId) = $this->_prepareActivateRewriteRulesForModule();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Execute the method under test
+		list($ret, $success) = $this->_rewriteApi->activateRewriteRulesForModule($moduleId, array('rule2'));
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify the results
+		$this->assertTrue($success, 'should have succeeded');
+		$expectedRules[$moduleId]['rule2'] = array(
+			'pattern' => '123',
+		);
+
+		$this->assertEquals($expectedRules, $_SERVER['saveActiveRules'], 'saved rules');
+	}
+
+	public function testActivateRewriteRulesForModuleReturnsFalseWhenNotConfigured() {
+		list($ret, $expectedRules, $moduleId) = $this->_prepareActivateRewriteRulesForModule(REWRITE_STATUS_INVALID_PATTERN);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Execute the method under test
+		list($ret, $success) = $this->_rewriteApi->activateRewriteRulesForModule($moduleId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify the results
+		$this->assertTrue(!$success, 'should have failed');
+	}
+
+	public function testActivateRewriteRulesForModuleUsesPatternHistory() {
+		list($ret, $expectedRules, $moduleId) = $this->_prepareActivateRewriteRulesForModule(REWRITE_STATUS_OK, true, true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Execute the method under test
+		list($ret, $success) = $this->_rewriteApi->activateRewriteRulesForModule($moduleId);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify the results
+		$this->assertTrue($success, 'should have succeeded');
+
+		$expectedRules[$moduleId]['rule1'] = array(
+			'pattern' => 'existing pattern for r1',
+		);
+		$expectedRules[$moduleId]['rule2'] = array(
+			'pattern' => 'old pattern for r2',
+		);
+		$this->assertEquals($expectedRules, $_SERVER['saveActiveRules'], 'saved rules');
+
+		list($ret, $history) = RewriteHelper::getHistoryForModule($moduleId);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			array(
+				'rule0' => array(
+					'pattern' => 'foo',
+				),
+			),
+			$history,
+			'history for rule1 should have been removed'
+		);
+	}
+
+	public function testActivateRewriteRulesForModuleIgnoresExistingPatternsAndPatternHistoryOnRequest() {
+		list($ret, $expectedRules, $moduleId) = $this->_prepareActivateRewriteRulesForModule(REWRITE_STATUS_OK, true, true);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Execute the method under test
+		list($ret, $success) = $this->_rewriteApi->activateRewriteRulesForModule(
+			$moduleId,
+			null,
+			true
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Verify the results
+		$this->assertTrue($success, 'should have succeeded');
+
+		$expectedRules[$moduleId]['rule1'] = array(
+			'pattern' => 'abc',
+		);
+		$expectedRules[$moduleId]['rule2'] = array(
+			'pattern' => '123',
+		);
+		$this->assertEquals($expectedRules, $_SERVER['saveActiveRules'], 'saved rules');
+
+		list($ret, $history) = RewriteHelper::getHistoryForModule($moduleId);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(
+			array(
+				'rule0' => array(
+					'pattern' => 'foo',
+				),
+			),
+			$history,
+			'history for rule1 should have been removed'
+		);
+	}
+
+	public function _prepareActivateRewriteRulesForModule(
+		$returnCode = REWRITE_STATUS_OK,
+		$hasActiveRulesForModule = false,
+		$hasHistory = false
+	) {
+		$module   = new RewriteApiMockModule();
+		$moduleId = $module->getId();
+
+		$activeRules = array(
+			'a' => array(
+				'r1' => array(
+					'pattern' => 'abc',
+				),
+				'r2' => array(
+					'pattern' => '123',
+				),
+			),
+			'b' => array(
+				'r1' => array(
+					'pattern' => '.*',
+				),
+			),
+		);
+
+		if ($hasActiveRulesForModule) {
+			$activeRules[$moduleId]['rule1'] = array(
+				'pattern' => 'existing pattern for r1',
+			);
+		}
+
+		$expectedRules             = $activeRules;
+		$activeRules['returnCode'] = $returnCode;
+
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'rewrite',
+			'activeRules',
+			serialize($activeRules)
+		);
+
+		if ($ret) {
+			return array($ret, null, null);
+		}
+		$_SERVER['saveActiveRules'] = null;
+
+		if ($hasHistory) {
+			// Create a pattern history for that module
+			$ret = RewriteHelper::setHistoryForModule(
+				$moduleId,
+				array(
+					'rule2' => array(
+						'pattern' => 'old pattern for r2',
+					),
+					'rule0' => array(
+						'pattern' => 'foo',
+					),
+				)
+			);
+
+			if ($ret) {
+				return array($ret, null, null);
+			}
+		}
+
+		return array(null, $expectedRules, $moduleId);
+	}
+}
+
+/**
+ * Mock rewrite parser for this test
+ */
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteParser.class');
+class RewriteApiMockParser extends RewriteParser {
+	public function __construct() {
+		$this->_setParserId('rewriteapimock');
+		$this->_setParserType('mock');
+	}
+
+	public function needsEmbedConfig() {
+		return array(null, true);
+	}
+
+	public function fetchEmbedConfig() {
+		return array(
+			null,
+			array(
+				'phpunit' => 'test',
+			),
+		);
+	}
+
+	public function saveEmbedConfig($params) {
+		if ($params['phpunit']) {
+			return array(null, REWRITE_STATUS_OK, null);
+		}
+
+		return array(null, REWRITE_STATUS_INVALID_PATTERN, 'Bad pattern');
+	}
+
+	/**
+	 * @see RewriteParser::saveActiveRules
+	 */
+	public function saveActiveRules(
+		$parser = null,
+		$activeRules = null,
+		$upgradeModule = null
+	) {
+		if (is_null($parser)) {
+			return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null, null);
+		}
+
+		$returnCode = $activeRules['returnCode'];
+		unset($activeRules['returnCode']);
+		$_SERVER['saveActiveRules'] = $activeRules;
+
+		return array(null, $returnCode, null);
+	}
+}
+
+/**
+ * Mock module for tests
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ */
+class RewriteApiMockModule extends GalleryModule {
+	public function __construct() {
+		$this->setId('rewriteapimock');
+		$this->setRequiredCoreApi(GalleryCoreApi::getApiVersion());
+		$this->setRequiredModuleApi(GalleryModule::getApiVersion());
+	}
+
+	public function getRewriteRules() {
+		return array(
+			'rule1' => array(
+				'pattern' => 'abc',
+			),
+			'rule2' => array(
+				'pattern' => '123',
+			),
+		);
+	}
+}

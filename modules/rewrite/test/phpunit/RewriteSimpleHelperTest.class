@@ -1,0 +1,248 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * Rewrite Simple Helper tests
+ *
+ * @package Rewrite
+ * @subpackage PHPUnit
+ * @author Douglas Cau <douglas@cau.se>
+ * @version $Revision: 17580 $
+ */
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteSimpleHelper.class');
+GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteUrlGenerator.class');
+class RewriteSimpleHelperTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$urlGenerator = new RewriteUrlGenerator();
+		$urlGenerator->init('phpunit');
+		$gallery->setUrlGenerator($urlGenerator);
+	}
+
+	public function testParsePath() {
+		list($ret, $testAlbum) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($testAlbum);
+		list($ret, $testItem) = $this->_createRandomDataItem(
+			$testAlbum->getId(),
+			'application/unknown',
+			array(
+				'pathComponent' => 'foo# bar&.dat',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		list($ret, $testItemPath) = $testItem->fetchLogicalPath();
+
+		if ($ret) {
+			return $ret;
+		}
+		$testItemPath = str_replace('%2F', '/', urlencode($testItemPath));
+
+		$url    = 'v/%path%';
+		$entity = null;
+		$params = array(
+			'view'   => 'core.ShowItem',
+			'itemId' => $testItem->getId(),
+		);
+		$ret    = RewriteSimpleHelper::parsePath($url, $params, $entity);
+
+		$this->assertTrue($ret, 'status');
+		$this->assertEquals('v' . $testItemPath . '.html', $url, 'url');
+		$this->assertEquals(
+			array(
+				'view' => 'core.ShowItem',
+			),
+			$params,
+			'params'
+		);
+	}
+
+	public function testParseFileName() {
+		list($ret, $testAlbum) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($testAlbum);
+		list($ret, $testItem) = $this->_createRandomDataItem(
+			$testAlbum->getId(),
+			'application/unknown',
+			array(
+				'pathComponent' => 'foo# bar&.dat',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $derivative) = $this->_createDerivative($testItem, $testItem->getId(), DERIVATIVE_TYPE_IMAGE_RESIZE);
+
+		if ($ret) {
+			return $ret;
+		}
+		$testItemName = urlencode($testItem->getPathComponent());
+
+		$url    = 'd/%fileName%';
+		$entity = null;
+		$params = array(
+			'view'   => 'core.DownloadItem',
+			'itemId' => $derivative->getId(),
+		);
+		$ret    = RewriteSimpleHelper::parseFileName($url, $params, $entity);
+
+		$this->assertTrue($ret, 'status');
+		$this->assertEquals('d/' . $testItemName, $url, 'url');
+		$this->assertEquals(
+			array(
+				'view'   => 'core.DownloadItem',
+				'itemId' => $derivative->getId(),
+			),
+			$params,
+			'params'
+		);
+	}
+
+	public function testParseSerialNumber() {
+		list($ret, $testAlbum) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($testAlbum);
+		list($ret, $testItem) = $this->_createRandomDataItem(
+			$testAlbum->getId(),
+			'application/unknown',
+			array(
+				'pathComponent' => 'foo# bar&.dat',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $derivative) = $this->_createDerivative($testItem, $testItem->getId(), DERIVATIVE_TYPE_IMAGE_RESIZE);
+
+		if ($ret) {
+			return $ret;
+		}
+		$testSerialNumber = $testItem->getSerialNumber();
+
+		$url    = 'd/%serialNumber%';
+		$entity = null;
+		$params = array(
+			'view'   => 'core.DownloadItem',
+			'itemId' => $derivative->getId(),
+		);
+		$ret    = RewriteSimpleHelper::parseSerialNumber($url, $params, $entity);
+
+		$this->assertTrue($ret, 'status');
+		$this->assertEquals('d/' . $testSerialNumber, $url, 'url');
+		$this->assertEquals(
+			array(
+				'view'   => 'core.DownloadItem',
+				'itemId' => $derivative->getId(),
+			),
+			$params,
+			'params'
+		);
+	}
+
+	public function testParseLanguage() {
+		global $gallery;
+
+		list($ret, $language) = $gallery->getActiveLanguageCode();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (empty($language)) {
+			$language = array('en', 'US');
+		}
+		list($null, $defaultLanguages) = GalleryTranslator::doStatic()->getLanguageData();
+
+		$language = explode('_', $language);
+
+		if (isset($language[1]) && $defaultLanguages[$language[0]] == $language[1]) {
+			unset($language[1]);
+		}
+		$language = join('_', $language);
+
+		$url    = 'v/%language%';
+		$entity = null;
+		$params = array(
+			'view' => 'core.ShowItem',
+		);
+		$ret    = RewriteSimpleHelper::parseLanguage($url, $params, $entity);
+
+		$this->assertTrue($ret, 'status');
+		$this->assertEquals('v/' . $language, $url, 'url');
+		$this->assertEquals(
+			array(
+				'view' => 'core.ShowItem',
+			),
+			$params,
+			'params'
+		);
+	}
+
+	public function testLoadItemIdFromPath() {
+		// Setup..
+		list($ret, $testAlbum) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($testAlbum);
+
+		list($ret, $testAlbumPath) = $testAlbum->fetchLogicalPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('path', $testAlbumPath);
+		$ret = RewriteSimpleHelper::loadItemIdFromPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$itemId = (int)GalleryUtilities::getRequestVariables('itemId');
+		$this->assertEquals($testAlbum->getId(), $itemId);
+	}
+}

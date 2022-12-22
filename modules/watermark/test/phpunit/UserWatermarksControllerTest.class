@@ -1,0 +1,443 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/watermark/classes/WatermarkHelper.class');
+GalleryCoreApi::requireOnce('modules/watermark/classes/WatermarkImage.class');
+
+/**
+ * UserWatermarks controller tests
+ *
+ * @package Watermark
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class UserWatermarksControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'watermark.UserWatermarks');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$watermark_module = new WatermarkModule();
+		$this->_registerTestEventListener('GalleryEntity::delete', $watermark_module);
+
+		list($ret, $this->_user) = $this->_createUser();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_markForCleanup($this->_user);
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'watermark');
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter('module', 'watermark', 'allowUserWatermarks', 1);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_saveUser = $gallery->getActiveUser();
+		$gallery->setActiveUser($this->_user);
+	}
+
+	public function tearDown() {
+		if (isset($this->_idToDelete)) {
+			$ret = GalleryCoreApi::deleteEntityById($this->_idToDelete, 'WatermarkImage');
+
+			if ($ret) {
+				echo $ret->getAsHtml();
+				$this->failWithStatus($ret);
+			}
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testAddWatermark() {
+		global $gallery;
+		$platform =& $gallery->getPlatform();
+
+		$dataFile     = GalleryCoreApi::getCodeBasePath('modules/core/test/data/test1.gif');
+		$rand         = mt_rand();
+		$targetName   = sprintf('phpunit_%s.gif', $rand);
+		$expectedName = sprintf('phpunit_%s_gif', $rand);
+		GalleryUtilities::putRequestVariable('form[action][add]', 1);
+		GalleryUtilities::putRequestVariable('form[name][1]', $targetName);
+		GalleryUtilities::putRequestVariable('form[type][1]', 'image/gif');
+		GalleryUtilities::putRequestVariable('form[tmp_name][1]', $dataFile);
+		GalleryUtilities::putRequestVariable('form[size][1]', $platform->filesize($dataFile));
+		GalleryUtilities::putRequestVariable('form[error][1]', 0);
+
+		$results    = $this->handleRequest();
+		$counter    =& GalleryTestCase::getEntityCounter();
+		$expectedId = $counter->getRecentEntityId('WatermarkImage');
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'        => 'core.UserAdmin',
+					'subView'     => 'watermark.UserWatermarkEdit',
+					'watermarkId' => $expectedId,
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+
+
+		// Verify the watermark exists
+		list($ret, $map) = $this->_fetchWatermarkMapByFilename();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertTrue(isset($map[$expectedName]), 'Watermark not added');
+	}
+
+	public function testAddWatermarkMissing() {
+		GalleryUtilities::putRequestVariable('form[action][add]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'watermark.UserWatermarks',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][missingFile]'),
+			),
+			$results
+		);
+	}
+
+	public function testDeleteWatermark() {
+		// Create a watermark (it'll be created as our active user)
+		$watermark = new WatermarkImage();
+		$ret       = $watermark->create(__FILE__, 'test/file', 'phpunit_' . mt_rand() . '.gif');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $watermark->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+		GalleryUtilities::putRequestVariable('form[delete][watermarkId]', $watermark->getId());
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.UserAdmin',
+					'subView' => 'watermark.UserWatermarks',
+				),
+				'status'   => array(
+					'delete' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		$ret = $this->_verifyMissing($watermark->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testDeleteWatermarkInUse() {
+		// Create a watermark (it'll be created as our active user)
+		$watermark = new WatermarkImage();
+		$ret       = $watermark->create(__FILE__, 'test/file', 'phpunit_' . mt_rand() . '.gif');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $watermark->save();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Use this watermark
+		list($ret, $item) = $this->_createRandomDataItem($this->_getRootId());
+
+		if ($ret) {
+			return $ret->wrap($ret);
+		}
+		$this->_markForCleanup($item);
+		list($ret, $derivative) = $this->_createDerivative(
+			$item,
+			$item->getId(),
+			DERIVATIVE_TYPE_IMAGE_THUMBNAIL,
+			'',
+			'test/file',
+			array(
+				'postFilterOperations' => 'composite|plugins_data/modules/watermark/'
+														. $watermark->getFileName() . ',...',
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Try to delete it
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+		GalleryUtilities::putRequestVariable('form[delete][watermarkId]', $watermark->getId());
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'        => 'core.UserAdmin',
+					'subView'     => 'watermark.ConfirmDelete',
+					'watermarkId' => $watermark->getId(),
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results,
+			'Confirm Delete'
+		);
+
+		// Verify that it's NOT gone
+		$ret = $this->_verifyEntity($watermark);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testIllegalDeleteWatermark() {
+		// valid, but illegal
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+		GalleryUtilities::putRequestVariable('form[delete][watermarkId]', 1);
+
+		$results = $this->handleRequest(ERROR_MISSING_OBJECT);
+
+		// invalid and illegal
+		GalleryUtilities::putRequestVariable('form[action][delete]', 1);
+		GalleryUtilities::putRequestVariable('form[delete][watermarkId]', 123456789);
+
+		$results = $this->handleRequest(ERROR_MISSING_OBJECT);
+	}
+
+	public function testAddMaliciousFile() {
+		global $gallery;
+		$platform =& $gallery->getPlatform();
+
+		$dataFile     = GalleryCoreApi::getCodeBasePath('modules/core/test/data/test1.gif');
+		$rand         = mt_rand();
+		$targetName   = sprintf('phpunit_%s.php', $rand);
+		$expectedName = sprintf('phpunit_%s_php', $rand);
+		GalleryUtilities::putRequestVariable('form[action][add]', 1);
+		GalleryUtilities::putRequestVariable('form[name][1]', $targetName);
+		GalleryUtilities::putRequestVariable('form[type][1]', 'image/gif');
+		GalleryUtilities::putRequestVariable('form[tmp_name][1]', $dataFile);
+		GalleryUtilities::putRequestVariable('form[size][1]', $platform->filesize($dataFile));
+		GalleryUtilities::putRequestVariable('form[error][1]', 0);
+
+		$results    = $this->handleRequest();
+		$counter    =& GalleryTestCase::getEntityCounter();
+		$expectedId = $counter->getRecentEntityId('WatermarkImage');
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'        => 'core.UserAdmin',
+					'subView'     => 'watermark.UserWatermarkEdit',
+					'watermarkId' => $expectedId,
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+
+
+		// Verify the watermark exists
+		list($ret, $map) = $this->_fetchWatermarkMapByFilename();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		if (!isset($map[$expectedName])) {
+			return $this->assertTrue(isset($map[$expectedName]), 'Watermark not added');
+		}
+
+		list($ret, $path) = $map[$expectedName]->fetchPath();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// We're expecting the same name, but the . changed to _ in the file extension
+		$this->assertEquals($expectedName, basename($path));
+	}
+
+	public function testAddWatermarkSameFilenameAsOtherUser() {
+		global $gallery;
+		$platform =& $gallery->getPlatform();
+
+		// Start with admin user..
+		$gallery->setActiveUser($this->_saveUser);
+
+		$dataFile     = GalleryCoreApi::getCodeBasePath('modules/core/test/data/test1.gif');
+		$rand         = mt_rand();
+		$targetName   = sprintf('phpunit_%s.gif', $rand);
+		$expectedName = sprintf('phpunit_%s_gif', $rand);
+		GalleryUtilities::putRequestVariable('form[action][add]', 1);
+		GalleryUtilities::putRequestVariable('form[name][1]', $targetName);
+		GalleryUtilities::putRequestVariable('form[type][1]', 'image/gif');
+		GalleryUtilities::putRequestVariable('form[tmp_name][1]', $dataFile);
+		GalleryUtilities::putRequestVariable('form[size][1]', $platform->filesize($dataFile));
+		GalleryUtilities::putRequestVariable('form[error][1]', 0);
+
+		$results           = $this->handleRequest();
+		$counter           =& GalleryTestCase::getEntityCounter();
+		$this->_idToDelete = $expectedId = $counter->getRecentEntityId('WatermarkImage');
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'        => 'core.UserAdmin',
+					'subView'     => 'watermark.UserWatermarkEdit',
+					'watermarkId' => $expectedId,
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results,
+			'Add first watermark'
+		);
+
+		// Verify the watermark exists
+		list($ret, $map) = $this->_fetchWatermarkMapByFilename();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(isset($map[$expectedName]), 'First watermark not added');
+
+		// Now change active user and add watermark with same filename..
+		$gallery->setActiveUser($this->_user);
+		$expectedName = '_' . $expectedName;
+
+		$results    = $this->handleRequest();
+		$expectedId = $counter->getRecentEntityId('WatermarkImage');
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'        => 'core.UserAdmin',
+					'subView'     => 'watermark.UserWatermarkEdit',
+					'watermarkId' => $expectedId,
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results,
+			'Add second watermark'
+		);
+
+		// Verify the watermark exists
+		list($ret, $map) = $this->_fetchWatermarkMapByFilename();
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertTrue(isset($map[$expectedName]), 'Second watermark not added');
+	}
+
+	public function testPermission() {
+		global $gallery;
+
+		GalleryUtilities::putRequestVariable('form[action][add]', 1);
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'watermark', 'allowUserWatermarks', 0);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$results = $this->handleRequest(ERROR_PERMISSION_DENIED);
+
+		$ret = GalleryCoreApi::setPluginParameter('module', 'watermark', 'allowUserWatermarks', 1);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->_becomeGuestUser();
+
+		$results = $this->handleRequest(ERROR_PERMISSION_DENIED);
+
+		list($ret, $this->_user2) = $this->_createUser(
+			array(
+				'locked' => 1,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_user2);
+		$gallery->setActiveUser($this->_user2);
+
+		$results = $this->handleRequest(ERROR_PERMISSION_DENIED);
+	}
+
+	public function _fetchWatermarkMapByFilename() {
+		list($ret, $watermarks) = WatermarkHelper::fetchWatermarks();
+
+		if ($ret) {
+			return array($ret, null);
+		}
+
+		$results = array();
+
+		foreach ($watermarks as $id => $watermark) {
+			$results[$watermark->getFilename()] = $watermark;
+		}
+
+		return array(null, $results);
+	}
+}

@@ -50,10 +50,17 @@ class KeywordAlbumView extends GalleryView {
 	    return array($ret, null, null, null);
 	}
 	list ($keyword, $itemId) = GalleryUtilities::getRequestVariables('keyword', 'itemId');
-	$item->createDynamicAlbum(
-	    $module->translate(array('text' => 'Keyword Album: %s', 'arg1' => $keyword)),
-	    array(array('Keyword Album', 'keyword album'),
-		  array($module->translate('Keyword Album'), $module->translate('keyword album')))
+		$item->create(
+			$module->translate(
+				array(
+					'text' => 'Keyword Album: %s',
+					'arg1' => $keyword,
+				)
+			),
+			array(
+				array('Keyword Album', 'keyword album'),
+				array($module->translate('Keyword Album'), $module->translate('keyword album')),
+			)
 	);
 
 	list ($ret, $moduleParams) =

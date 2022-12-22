@@ -1,0 +1,226 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/cart/classes/CartHelper.class');
+
+/**
+ * ModifyCart controller tests
+ * @package Cart
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17923 $
+ */
+class ModifyCartControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'cart.ModifyCart');
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Create an album to hold all of the test items
+		list($ret, $this->_album) = $this->_createRandomAlbum($this->_getRootId());
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->_markForCleanup($this->_album);
+
+		// Save the existing cart
+		list($ret, $this->_saveCartItemCounts) = CartHelper::fetchCartItemCounts();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$cartItemCounts = array(
+			1 => 3,
+			2 => 3,
+		);
+
+		$ret = CartHelper::setCartItemCounts($cartItemCounts);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		// Restore the existing cart
+		$ret = CartHelper::setCartItemCounts($this->_saveCartItemCounts);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = parent::tearDown();
+
+		if ($ret) {
+			$this->failWithStatus($ret);
+		}
+	}
+
+	public function testUpdateCart() {
+		GalleryUtilities::putRequestVariable('form[delete][1]', 'on');
+		GalleryUtilities::putRequestVariable('form[counts][2]', 5);
+		GalleryUtilities::putRequestVariable('form[action][modify]', 1);
+		GalleryUtilities::putRequestVariable('form[pluginId]', 'updateCart');
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+		array('redirect'   => array('view' => 'cart.ViewCart',
+							  'itemId'     => $this->_album->getId(), ),
+				  'status' => array('cartModified' => 1),
+				  'error'  => array(), ),
+				$results
+	);
+
+		// Verify our cart
+		list($ret, $cartItemCounts) = CartHelper::fetchCartItemCounts();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(2 => 5), $cartItemCounts);
+	}
+
+	public function testEmptyCart() {
+		GalleryUtilities::putRequestVariable('form[action][modify]', 1);
+		GalleryUtilities::putRequestVariable('form[pluginId]', 'emptyCart');
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+		array('redirect'   => array('view' => 'cart.ViewCart',
+							  'itemId'     => $this->_album->getId(), ),
+				  'status' => array('cartModified' => 1),
+				  'error'  => array(), ),
+				$results
+	);
+
+
+		// Verify our cart
+		list($ret, $cartItemCounts) = CartHelper::fetchCartItemCounts();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(array(), $cartItemCounts);
+	}
+
+	public function testFulfillCart() {
+		// Work with real items in this test
+		list($ret, $photoItem) = $this->_createRandomDataItem(
+		$this->_album->getId(),
+		'image/jpeg',
+		array(),
+		GalleryCoreApi::getCodeBasePath('modules/core/test/data/test1.jpg')
+	);
+
+		if ($ret) {
+			return $ret;
+		}
+		$photoItemId = $photoItem->getId();
+
+		list($ret, $dataItem) = $this->_createRandomDataItem($this->_album->getId());
+
+		if ($ret) {
+			return $ret;
+		}
+		$dataItemId = $dataItem->getId();
+
+		$cartItemCounts = array($dataItemId => 2,
+				$photoItemId                => 1, );
+		$ret            = CartHelper::setCartItemCounts($cartItemCounts);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		GalleryUtilities::putRequestVariable("form[counts][$photoItemId]", 3);
+		GalleryUtilities::putRequestVariable("form[counts][$dataItemId]", 2);
+		GalleryUtilities::putRequestVariable('form[action][modify]', 1);
+		GalleryUtilities::putRequestVariable('form[pluginId]', 'modifycartcontrollertest');
+		GalleryUtilities::putRequestVariable('itemId', $this->_album->getId());
+
+		$this->_registerFactoryImplementationForTest(
+		'CartPluginInterface_1_1',
+		'ModifyCartControllerTestCartPlugin',
+		'modifycartcontrollertest',
+		__FILE__,
+		'cart'
+	);
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+		array('redirect'   => array('controller' => 'cart.TestPlugin'),
+				  // Verify that itemId is not set, see bug 2013274
+				  'status' => array('cartModified' => 1),
+				  'error'  => array(), ),
+				$results
+	);
+
+		// Verify that the cart has been processed correctly (filtered and updated count)
+		/**
+		 * @todo Shouldn't we update item counts on fulfillment requests as well?
+		 */
+		$this->assertEquals(
+		array($photoItemId => 1),
+				$_SERVER['ModifyCartControllerTest']['cartItemIds'],
+				'cart contents sent to cart plugin'
+	);
+	}
+}
+
+class ModifyCartControllerTestCartPlugin // extends CartPluginInterface_1_1
+{
+	public function getSupportedItemTypes() {
+		return array('GalleryPhotoItem');
+	}
+
+	public function getActionDisplayName() {
+		return array(null, 'Test cart plugin');
+	}
+
+	public function fulfillCart($cartItemIds) {
+		$_SERVER['ModifyCartControllerTest']['cartItemIds'] = $cartItemIds;
+
+		return array(null, array('controller' => 'cart.TestPlugin'));
+	}
+
+	public function getRequiredPermissions() {
+		return array('core.view');
+	}
+}

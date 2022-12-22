@@ -1,0 +1,314 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * PicLensHelper tests
+ * @package Slideshow
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class PicLensHelperTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$UnitTestPlatform = new UnitTestPlatform();
+		$gallery->setPlatform($UnitTestPlatform);
+		$gallery->setConfig('data.gallery.plugins_data', '/');
+	}
+
+	public function tearDown() {
+		global $gallery;
+
+		$this->assertTrue($gallery->_platform->isComplete(), $gallery->_platform->getRemaining());
+
+		return parent::tearDown();
+	}
+
+	/**
+	 * Set up our test platform to return the given data for requests to the given url.  This
+	 * handles both GalleryCoreApi::fetchWebPage and GalleryCoreApi::fetchWebFile.  You can
+	 * specify an optional outputFile (for fetchWebFile) and a response code to simulate an error.
+	 *
+	 * @todo refactor this method out into GalleryTestCase, and add support for optional headers.
+	 */
+	public function _setDownload($url, $data, $outputFile = null, $responseCode = '200 OK') {
+		global $gallery;
+
+		$urlInfo = parse_url($url);
+		$host    = $urlInfo['host'];
+		$path    = $urlInfo['path'];
+
+		$platform =& $gallery->_platform;
+		$platform->setReply('fsockopen', array($host, 80, null, null, 5), 'IN');
+		$platform->setReply(
+			'fwrite',
+			array('IN', "GET $path HTTP/1.0\r\nHost: $host\r\n\r\n", null),
+			true
+		);
+		$platform->setReply('fflush', array('IN'), null);
+		$platform->setReply('fgets', array('IN', 4096), "HTTP/1.1 $responseCode\r\n");
+		$platform->setReply('feof', array('IN'), false);
+		$platform->setReply('fgets', array('IN', 4096), "\r\n");
+
+		if ($outputFile) {
+			$platform->setReply('fopen', array($outputFile, 'wb', 0), 'OUT');
+		}
+		$platform->setReply('feof', array('IN'), false);
+		$platform->setReply('fread', array('IN', 4096), $data);
+
+		if ($outputFile) {
+			$platform->setReply('fwrite', array('OUT', $data, null), strlen($data));
+		}
+		$platform->setReply('feof', array('IN'), true);
+
+		if ($outputFile) {
+			$platform->setReply('fclose', array('OUT'), true);
+		}
+		$platform->setReply('fclose', array('IN'), true);
+	}
+
+	public function testInstall() {
+		global $gallery;
+
+		$this->_setDownload(
+			'http://gallery.menalto.com/versioncheck/piclens/release',
+			"version=VERSION\njsUrl=http://host/path/js\nswfUrl=http://host/path/swf\n"
+		);
+		$this->_setDownload(
+			'http://host/path/js',
+			'JS DATA',
+			'/modules/slideshow/piclens.js.new'
+		);
+		$this->_setDownload(
+			'http://host/path/swf',
+			'SWF DATA',
+			'/modules/slideshow/PicLensLite.swf.new'
+		);
+
+		$gallery->_platform->setReply(
+			'rename',
+			array('/modules/slideshow/piclens.js.new', '/modules/slideshow/piclens.js'),
+			true
+		);
+		$gallery->_platform->setReply(
+			'rename',
+			array('/modules/slideshow/PicLensLite.swf.new', '/modules/slideshow/PicLensLite.swf'),
+			true
+		);
+
+		list($ret, $version) = PicLensHelper::install();
+
+		$this->assertEquals('VERSION', $version);
+	}
+
+	public function testInstallMissingVersion() {
+		$this->_setDownload(
+			'http://gallery.menalto.com/versioncheck/piclens/release',
+			"version=\njsUrl=http://host/path/js\nswfUrl=http://host/path/swf\n"
+		);
+
+		list($ret, $version) = PicLensHelper::install();
+		$this->assertErrorEquals(ERROR_MISSING_VALUE, $ret);
+	}
+
+	public function testInstallMissingJsUrl() {
+		$this->_setDownload(
+			'http://gallery.menalto.com/versioncheck/piclens/release',
+			"version=VERSION\njsUrl=\nswfUrl=http://host/path/swf\n"
+		);
+
+		list($ret, $version) = PicLensHelper::install();
+		$this->assertErrorEquals(ERROR_MISSING_VALUE, $ret);
+	}
+
+	public function testInstallMissingSwfUrl() {
+		$this->_setDownload(
+			'http://gallery.menalto.com/versioncheck/piclens/release',
+			"version=VERSION\njsUrl=http://host/path/js\nswfUrl=\n"
+		);
+
+		list($ret, $version) = PicLensHelper::install();
+		$this->assertErrorEquals(ERROR_MISSING_VALUE, $ret);
+	}
+
+	public function testInstallMissingEverything() {
+		$this->_setDownload(
+			'http://gallery.menalto.com/versioncheck/piclens/release',
+			''
+		);
+
+		list($ret, $version) = PicLensHelper::install();
+		$this->assertErrorEquals(ERROR_PLATFORM_FAILURE, $ret);
+	}
+
+	public function testInstallFailedToRename() {
+		global $gallery;
+
+		$this->_setDownload(
+			'http://gallery.menalto.com/versioncheck/piclens/release',
+			"version=VERSION\njsUrl=http://host/path/js\nswfUrl=http://host/path/swf\n"
+		);
+		$this->_setDownload(
+			'http://host/path/js',
+			'JS DATA',
+			'/modules/slideshow/piclens.js.new'
+		);
+		$this->_setDownload(
+			'http://host/path/swf',
+			'SWF DATA',
+			'/modules/slideshow/PicLensLite.swf.new'
+		);
+
+		// This rename fails
+		$gallery->_platform->setReply(
+			'rename',
+			array('/modules/slideshow/piclens.js.new', '/modules/slideshow/piclens.js'),
+			false
+		);
+
+		list($ret, $version) = PicLensHelper::install();
+		$this->assertErrorEquals(ERROR_PLATFORM_FAILURE, $ret);
+	}
+
+	public function testInstallFailedToFetch() {
+		global $gallery;
+
+		$this->_setDownload(
+			'http://gallery.menalto.com/versioncheck/piclens/release',
+			"version=VERSION\njsUrl=http://host/path/js\nswfUrl=http://host/path/swf\n"
+		);
+		$this->_setDownload(
+			'http://host/path/js',
+			'JS DATA',
+			'/modules/slideshow/piclens.js.new',
+			'404 Not Found'
+		);
+		$this->_setDownload(
+			'http://host/path/swf',
+			'SWF DATA',
+			'/modules/slideshow/PicLensLite.swf.new',
+			'500 Internal Server Error'
+		);
+
+		// We clean up the file that got downloaded
+		$gallery->_platform->setReply(
+			'file_exists',
+			array('/modules/slideshow/piclens.js.new'),
+			false
+		);
+		$gallery->_platform->setReply(
+			'file_exists',
+			array('/modules/slideshow/PicLensLite.swf.new'),
+			true
+		);
+		$gallery->_platform->setReply(
+			'unlink',
+			array('/modules/slideshow/PicLensLite.swf.new'),
+			true
+		);
+
+		list($ret, $version) = PicLensHelper::install();
+		$this->assertErrorEquals(ERROR_PLATFORM_FAILURE, $ret);
+	}
+
+	public function testGetLatestPicLensInfo() {
+		$this->_setDownload(
+			'http://gallery.menalto.com/versioncheck/piclens/release',
+			"version=VERSION\njsUrl=http://host/path/js\nswfUrl=http://host/path/swf\n"
+		);
+
+		$this->assertEquals(
+			array(
+				'version' => 'VERSION',
+				'jsUrl'   => 'http://host/path/js',
+				'swfUrl'  => 'http://host/path/swf',
+			),
+			PicLensHelper::getLatestPicLensInfo()
+		);
+	}
+
+	/*
+	 * Perhaps we should fail if the result is not a legitimate url?
+	 * Seems like a low priority since we own gallery.menalto.com
+	 */
+	public function testGetLatestPicLensInfoUnsanitaryReply() {
+		$this->_setDownload(
+			'http://gallery.menalto.com/versioncheck/piclens/release',
+			"version=<evil>\njsUrl=<eviler>\nswfUrl=<evilest>\n"
+		);
+
+		$this->assertEquals(
+			array(
+				'version' => '&lt;evil&gt;',
+				'jsUrl'   => '&lt;eviler&gt;',
+				'swfUrl'  => '&lt;evilest&gt;',
+			),
+			PicLensHelper::getLatestPicLensInfo()
+		);
+	}
+
+	public function testGetLatestPicLensInfoFailedToFetch() {
+		$this->_setDownload(
+			'http://gallery.menalto.com/versioncheck/piclens/release',
+			'',
+			null,
+			'404 Not Found'
+		);
+		$this->assertEquals(null, PicLensHelper::getLatestPicLensInfo());
+	}
+
+	public function testUninstall() {
+		global $gallery;
+
+		$gallery->_platform->setReply(
+			'file_exists',
+			array('/modules/slideshow/piclens.js'),
+			true
+		);
+		$gallery->_platform->setReply(
+			'unlink',
+			array('/modules/slideshow/piclens.js'),
+			true
+		);
+		$gallery->_platform->setReply(
+			'file_exists',
+			array('/modules/slideshow/PicLensLite.swf'),
+			true
+		);
+		$gallery->_platform->setReply(
+			'unlink',
+			array('/modules/slideshow/PicLensLite.swf'),
+			true
+		);
+
+		PicLensHelper::uninstall();
+	}
+}

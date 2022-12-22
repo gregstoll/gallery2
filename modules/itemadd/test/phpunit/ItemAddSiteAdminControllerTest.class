@@ -1,0 +1,635 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * ItemAddSiteAdmin controller tests
+ * @package ItemAdd
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17580 $
+ */
+class ItemAddSiteAdminControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'itemadd.ItemAddSiteAdmin');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'itemadd');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function _setUploadDirs($data) {
+		foreach ($data as $i => $value) {
+			$key = 'uploadLocalServer.dir.' . $i;
+
+			if (isset($value)) {
+				$ret = GalleryCoreApi::setPluginParameter('module', 'itemadd', $key, $value);
+
+				if ($ret) {
+					return $ret;
+				}
+			} else {
+				$ret = GalleryCoreApi::removePluginParameter('module', 'itemadd', $key);
+
+				if ($ret) {
+					return $ret;
+				}
+			}
+		}
+
+		return null;
+	}
+
+	public function testReset() {
+		GalleryUtilities::putRequestVariable('form[action][reset]', 1);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testSave() {
+		GalleryUtilities::putRequestVariable('form[action][save]', 1);
+		GalleryUtilities::putRequestVariable('form[fromweb]', 'admin');
+		GalleryUtilities::putRequestVariable('form[fromserver]', 'off');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(
+					'saved' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'itemadd');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('admin', $params['fromweb'], 'fromweb');
+		$this->assertEquals('off', $params['fromserver'], 'fromserver');
+	}
+
+	public function testAddUploadLocalServerDir() {
+		// Add should save other settings on the page too
+		GalleryUtilities::putRequestVariable('form[fromweb]', 'on');
+		GalleryUtilities::putRequestVariable('form[fromserver]', 'admin');
+
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][newDir]', __DIR__);
+		GalleryUtilities::putRequestVariable('form[action][addUploadLocalServerDir]', 1);
+
+		$ret = $this->_setUploadDirs(
+			array(
+				1 => 'a',
+				2 => 'b',
+				3 => null,
+				4 => null,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(
+					'addedDir' => 1,
+					'saved'    => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		GalleryDataCache::reset();
+		list($ret, $params) = GalleryCoreApi::fetchAllPluginParameters('module', 'itemadd');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals(__DIR__, $params['uploadLocalServer.dir.3'], 'new dir');
+		$this->assertFalse(isset($params['uploadLocalServer.dir.4']), 'end of list');
+
+		$valueMap['uploadLocalServer.dir.1'] = 'a';
+		$valueMap['uploadLocalServer.dir.2'] = 'b';
+		$valueMap['uploadLocalServer.dir.3'] = __DIR__;
+
+		foreach ($valueMap as $key => $expectedValue) {
+			$this->assertEquals($expectedValue, $params[$key], "value mismatch for $key");
+		}
+	}
+
+	public function testAddUploadLocalServerDirMissing() {
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][newDir]', '');
+		GalleryUtilities::putRequestVariable('form[action][addUploadLocalServerDir]', 1);
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][uploadLocalServer][newDir][missing]'),
+			),
+			$results
+		);
+	}
+
+	public function testAddUploadLocalServerDirNotDir() {
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][newDir]', __FILE__);
+		GalleryUtilities::putRequestVariable('form[action][addUploadLocalServerDir]', 1);
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][uploadLocalServer][newDir][notADirectory]'),
+			),
+			$results
+		);
+	}
+
+	public function testAddUploadLocalServerDirBogus() {
+		global $gallery;
+		$gallery->_phpVm = new ItemAddSiteAdminControllerTestPhpVm('');
+
+		GalleryUtilities::putRequestVariable(
+			'form[uploadLocalServer][newDir]',
+			'/this/fake/gallery2/path/wont/exist'
+		);
+		GalleryUtilities::putRequestVariable('form[action][addUploadLocalServerDir]', 1);
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][uploadLocalServer][newDir][notReadable]'),
+			),
+			$results
+		);
+
+		// Test again with an open_basedir restriction
+		$gallery->_phpVm = new ItemAddSiteAdminControllerTestPhpVm('/valid/dir');
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][uploadLocalServer][newDir][restrictedByOpenBaseDir]',
+				),
+			),
+			$results,
+			'with open_basedir'
+		);
+	}
+
+	public function testAddUploadLocalServerDirNotReadable() {
+		global $gallery;
+		$platform = new UnitTestPlatform();
+		$platform->setReply('splitPath', array('/test/path'), array('/', 'test', 'path'));
+		$platform->setReply('isRestrictedByOpenBaseDir', array('/test/path'), false);
+		$platform->setReply('is_readable', array('/test/path'), false);
+		$gallery->setPlatform($platform);
+
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][newDir]', '/test/path');
+		GalleryUtilities::putRequestVariable('form[action][addUploadLocalServerDir]', 1);
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][uploadLocalServer][newDir][notReadable]'),
+			),
+			$results
+		);
+	}
+
+	public function testAddUploadLocalServerDirRestricted() {
+		global $gallery;
+		$platform = new UnitTestPlatform();
+		$platform->setReply('splitPath', array('/test/path'), array('/', 'test', 'path'));
+		$platform->setReply('isRestrictedByOpenBaseDir', array('/test/path'), true);
+		$gallery->setPlatform($platform);
+
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][newDir]', '/test/path');
+		GalleryUtilities::putRequestVariable('form[action][addUploadLocalServerDir]', 1);
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array(
+					'form[error][uploadLocalServer][newDir][restrictedByOpenBaseDir]',
+				),
+			),
+			$results
+		);
+	}
+
+	public function testAddUploadLocalServerDirDotDotPath() {
+		// Apply realpath to paths with ..
+		global $gallery;
+		$platform = new UnitTestPlatform();
+		$platform->setReply('splitPath', array('/test/../path'), array('/', 'test', '..', 'path'));
+		$platform->setReply('realpath', array('/test/../path'), '/path');
+		$platform->setReply('isRestrictedByOpenBaseDir', array('/path'), false);
+		$platform->setReply('is_readable', array('/path'), true);
+		$platform->setReply('is_dir', array('/path'), true);
+		$gallery->setPlatform($platform);
+
+		GalleryUtilities::putRequestVariable('form[action][addUploadLocalServerDir]', 1);
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][newDir]', '/test/../path');
+		GalleryUtilities::putRequestVariable('form[fromweb]', 'off');
+		GalleryUtilities::putRequestVariable('form[fromserver]', 'on');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(
+					'addedDir' => 1,
+					'saved'    => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testAddUploadLocalServerDirRelativePath() {
+		// Relative path should be converted to absolute (with realpath)
+		global $gallery;
+		$platform =& $gallery->getPlatform();
+		$saveDir  = $platform->getcwd();
+
+		$ret = $this->_setUploadDirs(
+			array(
+				1 => 'a',
+				2 => null,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$platform->chdir(__DIR__);
+		GalleryUtilities::putRequestVariable('form[action][addUploadLocalServerDir]', 1);
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][newDir]', '.');
+		GalleryUtilities::putRequestVariable('form[fromweb]', 'off');
+		GalleryUtilities::putRequestVariable('form[fromserver]', 'admin');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(
+					'addedDir' => 1,
+					'saved'    => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		$platform->chdir($saveDir);
+
+		list($ret, $param) = GalleryCoreApi::fetchAllPluginParameters('module', 'itemadd');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('a', $param['uploadLocalServer.dir.1']);
+		$this->assertEquals(
+			$platform->realpath(__DIR__),
+			$param['uploadLocalServer.dir.2'],
+			'new dir'
+		);
+	}
+
+	public function testAddUploadLocalServerDirWithEntity() {
+		global $gallery;
+		$platform = new UnitTestPlatform();
+		$platform->setReply('splitPath', array('/php&unit'), array('/', 'php&unit'));
+		$platform->setReply('isRestrictedByOpenBaseDir', array('/php&unit'), false);
+		$platform->setReply('is_readable', array('/php&unit'), true);
+		$platform->setReply('is_dir', array('/php&unit'), true);
+		$gallery->setPlatform($platform);
+
+		GalleryUtilities::putRequestVariable('form[action][addUploadLocalServerDir]', 1);
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][newDir]', '/php&unit');
+		GalleryUtilities::putRequestVariable('form[fromweb]', 'on');
+		GalleryUtilities::putRequestVariable('form[fromserver]', 'on');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(
+					'addedDir' => 1,
+					'saved'    => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testAddUploadLocalServerDirWithUmlaut() {
+		global $gallery;
+
+		// Fake a specific charset to isolate this test
+		GalleryDataCache::put('GalleryCharsetHelper_simple::detectSystemCharset', 'ISO-8859-1');
+
+		$gallery->_phpVm = new ItemAddSiteAdminControllerTestPhpVm('');
+		$platform        = new UnitTestPlatform();
+		$iso88591String  = '/php' . chr(228) . 'unit';
+		$platform->setReply('splitPath', array($iso88591String), array($iso88591String));
+		$platform->setReply('isRestrictedByOpenBaseDir', array($iso88591String), false);
+		$platform->setReply('is_readable', array($iso88591String), true);
+		$platform->setReply('is_dir', array($iso88591String), true);
+		$gallery->setPlatform($platform);
+
+		// German umlaut '�' in ISO-8859-1
+		$umlautUtf8 = GalleryCoreApi::convertToUtf8(chr(228), 'ISO-8859-1');
+		$dir        = '/php' . $umlautUtf8 . 'unit';
+		GalleryUtilities::putRequestVariable('form[action][addUploadLocalServerDir]', 1);
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][newDir]', $dir);
+		GalleryUtilities::putRequestVariable('form[fromweb]', 'admin');
+		GalleryUtilities::putRequestVariable('form[fromserver]', 'on');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(
+					'addedDir' => 1,
+					'saved'    => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+	}
+
+	public function testAddUploadLocalServerDirWithSymlink() {
+		// If symlink in the path check open_basedir with realpath but store given path
+		global $gallery;
+		$ret = $this->_setUploadDirs(
+			array(
+				1 => 'a',
+				2 => null,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// realpath of /link/dir is /other/fun/dir
+		$platform = new UnitTestPlatform();
+		$platform->setReply('splitPath', array('/link/dir'), array('/', 'link', 'dir'));
+		$platform->setReply('isRestrictedByOpenBaseDir', array('/link/dir'), false);
+		$platform->setReply('is_readable', array('/link/dir'), true);
+		$platform->setReply('is_dir', array('/link/dir'), true);
+		$gallery->setPlatform($platform);
+
+		GalleryUtilities::putRequestVariable('form[action][addUploadLocalServerDir]', 1);
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][newDir]', '/link/dir');
+		GalleryUtilities::putRequestVariable('form[fromweb]', 'off');
+		GalleryUtilities::putRequestVariable('form[fromserver]', 'on');
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(
+					'addedDir' => 1,
+					'saved'    => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		list($ret, $param) = GalleryCoreApi::fetchAllPluginParameters('module', 'itemadd');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('a', $param['uploadLocalServer.dir.1']);
+		$this->assertEquals('/link/dir', $param['uploadLocalServer.dir.2'], 'new dir');
+	}
+
+	public function testRemoveUploadLocalServerDir() {
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][selectedDir]', '2');
+		GalleryUtilities::putRequestVariable('form[action][removeUploadLocalServerDir]', 1);
+
+		$ret = $this->_setUploadDirs(
+			array(
+				1 => 'a',
+				2 => 'x',
+				3 => 'b',
+				4 => 'c',
+				5 => null,
+			)
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Perform the request and verify that we succeeded
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(
+					'removedDir' => 1,
+				),
+				'error'    => array(),
+			),
+			$results
+		);
+
+		GalleryDataCache::reset();
+		list($ret, $param) = GalleryCoreApi::fetchAllPluginParameters('module', 'itemadd');
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('a', $param['uploadLocalServer.dir.1']);
+		$this->assertEquals('b', $param['uploadLocalServer.dir.2']);
+		$this->assertEquals('c', $param['uploadLocalServer.dir.3']);
+		$this->assertFalse(isset($param['uploadLocalServer.dir.4']), 'end of list');
+	}
+
+	public function testRemoveUploadLocalServerDirMissing() {
+		GalleryUtilities::putRequestVariable('form[uploadLocalServer][selectedDir]', '');
+		GalleryUtilities::putRequestVariable('form[action][removeUploadLocalServerDir]', 1);
+
+		// Perform the request and verify that we failed
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'delegate' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'itemadd.ItemAddSiteAdmin',
+				),
+				'status'   => array(),
+				'error'    => array('form[error][uploadLocalServer][selectedDir][missing]'),
+			),
+			$results
+		);
+	}
+}
+
+/**
+ * @package ItemAdd
+ * @subpackage PHPUnit
+ */
+class ItemAddSiteAdminControllerTestPhpVm extends GalleryPhpVm {
+	public function __construct($iniVal) {
+		$this->_iniVal = $iniVal;
+	}
+
+	public function ini_get($varname) {
+		if ($varname == 'open_basedir') {
+			return $this->_iniVal;
+		}
+
+		return parent::ini_get($varname);
+	}
+
+	// For the upload directory test
+	public function function_exists($functionName) {
+		// make it use our charset tables, they work on all platforms
+		switch ($functionName) {
+			case 'iconv':
+			case 'mb_convert_encoding':
+			case 'recode_string':
+				return false;
+
+			case 'nl_langinfo':
+				return true;
+
+			default:
+				return function_exists($functionName);
+		}
+	}
+
+	public function setlocale($category, $locale) {
+		return '';
+	}
+
+	/*
+	 * Other test cases might define CODESET on Windows. In this case we need to declare
+	 * the method as well.
+	 */
+	public function nl_langinfo($item) {
+		return 'ISO-8859-1';
+	}
+}

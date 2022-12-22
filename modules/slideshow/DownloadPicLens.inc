@@ -127,7 +127,7 @@ class DownloadPicLensView extends GalleryView {
 	    if ($fd = $platform->fopen($data['path'], 'rb')) {
 		while (true) {
 		    $bytes = $platform->fread($fd, 65535);
-		    if (strlen($bytes) == 0) {
+		    if (strlen($bytes??'') == 0) {
 			break;
 		    }
 		    print $bytes;

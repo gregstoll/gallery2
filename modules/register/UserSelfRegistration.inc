@@ -106,7 +106,7 @@ class UserSelfRegistrationController extends GalleryController {
 		    return array(GalleryCoreApi::error(ERROR_MISSING_OBJECT), null);
 		}
 
-		$ret = $user->create($form['userName']);
+		$ret = $user->createPendingUser($form['userName']);
 		if ($ret) {
 		    if (!($ret->getErrorCode() & ERROR_COLLISION)) {
 			return array($ret, null);

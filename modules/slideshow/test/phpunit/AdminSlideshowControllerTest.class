@@ -1,0 +1,160 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+/**
+ * AdminSlideshow controller tests
+ * @package Slideshow
+ * @subpackage PHPUnit
+ * @author Bharat Mediratta <bharat@menalto.com>
+ * @version $Revision: 17580 $
+ */
+class AdminSlideshowControllerTest extends GalleryControllerTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName, 'slideshow.AdminSlideshow');
+	}
+
+	public function setUp($x1 = null) {
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'slideshow');
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function testInstallNotSiteAdmin() {
+		$ret = $this->_becomeGuestUser();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->handleRequest(ERROR_PERMISSION_DENIED);
+	}
+
+	public function testInstallSuccess() {
+		GalleryUtilities::putRequestVariable('form[action][install]', 1);
+		$mockPicLensHelper = new AdminSlideshowControllerTest_MockPicLensHelper();
+		$mockPicLensHelper->setReply('install', array(), array(null, 'TEST_VERSION'));
+		$this->_controller->_setPicLensHelper($mockPicLensHelper);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'slideshow.AdminSlideshow',
+				),
+				'error'    => array(),
+				'status'   => array(
+					'installed' => 'TEST_VERSION',
+				),
+			),
+			$results
+		);
+
+		$this->assertTrue($mockPicLensHelper->isComplete(), $mockPicLensHelper->getRemaining());
+	}
+
+	public function testInstallFailed() {
+		GalleryUtilities::putRequestVariable('form[action][install]', 1);
+		$mockPicLensHelper = new AdminSlideshowControllerTest_MockPicLensHelper();
+		$mockPicLensHelper->setReply(
+			'install',
+			array(),
+			array(GalleryCoreApi::error(ERROR_UNKNOWN), null)
+		);
+		$this->_controller->_setPicLensHelper($mockPicLensHelper);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'slideshow.AdminSlideshow',
+				),
+				'error'    => array(),
+				'status'   => array(
+					'downloadFailed' => 1,
+				),
+			),
+			$results
+		);
+
+		$this->assertTrue($mockPicLensHelper->isComplete(), $mockPicLensHelper->getRemaining());
+	}
+
+	public function testUninstall() {
+		GalleryUtilities::putRequestVariable('form[action][uninstall]', 1);
+		$ret = GalleryCoreApi::setPluginParameter(
+			'module',
+			'slideshow',
+			'piclens.version',
+			'TEST_VALUE'
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$mockPicLensHelper = new AdminSlideshowControllerTest_MockPicLensHelper();
+		$mockPicLensHelper->setReply('uninstall', array(), null);
+		$this->_controller->_setPicLensHelper($mockPicLensHelper);
+
+		$results = $this->handleRequest();
+		$this->assertEquals(
+			array(
+				'redirect' => array(
+					'view'    => 'core.SiteAdmin',
+					'subView' => 'slideshow.AdminSlideshow',
+				),
+				'error'    => array(),
+				'status'   => array(
+					'uninstalled' => 1,
+				),
+			),
+			$results
+		);
+
+		list($ret, $actual) = GalleryCoreApi::getPluginParameter('module', 'slideshow', 'piclens.version');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$this->assertEquals(null, $actual);
+		$this->assertTrue($mockPicLensHelper->isComplete(), $mockPicLensHelper->getRemaining());
+	}
+}
+
+class AdminSlideshowControllerTest_MockPicLensHelper extends MockObject {
+	public function install() {
+		return $this->_makeReply('install', array());
+	}
+
+	public function uninstall() {
+		return $this->_makeReply('uninstall', array());
+	}
+}

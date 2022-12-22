@@ -1,0 +1,221 @@
+<?php
+/*
+ * Gallery - a web based photo album viewer and editor
+ * Copyright (C) 2000-2008 Bharat Mediratta
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+GalleryCoreApi::requireOnce('modules/archiveupload/classes/ArchiveExtractToolkit.class');
+
+/**
+ * Test ArchiveExtractToolkit functionality
+ * @package ArchiveUpload
+ * @subpackage PHPUnit
+ * @author Alan Harder <alan.harder@sun.com>
+ * @version $Revision: 17999 $
+ */
+class ArchiveExtractToolkitTest extends GalleryTestCase {
+	public function __construct($methodName) {
+		parent::__construct($methodName);
+	}
+
+	public function setUp($x1 = null) {
+		global $gallery;
+		$ret = parent::setUp();
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$ret = $this->_markPluginParametersForCleanup('module', 'archiveupload');
+
+		if ($ret) {
+			return $ret;
+		}
+		$ret = GalleryCoreApi::setPluginParameter('module', 'archiveupload', 'removeMeta', 0);
+
+		if ($ret) {
+			return $ret;
+		}
+		list($ret, $this->_unzipPath) = GalleryCoreApi::getPluginParameter('module', 'archiveupload', 'unzipPath');
+
+		if ($ret) {
+			return $ret;
+		}
+
+		// Get a toolkit to work with
+		$this->_toolkit = new ArchiveExtractToolkit();
+	}
+
+	public function testPerformOperation() {
+		global $gallery;
+		$platform = new UnitTestPlatform();
+		$platform->setReply('is_dir', array('testDir'), true);
+		$platform->setReply('getcwd', array(), 'testCwd');
+		$platform->setReply('chdir', array('testDir'), true);
+		$platform->setReply(
+			'exec',
+			array(array(array($this->_unzipPath, 'testZip.zip'))),
+			array(true, array(), array())
+		);
+		$platform->setReply('chdir', array('testCwd'), true);
+		$platform->setReply('recursiveChmod', array('testDir', null, null), true);
+		$gallery->setPlatform($platform);
+
+		$platform->setReply('opendir', array('testDir'), 'testHand');
+		$platform->setReply('readdir', array('testHand'), '.');
+		$platform->setReply('readdir', array('testHand'), '..');
+		$platform->setReply('readdir', array('testHand'), 'symlink.jpg');
+		$platform->setReply('readdir', array('testHand'), false);
+		$platform->setReply('closedir', array('testHand'), true);
+		$platform->setReply('getDirectorySeparator', array(), '/');
+		$platform->setReply('is_link', array('testDir/symlink.jpg'), false);
+		$platform->setReply('is_dir', array('testDir/symlink.jpg'), false);
+
+		list($ret, $results) = $this->_toolkit->performOperation(
+			'application/zip',
+			'extract',
+			'testZip.zip',
+			'testDir',
+			array()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('application/zip', $results);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testRemoveMeta() {
+		global $gallery;
+		$ret = GalleryCoreApi::setPluginParameter('module', 'archiveupload', 'removeMeta', 1);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$platform = new UnitTestPlatform();
+		$platform->setReply('is_dir', array('testDir'), true);
+		$platform->setReply('getcwd', array(), 'testCwd');
+		$platform->setReply('chdir', array('testDir'), true);
+		$platform->setReply(
+			'exec',
+			array(array(array($this->_unzipPath, 'testZip.zip'))),
+			array(true, array(), array())
+		);
+		$platform->setReply('chdir', array('testCwd'), true);
+		$platform->setReply('recursiveChmod', array('testDir', null, null), true);
+		$platform->setReply('opendir', array('testDir'), 'testHand');
+		$platform->setReply('readdir', array('testHand'), '.');
+		$platform->setReply('readdir', array('testHand'), '..');
+		$platform->setReply('readdir', array('testHand'), '.DS_Store');
+		$platform->setReply('readdir', array('testHand'), 'test.jpg');
+		$platform->setReply('readdir', array('testHand'), '__MACOSX');
+		$platform->setReply('readdir', array('testHand'), 'subdir');
+		$platform->setReply('readdir', array('testHand'), 'test.gif');
+		$platform->setReply('readdir', array('testHand'), false);
+		$platform->setReply('closedir', array('testHand'), true);
+		$platform->setReply('getDirectorySeparator', array(), '/');
+		$platform->setReply('is_link', array('testDir/.DS_Store'), false);
+		$platform->setReply('is_dir', array('testDir/.DS_Store'), false);
+		$platform->setReply('unlink', array('testDir/.DS_Store'), true);
+		$platform->setReply('is_link', array('testDir/test.jpg'), false);
+		$platform->setReply('is_dir', array('testDir/test.jpg'), false);
+		$platform->setReply('is_link', array('testDir/__MACOSX'), false);
+		$platform->setReply('is_dir', array('testDir/__MACOSX'), true);
+		$platform->setReply('recursiveRmdir', array('testDir/__MACOSX'), true);
+		$platform->setReply('is_link', array('testDir/subdir'), false);
+		$platform->setReply('is_dir', array('testDir/subdir'), true);
+		$platform->setReply('opendir', array('testDir/subdir'), 'testHand2');
+		$platform->setReply('readdir', array('testHand2'), 'Thumbs.db');
+		$platform->setReply('readdir', array('testHand2'), 'test.png');
+		$platform->setReply('readdir', array('testHand2'), '.Trashes');
+		$platform->setReply('readdir', array('testHand2'), false);
+		$platform->setReply('closedir', array('testHand2'), true);
+		$platform->setReply('getDirectorySeparator', array(), '/');
+		$platform->setReply('is_link', array('testDir/subdir/Thumbs.db'), false);
+		$platform->setReply('is_dir', array('testDir/subdir/Thumbs.db'), false);
+		$platform->setReply('unlink', array('testDir/subdir/Thumbs.db'), true);
+		$platform->setReply('is_link', array('testDir/subdir/test.png'), false);
+		$platform->setReply('is_dir', array('testDir/subdir/test.png'), false);
+		$platform->setReply('is_link', array('testDir/subdir/.Trashes'), false);
+		$platform->setReply('is_dir', array('testDir/subdir/.Trashes'), false);
+		$platform->setReply('unlink', array('testDir/subdir/.Trashes'), true);
+		$platform->setReply('is_link', array('testDir/test.gif'), false);
+		$platform->setReply('is_dir', array('testDir/test.gif'), false);
+		$gallery->setPlatform($platform);
+
+		list($ret, $results) = $this->_toolkit->performOperation(
+			'application/zip',
+			'extract',
+			'testZip.zip',
+			'testDir',
+			array()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals($results, 'application/zip');
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+
+	public function testRemoveLinks() {
+		global $gallery;
+		$ret = GalleryCoreApi::setPluginParameter('module', 'archiveupload', 'removeMeta', 1);
+
+		if ($ret) {
+			return $ret;
+		}
+
+		$platform = new UnitTestPlatform();
+		$platform->setReply('is_dir', array('testDir'), true);
+		$platform->setReply('getcwd', array(), 'testCwd');
+		$platform->setReply('chdir', array('testDir'), true);
+		$platform->setReply(
+			'exec',
+			array(array(array($this->_unzipPath, 'testZip.zip'))),
+			array(true, array(), array())
+		);
+		$platform->setReply('chdir', array('testCwd'), true);
+		$platform->setReply('recursiveChmod', array('testDir', null, null), true);
+		$platform->setReply('opendir', array('testDir'), 'testHand');
+		$platform->setReply('readdir', array('testHand'), '.');
+		$platform->setReply('readdir', array('testHand'), '..');
+		$platform->setReply('readdir', array('testHand'), 'symlink.jpg');
+		$platform->setReply('readdir', array('testHand'), false);
+		$platform->setReply('closedir', array('testHand'), true);
+		$platform->setReply('getDirectorySeparator', array(), '/');
+		$platform->setReply('is_link', array('testDir/symlink.jpg'), true);
+		$platform->setReply('unlink', array('testDir/symlink.jpg'), true);
+		$gallery->setPlatform($platform);
+
+		list($ret, $results) = $this->_toolkit->performOperation(
+			'application/zip',
+			'extract',
+			'testZip.zip',
+			'testDir',
+			array()
+		);
+
+		if ($ret) {
+			return $ret;
+		}
+		$this->assertEquals('application/zip', $results);
+		$this->assertTrue($platform->isComplete(), $platform->getRemaining());
+	}
+}
