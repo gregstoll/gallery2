@@ -58,6 +58,12 @@ Some unit tests require translation files for the core module.
 In order to facilitate the initial setup, there is a script at `lib/tools/phpunit/create-locale.sh` to
 create the files in the appropriate location.
 
+In order to use your locale in the docker image, you need to add it to `PHP.Dockerfile`. This is an example
+for `ca_ES` locale. Add a line like it using your locale:
+```shell
+    && sed -i -e 's/# ca_ES ISO-8859-1/ca_ES ISO-8859-1/' /etc/locale.gen \
+```
+
 # Release management
 
 Tools for release management are on folder `lib/tools/release`.
