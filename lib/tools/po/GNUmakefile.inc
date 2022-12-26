@@ -13,6 +13,7 @@
 # Copyright 2000-2002 Joris Braakman <jbraakman@yahoo.com>
 # Copyright 2001-2002 Chuck Hagenbuch <chuck@horde.org>
 # Copyright 2001-2002 Jan Schneider <jan@horde.org>
+# Copyright 2022 Orestes Sanchez <miceno.atreides@gmail.com>
 #
 # $Id: GNUmakefile.inc 18114 2008-10-04 15:39:28Z mindless $
 #
@@ -20,6 +21,7 @@ MODULE_DIR = $(shell dirname "`pwd`")
 TYPE_DIR = $(shell dirname "$(MODULE_DIR)")
 APPLICATION ?= $(shell basename "$(TYPE_DIR)")_$(shell basename "$(MODULE_DIR)")
 PHP ?= php
+SOURCE_ENCODING ?= utf-8
 
 # Let PHP parse the config.php file to get the g2data directory.
 G2DATA = $(shell echo '<?php include("$(GALLERYDIR)/lib/support/GallerySetupUtilities.class"); $$gallery = new GallerySetupUtilitiesStub(); @include("$(GALLERYDIR)/config.php"); print $$gallery->getConfig("data.gallery.base"); ?>' | $(PHP) -q 2>&1)
@@ -46,7 +48,7 @@ messages.po: alwaysbuild
 	@# Don't extract right to strings.raw because extract.php tries to preserve
 	@# some old data from strings.raw and the > redirect blanks it out.
 	@mv strings.raw.tmp strings.raw
-	@xgettext --keyword=_ -C --no-location --add-comments=HINT: \
+	@xgettext --from-code="$(SOURCE_ENCODING)" --keyword=_ -C --no-location --add-comments=HINT: \
 		  --msgid-bugs-address=gallery-translations@lists.sourceforge.net strings.raw
 	@sed '1,4 d' < messages.po > messages.tmp
 	@cat "$(TOOLDIR)"/po/header.txt messages.tmp > messages.po
