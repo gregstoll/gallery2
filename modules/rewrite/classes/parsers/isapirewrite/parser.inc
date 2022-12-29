@@ -59,7 +59,7 @@ class IsapiRewriteParser extends RewriteParser {
     function saveAccessList($accessList, $allowEmptyReferer) {
 	GalleryCoreApi::requireOnce(
 	    'modules/rewrite/classes/parsers/isapirewrite/IsapiRewriteHelper.class');
-	return IsapiRewriteHelper::saveAccessList($accessList, $allowEmptyReferer);
+	return IsapiRewriteHelper::saveAccessList($this, $accessList, $allowEmptyReferer);
     }
 
     /**
