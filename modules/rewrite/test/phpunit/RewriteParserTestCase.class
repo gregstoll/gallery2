@@ -713,7 +713,7 @@ class RewriteParserMockPlatform extends GalleryPlatform {
 		return parent::is_writeable($file);
 	}
 
-	public function file($file, $use_include_path = false) {
+	static public function file($file, $use_include_path = false) {
 		if (strpos($file, '.htaccess') !== false || strpos($file, '\httpd.ini') !== false) {
 			return $passCodeAudit = array();
 		}
@@ -721,7 +721,7 @@ class RewriteParserMockPlatform extends GalleryPlatform {
 		return parent::file($file);
 	}
 
-	public function fopen($file, $mode, $useIncludePath=null, $zcontext=null) {
+	public function fopen($file, $mode, $useIncludePath=false, $zcontext=null) {
 		if (strpos($file, 'embedded/.htaccess') !== false) {
 			if ($this->_isWriteable) {
 				$this->_test->_embeddedFileContent = '';
