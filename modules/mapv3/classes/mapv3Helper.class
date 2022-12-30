@@ -1009,12 +1009,12 @@ class mapv3Helper extends mapv3Interface_1_0 // and GalleryEventListener
 			'summary'     => preg_replace(
 				array('/\n/', '/\r/'),
 				array('', ''),
-				$item->getSummary()
+				$item->getSummary() ?? ''
 			),
 			'description' => preg_replace(
 				array('/\n/', '/\r/'),
 				array('', ''),
-				$item->getDescription()
+				$item->getDescription() ?? ''
 			),
 			'created'     => PHP81_BC\strftime_modified($dateFormat, $item->getOriginationTimestamp()),
 		);
