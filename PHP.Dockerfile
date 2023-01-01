@@ -21,6 +21,7 @@ RUN apt-get install less
 #    setlocale(LC_ALL, "fr_FR"); echo strftime("%A %d %B %Y");
 #
 RUN apt-get install -y libonig-dev locales && apt-get clean \
+    && sed -i -e 's/# ca_ES ISO-8859-1/ca_ES ISO-8859-1/' /etc/locale.gen \
     && sed -i -e 's/# fr_FR ISO-8859-1/fr_FR ISO-8859-1/' /etc/locale.gen \
     && sed -i -e 's/# es_ES ISO-8859-1/es_ES ISO-8859-1/' /etc/locale.gen \
     && sed -i -e 's/# es_AR ISO-8859-1/es_AR ISO-8859-1/' /etc/locale.gen \
