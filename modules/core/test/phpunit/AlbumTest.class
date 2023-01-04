@@ -24,7 +24,32 @@
  * @author Bharat Mediratta <bharat@menalto.com>
  * @version $Revision: 17589 $
  */
-class AlbumTest extends GalleryTestCase {
+class AlbumTest extends GalleryTestCase{
+
+	public function setUpSlug($slugMode)
+	{
+		global $gallery;
+
+		$this->_platform =& $gallery->getPlatform();
+
+		list($ret, $this->previousValueSlugMode) = GalleryCoreApi::getPluginParameter('module', 'core', 'slug.mode');
+		GalleryCoreApi::setPluginParameter('module', 'core', 'slug.mode', $slugMode);
+
+		if ($ret) {
+			return $ret;
+		}
+	}
+
+	public function tearDownSlug()
+	{
+		return GalleryCoreApi::setPluginParameter('module', 'core', 'slug.mode', $this->previousValueSlugMode);
+	}
+	public function tearDown()
+	{
+		$this->tearDownSlug();
+
+		return parent::tearDown();
+	}
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -32,6 +57,7 @@ class AlbumTest extends GalleryTestCase {
 	public function setUp($x1 = null) {
 		$ret = parent::setUp();
 
+		$ret = $this->setUpSlug('classic');
 		if ($ret) {
 			return $ret;
 		}

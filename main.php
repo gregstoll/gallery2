@@ -542,7 +542,7 @@ function _GalleryMain($embedded=false, $template=null) {
 		    $html = $theme->splitHtml($html, $results);
 		}
 
-		if ($shouldCache && $results['cacheable']) {
+		if ($shouldCache && isset($results['cacheable']) && $results['cacheable']) {
 		    $htmlForCache = $html;
 		    if ($embedded) {
 			$themeDataForCache = $template->getVariable('theme');
@@ -565,7 +565,7 @@ function _GalleryMain($embedded=false, $template=null) {
 		    $data['isDone'] = true;
 		}
 
-		if ($shouldCache && $results['cacheable']) {
+		if ($shouldCache && isset($results['cacheable']) && $results['cacheable']) {
 		    $session =& $gallery->getSession();
 		    $cacheKey = $urlGenerator->getCacheableUrl();
 		    $sessionId = $session->getId();
