@@ -31,23 +31,28 @@ class SystemChecksStep extends UpgradeStep {
      * Returns the exact bytes value from a php.ini setting
      * Copied from PHP.net's manual entry for ini_get()
      */
-    function _getBytes($val) {
-	$val = trim($val);
-	$last = $val[strlen($val)-1];
-    $val = intval(substr($val, 0, strlen($val) - 1));
-	switch ($last) {
-	case 'g':
-	case 'G':
-	    $val *= 1024;
-	case 'm':
-	case 'M':
-	    $val *= 1024;
-	case 'k':
-	case 'K':
-	    $val *= 1024;
+	function _getBytes($val) {
+		$val = trim($val??'');
+		$length = strlen($val);
+		if ( $length > 0) {
+			$last = strtolower($val[$length-1]);
+			$multiplier = 1;
+			switch ($last) {
+				case 'g':
+					$multiplier *= 1024;
+				case 'm':
+					$multiplier *= 1024;
+				case 'k':
+					$multiplier *= 1024;
+			}
+			if ($multiplier > 1) {
+				$val = substr($val, 0, $length - 1);
+			}
+			return intval($val)*$multiplier;
+		}
+		return 0;
+
 	}
-	return $val;
-    }
 
     function processRequest() {
 	if (!empty($_GET['zendtest'])) {
@@ -460,7 +465,7 @@ class SystemChecksStep extends UpgradeStep {
 		    $message .= $this->renderFileList($manifest['modified'], 'modified', $heading,
 						      $notice);
 		}
-	
+
 		if ((!empty($manifest['modified']) || !empty($manifest['missing']))
 			&& !empty($manifest['shouldRemove'])) {
 		    $message .= '<br /> <br />';
@@ -478,7 +483,7 @@ class SystemChecksStep extends UpgradeStep {
 		    $message .= $this->renderFileList($manifest['shouldRemove'], 'shouldRemove',
 						      $heading, $notice);
 		}
-  
+
 		$templateData['check'][] =
 		    array('title' => $title,
 			  'warning' => true,
@@ -502,7 +507,7 @@ class SystemChecksStep extends UpgradeStep {
 		$message = _('Error: The configured database user does not have the required '
 				    . 'database privileges to perform the upgrade.') . '<br/>'
 				    . $error;
-		$templateData['check'][] = 
+		$templateData['check'][] =
 		    array('title' => $title,
 			  'error' => true,
 			  'notice' => $message);
@@ -702,7 +707,7 @@ class SystemChecksStep extends UpgradeStep {
 	$ret = $storage->validateConnection();
 	if ($ret) {
 	    $gallery->debug($ret->getAsHtml());
-	    return array(false, 
+	    return array(false,
 		_('Database permission test failed. Could not connect to database.'));
 	}
 
@@ -711,7 +716,7 @@ class SystemChecksStep extends UpgradeStep {
 	$snippet = $gallery->stopRecordingDebugSnippet();
 	if ($ret) {
 	    $gallery->debug($ret->getAsHtml());
-	    return array(false, 
+	    return array(false,
 		_('Database permission test failed. Could not acquire database information.')
 		. "\n" . $snippet);
 	}
@@ -742,15 +747,15 @@ class SystemChecksStep extends UpgradeStep {
 
 	$moduleSql = $storageExtras->getModuleSql('core');
 	if (empty($moduleSql['test'])) {
-	    return array(false, 
+	    return array(false,
 		_('Database permission test failed due to corrupted file integrity.'));
 	}
 
 	for ($i = 1; $i <= 4; $i++) {
-	    list ($success, $error) = 
+	    list ($success, $error) =
 		$this->_executeSql($moduleSql['test']['InstallerTest'][$i], $tablePrefix);
 	    if (!$success) {
-		return array(false, 
+		return array(false,
 		    _('Failed to create, alter or drop a database test table. ') . $error);
 	    }
 	}
