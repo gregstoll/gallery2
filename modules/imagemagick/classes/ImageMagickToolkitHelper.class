@@ -544,9 +544,9 @@ class ImageMagickToolkitHelper {
 	 * If the path is not restricted by open_basedir, then verify that it's legal.
 	 * Else just hope that it's valid and use it.
 	 */
-	if ($platform->isRestrictedByOpenBaseDir($imageMagickPath) 
+	if ($platform->isRestrictedByOpenBaseDir($imageMagickPath)
 		|| !@$platform->is_dir($imageMagickPath)) {
-	    return array(GalleryCoreApi::error(ERROR_BAD_PATH, null, null, '"' . $imageMagickPath 
+	    return array(GalleryCoreApi::error(ERROR_BAD_PATH, null, null, '"' . $imageMagickPath
 			. '" is not a directory or is not specified in open_basedir.'), null);
 	}
 
@@ -717,14 +717,14 @@ class ImageMagickToolkitHelper {
 	$cmykSupport = false;
 	list ($success, $results) = $platform->exec(array(
 	    array_merge($identifyCmd, array('-format', '%r', $dataPath . 'cmyk.jpg'))));
-	if ($success && count($results) && strpos($results[0], 'CMYK') !== false) {
+	if ($success && count($results) && (strpos($results[0], 'CMYK') !== false || strpos($results[0], 'ColorSeparation') !== false)) {
 	    list ($success) = $platform->exec(array(
 		array_merge($convertCmd,
 			    array('-colorspace', 'RGB', $dataPath . 'cmyk.jpg', $tmpFilename))));
 	    if ($success) {
 		list ($success, $results) = $platform->exec(array(
 		    array_merge($identifyCmd, array('-format', '%r', $tmpFilename))));
-		if ($success && count($results) && strpos($results[0], 'RGB') !== false) {
+		if ($success && count($results) && (strpos($results[0], 'RGB') !== false || strpos($results[0], 'TrueColor') !== false)) {
 		    /* We successfully identified a CMYK jpeg and converted it to RGB */
 		    $cmykSupport = true;
 		}
