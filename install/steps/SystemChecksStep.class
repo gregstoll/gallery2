@@ -31,23 +31,28 @@ class SystemChecksStep extends InstallStep {
      * Returns the exact bytes value from a php.ini setting
      * Copied from PHP.net's manual entry for ini_get()
      */
-    function _getBytes($val) {
-	$val = trim($val);
-	$last = $val[strlen($val)-1];
-    $val = intval(substr($val, 0, strlen($val) - 1));
-	switch ($last) {
-	case 'g':
-	case 'G':
-	    $val *= 1024;
-	case 'm':
-	case 'M':
-	    $val *= 1024;
-	case 'k':
-	case 'K':
-	    $val *= 1024;
+	function _getBytes($val) {
+		$val = trim($val??'');
+		$length = strlen($val);
+		if ( $length > 0) {
+			$last = strtolower($val[$length-1]);
+			$multiplier = 1;
+			switch ($last) {
+				case 'g':
+					$multiplier *= 1024;
+				case 'm':
+					$multiplier *= 1024;
+				case 'k':
+					$multiplier *= 1024;
+			}
+			if ($multiplier > 1) {
+				$val = substr($val, 0, $length - 1);
+			}
+			return intval($val)*$multiplier;
+		}
+		return 0;
+
 	}
-	return $val;
-    }
 
     function processRequest() {
 	/* Zend test */
