@@ -221,7 +221,7 @@ class WebDavHelper {
      * @param string $url
      * @return boolean true if OPTIONS responses include the DAV headers
      */
-    function checkDavHeaders($url) {
+    static function checkDavHeaders($url) {
 	list ($status, $headers, $body) = GalleryCoreApi::requestWebPage($url, 'OPTIONS');
 
 	if (!preg_match('/^HTTP\/[0-9]\.[0-9] 200/', $status)) {
@@ -251,7 +251,7 @@ class WebDavHelper {
      *               'script' (optional) => string JavaScript to be used as onclick,
      *               'attrs' => array() string additional link tag attributes)
      */
-    function getMountLink($itemId) {
+    static function getMountLink($itemId) {
 	global $gallery;
 	$urlGenerator =& $gallery->getUrlGenerator();
 
