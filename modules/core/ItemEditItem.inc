@@ -65,7 +65,7 @@ class ItemEditItem extends ItemEditPlugin {
 		    $error[] = 'form[error][pathComponent][missing]';
 		    $form['pathComponent'] = '';
 		} else if (!$platform->isLegalPathComponent($form['pathComponent'])) {
-		    $error[] = 'form[error][pathComponent][invalid]';
+		    $form['pathComponent'] = $platform->legalizePathComponent($form['pathComponent']);
 		}
 	    }
 
