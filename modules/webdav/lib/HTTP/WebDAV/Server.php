@@ -2126,7 +2126,7 @@ class HTTP_WebDAV_Server
         $uuid[12] = '4';
         $n = 8 + (ord($uuid[16]) & 3);
         $hex = '0123456789abcdef';
-        $uuid{16} = $hex[$n];
+        $uuid[16] = $hex[$n];
 
         // return formated uuid
         return substr($uuid,  0, 8)
