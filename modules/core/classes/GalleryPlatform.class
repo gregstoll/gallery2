@@ -856,12 +856,7 @@ class GalleryPlatform {
      */
     function fsockopen($target, $port, &$errno, &$errstr, $timeout) {
 	global $gallery;
-	if ($gallery->getDebug()) {
-	    $gallery->debug("fsockopen($target, $port, $errno, $errstr, $timeout)");
-	}
-	if (str_contains($target, ':')){
-		list($target, $port) = preg_split(':', $target);
-	}
+        $gallery->debug("fsockopen($target, $port, $errno, $errstr, $timeout)");
 	return fsockopen($target, $port, $errno, $errstr, $timeout);
     }
 
