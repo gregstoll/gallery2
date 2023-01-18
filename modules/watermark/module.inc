@@ -185,6 +185,8 @@ class WatermarkModule extends GalleryModule /* and GalleryEventListener */ {
 	case '1.1.5':
 	case '1.1.6':
 	case '1.1.7':
+	case '1.1.8':
+	case '1.2.0':
 
 	case 'end of upgrade path':
 	    /*
@@ -271,7 +273,7 @@ class WatermarkModule extends GalleryModule /* and GalleryEventListener */ {
 	}
 
 	$ret = GalleryCoreApi::registerFactoryImplementation(
-	    'GalleryEventListener', 'WatermarkModule', 'WatermarkModule', 
+	    'GalleryEventListener', 'WatermarkModule', 'WatermarkModule',
 	    'modules/watermark/module.inc', 'watermark', array('GalleryEntity::delete'));
 	if ($ret) {
 	    return $ret;
