@@ -577,6 +577,13 @@ class RewriteHelperTest extends GalleryTestCase {
 			null,
 		);
 
+		$ret = GalleryCoreApi::setPluginParameter(
+		    'module',
+		    'rewrite',
+		    'allowEmptyReferer',
+		    '1'
+		);
+
 		foreach ($tests as $key => $test) {
 			list($ret, $code, $regexRules, $shortUrls, $errno) = RewriteHelper::parseActiveRules(
 				$test[0],
@@ -590,7 +597,7 @@ class RewriteHelperTest extends GalleryTestCase {
 			}
 
 			$this->assertTrue($test[1] == $code, 'code ' . $key);
-			$this->assertTrue($test[2] == $regexRules, 'regex rules ' . $key);
+			$this->assertEquals($test[2], $regexRules, 'regex rules ' . $key);
 			$this->assertTrue($test[3] == $shortUrls, 'short urls ' . $key);
 			$this->assertTrue($test[4] == $errno, 'errno ' . $key);
 			$this->assertTrue($test[5] == $test[0], 'active rules ' . $key);
@@ -709,6 +716,13 @@ class RewriteHelperTest extends GalleryTestCase {
 	}
 
 	public function testSortRules() {
+		$ret = GalleryCoreApi::setPluginParameter(
+		    'module',
+		    'rewrite',
+		    'allowEmptyReferer',
+		    '1'
+		);
+
 		$serverName = GalleryUtilities::getServerVar('HTTP_HOST');
 
 		// Initialize active rules in reverse order

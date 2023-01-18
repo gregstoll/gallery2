@@ -30,7 +30,7 @@ class PathInfoHelper {
     /**
      * @see RewriteParser::saveActiveRules
      */
-    function saveActiveRules($parser, $activeRules=null, $upgradeModule=null) {
+    static function saveActiveRules($parser, $activeRules=null, $upgradeModule=null) {
 	/* By default we use the rules we've already got */
 	if (is_null($activeRules)) {
 	    list($ret, $activeRules) = GalleryCoreApi::getPluginParameter(
@@ -80,7 +80,7 @@ class PathInfoHelper {
      * @param array $regexRules regular expression rules used by the parser
      * @return GalleryStatus a status code
      */
-    function saveParser($regexRules) {
+    static function saveParser($regexRules) {
 	$static = $dynamic = array();
 	foreach ($regexRules as $rule) {
 	    if (empty($rule['pattern'])) {
@@ -118,7 +118,7 @@ class PathInfoHelper {
      *               int rewrite status code (REWRITE_STATUS_OK on success)
      *               int true rewrite status code (REWRITE_STATUS_OK on success)
      */
-    function checkPathInfo() {
+    static function checkPathInfo() {
 	global $gallery;
 	$urlGenerator =& $gallery->getUrlGenerator();
 
@@ -145,7 +145,7 @@ class PathInfoHelper {
     /**
      * @see RewriteParser::loadTestResultsTemplate
      */
-    function loadTestResultsTemplate(&$template, &$form) {
+    static function loadTestResultsTemplate(&$template, &$form) {
 	global $gallery;
 	$urlGenerator =& $gallery->getUrlGenerator();
 
