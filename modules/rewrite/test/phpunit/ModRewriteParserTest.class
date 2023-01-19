@@ -67,7 +67,6 @@ class ModRewriteParserTest extends RewriteParserTestCase {
 		GalleryDataCache::put('G2_EMBED', 1, true);
 		$testRules['rewriteparsermock'][0] = 'bogus1';
 		list($ret, $code, $errno)          = $this->_parser->saveActiveRules(
-			$this->_parser,
 			$testRules,
 			null
 		);
@@ -102,7 +101,6 @@ class ModRewriteParserTest extends RewriteParserTestCase {
 			'pattern' => 'p/%bogus%',
 		);
 		list($ret, $code, $errno)          = $this->_parser->saveActiveRules(
-			$this->_parser,
 			$testRules
 		);
 
@@ -135,7 +133,7 @@ class ModRewriteParserTest extends RewriteParserTestCase {
 	public function testSaveAccessList() {
 		$accessList       = array('phpunit.test1', 'phpunit.test2');
 		$ourParser        = $this->_parser;
-		list($ret, $code) = $ourParser->saveAccessList($accessList, true, $ourParser);
+		list($ret, $code) = $ourParser->saveAccessList($accessList, true);
 
 		if ($ret) {
 			return array($ret, null, null);

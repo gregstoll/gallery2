@@ -504,14 +504,9 @@ class RewriteApiMockParser extends RewriteParser {
 	 * @see RewriteParser::saveActiveRules
 	 */
 	public function saveActiveRules(
-		$parser = null,
 		$activeRules = null,
 		$upgradeModule = null
 	) {
-		if (is_null($parser)) {
-			return array(GalleryCoreApi::error(ERROR_BAD_PARAMETER), null, null);
-		}
-
 		$returnCode = $activeRules['returnCode'];
 		unset($activeRules['returnCode']);
 		$_SERVER['saveActiveRules'] = $activeRules;
