@@ -58,7 +58,7 @@ class ItemAddAlbumController extends GalleryController {
 	    if (empty($form['pathComponent'])) {
 		$error[] = 'form[error][pathComponent][missing]';
 	    } else if (!$platform->isLegalPathComponent($form['pathComponent'], true)) {
-		$error[] = 'form[error][pathComponent][invalid]';
+		    $form['pathComponent'] = $platform->legalizePathComponent($form['pathComponent'], true);
 	    }
 
 	    if (empty($error)) {

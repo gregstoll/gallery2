@@ -240,16 +240,15 @@ class ItemEditItemPluginTest extends ItemEditPluginTestCase {
 	}
 
 	public function testInvalidPathComponent() {
-		$newPathComponent = $this->_item[0]->getPathComponent() . mt_rand();
-
 		GalleryUtilities::putRequestVariable('form[action][save]', 1);
-		GalleryUtilities::putRequestVariable('form[pathComponent]', '#$%W$%W?$%W%/');
+		GalleryUtilities::putRequestVariable('form[pathComponent]', '%W$%W?$%W%/');
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item[0]->getSerialNumber());
 
 		// Perform the request and verify that we failed
 		$results = $this->handleRequest($this->_item[0], $this->_preferred);
 
 		$this->assertEquals(
-			array(array('form[error][pathComponent][invalid]'), null),
+		    array (0 => array (), 1 => 'Changes saved successfully',),
 			$results
 		);
 	}
@@ -257,19 +256,17 @@ class ItemEditItemPluginTest extends ItemEditPluginTestCase {
 	public function testInvalidPathComponentDisallowedFileExtension() {
 		GalleryUtilities::putRequestVariable('form[action][save]', 1);
 		GalleryUtilities::putRequestVariable('form[pathComponent]', 'test_new.php');
-
+		GalleryUtilities::putRequestVariable('form[serialNumber]', $this->_item[0]->getSerialNumber());
 		// Perform the request and verify that we fail
 		$results = $this->handleRequest($this->_item[0], $this->_preferred);
 
 		$this->assertEquals(
-			array(array('form[error][pathComponent][invalid]'), null),
+		    array (0 => array (), 1 => 'Changes saved successfully',),
 			$results
 		);
 	}
 
 	public function testMissingPathComponent() {
-		$newPathComponent = $this->_item[0]->getPathComponent() . mt_rand();
-
 		GalleryUtilities::putRequestVariable('form[action][save]', 1);
 		GalleryUtilities::removeRequestVariable('form[pathComponent]');
 

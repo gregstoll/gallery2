@@ -179,15 +179,8 @@ class ItemAddAlbumControllerTest extends GalleryControllerTestCase {
 		$results = $this->handleRequest();
 
 		$this->assertEquals(
-			array(
-				'delegate' => array(
-					'view'    => 'core.ItemAdmin',
-					'subView' => 'core.ItemAddAlbum',
-				),
-				'status'   => array(),
-				'error'    => array('form[error][pathComponent][invalid]'),
-			),
-			$results
+			array(),
+			$results['error']
 		);
 	}
 

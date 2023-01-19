@@ -624,15 +624,7 @@ class GalleryPlatform {
 		    return $ret;
 	    }
 	    $slugMode = $slugMode ?? 'modern';
-	    switch ($slugMode) {
-		    case 'modern':
-			    return self::legalizePathComponentWithSlug($component, $forDirectory);
-		    case 'classic':
-			    return self::legalizePathComponentClassic($component, $forDirectory);
-		    default:
-			    return GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
-				"Unknown slug mode $slugMode.");
-	    }
+	    return $this->legalizePathComponentHelper($component, $forDirectory, $slugMode);
     }
     /**
      * Remove any illegal characters from the path component.
@@ -2221,6 +2213,25 @@ class GalleryPlatform {
 			$title = $fallback_title;
 
 		return $title;
+	}
+
+	/**
+	 * @param string $component
+	 * @param bool $forDirectory
+	 * @param mixed $slugMode
+	 * @return GalleryStatus|string
+	 */
+	public function legalizePathComponentHelper($component, $forDirectory=false, $slugMode='classic')
+	{
+		switch ($slugMode) {
+			case 'modern':
+				return self::legalizePathComponentWithSlug($component, $forDirectory);
+			case 'classic':
+				return self::legalizePathComponentClassic($component, $forDirectory);
+			default:
+				return GalleryCoreApi::error(ERROR_BAD_PARAMETER, __FILE__, __LINE__,
+				    "Unknown slug mode $slugMode.");
+		}
 	}
 }
 ?>
