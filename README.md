@@ -6,4 +6,8 @@ Since [#26](https://github.com/gregstoll/gallery2/pull/26) the code supports PHP
 
 This code is based on gallery2 version 2.3.2 (core version 1.3.0.2)
 
+To upgrade from a stock Gallery2 installation:
+- Backup the existing files and data
+- Unzip the files from this repository on top of the existing install
+
 FYI - Brad Dutton has revived Gallery 3 that is compatible with PHP 7.  I haven't tried it, but you can download it at [galleryrevival.com](http://galleryrevival.com/).
