@@ -288,7 +288,7 @@ class ItemEditWatermark extends ItemEditPlugin {
 		foreach ($derivatives as $derivative) {
 		    $ops = $derivative->getPostFilterOperations();
 		    if (preg_match('{composite\|plugins_data/modules/watermark/([^;]*)}',
-				   $ops, $matches)) {
+				   $ops??'', $matches)) {
 			switch ($derivative->getDerivativeType()) {
 			case DERIVATIVE_TYPE_IMAGE_PREFERRED:
 			    $form['whichDerivative']['preferred'] = 1;
