@@ -717,7 +717,7 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
 	INSERT INTO
 	  [ImageBlockCacheMap]
 	SELECT DISTINCT
-	  ?, ?, [GalleryEntity::creationTimestamp], [GalleryEntity::id], ' . $randStatement . '
+	  CAST(? AS INTEGER), CAST(? AS INTEGER), [GalleryEntity::creationTimestamp], [GalleryEntity::id], ' . $randStatement . '
 	FROM
 	  [GalleryEntity], [%s], [GalleryAccessSubscriberMap],
 	  [GalleryChildEntity], [GalleryDerivative]
