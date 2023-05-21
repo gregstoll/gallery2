@@ -713,11 +713,16 @@ class ImageBlockHelper /* extends GalleryEventListener */ {
 	    return $ret;
 	}
 
+    // TODO - hack to fix https://github.com/gregstoll/gallery2/issues/144
+    $castBlock = '?, ?';
+    if ($storage->getType() == 'postgres') {
+        $castBlock = 'CAST(? AS INTEGER), CAST(? AS INTEGER)';
+    }
 	$query = '
 	INSERT INTO
 	  [ImageBlockCacheMap]
 	SELECT DISTINCT
-	  CAST(? AS INTEGER), CAST(? AS INTEGER), [GalleryEntity::creationTimestamp], [GalleryEntity::id], ' . $randStatement . '
+	  ' . $castBlock . ', [GalleryEntity::creationTimestamp], [GalleryEntity::id], ' . $randStatement . '
 	FROM
 	  [GalleryEntity], [%s], [GalleryAccessSubscriberMap],
 	  [GalleryChildEntity], [GalleryDerivative]
