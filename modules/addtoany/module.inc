@@ -52,7 +52,7 @@ class AddToAnyModule extends GalleryModule
 			null,
 			array(
 				array(
-					'name' => $this->translate('AddToAny'),
+					'name' => $this->translate('AddToAny share link'),
 					'view' => 'addtoany.AddToAnySiteAdmin',
 				),
 			),
