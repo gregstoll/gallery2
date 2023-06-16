@@ -55,13 +55,6 @@ class AddToAnyBlockCallbackTest extends GalleryTestCase {
 			return $ret;
 		}
 
-		$ret = GalleryCoreApi::setPluginParameter(
-			'module',
-			'addtoany',
-			'addToAnyAccountId',
-			'accountID'
-		);
-
 		return $ret;
 	}
 
@@ -70,10 +63,8 @@ class AddToAnyBlockCallbackTest extends GalleryTestCase {
 		$block = $data['block']['addtoany'];
 
 		$this->assertTrue(array_key_exists('onlyWhenLoggedIn', $block), 'Missing param onlyWhenLoggedIn');
-		$this->assertTrue(array_key_exists('addToAnyAccountId', $block), 'Missing param addToAnyAccountId');
 
 		$this->assertTrue($block['onlyWhenLoggedIn'], 'Bad param onlyWhenLoggedIn');
-		$this->assertEquals('accountID', $block['addToAnyAccountId'], 'Bad param addToAnyAccountId');
 	}
 
 	public function _doAddToAnyBlockCallback($userId = null, $itemId = null) {

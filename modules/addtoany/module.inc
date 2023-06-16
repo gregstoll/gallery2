@@ -70,7 +70,6 @@ class AddToAnyModule extends GalleryModule
 
 				foreach (array(
 					'onlyWhenLoggedIn' => false,
-					'addToAnyAccountId' => 'addToAnyAccountId',
 				) as $key => $value) {
 					$ret = $this->setParameter($key, $value);
 					if ($ret) {

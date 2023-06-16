@@ -28,17 +28,6 @@
 	{g->text text="Show AddToAny links only when logged in (hide for guests)"}
     </label>
     </div>
-
-    <div class="form-group">
-    <label for="AddToAny_addToAnyAccountId">
-	{g->text text="addToAny.com account ID"}
-	<input type="text" class="form-control" size="40"
-	    {assign var="addToAnyAccountId" value=$form.addToAnyAccountId}
-	    {if $form.addToAnyAccountId}value="{$form.addToAnyAccountId}" {/if}
-	       name="{g->formVar var="form[addToAnyAccountId]"}"
-	       id="AddToAny_addToAnyAccountId"/>
-    </label>
-    </div>
 </div>
 
 <div class="gbBlock gcBackground1">

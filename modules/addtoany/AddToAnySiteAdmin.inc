@@ -45,7 +45,7 @@ class AddToAnySiteAdminController extends GalleryController
 
 		if (isset($form['action']['save'])) {
 			/* save parameters */
-			foreach (array('onlyWhenLoggedIn', 'addToAnyAccountId') as $setting) {
+			foreach (array('onlyWhenLoggedIn') as $setting) {
 				$ret = GalleryCoreApi::setPluginParameter('module', 'addtoany', $setting,
 					(isset($form[$setting]) && $form[$setting]) ? $form[$setting] : 0);
 				if ($ret) {
