@@ -247,14 +247,14 @@ class WatermarkHelper {
 		    $watermarksIds = array_keys($watermarks);
 		    $newDefaultWatermarkId = $watermarksIds[0];
 		} else {
-		    $ret = GalleryCoreApi::setPluginParameter('module', 'watermark', 
+		    $ret = GalleryCoreApi::setPluginParameter('module', 'watermark',
 			'forceDefaultWatermark', false);
 		    if ($ret) {
 			return array($ret, null);
 		    }
 		}
 	    }
-	    $ret = GalleryCoreApi::setPluginParameter('module', 'watermark', 
+	    $ret = GalleryCoreApi::setPluginParameter('module', 'watermark',
 		'defaultWatermarkId', $newDefaultWatermarkId);
 	    if ($ret) {
 		return array($ret, null);
@@ -363,8 +363,8 @@ class WatermarkHelper {
 			$watermark->getMimeType(),
 			$watermark->getWidth(),
 			$watermark->getHeight(),
-			number_format($xPercent, 3, '.', ''),
-			number_format($yPercent, 3, '.', ''));
+			number_format(floatval($xPercent), 3, '.', ''),
+			number_format(floatval($yPercent), 3, '.', ''));
 
 		    /* Replace existing watermark, or add a new one */
 		    $postFilterOps = $derivative->getPostFilterOperations();
