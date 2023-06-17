@@ -211,7 +211,7 @@ class GalleryStorage {
 	global $gallery;
 
 	$this->_traceStart();
-	$db =& ADONewConnection($this->getAdoDbType());
+	$db = ADONewConnection($this->getAdoDbType());
 	$this->_traceStop();
 	if (empty($db)) {
 	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
@@ -1538,7 +1538,7 @@ class GallerySearchResults {
      * @return array the next result or false if EOF
      */
     function nextResult() {
-	$row =& $this->_recordSet->FetchRow();
+	$row = $this->_recordSet->FetchRow();
 	if (!empty($row) && !empty($this->_fieldNames) && !empty($this->_mapInfo)) {
 	    /* Normalize fetched values */
 	    global $gallery;

@@ -2471,6 +2471,16 @@ class UrlGeneratorTest extends GalleryTestCase {
 		);
 	}
 
+	public function testGetCacheableUrlWithArrayInQuery() {
+		$expectedUrl =  '/gallery2/phpunit_test.php?foo%5Bfirst%5D%5Bsecond%5D=second_value&foo%5Bsecond%5D=first_value';
+		$_SERVER['REQUEST_URI'] = $expectedUrl;
+
+		$this->assertEquals(
+			"http://example.com". $expectedUrl,
+			$this->_urlGenerator->getCacheableUrl()
+		);
+	}
+
 	public function testGenerateUrlWithoutPersistentSession() {
 		global $gallery;
 

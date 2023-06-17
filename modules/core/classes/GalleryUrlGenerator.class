@@ -480,12 +480,8 @@ class GalleryUrlGenerator {
 	if (!empty($parsed['query'])) {
 	    parse_str($parsed['query'], $components);
 	    unset($components[GALLERY_FORM_VARIABLE_PREFIX . 'return']);
-	    $first = true;
-	    foreach ($components as $key => $value) {
-		$url .= $first ? '?' : '&';
-		$url .= "$key=$value";
-		$first = false;
-	    }
+	    $query_string = http_build_query($components);
+	    $url .= '?' . $query_string;
 	}
 	$url .= !empty($parsed['fragment']) ? '#' . $parsed['fragment'] : '';
 	return $url;
