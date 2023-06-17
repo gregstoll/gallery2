@@ -19,17 +19,17 @@
  */
 
 GalleryCoreApi::requireOnce('modules/core/classes/GallerySmarty.class');
-GalleryCoreApi::requireOnce('modules/share/Callbacks.inc');
+GalleryCoreApi::requireOnce('modules/addtoany/Callbacks.inc');
 GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
 //GalleryCoreApi::requireOnce('modules/core/classes/GalleryToolkit.class');
 /**
- * Test Share Block functionality
+ * Test AddToAny Block functionality
  *
- * @package share
+ * @package addtoany
  * @subpackage PHPUnit
  * @author Orestes Sanchez <miceno.atreides@gmail.com>
  */
-class ShareBlockCallbackTest extends GalleryTestCase {
+class AddToAnyBlockCallbackTest extends GalleryTestCase {
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -46,7 +46,7 @@ class ShareBlockCallbackTest extends GalleryTestCase {
 
 		$ret = GalleryCoreApi::setPluginParameter(
 			'module',
-			'share',
+			'addtoany',
 			'onlyWhenLoggedIn',
 			1
 		);
@@ -55,30 +55,21 @@ class ShareBlockCallbackTest extends GalleryTestCase {
 			return $ret;
 		}
 
-		$ret = GalleryCoreApi::setPluginParameter(
-			'module',
-			'share',
-			'addThisAccountId',
-			'accountID'
-		);
-
 		return $ret;
 	}
 
-	public function testShareBlockCallback() {
-		$data  = $this->_doShareBlockCallback();
-		$block = $data['block']['share'];
+	public function testAddToAnyBlockCallback() {
+		$data  = $this->_doAddToAnyBlockCallback();
+		$block = $data['block']['addtoany'];
 
 		$this->assertTrue(array_key_exists('onlyWhenLoggedIn', $block), 'Missing param onlyWhenLoggedIn');
-		$this->assertTrue(array_key_exists('addThisAccountId', $block), 'Missing param addThisAccountId');
 
 		$this->assertTrue($block['onlyWhenLoggedIn'], 'Bad param onlyWhenLoggedIn');
-		$this->assertEquals('accountID', $block['addThisAccountId'], 'Bad param addThisAccountId');
 	}
 
-	public function _doShareBlockCallback($userId = null, $itemId = null) {
+	public function _doAddToAnyBlockCallback($userId = null, $itemId = null) {
 		$smarty                = new GallerySmarty();
-		$callbacks             = new AddtoanyCallbacks();
+		$callbacks             = new AddToAnyCallbacks();
 		$params                = array();
 		$params['useDefaults'] = true;
 
@@ -89,7 +80,7 @@ class ShareBlockCallbackTest extends GalleryTestCase {
 		if (isset($itemId)) {
 			$params['itemId'] = $itemId;
 		}
-		$result = $callbacks->callback($params, $smarty, 'ShareBlockParams', $userId);
+		$result = $callbacks->callback($params, $smarty, 'AddToAnyBlockParams', $userId);
 
 		if (!$result) {
 			$result = $smarty->_tpl_vars;
@@ -101,7 +92,7 @@ class ShareBlockCallbackTest extends GalleryTestCase {
 
 
 // Allow for suppressed php errors
-function ShareBlockTest_error_handler($errno, $errstr, $errfile, $errline) {
+function AddToAnyBlockTest_error_handler($errno, $errstr, $errfile, $errline) {
 	if (error_reporting() == 0) {
 		return;
 	}
