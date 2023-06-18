@@ -15,12 +15,12 @@
     {g->text text="Show URLs"}
     <span id="GetUrls_{$GetUrlsData.itemId}-toggle"
      class="giBlockToggle gcBackground1 gcBorder2" style="border-width: 1px"
-     onclick="BlockToggle('GetUrls_{$GetUrlsData.itemId}_details', 
+     onclick="BlockToggle('GetUrls_{$GetUrlsData.itemId}_details',
              'GetUrls_{$GetUrlsData.itemId}-toggle')">+</span>
   </h3>
 {/if}
 <div id="GetUrls_{$GetUrlsData.itemId}_details"{if !empty($blockToggle)} style="display: none;"{/if}>
-{if $GetUrlsData.guestMode && $GetUrlsData.isPhoto && !$GetUrlsData.permissions.viewSource && 
+{if $GetUrlsData.guestMode && $GetUrlsData.isPhoto && !$GetUrlsData.permissions.viewSource &&
       !$GetUrlsData.permissions.viewResizes && ($isBlock && $showWarnings || !$isBlock && !$GetUrlsData.options.suppressSourceWarning)}
 <div class="gbBlock">
 {assign var=divOpen value=1}
@@ -29,7 +29,7 @@
   </h3>
 {/if}
 
-{if $GetUrlsData.guestMode && $GetUrlsData.isPhoto && !$GetUrlsData.permissions.viewSource && 
+{if $GetUrlsData.guestMode && $GetUrlsData.isPhoto && !$GetUrlsData.permissions.viewSource &&
       $GetUrlsData.permissions.viewResizes && ($isBlock && $showWarnings || !$isBlock && !$GetUrlsData.options.suppressResizedWarning)}
 {if !isset($divOpen)}
 <div class="gbBlock">
@@ -54,14 +54,14 @@
 </div>
 {/if}
 
-{if $GetUrlsData.isPhoto && $GetUrlsData.permissions.viewSource && $GetUrlsData.permissions.viewResizes && 
+{if $GetUrlsData.isPhoto && $GetUrlsData.permissions.viewSource && $GetUrlsData.permissions.viewResizes &&
       $GetUrlsData.options.HtmlResize2Full && isset($GetUrlsData.resizeId)}
 {assign var=showHtmlResize2Full value=1}
 {else}
 {assign var=showHtmlResize2Full value=0}
 {/if}
 
-{if $GetUrlsData.isPhoto && $GetUrlsData.options.HtmlInline && 
+{if $GetUrlsData.isPhoto && $GetUrlsData.options.HtmlInline &&
     ($GetUrlsData.permissions.viewSource || ($GetUrlsData.permissions.viewResizes && isset($GetUrlsData.resizeId)))}
 {assign var=showHtmlInline value=1}
 {else}
@@ -87,7 +87,7 @@
     {if $GetUrlsData.showIeLinks} <a onclick="javascript:navigator.clipboard.writeText('&lt;a href=&quot;{g->url arg1="view=core.ShowItem" arg2="itemId=`$GetUrlsData.itemId`" forceFullUrl=true forceSessionId=false htmlEntities=false}&quot;&gt;click for image&lt;/a&gt;');window.status = '[CLK]{$GetUrlsData.itemId}[/CLK] copied to your clipboard for forum posting!';" href>[CLK]</a>{/if}
   </p>
   {/if}
-  
+
   {if $showHtmlInline}
   {if $GetUrlsData.permissions.viewSource}
   <p class="gbDescription">
@@ -126,14 +126,14 @@
 </div>
 {/if}
 
-{if $GetUrlsData.isPhoto && $GetUrlsData.permissions.viewSource && $GetUrlsData.permissions.viewResizes && 
+{if $GetUrlsData.isPhoto && $GetUrlsData.permissions.viewSource && $GetUrlsData.permissions.viewResizes &&
       $GetUrlsData.options.BbResize2Full && isset($GetUrlsData.resizeId)}
 {assign var=showBbResize2Full value=1}
 {else}
 {assign var=showBbResize2Full value=0}
 {/if}
 
-{if $GetUrlsData.isPhoto && $GetUrlsData.options.BbInline && 
+{if $GetUrlsData.isPhoto && $GetUrlsData.options.BbInline &&
     ($GetUrlsData.permissions.viewSource || ($GetUrlsData.permissions.viewResizes && isset($GetUrlsData.resizeId)))}
 {assign var=showBbInline value=1}
 {else}
@@ -173,7 +173,7 @@
     {g->text text="Show image directly (resized version will be shown):"}
     <br />
     <input onclick="this.focus(); this.select();" name="forum" type="text" readonly="true" size="{$width}" value="[img]{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.resizeId`" forceFullUrl=true forceSessionId=false}[/img]">
-    {if $GetUrlsData.showIeLinks} <a onclick="javascript:navigator.clipboard.writeText('[IMG]{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.resizeId`" forceFullUrl=true forceSessionId=false htmlEntities=false}[/IMG]');window.status = '[IMG]{$GetUrlsData.resizeId}[/IMG] copied to your clipboard for forum posting!';" href>[IMG]</a>{/if}   </p>
+    {if $GetUrlsData.showIeLinks} <a onclick="javascript:navigator.clipboard.writeText('[IMG]{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.resizeId`" forceFullUrl=true forceSessionId=false htmlEntities=false}[/IMG]');window.status = '[IMG]{$GetUrlsData.resizeId}[/IMG] copied to your clipboard for forum posting!';" href>[IMG]</a>{/if}
   </p>
   {/if}
   {/if}
@@ -212,7 +212,7 @@
     {g->text text="Download URL for original item:"}
     <br />
     <input onclick="this.focus(); this.select();" name="forum" type="text" readonly="true" size="{$width}" value="{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.itemId`" forceFullUrl=true forceSessionId=false}">
-    {if $GetUrlsData.showIeLinks} <a onclick="javascript:navigator.clipboard.writeText('{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.itemId`" forceFullUrl=true forceSessionId=false htmlEntities=false}');window.status = 'http link to Full Item ID {$GetUrlsData.itemId} copied to your clipboard!';" href>[IMG]</a>{/if}   </p>
+    {if $GetUrlsData.showIeLinks} <a onclick="javascript:navigator.clipboard.writeText('{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.itemId`" forceFullUrl=true forceSessionId=false htmlEntities=false}');window.status = 'http link to Full Item ID {$GetUrlsData.itemId} copied to your clipboard!';" href>[IMG]</a>{/if}
   </p>
   {/if}
   {/if}
@@ -225,7 +225,7 @@
     {g->text text="URL for resized version:"}
     <br />
     <input onclick="this.focus(); this.select();" name="forum" type="text" readonly="true" size="{$width}" value="{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.resizeId`" forceFullUrl=true forceSessionId=false}">
-    {if $GetUrlsData.showIeLinks} <a onclick="javascript:navigator.clipboard.writeText('{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.resizeId`" forceFullUrl=true forceSessionId=false htmlEntities=false}');window.status = 'http link to Resized Item ID {$GetUrlsData.resizeId} copied to your clipboard!';" href>[IMG]</a>{/if}   </p>
+    {if $GetUrlsData.showIeLinks} <a onclick="javascript:navigator.clipboard.writeText('{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.resizeId`" forceFullUrl=true forceSessionId=false htmlEntities=false}');window.status = 'http link to Resized Item ID {$GetUrlsData.resizeId} copied to your clipboard!';" href>[IMG]</a>{/if}
   </p>
   {/if}
 
@@ -237,7 +237,7 @@
     {g->text text="URL for thumbnail:"}
     <br />
     <input onclick="this.focus(); this.select();" name="forum" type="text" readonly="true" size="{$width}" value="{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.thumbId`" forceFullUrl=true forceSessionId=false}">
-    {if $GetUrlsData.showIeLinks} <a onclick="javascript:navigator.clipboard.writeText('{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.thumbId`" forceFullUrl=true forceSessionId=false htmlEntities=false}');window.status = 'http link to Thumb Item ID {$GetUrlsData.thumbId} copied to your clipboard!';" href>[IMG]</a>{/if}   </p>
+    {if $GetUrlsData.showIeLinks} <a onclick="javascript:navigator.clipboard.writeText('{g->url arg1="view=core.DownloadItem" arg2="itemId=`$GetUrlsData.thumbId`" forceFullUrl=true forceSessionId=false htmlEntities=false}');window.status = 'http link to Thumb Item ID {$GetUrlsData.thumbId} copied to your clipboard!';" href>[IMG]</a>{/if}
   </p>
   {/if}
 </div>
