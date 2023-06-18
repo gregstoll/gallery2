@@ -11,11 +11,11 @@ RewriteRule {$Httpdini.galleryDirectory}modules/rewrite/data/isapi_rewrite/Rewri
 {foreach from=$Httpdini.rules item=rule}
 {if !empty($rule.conditions)}
 {foreach from=$rule.conditions item="condition"}
-RewriteCond {$condition.test} {$condition.pattern}{if !empty($condition.flags)}   [{$condition.flags|@implode:","}]{/if}
+RewriteCond {$condition.test} {$condition.pattern}{if !empty($condition.flags)}   [{","|@implode:$condition.flags}]{/if}
 
 {/foreach}
 {/if}
-RewriteRule ([^?]*)(?:\?(.*))? {$rule.substitution}{if !empty($rule.flags)}   [{$rule.flags|@implode:","}]{/if}
+RewriteRule ([^?]*)(?:\?(.*))? {$rule.substitution}{if !empty($rule.flags)}   [{","|@implode:$rule.flags}]{/if}
 
 {/foreach}
 
