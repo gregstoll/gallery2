@@ -21,11 +21,11 @@
 {foreach from=$Htaccess.rules item=rule}
 {if !empty($rule.conditions)}
 {foreach from=$rule.conditions item="condition"}
-    RewriteCond %{ldelim}{$condition.test}{rdelim} {$condition.pattern}{if !empty($condition.flags)}   [{$condition.flags|@implode:","}]{/if}
+    RewriteCond %{ldelim}{$condition.test}{rdelim} {$condition.pattern}{if !empty($condition.flags)}   [{","|@implode:$condition.flags}]{/if}
 
 {/foreach}
 {/if}
-    RewriteRule .   {$rule.substitution}{if !empty($rule.flags)}   [{$rule.flags|@implode:","}]{/if}
+    RewriteRule .   {$rule.substitution}{if !empty($rule.flags)}   [{","|@implode:$rule.flags}]{/if}
 
 {/foreach}
 </IfModule>
