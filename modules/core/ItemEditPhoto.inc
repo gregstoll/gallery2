@@ -244,7 +244,7 @@ class ItemEditPhoto extends ItemEditPlugin {
 	    $ItemEditPhoto['editPhoto']['hasPreferredSource'] = false;
 	} else {
 	    $preferred = $results[$item->getId()];
-	    if (preg_match("/(rotate|resize|scale)\|/", $preferred->getDerivativeOperations())) {
+	    if (preg_match("/(rotate|resize|scale)\|/", $preferred->getDerivativeOperations() ?? '')) {
 		$ItemEditPhoto['editPhoto']['hasPreferredSource'] = true;
 	    } else {
 		$ItemEditPhoto['editPhoto']['hasPreferredSource'] = false;
