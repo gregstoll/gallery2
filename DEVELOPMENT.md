@@ -73,3 +73,23 @@ Tools for release management are on folder `lib/tools/release`.
 Tools for release management are on folder `lib/tools/po`.
 
 See further details at [Gallery2 Codex](http://codex.galleryproject.org/Gallery2:Localization.html).
+
+# Disable Xdebug on docker
+
+Run
+
+```shell
+docker compose exec -it php \
+  mv '/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini' \
+     '/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini-disabled' \
+  && docker compose restart php
+```
+
+To enable it again:
+
+```shell
+docker compose exec -it php \
+  mv '/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini-disabled' \
+     '/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini' \
+  && docker compose restart php
+```

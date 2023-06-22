@@ -1,6 +1,6 @@
 FROM php:8.1-fpm
 
-RUN docker-php-ext-install mysqli gettext
+RUN docker-php-ext-install mysqli
 
 RUN pecl install xdebug && docker-php-ext-enable xdebug
 
@@ -21,10 +21,10 @@ RUN apt-get install less
 #    setlocale(LC_ALL, "fr_FR"); echo strftime("%A %d %B %Y");
 #
 RUN apt-get install -y libonig-dev locales && apt-get clean \
-    && sed -i -e 's/# ca_ES ISO-8859-1/ca_ES ISO-8859-1/' /etc/locale.gen \
     && sed -i -e 's/# fr_FR ISO-8859-1/fr_FR ISO-8859-1/' /etc/locale.gen \
     && sed -i -e 's/# es_ES ISO-8859-1/es_ES ISO-8859-1/' /etc/locale.gen \
     && sed -i -e 's/# es_AR ISO-8859-1/es_AR ISO-8859-1/' /etc/locale.gen \
+    && sed -i -e 's/# ca_ES ISO-8859-1/ca_ES ISO-8859-1/' /etc/locale.gen \
     && sed -i -e 's/# de_DE ISO-8859-1/de_DE ISO-8859-1/' /etc/locale.gen \
     && sed -i -e 's/# pt_BR ISO-8859-1/pt_BR ISO-8859-1/' /etc/locale.gen \
     && dpkg-reconfigure --frontend=noninteractive locales \
@@ -67,4 +67,3 @@ RUN apt-get update \
 		xsl
 
 RUN apt-get install -y gettext unzip ffmpeg netpbm
-
