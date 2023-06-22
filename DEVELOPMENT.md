@@ -45,6 +45,18 @@ to run tests one-per-request; automatic refresh stops when a test fails.
     core:1by1
 ```
 
+In addition, you will need to set two environ variables for the authentication:
+
+* `USERNAME`, use the username you use for login on the admin panel.
+* `PASSWORD`, use the password for the user.
+
+For example:
+```shell
+export USERNAME=admin
+export PASSWORD=myadminpassword
+
+```
+
 ## Test results
 
 As the test progress, you will see the number of the latest test executed, like this:
