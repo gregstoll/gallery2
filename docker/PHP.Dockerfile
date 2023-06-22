@@ -1,8 +1,6 @@
-FROM php:8.1-fpm
+FROM php:8.1-fpm AS php_base
 
 RUN docker-php-ext-install mysqli
-
-RUN pecl install xdebug && docker-php-ext-enable xdebug
 
 RUN apt-get update && apt-get install -y \
 		libfreetype6-dev \
@@ -13,8 +11,6 @@ RUN apt-get update && apt-get install -y \
 		libjpeg-turbo-progs \
 	&& docker-php-ext-configure gd --with-freetype --with-jpeg \
 	&& docker-php-ext-install -j$(nproc) gd
-
-RUN apt-get install less
 
 #
 # Test locale support is working:
@@ -66,4 +62,8 @@ RUN apt-get update \
 		dom \
 		xsl
 
-RUN apt-get install -y gettext unzip ffmpeg netpbm
+RUN apt-get install -y less procps gettext unzip ffmpeg netpbm
+
+FROM php_base AS php_debug
+
+RUN pecl install xdebug && docker-php-ext-enable xdebug

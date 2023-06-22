@@ -1,4 +1,3 @@
-version: '3'
 services:
   web:
     image: nginx:latest
@@ -15,6 +14,7 @@ services:
     build:
       context: .
       dockerfile: docker/PHP.Dockerfile
+      target: php_${PHP_TARGET:-base}
     environment:
       PHP_IDE_CONFIG: "serverName=docker"
     volumes:

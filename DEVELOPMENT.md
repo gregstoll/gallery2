@@ -76,20 +76,29 @@ See further details at [Gallery2 Codex](http://codex.galleryproject.org/Gallery2
 
 # Disable Xdebug on docker
 
-Run
+Start docker-composer using a variable to control PHP base image, `PHP_TARGET`:
+
+* do not set it or set it to `base` to use a PHP version with no Xdebug.
+* set it to `debug`, to use a PHP version with Xdebug.
+
+Whenever you would like to switch from base to debug, you should build the php service:
+
+Example to activate debug:
 
 ```shell
-docker compose exec -it php \
-  mv '/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini' \
-     '/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini-disabled' \
-  && docker compose restart php
+export PHP_TARGET=debug
+
+docker compose down && \
+  docker compose build php && \
+  docker compose restart php
 ```
 
-To enable it again:
+Example to disable debug:
 
 ```shell
-docker compose exec -it php \
-  mv '/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini-disabled' \
-     '/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini' \
-  && docker compose restart php
+export PHP_TARGET=base
+
+docker compose down && \
+  docker compose build php && \
+  docker compose restart php
 ```
