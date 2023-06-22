@@ -45,6 +45,21 @@ to run tests one-per-request; automatic refresh stops when a test fails.
     core:1by1
 ```
 
+## Test results
+
+As the test progress, you will see the number of the latest test executed, like this:
+```text
+testRow1
+testRow2
+testRow3
+...
+testRow15
+testRow16
+...
+```
+At the end you will see a report available on the name of the scope you selected, with `html`
+extension. You can open it on a browser to see more details on the execution.
+
 
 # Docker
 

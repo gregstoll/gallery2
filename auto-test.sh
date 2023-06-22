@@ -4,6 +4,9 @@ set -a
 set -u
 
 SCRIPT_PATH=$(dirname $0)
+COOKIE_STORE="$SCRIPT_PATH/tmp-cookies.txt"
+
+rm $COOKIE_STORE || true
 
 function slugify() {
   iconv -t ascii//TRANSLIT \
@@ -31,11 +34,11 @@ function run_test() {
     -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36' \
     --compressed \
     --insecure \
-    | tee $BASENAME.out \
+    | tee $BASENAME.html \
     | grep updateStats \
     | sed -E "s/(.*getElementById\(')([^']*)('.*)/\2/"
 
-  tail -1 $BASENAME.out
+  tail -1 $BASENAME.html
 }
 
 function do_login() {
@@ -45,8 +48,8 @@ function do_login() {
   G2_AUTH_TOKEN=$(get_authToken)
 
   curl -XPOST \
-    -b $SCRIPT_PATH/tmp-cookies.txt \
-    -c $SCRIPT_PATH/tmp-cookies.txt \
+    -b "$SCRIPT_PATH/tmp-cookies.txt" \
+    -c "$SCRIPT_PATH/tmp-cookies.txt" \
     "$SERVER_URL/main.php" \
     -H 'Cache-Control: no-cache' \
     -H 'Connection: keep-alive' \
@@ -58,7 +61,8 @@ function do_login() {
     --data "g2_form%5Busername%5D=$USERNAME" \
     --data "g2_form%5Bpassword%5D=$PASSWORD" \
     --compressed \
-    --insecure
+    --insecure \
+    -o /dev/null
 }
 
 function get_authToken() {
@@ -78,8 +82,8 @@ function do_securitycheck() {
   PASSWORD=$1
 
   curl \
-    -b $SCRIPT_PATH/tmp-cookies.txt \
-    -c $SCRIPT_PATH/tmp-cookies.txt \
+    -b "$SCRIPT_PATH/tmp-cookies.txt" \
+    -c "$SCRIPT_PATH/tmp-cookies.txt" \
     "$SERVER_URL/lib/tools/phpunit/index.php" \
     -H 'Cache-Control: no-cache' \
     -H 'Connection: keep-alive' \
@@ -87,20 +91,22 @@ function do_securitycheck() {
     -H 'Pragma: no-cache' \
     --data "password=$PASSWORD" \
     --compressed \
-    --insecure
+    --insecure \
+    -o /dev/null
 
 }
 
 function get_setupsid() {
   curl \
-    -b $SCRIPT_PATH/tmp-cookies.txt \
-    -c $SCRIPT_PATH/tmp-cookies.txt \
+    -b "$SCRIPT_PATH/tmp-cookies.txt" \
+    -c "$SCRIPT_PATH/tmp-cookies.txt" \
     "$SERVER_URL/lib/tools/phpunit/index.php" \
     -H 'Cache-Control: no-cache' \
     -H 'Connection: keep-alive' \
     -H 'Pragma: no-cache' \
     --compressed \
-    --insecure
+    --insecure \
+    -o /dev/null
 }
 
 SERVER_URL=$1
@@ -108,7 +114,13 @@ SCOPE=$2
 USERNAME=${USERNAME}
 PASSWORD=${PASSWORD}
 
+docker compose down
+export PHP_TARGET=base
+docker compose build php
+docker compose up -d
+sleep 10
 get_setupsid
 do_login $USERNAME $PASSWORD
 do_securitycheck $PASSWORD
 run_test "$SCOPE"
+docker compose down
