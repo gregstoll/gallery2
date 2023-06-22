@@ -36,7 +36,7 @@ class CreateConfigFileStep extends InstallStep {
     function processRequest() {
 	if (!empty($_GET['downloadConfig'])) {
 	    GallerySetupUtilities::generateTextFileForDownload(
-		'config.php', $this->_getConfigContents());
+		'config.php', $this::_getConfigContents());
 	    return false;
 	}
 
@@ -132,7 +132,7 @@ class CreateConfigFileStep extends InstallStep {
 	$this->_firstTime = false;
     }
 
-    function _getConfigContents() {
+    static function _getConfigContents() {
 	global $galleryStub;
 	$configDir = $_SESSION['configPath'];
 	$baseDir = dirname(dirname(dirname(__FILE__)));
