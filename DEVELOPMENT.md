@@ -16,7 +16,37 @@ http://SITE_ADDRESS/lib/tools/phpunit/index.php
 
 To run any test, write the name of the module on the input box and hit `ENTER` (there is no form button).
 
-## Docker
+## Launch test from command line
+
+There is a helper script to run tests:
+```shell
+auto-test.sh <SERVER_URL> <SCOPE>
+```
+
+* `SERVER_URL` is the server URL as in `http://host.docker.internal:10000/`.
+* `SCOPE` is a regular expression string to restrict testing to classes containing that text
+in their class name or test method. If you use an exclamation before a module/class/test
+name(s) encapsulated in parenthesis and separated with bars,
+this will exclude the matching tests. Use "`:#-#`" to restrict which matching tests are
+actually run. You can also specify multiple spans with "`:#-#,#-#,#-#`". Append "`:1by1`"
+to run tests one-per-request; automatic refresh stops when a test fails.
+```text
+    AddCommentControllerTest.testAddComment
+    AddCommentControllerTest.testAdd
+    AddCommentControllerTest
+    comment
+    !(comment)
+    !(comment|core)
+    comment:1-3
+    comment:3-
+    comment:-5
+    comment:1-3,6-8,10-12
+    comment:-3,4-
+    core:1by1
+```
+
+
+# Docker
 
 There is a docker compose configuration that will run nginx web server, PHP-FPM server and MySQL server.
 
