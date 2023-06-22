@@ -114,13 +114,7 @@ SCOPE=$2
 USERNAME=${USERNAME}
 PASSWORD=${PASSWORD}
 
-docker compose down
-export PHP_TARGET=base
-docker compose build php
-docker compose up -d
-sleep 10
 get_setupsid
 do_login $USERNAME $PASSWORD
 do_securitycheck $PASSWORD
 run_test "$SCOPE"
-docker compose down
