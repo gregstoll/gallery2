@@ -18,6 +18,25 @@ To run any test, write the name of the module on the input box and hit `ENTER` (
 
 ## Launch test from command line
 
+You will need to set two environment variables for the authentication:
+
+* `USERNAME`, use the username you use for login on the admin panel.
+* `PASSWORD`, use the password for the user.
+
+This script assumes that you use the same password for the admin user and for the `setup.password`
+to access the support area.
+
+For example:
+```shell
+$ export USERNAME=admin
+$ export PASSWORD=myadminpassword
+
+$ grep "setup.password" config.php
+...
+$gallery->setConfig('setup.password', 'myadminpassword');
+...
+```
+
 There is a helper script to run tests:
 ```shell
 auto-test.sh <SERVER_URL> <SCOPE>
@@ -43,18 +62,6 @@ to run tests one-per-request; automatic refresh stops when a test fails.
     comment:1-3,6-8,10-12
     comment:-3,4-
     core:1by1
-```
-
-In addition, you will need to set two environ variables for the authentication:
-
-* `USERNAME`, use the username you use for login on the admin panel.
-* `PASSWORD`, use the password for the user.
-
-For example:
-```shell
-export USERNAME=admin
-export PASSWORD=myadminpassword
-
 ```
 
 ## Test results
