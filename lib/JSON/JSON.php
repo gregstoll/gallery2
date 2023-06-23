@@ -271,15 +271,12 @@ class Services_JSON
     *                           level. If it is a string (such as '\t' or '&nbsp;'),
     *                           it contains the characters used to indent at each level.
     *
-    * @param    mixed   $send_header    Set it to also send headers.
     * @return   mixed   JSON string representation of input var or an error if a problem occurs
     * @access   public
     */
-    static function stringify($var, $replacer=false, $space=false, $send_header=false)
+    static function stringify($var, $replacer=false, $space=false)
     {
-	if ($send_header) {
-	    header('Content-type: application/json');
-	}
+	header('Content-type: application/json');
         $s = new Services_JSON(SERVICES_JSON_USE_TO_JSON);
 
         $s->_tab = is_numeric($space) ? str_repeat(' ', $space) : $space;
