@@ -16,7 +16,71 @@ http://SITE_ADDRESS/lib/tools/phpunit/index.php
 
 To run any test, write the name of the module on the input box and hit `ENTER` (there is no form button).
 
-## Docker
+## Launch test from command line
+
+You will need to set two environment variables for the authentication:
+
+* `USERNAME`, use the username you use for login on the admin panel.
+* `PASSWORD`, use the password for the user.
+
+This script assumes that you use the same password for the admin user and for the `setup.password`
+to access the support area.
+
+For example:
+```shell
+$ export USERNAME=admin
+$ export PASSWORD=myadminpassword
+
+$ grep "setup.password" config.php
+...
+$gallery->setConfig('setup.password', 'myadminpassword');
+...
+```
+
+There is a helper script to run tests:
+```shell
+auto-test.sh <SERVER_URL> <SCOPE>
+```
+
+* `SERVER_URL` is the server URL as in `http://host.docker.internal:10000/`.
+* `SCOPE` is a regular expression string to restrict testing to classes containing that text
+in their class name or test method. If you use an exclamation before a module/class/test
+name(s) encapsulated in parenthesis and separated with bars,
+this will exclude the matching tests. Use "`:#-#`" to restrict which matching tests are
+actually run. You can also specify multiple spans with "`:#-#,#-#,#-#`". Append "`:1by1`"
+to run tests one-per-request; automatic refresh stops when a test fails.
+```text
+    AddCommentControllerTest.testAddComment
+    AddCommentControllerTest.testAdd
+    AddCommentControllerTest
+    comment
+    !(comment)
+    !(comment|core)
+    comment:1-3
+    comment:3-
+    comment:-5
+    comment:1-3,6-8,10-12
+    comment:-3,4-
+    core:1by1
+```
+
+## Test results
+
+As the test progress, you will see the number of the latest test executed, like this:
+```text
+testRow1
+testRow2
+testRow3
+...
+testRow15
+testRow16
+...
+```
+At the end you will see a report available on the name of the scope you selected, with `html`
+extension. You can open it on a browser to see more details on the execution.
+
+
+# Docker
 
 There is a docker compose configuration that will run nginx web server, PHP-FPM server and MySQL server.
 
@@ -73,3 +137,32 @@ Tools for release management are on folder `lib/tools/release`.
 Tools for release management are on folder `lib/tools/po`.
 
 See further details at [Gallery2 Codex](http://codex.galleryproject.org/Gallery2:Localization.html).
+
+# Disable Xdebug on docker
+
+Start docker-composer using a variable to control PHP base image, `PHP_TARGET`:
+
+* do not set it or set it to `base` to use a PHP version with no Xdebug.
+* set it to `debug`, to use a PHP version with Xdebug.
+
+Whenever you would like to switch from base to debug, you should build the php service:
+
+Example to activate debug:
+
+```shell
+export PHP_TARGET=debug
+
+docker compose down && \
+  docker compose build php && \
+  docker compose restart php
+```
+
+Example to disable debug:
+
+```shell
+export PHP_TARGET=base
+
+docker compose down && \
+  docker compose build php && \
+  docker compose restart php
+```
