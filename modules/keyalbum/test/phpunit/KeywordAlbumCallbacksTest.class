@@ -451,6 +451,11 @@ class KeywordAlbumCallbacksTest extends GalleryTestCase {
 			),
 			array(
 				'/SELECT DISTINCT\s+\[GalleryItem::keywords\]\s+FROM\s+\[GalleryItem\]\s+'
+				. 'INNER JOIN \[GalleryAccessSubscriberMap.*IN \(\?,\?\)\s*$/s',
+				array(),
+			),
+			array(
+				'/SELECT DISTINCT\s+\[GalleryItem::keywords\]\s+FROM\s+\[GalleryItem\]\s+'
 				. 'WHERE \[GalleryItem::id\] IS NULL\s*$/',
 				array(),
 			),
