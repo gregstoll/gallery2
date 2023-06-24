@@ -9,6 +9,25 @@ Internet](`https://web.archive.org/web/20210224144709/http://codex.gallery2.org/
 
 # Unit testing
 
+## Setup
+
+You will probably need to install locale files for the following languages: `es` (Spanish), `ca` (Catalan),
+`de` (German), `fr` (French) and `pt_BR` (Brazilian Portuguese). Here there are some example for different OS:
+
+```shell
+Almalinux 8
+
+dnf install langpacks-es langpacks-ca langpacks-de langpacks-fr langpacks-pt_BR  -y
+```
+
+```shell
+Debian
+
+See docker config file for an example
+```
+
+## Run tests from the browser
+
 Run unit testing by navigating to the following URL:
 ```text
 http://SITE_ADDRESS/lib/tools/phpunit/index.php
@@ -63,8 +82,6 @@ to run tests one-per-request; automatic refresh stops when a test fails.
     comment:-3,4-
     core:1by1
 ```
-
-## Test results
 
 As the test progress, you will see the number of the latest test executed, like this:
 ```text
