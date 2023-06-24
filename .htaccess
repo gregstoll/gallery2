@@ -6,7 +6,7 @@ RewriteCond %{HTTPS} "!=on"
 RewriteRule ^/?(.*) https://%{SERVER_NAME}/$1 [R,L]
 
 RedirectMatch 404 \.(md|txt|ini|Dockerfile|git|htaccess|inc)
-RedirectMatch 404 (config\.php|phpinfo|README|LICENSE)
+RedirectMatch 404 (docker|config\.php|phpinfo|README|LICENSE)
 
 # BEGIN Url Rewrite section
 # (Automatically generated.  Do not edit this section)
@@ -23,9 +23,7 @@ RedirectMatch 404 (config\.php|phpinfo|README|LICENSE)
 
     RewriteCond %{QUERY_STRING} g2_view=core.DownloadItem
     RewriteCond %{QUERY_STRING} g2_itemId=([0-9]+)
-    RewriteCond %{HTTP:Referer} !^[a-zA-Z0-9\+\.\-]+://fotos.arxiuhistoricpoblenou.es/   [NC]
-    RewriteCond %{HTTP:Referer} !^[a-zA-Z0-9\+\.\-]+://fotos.arxiuhistoricpoblenou.cat/   [NC]
-    RewriteCond %{HTTP:Referer} !^[a-zA-Z0-9\+\.\-]+://fotos-8.arxiuhistoricpoblenou.cat/   [NC]
+    RewriteCond %{HTTP:Referer} !^[a-zA-Z0-9\+\.\-]+://%{SERVER_NAME}/   [NC]
     RewriteCond %{HTTP:Referer} !^$
     RewriteRule .   /main.php?g2_view=watermark.DownloadItem&g2_itemId=%1   [L]
     RewriteCond %{THE_REQUEST} /sitemap(\?.|\ .)
