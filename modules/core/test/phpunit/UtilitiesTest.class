@@ -551,6 +551,7 @@ class UtilitiesTest extends GalleryTestCase {
 
 	public function testConvertPathToUrl() {
 		global $gallery;
+		$protocol = GalleryUtilities::getProtocol();
 
 		// Simulate UNIX to line up with our mock platform
 		$file                   = str_replace('\\', '/', __FILE__);
@@ -573,7 +574,7 @@ class UtilitiesTest extends GalleryTestCase {
 		);
 
 		$this->assertEquals(
-			'http://example.com/gallery2/modules/core/test/phpunit/UtilitiesTest.class',
+			"$protocol://example.com/gallery2/modules/core/test/phpunit/UtilitiesTest.class",
 			GalleryUtilities::convertPathToUrl(
 				$file,
 				array(
