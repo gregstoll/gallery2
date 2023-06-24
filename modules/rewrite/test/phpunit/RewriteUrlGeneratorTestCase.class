@@ -747,6 +747,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 
 	public function testGenerateUrlForceFullUrl() {
 		global $gallery;
+		$protocol = GalleryUtilities::getProtocol();
 		$session =& $gallery->getSession();
 
 		$params = $this->_getTestUrlParams();
@@ -756,36 +757,36 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 			'forceServerRelativeUrl' => true,
 		);
 
-		$expectedUrl[0]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP
+		$expectedUrl[0]  = "$protocol://example.com/gallery2/" . GALLERY_MAIN_PHP
 		. '?g2_view=rand164.NonShort&amp;g2_foo=bar';
 		$expectedUrl[1]  = sprintf(
-			'http://example.com/gallery2/d/%d-%d/%s',
+			"$protocol://example.com/gallery2/d/%d-%d/%s",
 			$this->_testItem->getId(),
 			$this->_testItem->getSerialNumber(),
 			urlencode($this->_testItem->getPathComponent())
 		);
 		$expectedUrl[2]  = 'http://href_website.com/foo';
 		$expectedUrl[3]  = $this->_signUrl(
-			'http://example.com/gallery2/' . GALLERY_MAIN_PHP
+			"$protocol://example.com/gallery2/" . GALLERY_MAIN_PHP
 			. '?g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId()
 		);
-		$expectedUrl[4]  = 'http://example.com/gallery2/themes/foo/images/bar.jpg';
-		$expectedUrl[5]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP;
-		$expectedUrl[6]  = 'http://example.com/gallery2/v' . $this->_testAlbumPath;
-		$expectedUrl[7]  = 'http://example.com/gallery2/v' . $this->_testItemPath . '.html';
-		$expectedUrl[8]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP . '?g2_itemId=-5759';
-		$expectedUrl[9]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP
+		$expectedUrl[4]  = "$protocol://example.com/gallery2/themes/foo/images/bar.jpg";
+		$expectedUrl[5]  = "$protocol://example.com/gallery2/" . GALLERY_MAIN_PHP;
+		$expectedUrl[6]  = "$protocol://example.com/gallery2/v" . $this->_testAlbumPath;
+		$expectedUrl[7]  = "$protocol://example.com/gallery2/v" . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = "$protocol://example.com/gallery2/" . GALLERY_MAIN_PHP . '?g2_itemId=-5759';
+		$expectedUrl[9]  = "$protocol://example.com/gallery2/" . GALLERY_MAIN_PHP
 		. '?g2_itemId=' . $this->_derivative->getId();
-		$expectedUrl[10] = 'http://example.com/gallery2/' . ltrim($this->_testAlbumPath, '/')
+		$expectedUrl[10] = "$protocol://example.com/gallery2/" . ltrim($this->_testAlbumPath, '/')
 		. 'test.html';
-		$expectedUrl[11] = 'http://example.com/gallery2/' . ltrim($this->_testItemPath, '/')
+		$expectedUrl[11] = "$protocol://example.com/gallery2/" . ltrim($this->_testItemPath, '/')
 		. '/test.html';
-		$expectedUrl[12] = 'http://example.com/gallery2/t' . rtrim($this->_testAlbumPath, '/')
+		$expectedUrl[12] = "$protocol://example.com/gallery2/t" . rtrim($this->_testAlbumPath, '/')
 		. '.test';
-		$expectedUrl[13] = 'http://example.com/gallery2/t' . $this->_testItemPath . '.test';
-		$expectedUrl[14] = 'http://example.com/gallery2/phpunit/';
-		$expectedUrl[15] = $this->_signUrl('http://example.com/gallery2/phpunit2/');
-		$expectedUrl[16] = 'http://example.com/gallery2/phpunit/'
+		$expectedUrl[13] = "$protocol://example.com/gallery2/t" . $this->_testItemPath . '.test';
+		$expectedUrl[14] = "$protocol://example.com/gallery2/phpunit/";
+		$expectedUrl[15] = $this->_signUrl("$protocol://example.com/gallery2/phpunit2/");
+		$expectedUrl[16] = "$protocol://example.com/gallery2/phpunit/"
 		. urlencode($this->_urlEncodePath);
 
 		$ret = $this->_runGenerateUrlTest(array(), $expectedUrl, $params, $options);

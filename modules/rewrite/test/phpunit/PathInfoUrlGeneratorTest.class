@@ -86,6 +86,7 @@ class PathInfoUrlGeneratorTest extends RewriteUrlGeneratorTestCase {
 	}
 
 	public function testGetBaseUrl() {
+		$protocol = GalleryUtilities::getProtocol();
 		// Standard Gallery init
 		$_SERVER['REQUEST_URI'] = '/gallery2/phpunit_test.php?foo=bar&bar=foo';
 		$urlGenerator           = new PathInfoUrlGenerator();
@@ -97,12 +98,12 @@ class PathInfoUrlGeneratorTest extends RewriteUrlGeneratorTestCase {
 
 		$this->assertTrue(!$urlGenerator->_error);
 		$this->assertEquals(
-			'http://example.com/gallery2/phpunit_test.php/',
+			"$protocol://example.com/gallery2/phpunit_test.php/",
 			$urlGenerator->_getBaseUrl(),
 			'baseUrl'
 		);
 		$this->assertEquals(
-			'http://example.com/gallery2/phpunit_test.php/',
+			"$protocol://example.com/gallery2/phpunit_test.php/",
 			$urlGenerator->_getBaseUrl(true),
 			'baseUrl forceDirect'
 		);
@@ -115,6 +116,7 @@ class PathInfoUrlGeneratorTest extends RewriteUrlGeneratorTestCase {
 	}
 
 	public function testGetBaseUrlEmbedded() {
+		$protocol = GalleryUtilities::getProtocol();
 		$_SERVER['REQUEST_URI'] = '/cms/index.php/?foo=bar&bar=foo';
 		// Embedded init with pathinfo and querystring in the base file
 		$urlGenerator = new PathInfoUrlGenerator();
@@ -126,11 +128,11 @@ class PathInfoUrlGeneratorTest extends RewriteUrlGeneratorTestCase {
 
 		$this->assertTrue(!$urlGenerator->_error);
 		$this->assertEquals(
-			'http://example.com/cms/index.php/',
+			"$protocol://example.com/cms/index.php/",
 			$urlGenerator->_getBaseUrl(),
 			'baseUrl'
 		);
-		$this->assertEquals('http://example.com/gallery2/main.php/', $urlGenerator->_getBaseUrl(true), 'baseUrl forceDirect');
+		$this->assertEquals("$protocol://example.com/gallery2/main.php/", $urlGenerator->_getBaseUrl(true), 'baseUrl forceDirect');
 		$this->assertEquals('?foo=bar&bar=foo', $urlGenerator->_getBaseParamString(), 'baseParam');
 		$this->assertEquals('', $urlGenerator->_getBaseParamString(true), 'baseParam forceDirect');
 	}
