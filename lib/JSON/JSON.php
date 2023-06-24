@@ -134,8 +134,8 @@ class Services_JSON
     *                                   bubble up with an error, so all return values
     *                                   from encode() should be checked with isError()
     *                           - SERVICES_JSON_USE_TO_JSON:  call toJSON when serializing objects
-    *                                   It serializes the return value from the toJSON call rather 
-    *                                   than the object it'self,  toJSON can return associative arrays, 
+    *                                   It serializes the return value from the toJSON call rather
+    *                                   than the object it'self,  toJSON can return associative arrays,
     *                                   strings or numbers, if you return an object, make sure it does
     *                                   not have a toJSON method, otherwise an error will occur.
     */
@@ -150,7 +150,7 @@ class Services_JSON
     var $_mb_strlen = false;
     var $_mb_substr = false;
     var $_mb_convert_encoding = false;
-    
+
     // tab and crlf are used by stringfy to produce pretty JSON.
     var $_tab = '';
     var $_crlf = '';
@@ -263,7 +263,7 @@ class Services_JSON
     *                           if var is a strng, note that encode() always expects it
     *                           to be in ASCII or UTF-8 format!
     * @param    mixed   $replacer    NOT SUPPORTED YET.
-    * @param    number|string   $space 
+    * @param    number|string   $space
     *                           an optional parameter that specifies the indentation
     *                           of nested structures. If it is omitted, the text will
     *                           be packed without extra whitespace. If it is a number,
@@ -276,14 +276,14 @@ class Services_JSON
     */
     static function stringify($var, $replacer=false, $space=false)
     {
-        //header('Content-type: application/json');
+	header('Content-type: application/json');
         $s = new Services_JSON(SERVICES_JSON_USE_TO_JSON);
-        
+
         $s->_tab = is_numeric($space) ? str_repeat(' ', $space) : $space;
         $s->_crlf = "\n";
         $s->_indent = 0;
         return  $s->encodeUnsafe($var);
-        
+
     }
     /**
     * encodes an arbitrary variable into JSON format (and sends JSON Header)
@@ -320,10 +320,10 @@ class Services_JSON
         $ret = $this->_encode($var);
         setlocale(LC_NUMERIC, $lc);
         return $ret;
-        
+
     }
     /**
-    * PRIVATE CODE that does the work of encodes an arbitrary variable into JSON format 
+    * PRIVATE CODE that does the work of encodes an arbitrary variable into JSON format
     *
     * @param    mixed   $var    any number, boolean, string, array, or object to be encoded.
     *                           see argument 1 to Services_JSON() above for array-parsing behavior.
@@ -333,11 +333,11 @@ class Services_JSON
     * @return   mixed   JSON string representation of input var or an error if a problem occurs
     * @access   public
     */
-    function _encode($var) 
+    function _encode($var)
     {
         $ind = str_repeat($this->_tab, $this->_indent);
-        $indx = $ind . $this->_tab; 
-        
+        $indx = $ind . $this->_tab;
+
         switch (gettype($var)) {
             case 'boolean':
                 return $var ? 'true' : 'false';
@@ -402,7 +402,7 @@ class Services_JSON
                                 $ascii .= '?';
                                 break;
                             }
-                            
+
                             $char = pack('C*', $ord_var_c, ord($var[$c + 1]));
                             $c += 1;
                             $utf16 = $this->utf82utf16($char);
@@ -513,73 +513,73 @@ class Services_JSON
                             return $property;
                         }
                     }
-                    
-                    return "{" . $this->_crlf .  $indx .  
+
+                    return "{" . $this->_crlf .  $indx .
                         join(",". $this->_crlf . $indx, $properties) . $this->_crlf .
                         $ind."}";
-                    
+
                 }
 
                 // treat it like a regular array
                 $this->_indent++;
                 $elements = array_map(array($this, '_encode'), $var);
                 $this->_indent--;
-                
+
                 foreach($elements as $element) {
                     if(Services_JSON::isError($element)) {
                         return $element;
                     }
                 }
-                
+
                 $pad = $this->_tab === '' ? '' : ' ';
-                
+
                 // short array, just show it on one line.
                 if (strlen(join(',' . $pad, $elements)) < 30) {
                     return '[' . join(',' . $pad, $elements) . ']';
                 }
-                
+
                 return "[" . $this->_crlf .
                     $indx .  join(",". $this->_crlf . $indx, $elements) . $this->_crlf .
                     $ind . "]";
 
             case 'object':
-            
+
                 // support toJSON methods.
                 if (($this->use & SERVICES_JSON_USE_TO_JSON) && method_exists($var, 'toJSON')) {
                     // this may end up allowing unlimited recursion
                     // so we check the return value to make sure it's not got the same method.
                     $recode = $var->toJSON();
-                    
+
                     if (method_exists($recode, 'toJSON')) {
-                        
+
                         return ($this->use & SERVICES_JSON_SUPPRESS_ERRORS)
                         ? 'null'
                         : new Services_JSON_Error(class_name($var).
                             " toJSON returned an object with a toJSON method.");
-                            
+
                     }
-                    
+
                     return $this->_encode( $recode );
-                } 
-                
+                }
+
                 $vars = get_object_vars($var);
-                
+
                 $this->_indent++;
                 $properties = array_map(array($this, 'name_value'),
                                         array_keys($vars),
                                         array_values($vars));
                 $this->_indent--;
-                
+
                 foreach($properties as $property) {
                     if(Services_JSON::isError($property)) {
                         return $property;
                     }
                 }
-                
+
                 return "{" . $this->_crlf .
                     $indx .  join(",". $this->_crlf . $indx, $properties) . $this->_crlf .
                     $ind . "}";
-                
+
             default:
                 return ($this->use & SERVICES_JSON_SUPPRESS_ERRORS)
                     ? 'null'
@@ -599,13 +599,13 @@ class Services_JSON
     function name_value($name, $value)
     {
         $encoded_value = $this->_encode($value);
-        
+
         if(Services_JSON::isError($encoded_value)) {
             return $encoded_value;
         }
-        
+
         $pad = $this->_tab === '' ? '' : ' ';
-        
+
         return $this->_encode(strval($name)) . $pad . ':' . $pad . $encoded_value;
     }
 
@@ -833,7 +833,7 @@ class Services_JSON
                                 // element in an associative array,
                                 // for now
                                 $parts = array();
-                                
+
                                if (preg_match('/^\s*(["\'].*[^\\\]["\'])\s*:/Uis', $slice, $parts)) {
  	                              // "name":value pair
                                     $key = $this->decode($parts[1]);
@@ -940,28 +940,28 @@ class Services_JSON
 
         return false;
     }
-    
+
     /**
     * Calculates length of string in bytes
-    * @param string 
+    * @param string
     * @return integer length
     */
-    function strlen8( $str ) 
+    function strlen8( $str )
     {
         if ( $this->_mb_strlen ) {
             return mb_strlen( $str, "8bit" );
         }
         return strlen( $str );
     }
-    
+
     /**
     * Returns part of a string, interpreting $start and $length as number of bytes.
-    * @param string 
-    * @param integer start 
-    * @param integer length 
+    * @param string
+    * @param integer start
+    * @param integer length
     * @return integer length
     */
-    function substr8( $string, $start, $length=false ) 
+    function substr8( $string, $start, $length=false )
     {
         if ( $length === false ) {
             $length = $this->strlen8( $string ) - $start;
@@ -998,5 +998,5 @@ if (class_exists('PEAR_Error')) {
 
         }
     }
-    
+
 }

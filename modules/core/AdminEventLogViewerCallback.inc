@@ -160,7 +160,7 @@ class AdminEventLogViewerCallbackView extends GalleryView {
 
 	GalleryCoreApi::requireOnce('lib/JSON/JSON.php');
 	$json = new Services_JSON();
-	print $json->encode($data);
+	print $json->encodeUnsafe($data);
 	return null;
     }
 }

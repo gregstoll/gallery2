@@ -76,7 +76,7 @@ class CommentCallbackView extends GalleryView {
 
 	GalleryCoreApi::requireOnce('lib/JSON/JSON.php');
 	$json = new Services_JSON();
-	print $json->encode($result);
+	print $json->encodeUnsafe($result);
 	return null;
     }
 
