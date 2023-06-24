@@ -565,7 +565,23 @@ class KeywordAlbumCallbacksTest extends GalleryTestCase {
 					'weight' => '2.27',
 				),
 			),
-			array(),
+			array(
+			    array(
+				'name'   => 'two',
+				'raw'    => 'two',
+				'weight' => '5.43',
+			    ),
+			    array(
+				'name'   => '6',
+				'raw'    => '6',
+				'weight' => '1.88',
+			    ),
+			    array(
+				'name'   => '7',
+				'raw'    => '7',
+				'weight' => '3.27',
+			    ),
+			),
 		);
 
 		foreach (array(
@@ -577,7 +593,6 @@ class KeywordAlbumCallbacksTest extends GalleryTestCase {
 			array('allKeywords.3.time', false, 3, false, 6, array()),
 			// Keywords for public items
 			array('allKeywords.public.time', true, 0, false, 3, array(123, 456)),
-			// Keywords for public items but guest has no ACLs
 			// Verify cached value is used
 			array('allKeywords.public.time', false, 3, false, 3, array()),
 		) as $i => $params) {
