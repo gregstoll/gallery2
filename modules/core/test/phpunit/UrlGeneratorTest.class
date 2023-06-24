@@ -1774,6 +1774,7 @@ class UrlGeneratorTest extends GalleryTestCase {
 	}
 
 	public function testCurrentUrlToken() {
+		$protocol = GalleryUtilities::getProtocol();
 		$_SERVER['REQUEST_URI'] = '/gallery2/phpunit_test.php?a=b';
 		$url                    = $this->_urlGenerator->generateUrl(
 			array(
@@ -1784,7 +1785,7 @@ class UrlGeneratorTest extends GalleryTestCase {
 
 		$this->assertEquals(
 			'phpunit_test.php?g2_view=foo&amp;' .
-			'g2_test=http%3A%2F%2Fexample.com%2Fgallery2%2Fphpunit_test.php%3Fa%3Db',
+			"g2_test=$protocol%3A%2F%2Fexample.com%2Fgallery2%2Fphpunit_test.php%3Fa%3Db",
 			$url
 		);
 	}
@@ -2040,8 +2041,10 @@ class UrlGeneratorTest extends GalleryTestCase {
 	}
 
 	public function testGenerateFullUrlOn() {
+		$protocol = GalleryUtilities::getProtocol();
+
 		$this->assertEquals(
-			'http://example.com/gallery2/phpunit_test.php?g2_a=b',
+			"$protocol://example.com/gallery2/phpunit_test.php?g2_a=b",
 			$this->_urlGenerator->generateUrl(
 				array(
 					'a' => 'b',
@@ -2054,8 +2057,9 @@ class UrlGeneratorTest extends GalleryTestCase {
 	}
 
 	public function testGenerateFullUrlOnForRelative() {
+		$protocol = GalleryUtilities::getProtocol();
 		$this->assertEquals(
-			'http://example.com/gallery2/favicon.ico',
+			"$protocol://example.com/gallery2/favicon.ico",
 			$this->_urlGenerator->generateUrl(
 				array(
 					'href' => 'favicon.ico',
@@ -2125,8 +2129,9 @@ class UrlGeneratorTest extends GalleryTestCase {
 
 	// ForceFullUrl has precedence over ForceServerRelativeUrl
 	public function testGenerateServerRelativeUrlOnFullUrlOn() {
+		$protocol = GalleryUtilities::getProtocol();
 		$this->assertEquals(
-			'http://example.com/gallery2/phpunit_test.php?g2_a=b',
+			"$protocol://example.com/gallery2/phpunit_test.php?g2_a=b",
 			$this->_urlGenerator->generateUrl(
 				array(
 					'a' => 'b',
@@ -2140,41 +2145,45 @@ class UrlGeneratorTest extends GalleryTestCase {
 	}
 
 	public function testMakeRelativeUrl() {
+		$protocol = GalleryUtilities::getProtocol();
 		$this->assertEquals(
 			'phpunit_test.php?g2_a=b',
 			$this->_urlGenerator->makeRelativeUrl(
-				'http://example.com/gallery2/phpunit_test.php?g2_a=b'
+				"$protocol://example.com/gallery2/phpunit_test.php?g2_a=b"
 			)
 		);
 	}
 
 	public function testMakeRelativeUrlForceServerRelative() {
+		$protocol = GalleryUtilities::getProtocol();
 		$this->assertEquals(
 			'/gallery2/phpunit_test.php?g2_a=b',
 			$this->_urlGenerator->makeRelativeUrl(
-				'http://example.com/gallery2/phpunit_test.php?g2_a=b',
+				"$protocol://example.com/gallery2/phpunit_test.php?g2_a=b",
 				true
 			)
 		);
 	}
 
 	public function testMakeRelativeUrlDontForceServerRelative() {
+		$protocol = GalleryUtilities::getProtocol();
 		$this->assertEquals(
 			'phpunit_test.php?g2_a=b',
 			$this->_urlGenerator->makeRelativeUrl(
-				'http://example.com/gallery2/phpunit_test.php?g2_a=b',
+				"$protocol://example.com/gallery2/phpunit_test.php?g2_a=b",
 				false
 			)
 		);
 	}
 
 	public function testMakeServerRelativeUrl() {
+		$protocol = GalleryUtilities::getProtocol();
 		$this->_urlGenerator->_file[0] = '';
 
 		$this->assertEquals(
 			'/gallery2/v/AlbumName',
 			$this->_urlGenerator->makeRelativeUrl(
-				'http://example.com/gallery2/v/AlbumName'
+				"$protocol://example.com/gallery2/v/AlbumName"
 			)
 		);
 	}
@@ -2192,38 +2201,41 @@ class UrlGeneratorTest extends GalleryTestCase {
 	}
 
 	public function testMakeRelativeUrlBaseFileNotInRequestUri() {
+		$protocol = GalleryUtilities::getProtocol();
 		$_SERVER['REQUEST_URI']        = '/gallery2/v/AlbumName';
 		$this->_urlGenerator->_file[0] = 'main.php';
 
 		$this->assertEquals(
 			'/gallery2/v/AnotherAlbum',
 			$this->_urlGenerator->makeRelativeUrl(
-				'http://example.com/gallery2/v/AnotherAlbum'
+				"$protocol://example.com/gallery2/v/AnotherAlbum"
 			)
 		);
 	}
 
 	// Do not be fooled by baseFile in the return URL
 	public function testMakeRelativeUrlBaseFileInReturnUrl() {
+		$protocol = GalleryUtilities::getProtocol();
 		$_SERVER['REQUEST_URI']        = '/gallery2/v/AlbumName?g2_return=main.php';
 		$this->_urlGenerator->_file[0] = 'main.php';
 
 		$this->assertEquals(
 			'/gallery2/v/AnotherAlbum?g2_return=main.php',
 			$this->_urlGenerator->makeRelativeUrl(
-				'http://example.com/gallery2/v/AnotherAlbum?g2_return=main.php'
+				"$protocol://example.com/gallery2/v/AnotherAlbum?g2_return=main.php"
 			)
 		);
 	}
 
 	public function testMakeRelativeUrlBaseFileNotInReturnUrl() {
+		$protocol = GalleryUtilities::getProtocol();
 		$_SERVER['REQUEST_URI']        = '/gallery2/phpunit_test.php';
 		$this->_urlGenerator->_file[0] = 'phpunit_test.php';
 
 		$this->assertEquals(
 			'phpunit_test.php?foo=bar',
 			$this->_urlGenerator->makeRelativeUrl(
-				'http://example.com/gallery2/phpunit_test.php?foo=bar'
+				"$protocol://example.com/gallery2/phpunit_test.php?foo=bar"
 			)
 		);
 	}
@@ -2249,6 +2261,7 @@ class UrlGeneratorTest extends GalleryTestCase {
 	}
 
 	public function testMakeRelativeUrlCachesStaticComponents() {
+		$protocol = GalleryUtilities::getProtocol();
 		/*
 		 * The requestUri and file[0] do not depend on the parameters and can thus be cached between
 		 * calls
@@ -2256,7 +2269,7 @@ class UrlGeneratorTest extends GalleryTestCase {
 		$this->assertEquals(
 			'phpunit_test.php?g2_a=b',
 			$this->_urlGenerator->makeRelativeUrl(
-				'http://example.com/gallery2/phpunit_test.php?g2_a=b'
+				"$protocol://example.com/gallery2/phpunit_test.php?g2_a=b"
 			),
 			'1st call'
 		);
@@ -2266,7 +2279,7 @@ class UrlGeneratorTest extends GalleryTestCase {
 		$this->assertEquals(
 			'phpunit_test.php?g2_a=b',
 			$this->_urlGenerator->makeRelativeUrl(
-				'http://example.com/gallery2/phpunit_test.php?g2_a=b'
+				"$protocol://example.com/gallery2/phpunit_test.php?g2_a=b"
 			),
 			'2nd call'
 		);
@@ -2276,7 +2289,7 @@ class UrlGeneratorTest extends GalleryTestCase {
 		$this->assertEquals(
 			'/gallery2/phpunit_test.php?g2_a=b',
 			$this->_urlGenerator->makeRelativeUrl(
-				'http://example.com/gallery2/phpunit_test.php?g2_a=b'
+				"$protocol://example.com/gallery2/phpunit_test.php?g2_a=b"
 			),
 			'3rd call'
 		);
@@ -2472,20 +2485,22 @@ class UrlGeneratorTest extends GalleryTestCase {
 	}
 
 	public function testGetCacheableUrl() {
+		$protocol = GalleryUtilities::getProtocol();
 		$_SERVER['REQUEST_URI'] = '/gallery2/phpunit_test.php';
 
 		$this->assertEquals(
-			'http://example.com/gallery2/phpunit_test.php',
+			"$protocol://example.com/gallery2/phpunit_test.php",
 			$this->_urlGenerator->getCacheableUrl()
 		);
 	}
 
 	public function testGetCacheableUrlWithArrayInQuery() {
+		$protocol = GalleryUtilities::getProtocol();
 		$expectedUrl =  '/gallery2/phpunit_test.php?foo%5Bfirst%5D%5Bsecond%5D=second_value&foo%5Bsecond%5D=first_value';
 		$_SERVER['REQUEST_URI'] = $expectedUrl;
 
 		$this->assertEquals(
-			"http://example.com". $expectedUrl,
+			"$protocol://example.com". $expectedUrl,
 			$this->_urlGenerator->getCacheableUrl()
 		);
 	}
