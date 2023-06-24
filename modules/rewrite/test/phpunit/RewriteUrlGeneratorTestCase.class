@@ -269,9 +269,10 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 	}
 
 	public function testGetCurrentUrlDirEmbedded() {
+		$protocol = GalleryUtilities::getProtocol();
 		GalleryDataCache::put('G2_EMBED', 1, true);
 		$_SERVER['REQUEST_URI'] = '/cms/index.php?mod=gallery2';
-		$expectedUrl            = 'http://example.com/cms/';
+		$expectedUrl            = "$protocol://example.com/cms/";
 		$this->_urlGenerator    = new $this->_urlGeneratorName();
 		$ret                    = $this->_urlGenerator->init('/cms/index.php?mod=gallery2', '/gallery2/');
 
@@ -281,7 +282,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 		$this->assertEquals($expectedUrl, $this->_urlGenerator->getCurrentUrlDir(), 'default');
 		$this->assertFalse($this->_urlGenerator->_error, 'error');
 		$this->assertEquals(
-			'http://example.com/gallery2/',
+			"$protocol://example.com/gallery2/",
 			$this->_urlGenerator->getCurrentUrlDir(true),
 			'forceDirect'
 		);
@@ -293,6 +294,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 	}
 
 	public function testGetBaseUrl() {
+		$protocol = GalleryUtilities::getProtocol();
 		$_SERVER['REQUEST_URI'] = '/gallery2/phpunit_test.php?foo=1&bar=2';
 		$urlGenerator           = new $this->_urlGeneratorName();
 		$ret                    = $urlGenerator->init('phpunit_test.php');
@@ -303,17 +305,17 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 
 		$this->assertTrue(!$urlGenerator->_error);
 		$this->assertEquals(
-			'http://example.com/gallery2/',
+			"$protocol://example.com/gallery2/",
 			$urlGenerator->_getBaseUrl(),
 			'baseUrl default'
 		);
 		$this->assertEquals(
-			'http://example.com/gallery2/',
+			"$protocol://example.com/gallery2/",
 			$urlGenerator->_getBaseUrl(true),
 			'baseUrl forceDirect'
 		);
 		$this->assertEquals(
-			'http://example.com/gallery2/',
+			"$protocol://example.com/gallery2/",
 			$urlGenerator->_getBaseUrl(false),
 			'baseUrl no forceDirect'
 		);
@@ -329,6 +331,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 	}
 
 	public function testGetBaseUrlEmbedded() {
+		$protocol = GalleryUtilities::getProtocol();
 		GalleryDataCache::put('G2_EMBED', 1, true);
 		$urlGenerator = new $this->_urlGeneratorName();
 		$ret          = $urlGenerator->init('/cms/index.php', 'https://direct/gallery2/');
@@ -339,7 +342,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 
 		$this->assertTrue(!$urlGenerator->_error);
 		$this->assertEquals(
-			'http://example.com/cms/',
+			"$protocol://example.com/cms/",
 			$urlGenerator->_getBaseUrl(),
 			'baseUrl default'
 		);
@@ -349,7 +352,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 			'baseUrl forceDirect'
 		);
 		$this->assertEquals(
-			'http://example.com/cms/',
+			"$protocol://example.com/cms/",
 			$urlGenerator->_getBaseUrl(false),
 			'baseUrl no forceDirect'
 		);
