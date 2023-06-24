@@ -182,7 +182,7 @@ class WebHelper_simple {
 	}
 
 	/* If the HTTP response code did not begin with 2 this request was not successful */
-	$success = preg_match("/^HTTP\/\d+\.\d+\s2\d{2}/", $responseStatus);
+	$success = preg_match("/^HTTP\/\d+\.\d+\s2\d{2}/", $responseStatus ?? '');
 
 	return array($success, $responseBody, $responseStatus, $responseHeaders, $url);
     }
