@@ -374,7 +374,7 @@ class ModRewriteHelperMockPlatform extends GalleryPlatform {
 	}
 
 	public function fsockopen($target, $port, &$errno, &$errstr, $timeout) {
-		if ($target == 'www.test.server') {
+		if (str_contains($target, 'www.test.server')) {
 			return 'phpunit';
 		}
 
