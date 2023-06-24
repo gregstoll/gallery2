@@ -241,10 +241,11 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 	}
 
 	public function testGetCurrentUrlEmbedded() {
+		$protocol = GalleryUtilities::getProtocol();
 		GalleryDataCache::put('G2_EMBED', 1, true);
 		$_SERVER['REQUEST_URI'] = '/cms/index.php?mod=gallery2';
 		unset($_SERVER['QUERY_STRING']);
-		$expectedUrl         = 'http://example.com/cms/index.php?mod=gallery2';
+		$expectedUrl         = "$protocol://example.com/cms/index.php?mod=gallery2";
 		$this->_urlGenerator = new $this->_urlGeneratorName();
 		$ret                 = $this->_urlGenerator->init('/cms/index.php?mod=gallery2', '/gallery2/');
 
