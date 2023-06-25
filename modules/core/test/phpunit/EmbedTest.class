@@ -194,7 +194,8 @@ class EmbedTest extends GalleryTestCase {
 	 * more than once per HTTP request.
 	 */
 	public function testInitMultipleTimes() {
-		$expectedUrl          = 'http://example.com/cms/';
+		$protocol = GalleryUtilities::getProtocol();
+		$expectedUrl          = "$protocol://example.com/cms/";
 		$_SERVER['HTTP_HOST'] = 'example.com';
 
 		// These cache keys are the same as the ones defined in GalleryEmbed::init
@@ -255,7 +256,7 @@ class EmbedTest extends GalleryTestCase {
 
 		// force the embedded url directory
 		$this->assertEquals(
-			'http://example.com/',
+			"$protocol://example.com/",
 			$urlgenerator->getCurrentUrlDir(true),
 			'Second init call called initFirstPass again.'
 		);
