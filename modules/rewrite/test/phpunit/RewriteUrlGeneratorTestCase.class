@@ -227,6 +227,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 	}
 
 	public function testGetCurrentUrl() {
+		$protocol = GalleryUtilities::getProtocol();
 		$this->_urlGenerator = new $this->_urlGeneratorName();
 		$ret                 = $this->_urlGenerator->init();
 
@@ -234,16 +235,17 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 			return $ret;
 		}
 
-		$expected = 'http://example.com/gallery2/main.php?foo=1&bar=2';
+		$expected = "$protocol://example.com/gallery2/main.php?foo=1&bar=2";
 		$this->assertEquals($expected, $this->_urlGenerator->getCurrentUrl());
 		$this->assertFalse($this->_urlGenerator->_error, 'error');
 	}
 
 	public function testGetCurrentUrlEmbedded() {
+		$protocol = GalleryUtilities::getProtocol();
 		GalleryDataCache::put('G2_EMBED', 1, true);
 		$_SERVER['REQUEST_URI'] = '/cms/index.php?mod=gallery2';
 		unset($_SERVER['QUERY_STRING']);
-		$expectedUrl         = 'http://example.com/cms/index.php?mod=gallery2';
+		$expectedUrl         = "$protocol://example.com/cms/index.php?mod=gallery2";
 		$this->_urlGenerator = new $this->_urlGeneratorName();
 		$ret                 = $this->_urlGenerator->init('/cms/index.php?mod=gallery2', '/gallery2/');
 
@@ -255,21 +257,23 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 	}
 
 	public function testGetCurrentUrlDir() {
+		$protocol = GalleryUtilities::getProtocol();
 		$this->_urlGenerator = new $this->_urlGeneratorName();
 		$ret                 = $this->_urlGenerator->init();
 
 		if ($ret) {
 			return $ret;
 		}
-		$expectedUrl = 'http://example.com/gallery2/';
+		$expectedUrl = "$protocol://example.com/gallery2/";
 		$this->assertEquals($expectedUrl, $this->_urlGenerator->getCurrentUrlDir());
 		$this->assertFalse($this->_urlGenerator->_error, 'error');
 	}
 
 	public function testGetCurrentUrlDirEmbedded() {
+		$protocol = GalleryUtilities::getProtocol();
 		GalleryDataCache::put('G2_EMBED', 1, true);
 		$_SERVER['REQUEST_URI'] = '/cms/index.php?mod=gallery2';
-		$expectedUrl            = 'http://example.com/cms/';
+		$expectedUrl            = "$protocol://example.com/cms/";
 		$this->_urlGenerator    = new $this->_urlGeneratorName();
 		$ret                    = $this->_urlGenerator->init('/cms/index.php?mod=gallery2', '/gallery2/');
 
@@ -279,7 +283,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 		$this->assertEquals($expectedUrl, $this->_urlGenerator->getCurrentUrlDir(), 'default');
 		$this->assertFalse($this->_urlGenerator->_error, 'error');
 		$this->assertEquals(
-			'http://example.com/gallery2/',
+			"$protocol://example.com/gallery2/",
 			$this->_urlGenerator->getCurrentUrlDir(true),
 			'forceDirect'
 		);
@@ -291,6 +295,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 	}
 
 	public function testGetBaseUrl() {
+		$protocol = GalleryUtilities::getProtocol();
 		$_SERVER['REQUEST_URI'] = '/gallery2/phpunit_test.php?foo=1&bar=2';
 		$urlGenerator           = new $this->_urlGeneratorName();
 		$ret                    = $urlGenerator->init('phpunit_test.php');
@@ -301,17 +306,17 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 
 		$this->assertTrue(!$urlGenerator->_error);
 		$this->assertEquals(
-			'http://example.com/gallery2/',
+			"$protocol://example.com/gallery2/",
 			$urlGenerator->_getBaseUrl(),
 			'baseUrl default'
 		);
 		$this->assertEquals(
-			'http://example.com/gallery2/',
+			"$protocol://example.com/gallery2/",
 			$urlGenerator->_getBaseUrl(true),
 			'baseUrl forceDirect'
 		);
 		$this->assertEquals(
-			'http://example.com/gallery2/',
+			"$protocol://example.com/gallery2/",
 			$urlGenerator->_getBaseUrl(false),
 			'baseUrl no forceDirect'
 		);
@@ -327,6 +332,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 	}
 
 	public function testGetBaseUrlEmbedded() {
+		$protocol = GalleryUtilities::getProtocol();
 		GalleryDataCache::put('G2_EMBED', 1, true);
 		$urlGenerator = new $this->_urlGeneratorName();
 		$ret          = $urlGenerator->init('/cms/index.php', 'https://direct/gallery2/');
@@ -337,7 +343,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 
 		$this->assertTrue(!$urlGenerator->_error);
 		$this->assertEquals(
-			'http://example.com/cms/',
+			"$protocol://example.com/cms/",
 			$urlGenerator->_getBaseUrl(),
 			'baseUrl default'
 		);
@@ -347,7 +353,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 			'baseUrl forceDirect'
 		);
 		$this->assertEquals(
-			'http://example.com/cms/',
+			"$protocol://example.com/cms/",
 			$urlGenerator->_getBaseUrl(false),
 			'baseUrl no forceDirect'
 		);
@@ -741,6 +747,7 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 
 	public function testGenerateUrlForceFullUrl() {
 		global $gallery;
+		$protocol = GalleryUtilities::getProtocol();
 		$session =& $gallery->getSession();
 
 		$params = $this->_getTestUrlParams();
@@ -750,36 +757,36 @@ class RewriteUrlGeneratorTestCase extends GalleryTestCase {
 			'forceServerRelativeUrl' => true,
 		);
 
-		$expectedUrl[0]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP
+		$expectedUrl[0]  = "$protocol://example.com/gallery2/" . GALLERY_MAIN_PHP
 		. '?g2_view=rand164.NonShort&amp;g2_foo=bar';
 		$expectedUrl[1]  = sprintf(
-			'http://example.com/gallery2/d/%d-%d/%s',
+			"$protocol://example.com/gallery2/d/%d-%d/%s",
 			$this->_testItem->getId(),
 			$this->_testItem->getSerialNumber(),
 			urlencode($this->_testItem->getPathComponent())
 		);
 		$expectedUrl[2]  = 'http://href_website.com/foo';
 		$expectedUrl[3]  = $this->_signUrl(
-			'http://example.com/gallery2/' . GALLERY_MAIN_PHP
+			"$protocol://example.com/gallery2/" . GALLERY_MAIN_PHP
 			. '?g2_controller=core.ShowItem&amp;g2_itemId=' . $this->_testItem->getId()
 		);
-		$expectedUrl[4]  = 'http://example.com/gallery2/themes/foo/images/bar.jpg';
-		$expectedUrl[5]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP;
-		$expectedUrl[6]  = 'http://example.com/gallery2/v' . $this->_testAlbumPath;
-		$expectedUrl[7]  = 'http://example.com/gallery2/v' . $this->_testItemPath . '.html';
-		$expectedUrl[8]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP . '?g2_itemId=-5759';
-		$expectedUrl[9]  = 'http://example.com/gallery2/' . GALLERY_MAIN_PHP
+		$expectedUrl[4]  = "$protocol://example.com/gallery2/themes/foo/images/bar.jpg";
+		$expectedUrl[5]  = "$protocol://example.com/gallery2/" . GALLERY_MAIN_PHP;
+		$expectedUrl[6]  = "$protocol://example.com/gallery2/v" . $this->_testAlbumPath;
+		$expectedUrl[7]  = "$protocol://example.com/gallery2/v" . $this->_testItemPath . '.html';
+		$expectedUrl[8]  = "$protocol://example.com/gallery2/" . GALLERY_MAIN_PHP . '?g2_itemId=-5759';
+		$expectedUrl[9]  = "$protocol://example.com/gallery2/" . GALLERY_MAIN_PHP
 		. '?g2_itemId=' . $this->_derivative->getId();
-		$expectedUrl[10] = 'http://example.com/gallery2/' . ltrim($this->_testAlbumPath, '/')
+		$expectedUrl[10] = "$protocol://example.com/gallery2/" . ltrim($this->_testAlbumPath, '/')
 		. 'test.html';
-		$expectedUrl[11] = 'http://example.com/gallery2/' . ltrim($this->_testItemPath, '/')
+		$expectedUrl[11] = "$protocol://example.com/gallery2/" . ltrim($this->_testItemPath, '/')
 		. '/test.html';
-		$expectedUrl[12] = 'http://example.com/gallery2/t' . rtrim($this->_testAlbumPath, '/')
+		$expectedUrl[12] = "$protocol://example.com/gallery2/t" . rtrim($this->_testAlbumPath, '/')
 		. '.test';
-		$expectedUrl[13] = 'http://example.com/gallery2/t' . $this->_testItemPath . '.test';
-		$expectedUrl[14] = 'http://example.com/gallery2/phpunit/';
-		$expectedUrl[15] = $this->_signUrl('http://example.com/gallery2/phpunit2/');
-		$expectedUrl[16] = 'http://example.com/gallery2/phpunit/'
+		$expectedUrl[13] = "$protocol://example.com/gallery2/t" . $this->_testItemPath . '.test';
+		$expectedUrl[14] = "$protocol://example.com/gallery2/phpunit/";
+		$expectedUrl[15] = $this->_signUrl("$protocol://example.com/gallery2/phpunit2/");
+		$expectedUrl[16] = "$protocol://example.com/gallery2/phpunit/"
 		. urlencode($this->_urlEncodePath);
 
 		$ret = $this->_runGenerateUrlTest(array(), $expectedUrl, $params, $options);

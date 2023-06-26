@@ -1404,6 +1404,14 @@ class GalleryUtilities {
     }
 
     /**
+     * Return the protocol of the current request.
+     * @return string
+    */
+    static function getProtocol(){
+	return (GalleryUtilities::getServerVar('HTTPS') == 'on') ? 'https' : 'http';
+    }
+
+	/**
      * Return a sanitized version of the given variable from the _COOKIE superglobal.
      * @param string $key the key in the _COOKIE superglobal
      * @return string the value
