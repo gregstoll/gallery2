@@ -79,13 +79,16 @@ class RewriteUrlGeneratorTest extends GalleryTestCase {
 	}
 
 	public function testGetCurrentUrl() {
-		$expected = 'http://example.com/gallery2/phpunit_test.php?foo=1&bar=2';
+		$protocol = GalleryUtilities::getProtocol();
+		$expected = "$protocol://example.com/gallery2/phpunit_test.php?foo=1&bar=2";
 		$this->assertEquals($expected, $this->_urlGenerator->getCurrentUrl());
 		$this->assertFalse($this->_urlGenerator->_error, 'error');
 	}
 
 	public function testGetCurrentUrlDir() {
-		$expected = 'http://example.com/gallery2/';
+		$protocol = GalleryUtilities::getProtocol();
+
+		$expected = "$protocol://example.com/gallery2/";
 		$this->assertEquals($expected, $this->_urlGenerator->getCurrentUrlDir());
 		$this->assertFalse($this->_urlGenerator->_error, 'error');
 	}

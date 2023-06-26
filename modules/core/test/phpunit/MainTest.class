@@ -241,7 +241,8 @@ class MainTest extends GalleryTestCase {
 
 		// Controllers that should trigger the fix
 		$needFixControllers = array('core.Logout', 'core.UserLogin', 'publishxp.Login');
-		$base               = 'http://www.example.com/';
+		$protocol = GalleryUtilities::getProtocol();
+		$base               = "$protocol://www.example.com/";
 		$session            =& $gallery->getSession();
 
 		$ret = $session->init();
@@ -359,10 +360,11 @@ class MainTest extends GalleryTestCase {
 			'Unexpected return value'
 		);
 
+		$protocol = GalleryUtilities::getProtocol();
 		// Verify the result
 		$this->assertEquals(
 			array(
-				'location' => 'Location: http://example.com/gallery2/main.php',
+				'location' => "Location: $protocol://example.com/gallery2/main.php",
 			),
 			$this->_getResponseHeaders(),
 			'Wrong header'
