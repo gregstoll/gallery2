@@ -154,6 +154,11 @@ There is a `copy-volumes.sh` script that allows you to create a copy of the volu
 In case you would like to reset the state to the one in the vanilla volumes, you just need to copy data from the
 vanilla volumes to the new volumes.
 
+You will need to add the volume as an external volume in docker-compose config file:
+```yaml
+  gallery2-php8_mysqldata-fresh:
+    external: true
+```
 
 # Release management
 

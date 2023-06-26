@@ -19,7 +19,7 @@ services:
       PHP_IDE_CONFIG: "serverName=docker"
     volumes:
       - .:/app
-      - ./gallery2-data:/gallery2-data
+      - gallery2-data:/gallery2-data
       - ./docker/php.ini:/usr/local/etc/php/conf.d/custom.ini
       - ./docker/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
     links:
@@ -32,6 +32,10 @@ services:
       MYSQL_PASSWORD: 'secret'
       MYSQL_DATABASE: 'gallery2'
     volumes:
-      - ./mysqldata:/var/lib/mysql
+      - mysqldata:/var/lib/mysql
     ports:
       - "13306:3306"
+
+volumes:
+  mysqldata: { }
+  gallery2-data: { }
