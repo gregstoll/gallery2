@@ -145,6 +145,16 @@ for `ca_ES` locale. Add a line like it using your locale:
     && sed -i -e 's/# ca_ES ISO-8859-1/ca_ES ISO-8859-1/' /etc/locale.gen \
 ```
 
+## Copy volumes
+
+You can create a backup copy of the `mysqldata` and `gallery2-data` volumes to start afresh.
+
+There is a `copy-volumes.sh` script that allows you to create a copy of the volume.
+
+In case you would like to reset the state to the one in the vanilla volumes, you just need to copy data from the
+vanilla volumes to the new volumes.
+
+
 # Release management
 
 Tools for release management are on folder `lib/tools/release`.
