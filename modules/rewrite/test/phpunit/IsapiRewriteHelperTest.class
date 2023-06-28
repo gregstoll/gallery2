@@ -229,7 +229,7 @@ class IsapiRewriteHelperMockPlatform extends GalleryPlatform {
 		// The hostName can include the port part
 		list($host) = explode(':', $urlGenerator->getHostName());
 
-		if ($target == $host) {
+		if (str_contains($target, $host)) {
 			return 'phpunit';
 		}
 
