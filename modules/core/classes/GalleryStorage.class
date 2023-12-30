@@ -1125,11 +1125,11 @@ class GalleryStorage {
 
 	    $column = $this->_translateColumnName($member);
 	    if ($alias) {
-		$query = str_replace("[${class}::${member}]", "$alias.$column", $query);
+		$query = str_replace("[{$class}::{$member}]", "$alias.$column", $query);
 	    } else if ($class) {
-		$query = str_replace("[${class}::${member}]", "$table.$column", $query);
+		$query = str_replace("[{$class}::{$member}]", "$table.$column", $query);
 	    } else {
-		$query = str_replace("[::${member}]", "$column", $query);
+		$query = str_replace("[::{$member}]", "$column", $query);
 	    }
 	}
 
