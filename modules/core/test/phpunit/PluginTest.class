@@ -329,6 +329,11 @@ class PluginTest extends GalleryTestCase {
 class PluginTestCompatibleModule extends GalleryModule {}
 
 class PluginTestPlugin extends GalleryPlugin {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_type;
+	public $_requiredThemeApi;
+	public $_requiredModuleApi;
+
 	public function setPluginType($type) {
 		$this->_type = $type;
 	}

@@ -146,6 +146,13 @@ class StringParser_BBCode extends StringParser {
 	 * @var bool
 	 */
 	var $_validateAgain = false;
+
+	/* deprecated dynamic properties in php 8.2 */
+	var $_output;
+	var $_savedName;
+	var $_savedCloseCount;
+	var $_savedValue;
+	var $_quoting;
 	
 	/**
 	 * Add a code
@@ -1522,6 +1529,9 @@ class StringParser_BBCode_Node_Element extends StringParser_Node {
 	 * @var bool
 	 */
 	var $_paragraphHandled = false;
+
+	/* deprecated dynamic properties in php 8.2 */
+	var $_codeInfo;
 	
 	//////////////////////////////////////////////////
 	

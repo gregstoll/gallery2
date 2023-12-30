@@ -28,6 +28,12 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
  * @version $Revision: 17924 $
  */
 class UserLoginControllerTest extends GalleryControllerTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_exitCalls;
+	public $_headers;
+	public $_validationLevel;
+	public $_originalLoginRedirect;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName, 'core.UserLogin');
 	}
@@ -673,6 +679,10 @@ class UserLoginControllerTest extends GalleryControllerTestCase {
  * Mock ValidationPlugin
  */
 class UserLoginControllerTestPlugin extends GalleryValidationPlugin {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_errors;
+	public $_continue;
+
 	public function setContinue($continue) {
 		$this->_continue = $continue;
 	}
@@ -690,6 +700,11 @@ class UserLoginControllerTestPlugin extends GalleryValidationPlugin {
  * Mock session
  */
 class UserLoginControllerTestSession {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_sessionData;
+	public $_regenerateWasCalled;
+	public $_hash;
+
 	public function __construct() {
 		$this->_regenerateWasCalled = false;
 		$this->_hash                = array();
@@ -740,6 +755,10 @@ class UserLoginControllerTestSession {
  * Mock PHP VM
  */
 class UserLoginTestPhpVm {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_test;
+	public $_headersSent;
+
 	public function __construct(&$test, $headersSent = false) {
 		$this->_test             =& $test;
 		$this->_headersSent      = $headersSent;

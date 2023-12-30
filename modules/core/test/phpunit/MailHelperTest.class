@@ -25,6 +25,12 @@
  * @version $Revision: 20940 $
  */
 class MailHelperTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $templateFile;
+	public $_originalPlatform;
+	public $_dummyPlatform;
+	public $_emailData;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -281,6 +287,9 @@ class MailHelperTest extends GalleryTestCase {
  * @subpackage PHPUnit
  */
 class MailHelperDummyPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_platform;
+
 	public function __construct($platform) {
 		$this->_platform         = $platform;
 		$_REQUEST['mailedCount'] = 0;

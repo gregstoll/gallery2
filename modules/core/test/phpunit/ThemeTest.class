@@ -27,6 +27,9 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
  * @version $Revision: 17580 $
  */
 class ThemeTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_theme;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -661,6 +664,9 @@ class ThemeTest extends GalleryTestCase {
  * Test theme
  */
 class ThemeTestTheme extends GalleryTheme {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_preloadedBlocks;
+
 	public function __construct() {
 		global $gallery;
 
@@ -690,6 +696,9 @@ class ThemeTestView extends GalleryView {}
  * Test platform for this test
  */
 class ThemeTestPlatform extends GalleryPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_list;
+
 	public function opendir($path) {
 		if (strpos($path, 'themes/') !== false) {
 			$this->_list = array();

@@ -31,6 +31,9 @@ GalleryCoreApi::requireOnce(
  */
 class AdminRepositoryController extends AdminRepositoryDownloadAndInstallController {
 
+    /* deprecated dynamic properties in php 8.2 */
+    var $_repositories;
+
     /**
      * Get the repositories, but allow tests to inject their own version.
      * @see GalleryRepository::getRepositories

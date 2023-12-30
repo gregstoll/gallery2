@@ -29,6 +29,10 @@ GalleryCoreApi::requireOnce('modules/sitemap/Sitemap.inc');
  * @version $Revision: 20940 $
  */
 class SitemapViewTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_start_of_2005;
+	public $_start_of_2006;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -184,6 +188,9 @@ class SitemapViewTestUrlGenerator {
 GalleryCoreApi::requireOnce('modules/core/classes/GalleryPhpVm.class');
 
 class SitemapViewTestVm extends GalleryPhpVm {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_time;
+
 	public function header($string, $replace = NULL) {
 		echo "Header: $string\n";
 	}
@@ -198,6 +205,9 @@ class SitemapViewTestVm extends GalleryPhpVm {
 }
 
 class SitemapViewTestStorage {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_storage;
+
 	public function __construct($storage) {
 		$this->_storage = $storage;
 	}

@@ -27,6 +27,9 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryTheme.class');
  * @version $Revision: 20940 $
  */
 class WebTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_outputFile;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -569,6 +572,11 @@ class WebTest extends GalleryTestCase {
  * Mock platform
  */
 class WebTestPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_fileBuffer;
+	public $_testCase;
+	public $_readBuffer;
+
 	public function __construct(&$testCase) {
 		$this->_testCase   =& $testCase;
 		$this->_readBuffer = array();

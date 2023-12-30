@@ -27,6 +27,9 @@ GalleryCoreApi::requireOnce('modules/core/classes/helpers/GalleryUserHelper_medi
  * @version $Revision: 17608 $
  */
 class UserHelperTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_originalStorage;
+
 	public function setUp($x1 = null) {
 		global $gallery;
 
@@ -484,6 +487,10 @@ class UserHelperTestMockStorage {
  * Fake search results class, pretends to extend GallerySearchResults
  */
 class UserHelperTestMockStorageFakeResults {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_count;
+	public $_lastAttempt;
+
 	public function __construct($count, $lastAttempt = null) {
 		$this->_count       = $count;
 		$this->_lastAttempt = $lastAttempt;
@@ -532,6 +539,10 @@ class UserHelperTestPhpVm {
  * Mock Session
  */
 class UserHelperTestSession {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_regenerateWasCalled;
+	public $_sessionData;
+
 	public function __construct() {
 		$this->_regenerateWasCalled = false;
 	}

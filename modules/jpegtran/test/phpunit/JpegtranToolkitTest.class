@@ -29,6 +29,10 @@ GalleryCoreApi::requireOnce('modules/jpegtran/classes/JpegtranToolkit.class');
  * @version $Revision: 17580 $
  */
 class JpegtranToolkitTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_chmodWasCalled;
+	public $_jpegtranPath;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -386,6 +390,13 @@ class JpegtranToolkitTest extends GalleryTestCase {
  * @subpackage PHPUnit
  */
 class JpegtranToolkitTestPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_envId;
+	public $_test;
+	public $_testFile;
+	public $_jpegtranPath;
+	public $_chdirCount;
+
 	public function __construct(&$test, $jpegtranPath) {
 		$this->_test         =& $test;
 		$this->_testFile     = dirname(dirname(__DIR__)) . '/data/test.jpg';

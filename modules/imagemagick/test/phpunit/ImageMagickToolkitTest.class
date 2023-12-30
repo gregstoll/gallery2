@@ -33,6 +33,9 @@ class ImageMagickToolkitTest extends GalleryTestCase
 	// The current environment array item we are processing
 	public $_currentEnvironment = array();
 
+	/* deprecated dynamic properties in php 8.2 */
+	public $_chmodWasCalled;
+
 	/*
 	 * Information about files in our pseudo-platform.
 	 * Better would be to store the files information in the Platform, but
@@ -1415,6 +1418,12 @@ class ImageMagickToolkitTestPlatform
 {
 	public $_environment = array();
 	public $_files;
+
+	/* deprecated dynamic properties in php 8.2 */
+	public $_counter;
+	public $_copyOk;
+	public $_platform;
+	public $_test;
 
 	public function __construct($originalPlatform, &$files, &$test)
 	{

@@ -139,6 +139,10 @@ class Services_JSON
     *                                   strings or numbers, if you return an object, make sure it does
     *                                   not have a toJSON method, otherwise an error will occur.
     */
+
+    /* deprecated dynamic properties in php 8.2 */
+    var $use;
+
     function __construct($use = 0)
     {
         $this->use = $use;

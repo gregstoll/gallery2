@@ -27,6 +27,9 @@
  */
 class UserSelfRegistrationController extends GalleryController {
 
+    /* deprecated dynamic properties in php 8.2 */
+    var $_pluginInstances;
+
     /**
      * @see GalleryController::handleRequest
      */

@@ -25,6 +25,12 @@
  * @version $Revision: 17580 $
  */
 class UtilitiesTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_saveCookie;
+	public $_saveServerHttpCookie;
+	public $_mkdir;
+	public $_responseHeaders;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -2546,6 +2552,9 @@ class UtilitiesTest extends GalleryTestCase {
 }
 
 class UtilitiesTestPlatform {
+	/* deprecatced dynamic properties in php 8.2 */
+	public $_testCase;
+
 	public function __construct(&$testCase) {
 		$this->_testCase =& $testCase;
 	}

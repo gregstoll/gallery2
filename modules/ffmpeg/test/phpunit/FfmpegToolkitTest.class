@@ -29,6 +29,9 @@ GalleryCoreApi::requireOnce('modules/ffmpeg/classes/FfmpegToolkit.class');
  * @version $Revision: 17614 $
  */
 class FfmpegToolkitTest extends GalleryTestCase {
+	/* deprecated dynamic properties php 8.2 */
+	public $_chmodWasCalled;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -649,6 +652,10 @@ class FfmpegToolkitTest extends GalleryTestCase {
  * @subpackage PHPUnit
  */
 class FfmpegToolkitTestPlatform {
+	/* deprecated dynamic properties in ph 8.2 */
+	public $_test;
+	public $_ffmpegPath;
+
 	public function init(&$test) {
 		$this->_test                   =& $test;
 		list($ret, $this->_ffmpegPath) = GalleryCoreApi::getPluginParameter(

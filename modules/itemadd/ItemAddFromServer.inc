@@ -27,6 +27,21 @@
  */
 class ItemAddFromServer extends ItemAddPlugin {
 
+    /* deprecated dynamic properties in php 8.2 */
+    var $_platform;
+    var $_dirSep;
+    var $_templateAdapter;
+    var $_storage;
+    var $_addController;
+    var $_addingItemsMessage;
+    var $_fileCountMessage;
+    var $_totalItems;
+    var $_lastPostProcessed;
+    var $_addedItems;
+    var $_progressBatch;
+    var $_processBatch;
+    var $_localServerDirList;
+
     /**
      * @see ItemAddPlugin::isAppropriate
      */

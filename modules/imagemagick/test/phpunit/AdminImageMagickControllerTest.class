@@ -25,6 +25,11 @@
  * @version $Revision: 17580 $
  */
 class AdminImageMagickControllerTest extends GalleryControllerTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_cmykSupport;
+	public $_ranIdentify;
+	public $_slash;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName, 'imagemagick.AdminImageMagick');
 	}
@@ -149,7 +154,7 @@ class AdminImageMagickControllerTest extends GalleryControllerTestCase {
 
 		// Use valid inputs
 		GalleryUtilities::putRequestVariable('form[action][save]', 1);
-		GalleryUtilities::putRequestVariable('form[path]', "${slash}validPathBadBinaries${slash}");
+		GalleryUtilities::putRequestVariable('form[path]', "{$slash}validPathBadBinaries{$slash}");
 		GalleryUtilities::putRequestVariable('form[jpegQuality]', '12');
 		GalleryUtilities::putRequestVariable('form[cmykSupport]', $this->_cmykSupport);
 
@@ -174,7 +179,7 @@ class AdminImageMagickControllerTest extends GalleryControllerTestCase {
 
 		// Use valid inputs
 		GalleryUtilities::putRequestVariable('form[action][save]', 1);
-		GalleryUtilities::putRequestVariable('form[path]', "${slash}invalidPath${slash}");
+		GalleryUtilities::putRequestVariable('form[path]', "{$slash}invalidPath{$slash}");
 		GalleryUtilities::putRequestVariable('form[jpegQuality]', '12');
 		GalleryUtilities::putRequestVariable('form[cmykSupport]', $this->_cmykSupport);
 
@@ -224,7 +229,7 @@ class AdminImageMagickControllerTest extends GalleryControllerTestCase {
 
 		// Use valid inputs
 		GalleryUtilities::putRequestVariable('form[action][save]', 1);
-		GalleryUtilities::putRequestVariable('form[path]', "${slash}vulnerablePath${slash}");
+		GalleryUtilities::putRequestVariable('form[path]', "{$slash}vulnerablePath{$slash}");
 		GalleryUtilities::putRequestVariable('form[jpegQuality]', '80');
 		GalleryUtilities::putRequestVariable('form[cmykSupport]', $this->_cmykSupport);
 
@@ -302,6 +307,10 @@ class AdminImageMagickControllerTest extends GalleryControllerTestCase {
  * @subpackage PHPUnit
  */
 class AdminImageMagickControllerTestPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_unitTest;
+	public $_platform;
+
 	public function __construct($originalPlatform, &$unitTest) {
 		$this->_platform = $originalPlatform;
 		$this->_unitTest =& $unitTest;
@@ -311,16 +320,16 @@ class AdminImageMagickControllerTestPlatform {
 		$slash = $this->getDirectorySeparator();
 
 		switch ($path) {
-			case "${slash}validPath":
-			case "${slash}validPath${slash}":
-			case "${slash}validPath${slash}identify":
-			case "${slash}validPath${slash}convert":
-			case "${slash}vulnerablePath":
-			case "${slash}vulnerablePath${slash}":
-			case "${slash}vulnerablePath${slash}identify":
-			case "${slash}vulnerablePath${slash}convert":
-			case "${slash}validPathBadBinaries":
-			case "${slash}validPathBadBinaries${slash}":
+			case "{$slash}validPath":
+			case "{$slash}validPath{$slash}":
+			case "{$slash}validPath{$slash}identify":
+			case "{$slash}validPath{$slash}convert":
+			case "{$slash}vulnerablePath":
+			case "{$slash}vulnerablePath{$slash}":
+			case "{$slash}vulnerablePath{$slash}identify":
+			case "{$slash}vulnerablePath{$slash}convert":
+			case "{$slash}validPathBadBinaries":
+			case "{$slash}validPathBadBinaries{$slash}":
 				return true;
 		}
 
@@ -331,9 +340,9 @@ class AdminImageMagickControllerTestPlatform {
 		$slash = $this->getDirectorySeparator();
 
 		switch ($dir) {
-			case "${slash}validPath${slash}":
-			case "${slash}vulnerablePath${slash}":
-			case "${slash}validPathBadBinaries${slash}":
+			case "{$slash}validPath{$slash}":
+			case "{$slash}vulnerablePath{$slash}":
+			case "{$slash}validPathBadBinaries{$slash}":
 				return true;
 		}
 
@@ -364,7 +373,7 @@ class AdminImageMagickControllerTestPlatform {
 		$slash = $this->getDirectorySeparator();
 
 		switch ($args[0][0]) {
-			case "${slash}validPath${slash}identify":
+			case "{$slash}validPath{$slash}identify":
 				$this->_unitTest->_ranIdentify++;
 
 				return array(
@@ -372,7 +381,7 @@ class AdminImageMagickControllerTestPlatform {
 					empty($args[0][1]) ? array('Version: ImageMagick 6.3.3-5') : array('test.gif GIF 50x50+0+0 PseudoClass 8c 8-bit 232.0 0.000u 0:01'),
 				);
 
-			case "${slash}vulnerablePath${slash}identify":
+			case "{$slash}vulnerablePath{$slash}identify":
 				$this->_unitTest->_ranIdentify++;
 
 				return array(
@@ -380,12 +389,12 @@ class AdminImageMagickControllerTestPlatform {
 					empty($args[0][1]) ? array('Version: ImageMagick 6.1.3') : array('test.gif GIF 50x50+0+0 PseudoClass 8c 8-bit 232.0 0.000u 0:01'),
 				);
 
-			case "${slash}validPath${slash}convert":
-			case "${slash}vulnerablePath${slash}convert":
+			case "{$slash}validPath{$slash}convert":
+			case "{$slash}vulnerablePath{$slash}convert":
 				return array(1, array());
 
-			case "${slash}validPath${slash}composite":
-			case "${slash}vulnerablePath${slash}composite":
+			case "{$slash}validPath{$slash}composite":
+			case "{$slash}vulnerablePath{$slash}composite":
 				return array(1, array());
 
 			default:

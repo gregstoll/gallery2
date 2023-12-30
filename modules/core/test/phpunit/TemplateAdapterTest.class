@@ -32,6 +32,11 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplateAdapter.class')
  * @version $Revision: 20957 $
  */
 class TemplateAdapterTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_mockUrlGenerator;
+	public $_mockSmarty;
+	public $_templateAdapter;
+
 	public function GalleryTemplateAdapterTest($methodName) {
 		parent::__construct($methodName);
 	}
@@ -1033,6 +1038,9 @@ class TemplateAdapterMockTheme {
 
 class TemplateAdapterMockSmarty {
 	public $_includes = array();
+
+	/* deprecated dynamic properties in php 8.2 */
+	public $_tpl_vars;
 
 	public function _smarty_include($params) {
 		$this->_includes[] = $params;

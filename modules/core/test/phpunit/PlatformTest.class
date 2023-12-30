@@ -32,6 +32,14 @@ class PlatformTest extends GalleryTestCase {
 	 */
 	var $_platform = null;
 
+	/* deprecated dynamic properties in php 8.2 */
+	var $_saveVars;
+	var $_saveSID;
+	var $_rootAlbumId;
+	var $_sourceFile;
+	var $_destFile;
+	var $_mail;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -816,63 +824,63 @@ class PlatformTest extends GalleryTestCase {
 
 		$platform->setRealpathData(
 			array(
-				"${s}test${s}" => "${s}test",
-				"${s}testing"  => "${s}testing",
+				"{$s}test{$s}" => "{$s}test",
+				"{$s}testing"  => "{$s}testing",
 			)
 		);
 
-		$gallery->_phpVm = new PlatformTestPhpVm("${s}test${s}", $this);
+		$gallery->_phpVm = new PlatformTestPhpVm("{$s}test{$s}", $this);
 
-		$this->assertFalse($platform->isRestrictedByOpenBaseDir("${s}test"), 'no trailing slash');
+		$this->assertFalse($platform->isRestrictedByOpenBaseDir("{$s}test"), 'no trailing slash');
 		$this->assertTrue(
-			$platform->isRestrictedByOpenBaseDir("${s}testing"),
+			$platform->isRestrictedByOpenBaseDir("{$s}testing"),
 			'should not match basedir with trailing slash'
 		);
 
 		// Invalid paths (realpath returns false, our code does relative path and .. handling)
 		$platform->setRealpathData(
 			array(
-				"${s}test" => "${s}test",
+				"{$s}test" => "{$s}test",
 			)
 		);
 
-		$gallery->_phpVm = new PlatformTestPhpVm("${s}test", $this);
+		$gallery->_phpVm = new PlatformTestPhpVm("{$s}test", $this);
 
 		$this->assertTrue(
-			!$platform->isRestrictedByOpenBaseDir("${s}test${s}bogus"),
+			!$platform->isRestrictedByOpenBaseDir("{$s}test{$s}bogus"),
 			'valid bogus path'
 		);
 		$this->assertTrue(
-			!$platform->isRestrictedByOpenBaseDir("${s}test${s}bogus${s}..${s}path"),
+			!$platform->isRestrictedByOpenBaseDir("{$s}test{$s}bogus{$s}..{$s}path"),
 			'single dotdot'
 		);
 		$this->assertTrue(
-			$platform->isRestrictedByOpenBaseDir("${s}test${s}bogus${s}..${s}..${s}path"),
+			$platform->isRestrictedByOpenBaseDir("{$s}test{$s}bogus{$s}..{$s}..{$s}path"),
 			'multiple dotdots'
 		);
 		$this->assertTrue(
-			$platform->isRestrictedByOpenBaseDir("${s}test${s}.."),
+			$platform->isRestrictedByOpenBaseDir("{$s}test{$s}.."),
 			'dotdot at end'
 		);
 		$this->assertTrue(
-			!$platform->isRestrictedByOpenBaseDir("${s}.${s}test${s}bogus"),
+			!$platform->isRestrictedByOpenBaseDir("{$s}.{$s}test{$s}bogus"),
 			'dot in valid bogus path'
 		);
 		$this->assertTrue(
-			!$platform->isRestrictedByOpenBaseDir("${s}.${s}test${s}.${s}bogus"),
+			!$platform->isRestrictedByOpenBaseDir("{$s}.{$s}test{$s}.{$s}bogus"),
 			'two dots in valid bogus path'
 		);
-		$platform->setCwd("${s}test");
+		$platform->setCwd("{$s}test");
 		$this->assertTrue(
 			!$platform->isRestrictedByOpenBaseDir('bogus'),
 			'valid relative path'
 		);
 		$this->assertTrue(
-			$platform->isRestrictedByOpenBaseDir("..${s}bogus"),
+			$platform->isRestrictedByOpenBaseDir("..{$s}bogus"),
 			'invalid relative path'
 		);
 		$this->assertTrue(
-			!$platform->isRestrictedByOpenBaseDir("bogus${s}path${s}..${s}..${s}test"),
+			!$platform->isRestrictedByOpenBaseDir("bogus{$s}path{$s}..{$s}..{$s}test"),
 			'valid relative path with two dotdots'
 		);
 	}
@@ -914,7 +922,7 @@ class PlatformTest extends GalleryTestCase {
 		@$this->_platform->fclose($fd);
 	}
 
-	public function ignore_error_handler($errno, $errstr) {
+	public static function ignore_error_handler($errno, $errstr) {
 		return true;
 	}
 
@@ -1122,6 +1130,10 @@ class PlatformTest extends GalleryTestCase {
 }
 
 class PlatformTestPhpVm extends GalleryPhpVm {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_iniVal;
+	public $_test;
+
 	public function __construct($iniVal, &$test) {
 		$this->_iniVal = $iniVal;
 		$this->_test   =& $test;
@@ -1151,6 +1163,10 @@ class PlatformTestPhpVm extends GalleryPhpVm {
 GalleryCoreApi::requireOnce('modules/core/classes/GalleryPlatform/UnixPlatform.class');
 
 class PlatformTestOpenBaseDirUnixPlatform extends UnixPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_realpathData;
+	public $_cwd;
+
 	public function setRealpathData($realpathData) {
 		$this->_realpathData = $realpathData;
 	}

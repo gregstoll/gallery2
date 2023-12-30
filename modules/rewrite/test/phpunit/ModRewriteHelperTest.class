@@ -31,6 +31,10 @@ GalleryCoreApi::requireOnce(
 	'modules/rewrite/classes/parsers/modrewrite/ModRewriteHelper.class'
 );
 class ModRewriteHelperTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_fileContent;
+	public $_embeddedFileContent;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -368,6 +372,10 @@ class ModRewriteHelperMockPlatform extends GalleryPlatform {
 	public $_fileExistsEmbed         = true;
 	public $_embeddedPreviousContent = array();
 	public $_previousContent         = array();
+
+	/* deprecated dynamic properties in php 8.2 */
+	public $_readBuffer;
+	public $_test;
 
 	public function init(&$test) {
 		$this->_test =& $test;

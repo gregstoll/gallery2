@@ -26,6 +26,14 @@
  * @version $Revision: 18162 $
  */
 class ItemAddFromServerTest extends ItemAddPluginTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_addController;
+	public $_rootAlbum;
+	public $_lockId;
+	public $_symlinkAllowedPlatform;
+	public $_symlinkDisallowedPlatform;
+	public $_baseDir;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName, 'itemadd', 'ItemAddFromServer');
 	}
@@ -716,6 +724,13 @@ class ItemAddFromServerTest extends ItemAddPluginTestCase {
  * Test platform
  */
 class ItemAddFromServerTestPlatform extends GalleryPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_delegate;
+	public $_dirSep;
+	public $_symlinkSupported;
+	public $_baseDir;
+	public $_baseDirRecursive;
+
 	public function __construct($delegate, $symlinkSupported) {
 		$this->_delegate         = $delegate;
 		$dirSep                  = $this->_dirSep                  = $delegate->getDirectorySeparator();

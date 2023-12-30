@@ -24,6 +24,9 @@
  * @version $Revision: 17580 $
  */
 class CoreCallbacks {
+    /* deprecated dynamic properties in php 8.2 */
+    var $_tpl_vars;
+
     function callback($params, &$smarty, $callback, $userId=null) {
 	global $gallery;
 	$block =& $smarty->_tpl_vars['block'];

@@ -1016,6 +1016,9 @@ class TestSuite {
 	public $fClassname;
 	public $fModuleId;
 
+	/* deprecated dynamic properties in php 8.2 */
+	public $fFilter;
+
 	public function __construct($classname = false, $moduleid = false, $filter = null) {
 		// Find all methods of the given class whose name starts with
 		// "test" and add them to the test suite.

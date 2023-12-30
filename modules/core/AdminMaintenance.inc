@@ -29,6 +29,9 @@ GalleryCoreApi::requireOnce('modules/core/classes/helpers/MaintenanceHelper_simp
  */
 class AdminMaintenanceController extends GalleryController {
 
+    /* deprecated dynamic properties in php 8.2 */
+    var $_module;
+
     /**
      * @see GalleryController::handleRequest
      */

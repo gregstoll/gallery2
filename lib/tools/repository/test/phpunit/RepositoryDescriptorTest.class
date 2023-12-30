@@ -38,6 +38,9 @@ GalleryCoreApi::requireOnce(
 class RepositoryDescriptorTest extends GalleryTestCase {
 	public $_testModule;
 
+	/* deprecated dynamic properties in php 8.2 */
+	public $_canonicalFileMetaData;
+
 	public function setUp($x1 = null) {
 		$ret = parent::setUp($x1);
 
@@ -548,6 +551,9 @@ class RepositoryDescriptorTest extends GalleryTestCase {
 }
 
 class RepositoryDescriptorTestPhpVm extends GalleryPhpVm {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_crc32;
+
 	public function setCrc32($contents, $crc32) {
 		$this->_crc32[$contents] = $crc32;
 	}
@@ -558,6 +564,9 @@ class RepositoryDescriptorTestPhpVm extends GalleryPhpVm {
 }
 
 class RepositoryDescriptor_FakeFileMetaDataTest extends RepositoryDescriptor {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_metaData;
+
 	public function __construct($metaData) {
 		$this->_metaData = $metaData;
 	}
@@ -639,6 +648,9 @@ class RepositoryDescriptorTestTranslator {
 }
 
 class RepositoryDescriptorTestUtilities {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_matches;
+
 	public function setGetFileRevision($expected, $reply) {
 		$this->_matches[$expected] = $reply;
 	}
