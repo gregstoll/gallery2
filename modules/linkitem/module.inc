@@ -46,7 +46,7 @@ class LinkItemModule extends GalleryModule /* and GalleryEventListener */ {
 	$platform =& $gallery->getPlatform();
 	$slash = $platform->getDirectorySeparator();
 
-	$imageDir = $gallery->getConfig('data.gallery.plugins_data') . "modules${slash}linkitem";
+	$imageDir = $gallery->getConfig('data.gallery.plugins_data') . "modules{$slash}linkitem";
 	list ($success) = GalleryUtilities::guaranteeDirExists($imageDir);
 	if (!$success) {
 	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
@@ -55,7 +55,7 @@ class LinkItemModule extends GalleryModule /* and GalleryEventListener */ {
 
 	$imageFile = "$imageDir${slash}arrow.png";
 	if (!$platform->is_file($imageFile) &&
-	    !$platform->copy(dirname(__FILE__) . "${slash}images${slash}arrow.png", $imageFile)) {
+	    !$platform->copy(dirname(__FILE__) . "{$slash}images{$slash}arrow.png", $imageFile)) {
 	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
 					 "Unable to copy arrow.png to $imageDir");
 	}
