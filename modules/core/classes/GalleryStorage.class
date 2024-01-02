@@ -1138,14 +1138,14 @@ class GalleryStorage {
 	    $class = $regs[1];
 	    list ($table, $alias) = $this->_translateTableName($class);
 	    if ($alias == null) {
-		$query = str_replace("[${class}]", "$table", $query);
+		$query = str_replace("[{$class}]", "$table", $query);
 	    } else {
 		list ($ret, $as) = $this->getFunctionSql('AS', array());
 		if ($ret) {
 		    /* XXX TODO: propagate this back up as a GalleryStatus */
 		    return 'QUERY ERROR';
 		}
-		$query = str_replace("[${class}]", "$table $as $alias", $query);
+		$query = str_replace("[{$class}]", "$table $as $alias", $query);
 	    }
 	}
 
