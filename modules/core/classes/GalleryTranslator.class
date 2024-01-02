@@ -315,8 +315,8 @@ class GalleryTranslator {
 	if (function_exists('dgettext')) {
 	    $this->_isRightToLeft = isset($data['right-to-left']);
 	    /* Some systems only require LANG, some (like Mandrake) seem to require LANGUAGE also */
-	    putenv("LANG=${languageCode}");
-	    putenv("LANGUAGE=${languageCode}");
+	    putenv("LANG={$languageCode}");
+	    putenv("LANGUAGE={$languageCode}");
 
 	    GalleryTranslator::_setlocale(LC_ALL, $languageCode);
 	}
@@ -426,7 +426,7 @@ class GalleryTranslator {
 	    list ($supportedLanguages, $defaultCountry) = GalleryTranslator::getLanguageData();
 	}
 
-	list ($language, $country) = preg_split('/[-_]/', "${languageCode}_");
+	list ($language, $country) = preg_split('/[-_]/', "{$languageCode}_");
 	$country = GalleryUtilities::strToUpper($country);
 	if ((empty($country) || !isset($supportedLanguages[$language][$country]))
 		&& isset($defaultCountry[$language])) {
@@ -434,7 +434,7 @@ class GalleryTranslator {
 	    $country = $defaultCountry[$language];
 	}
 	if (isset($supportedLanguages[$language][$country])) {
-	    return array("${language}_${country}", $supportedLanguages[$language][$country]);
+	    return array("{$language}_{$country}", $supportedLanguages[$language][$country]);
 	}
 
 	if ($fallback) {

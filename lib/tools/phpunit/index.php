@@ -31,7 +31,7 @@ require_once '../../../init.inc';
 @date_default_timezone_set(date_default_timezone_get());
 $testReportDir = $gallery->getConfig('data.gallery.base') . 'test/';
 $priorRuns     = array();
-$glob          = glob("${testReportDir}*");
+$glob          = glob("{$testReportDir}*");
 
 if ($glob) {
 	foreach ($glob as $filename) {
@@ -49,7 +49,7 @@ if (!empty($_GET['run'])) {
 	list($action, $run) = explode(':', $_GET['run']);
 
 	$run     = substr($run, 0, strspn($run, '0123456789'));
-	$runFile = "${testReportDir}run-$run.html";
+	$runFile = "{$testReportDir}run-$run.html";
 
 	switch ($action) {
 		case 'frame':
@@ -68,7 +68,7 @@ if (!empty($_GET['run'])) {
 
 		case 'deleteall':
 			foreach ($priorRuns as $pr) {
-				unlink("${testReportDir}run-$pr[key].html");
+				unlink("{$testReportDir}run-$pr[key].html");
 			}
 
 			header('Location: index.php');
@@ -118,7 +118,7 @@ function PhpUnitOutputInterceptor($message) {
 		static $fd;
 
 		if (!isset($fd)) {
-			$fd = fopen("${testReportDir}run-" . date('YmdHis') . '.html', 'wb+');
+			$fd = fopen("{$testReportDir}run-" . date('YmdHis') . '.html', 'wb+');
 		}
 
 		static $replaced;

@@ -37,13 +37,13 @@ class GalleryTranslatorHelper_medium {
 	$codeBase = GalleryCoreApi::getCodeBasePath();
 
 	$gallery->guaranteeTimeLimit(30);  /* the glob may take a long time */
-	$pluginPath = "$codeBase${pluginType}s/$pluginId/";
-	$moFilesInPoDir = $platform->glob("${pluginPath}po/*.mo");
+	$pluginPath = "$codeBase{$pluginType}s/$pluginId/";
+	$moFilesInPoDir = $platform->glob("{$pluginPath}po/*.mo");
 	if (!empty($moFilesInPoDir)) {
 	    $moFiles = $moFilesInPoDir;
 	    $codePattern = '#(\w+).mo$#';
 	} else {
-	    $moFiles = $platform->glob("${pluginPath}locale/*/LC_MESSAGES/*.mo");
+	    $moFiles = $platform->glob("{$pluginPath}locale/*/LC_MESSAGES/*.mo");
 	    $codePattern = '#locale/(\w+)/LC_MESSAGES#';
 	}
 
@@ -64,7 +64,7 @@ class GalleryTranslatorHelper_medium {
 		    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
 		}
 
-		$destinationPath = $destinationDir . "${pluginType}s_$pluginId.mo";
+		$destinationPath = $destinationDir . "{$pluginType}s_$pluginId.mo";
 		$success = $platform->copy($moPath, $destinationPath);
 		if (!$success) {
 		    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE);
@@ -83,7 +83,7 @@ class GalleryTranslatorHelper_medium {
 
 	$gallery->guaranteeTimeLimit(30);  /* the glob may take a long time */
 	$moFiles = $platform->glob($gallery->getConfig('data.gallery.locale')
-				   . "*/LC_MESSAGES/${pluginType}s_$pluginId.mo");
+				   . "*/LC_MESSAGES/{$pluginType}s_$pluginId.mo");
 	$success = true;
 	if (!empty($moFiles)) {
 	    foreach ($moFiles as $moPath) {

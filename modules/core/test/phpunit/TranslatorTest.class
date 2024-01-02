@@ -512,14 +512,14 @@ class TranslatorTest extends GalleryTestCase {
 		$gallery->setConfig('data.gallery.locale', '/g2data/locale/');
 
 		$modulePath = GalleryCoreApi::getCodeBasePath('modules/TranslatorTest/');
-		$poPath     = "${modulePath}po/";
+		$poPath     = "{$modulePath}po/";
 
-		$platform->setReply('glob', array("${poPath}*.mo", null), array("${poPath}aa.mo"));
+		$platform->setReply('glob', array("{$poPath}*.mo", null), array("{$poPath}aa.mo"));
 		$platform->setReply('file_exists', array('/g2data/locale/aa/LC_MESSAGES/'), true);
 		$platform->setReply('is_dir', array('/g2data/locale/aa/LC_MESSAGES/'), true);
 		$platform->setReply(
 			'copy',
-			array("${poPath}aa.mo", '/g2data/locale/aa/LC_MESSAGES/modules_TranslatorTest.mo'),
+			array("{$poPath}aa.mo", '/g2data/locale/aa/LC_MESSAGES/modules_TranslatorTest.mo'),
 			true
 	);
 		$gallery->setPlatform($platform);
@@ -541,19 +541,19 @@ class TranslatorTest extends GalleryTestCase {
 		$gallery->setConfig('data.gallery.locale', '/g2data/locale/');
 
 		$modulePath = GalleryCoreApi::getCodeBasePath('modules/TranslatorTest/');
-		$poPath     = "${modulePath}po/";
+		$poPath     = "{$modulePath}po/";
 
-		$platform->setReply('glob', array("${poPath}*.mo", null), array());
+		$platform->setReply('glob', array("{$poPath}*.mo", null), array());
 		$platform->setReply(
 			'glob',
-			array("${modulePath}locale/*/LC_MESSAGES/*.mo", null),
-			array("${modulePath}locale/aa/LC_MESSAGES/aa.mo")
+			array("{$modulePath}locale/*/LC_MESSAGES/*.mo", null),
+			array("{$modulePath}locale/aa/LC_MESSAGES/aa.mo")
 	);
 		$platform->setReply('file_exists', array('/g2data/locale/aa/LC_MESSAGES/'), true);
 		$platform->setReply('is_dir', array('/g2data/locale/aa/LC_MESSAGES/'), true);
 		$platform->setReply(
 			'copy',
-			array("${modulePath}locale/aa/LC_MESSAGES/aa.mo",
+			array("{$modulePath}locale/aa/LC_MESSAGES/aa.mo",
 		  '/g2data/locale/aa/LC_MESSAGES/modules_TranslatorTest.mo', ),
 			true
 	);
@@ -576,9 +576,9 @@ class TranslatorTest extends GalleryTestCase {
 		$gallery->setConfig('data.gallery.locale', '/g2data/locale/');
 
 		$modulePath = GalleryCoreApi::getCodeBasePath('modules/TranslatorTest/');
-		$poPath     = "${modulePath}po/";
+		$poPath     = "{$modulePath}po/";
 
-		$platform->setReply('glob', array("${poPath}*.mo", null), array("${poPath}aa.mo"));
+		$platform->setReply('glob', array("{$poPath}*.mo", null), array("{$poPath}aa.mo"));
 
 		// This next block is what GalleryUtilities::guaranteeDirExists requires
 		$platform->setReply('file_exists', array('/g2data/locale/aa/LC_MESSAGES/'), false);
@@ -647,8 +647,8 @@ class TranslatorTest extends GalleryTestCase {
 
 		$platform->setReply(
 			'glob',
-			array("${codeBase}modules/*/po", null),
-			array("${codeBase}modules/test/po")
+			array("{$codeBase}modules/*/po", null),
+			array("{$codeBase}modules/test/po")
 	);
 		$platform->setReply(
 			'file_exists',
@@ -657,7 +657,7 @@ class TranslatorTest extends GalleryTestCase {
 	);
 		$platform->setReply(
 			'file_exists',
-			array("${codeBase}modules/test/po/wx_YZ.mo"),
+			array("{$codeBase}modules/test/po/wx_YZ.mo"),
 			false
 	);
 		$platform->setReply(
@@ -667,7 +667,7 @@ class TranslatorTest extends GalleryTestCase {
 	);
 		$platform->setReply(
 			'file_exists',
-			array("${codeBase}modules/test/po/wx.mo"),
+			array("{$codeBase}modules/test/po/wx.mo"),
 			true
 	);
 
@@ -681,14 +681,14 @@ class TranslatorTest extends GalleryTestCase {
 		$platform->setReply('mkdir', array('/g2data/locale/wx/LC_MESSAGES/', 755), true);
 		$platform->setReply(
 			'copy',
-			array("${codeBase}modules/test/po/wx.mo",
+			array("{$codeBase}modules/test/po/wx.mo",
 			  '/g2data/locale/wx/LC_MESSAGES/modules_test.mo', ),
 			true
 	);
 		$platform->setReply(
 			'glob',
-			array("${codeBase}themes/*/po", null),
-			array("${codeBase}themes/matrix/po")
+			array("{$codeBase}themes/*/po", null),
+			array("{$codeBase}themes/matrix/po")
 	);
 		$platform->setReply(
 			'file_exists',
@@ -697,7 +697,7 @@ class TranslatorTest extends GalleryTestCase {
 	);
 		$platform->setReply(
 			'file_exists',
-			array("${codeBase}themes/matrix/po/wx_YZ.mo"),
+			array("{$codeBase}themes/matrix/po/wx_YZ.mo"),
 			false
 	);
 		$platform->setReply(
@@ -732,8 +732,8 @@ class TranslatorTest extends GalleryTestCase {
 
 			$platform->setReply(
 				'glob',
-				array("${codeBase}modules/*/po", null),
-				array("${codeBase}modules/test/po")
+				array("{$codeBase}modules/*/po", null),
+				array("{$codeBase}modules/test/po")
 		);
 			$platform->setReply(
 				'file_exists',
@@ -745,7 +745,7 @@ class TranslatorTest extends GalleryTestCase {
 				array("/g2data/locale/$language/LC_MESSAGES/modules_test.mo"),
 				true
 		);
-			$platform->setReply('glob', array("${codeBase}themes/*/po", null), array());
+			$platform->setReply('glob', array("{$codeBase}themes/*/po", null), array());
 		}
 
 		$gallery->setPlatform($platform);
