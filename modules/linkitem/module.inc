@@ -53,7 +53,7 @@ class LinkItemModule extends GalleryModule /* and GalleryEventListener */ {
 					 "Unable to create directory: $imageDir");
 	}
 
-	$imageFile = "$imageDir${slash}arrow.png";
+	$imageFile = "$imageDir{$slash}arrow.png";
 	if (!$platform->is_file($imageFile) &&
 	    !$platform->copy(dirname(__FILE__) . "{$slash}images{$slash}arrow.png", $imageFile)) {
 	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
