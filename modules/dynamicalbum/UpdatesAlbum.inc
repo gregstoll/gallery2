@@ -27,6 +27,13 @@
  */
 class UpdatesAlbumView extends GalleryView {
 
+    /* deprecated dynamic properties in php 8.2 */
+    var $_view;
+    var $_title;
+    var $_itemType;
+    var $_viewDescription;
+    var $_param;
+
     function __construct() {
 	global $gallery;
 	$this->_view = 'dynamicalbum.UpdatesAlbum';

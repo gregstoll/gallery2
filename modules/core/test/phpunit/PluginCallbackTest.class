@@ -26,6 +26,9 @@ GalleryCoreApi::requireOnce('modules/core/PluginCallback.inc');
  * @version $Revision: 17580 $
  */
 class PluginCallbackTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_testPlugin;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -1114,6 +1117,9 @@ class PluginCallbackTest extends GalleryTestCase {
 }
 
 class MockGalleryStatus {
+	/* deprecated dynamic properties in php 8.2 */
+	public $something;
+
 	public function __construct() {
 		// Put something in here so that empty($this) would not return true
 		$this->something = 1;
@@ -1142,6 +1148,10 @@ class MockGalleryStatus {
 }
 
 class PluginCallbackMockStorage {
+	/* deprecated dynamic properties in php 8.2 */
+	public $rolledBack;
+	public $checkPointed;
+
 	public function rollbackTransaction() {
 		$this->rolledBack = 1;
 
@@ -1156,6 +1166,9 @@ class PluginCallbackMockStorage {
 }
 
 class PluginCallbackWithFakeHandler extends PluginCallbackView {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_replies;
+
 	/**
 	 * Class Loader
 	 */

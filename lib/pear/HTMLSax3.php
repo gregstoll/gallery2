@@ -826,6 +826,10 @@ class XML_HTMLSax3_OpeningTagState {
     * @access protected
     * @see XML_HTMLSax3_AttributeStartState
     */
+
+    /* deprecated dynamic properties in php 8.2 */
+    private array $attrs;
+
     function parseAttributes(&$context) {
         $Attributes = array();
     

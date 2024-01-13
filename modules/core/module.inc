@@ -26,6 +26,9 @@
  */
 class CoreModule extends GalleryModule {
 
+    /* deprecated dynamic properties in php 8.2 */
+    var $_galleryVersion;
+
     function __construct() {
 	global $gallery;
 

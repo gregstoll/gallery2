@@ -293,6 +293,9 @@ class EventTestEventListener {
  * Mock platform.
  */
 class EventTestPlatform extends GalleryPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_list;
+
 	public function opendir($path) {
 		if (substr($path, -8) == 'modules/') {
 			$this->_list = array();

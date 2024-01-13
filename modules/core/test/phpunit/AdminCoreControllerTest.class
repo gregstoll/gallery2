@@ -25,6 +25,9 @@
  * @version $Revision: 17630 $
  */
 class AdminCoreControllerTest extends GalleryControllerTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_valueMap;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName, 'core.AdminCore');
 	}
@@ -690,6 +693,9 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryPlatform/UnixPlatform.c
 GalleryCoreApi::requireOnce('modules/core/classes/GalleryPlatform/WinNtPlatform.class');
 
 class AdminCoreControllerTestUnixPlatform extends UnixPlatform {
+        /* deprecated dynamic properties in php 8.2 */
+	public $_succeed;
+
 	public function __construct($succeed) {
 		$this->_succeed = $succeed;
 	}

@@ -28,6 +28,12 @@ GalleryCoreApi::requireOnce('modules/core/classes/GallerySession.class');
  * @version $Revision: 18136 $
  */
 class SessionTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_saveStorage;
+	public $_saveServerVars;
+	public $_anonymousUserId;
+	public $_sessionIds;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -4459,6 +4465,10 @@ class SessionTest extends GalleryTestCase {
 }
 
 class SessionTestPhpVm extends GalleryPhpVm {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_randValue;
+	public $_timeValue;
+
 	public function __construct($md5Override = array(), $timeValue = null, $randValue = null) {
 		$_REQUEST['md5Override'] = $md5Override;
 		$this->_randValue        = $randValue;
@@ -4499,6 +4509,17 @@ class SessionTestPhpVm extends GalleryPhpVm {
 }
 
 class SessionTestStorage {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_query;
+	public $_data;
+	public $_options;
+	public $_addMapEntry;
+	public $_updateMapEntry;
+	public $_collisions;
+	public $_execute;
+	public $_type;
+	public $_searchResults;
+
 	public function __construct($collisions = 0, $results = array(), $type = 'foo') {
 		$this->_query          = array();
 		$this->_data           = array();
@@ -4551,6 +4572,10 @@ class SessionTestStorage {
 }
 
 class SessionTestRecordSet {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_results;
+	public $_i;
+
 	public function __construct($results = array()) {
 		$this->_results = $results;
 		$this->_i       = 0;

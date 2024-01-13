@@ -35,6 +35,11 @@ class StorageTest extends GalleryTestCase {
 	// results on the non transactional db connection
 	public $_resultsNonTransactional;
 
+	/* deprecated dynamic properties in php 8.2 */
+	public $_isEmptyAllowedForNotNullColumn;
+	public $_serverInfo;
+	public $_nonTransactionalDb;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -1798,6 +1803,9 @@ class StorageTestDB {
 	public $transCnt = 1;
 	public $_recordSets;
 
+	/* deprecated dynamic properties in php 8.2 */
+	public $_results;
+
 	public function __construct(&$testCase, $resultsType) {
 		$this->_testCase   =& $testCase;
 		$this->_results    =& $testCase->$resultsType;
@@ -1835,6 +1843,9 @@ class StorageTestDB {
 
 class StorageTestRecordSet {
 	public $_rows;
+
+	/* deprecated dynamic properties in php 8.2 */
+	public $_recordCount;
 
 	public function __construct($rows = array()) {
 		$this->_rows        = $rows;

@@ -64,16 +64,16 @@ class FfmpegModule extends GalleryModule {
 	}
 
 	$slash = $platform->getDirectorySeparator();
-	$imageDir = $gallery->getConfig('data.gallery.plugins_data') . "modules${slash}ffmpeg";
+	$imageDir = $gallery->getConfig('data.gallery.plugins_data') . "modules{$slash}ffmpeg";
 	list ($success) = GalleryUtilities::guaranteeDirExists($imageDir);
 	if (!$success) {
 	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
 					"Unable to create directory: $imageDir");
 	}
 
-	$imageFile = "$imageDir${slash}filmreel.png";
+	$imageFile = "$imageDir{$slash}filmreel.png";
 	if (!$platform->is_file($imageFile) &&
-	    !$platform->copy(dirname(__FILE__) . "${slash}images${slash}filmreel.png",
+	    !$platform->copy(dirname(__FILE__) . "{$slash}images{$slash}filmreel.png",
 			     $imageFile)) {
 	    return GalleryCoreApi::error(ERROR_PLATFORM_FAILURE, __FILE__, __LINE__,
 					"Unable to copy filmreel.png to $imageDir");

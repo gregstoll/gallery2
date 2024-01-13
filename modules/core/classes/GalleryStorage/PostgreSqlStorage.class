@@ -31,6 +31,9 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryStorage.class');
  */
 class PostgreSqlStorage extends GalleryStorage {
 
+    /* deprecated dynamic properties in php 8.2 */
+    public $_serverInfo;
+
     function __construct($config) {
     parent::__construct($config);
 	$this->_isTransactional = true;

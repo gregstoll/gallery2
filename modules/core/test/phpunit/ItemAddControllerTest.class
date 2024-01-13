@@ -25,6 +25,9 @@
  * @version $Revision: 17580 $
  */
 class ItemAddControllerTest extends GalleryControllerTestCase {
+	/* deprecated dynamci properties in php 8.2 */
+	public $_templateAdapter;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName, 'core.ItemAdd');
 	}
@@ -1152,6 +1155,9 @@ class ItemAddControllerTestPluginFail {
  * Test ItemAddOption
  */
 class ItemAddTestOption extends ItemAddOption {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_withError;
+
 	public function __construct($withError = false) {
 		$this->_withError                                = $withError;
 		$_SERVER['ItemAddControllerTest']['optionCalls'] = array();

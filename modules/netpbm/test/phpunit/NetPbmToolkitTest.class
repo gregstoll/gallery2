@@ -31,6 +31,9 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryPlatform/WinNtPlatform.
  * @version $Revision: 17580 $
  */
 class NetPbmToolkitTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_chmodWasCalled;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -1085,6 +1088,13 @@ class NetPbmToolkitTest extends GalleryTestCase {
  * @subpackage PHPUnit
  */
 class NetPbmToolkitTestPlatform extends WinNtPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_counter;
+	public $_platform;
+	public $_test;
+	public $_netPbmPath;
+	public $_jheadPath;
+
 	public function __construct($platform, &$test) {
 		$this->_platform = $platform;
 		$this->_test     =& $test;

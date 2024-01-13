@@ -29,6 +29,10 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryValidationPlugin.class'
  * @version $Revision: 18057 $
  */
 class UserSelfRegistrationControllerTest extends GalleryControllerTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_emailBody;
+	public $_emailSubject;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName, 'register.UserSelfRegistration');
 	}
@@ -659,6 +663,10 @@ class UserSelfRegistrationControllerTest extends GalleryControllerTestCase {
 }
 
 class RegisterDummyPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_test;
+	public $_platform;
+
 	public function __construct($platform, &$test) {
 		$this->_platform = $platform;
 		$this->_test     =& $test;
@@ -749,6 +757,11 @@ class RegisterDummyPlatform {
  * Mock ValidationPlugin
  */
 class UserSelfRegistrationControllerTestPlugin extends GalleryValidationPlugin {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_emailBody;
+	public $_errors;
+	public $_continue;
+
 	public function setContinue($continue) {
 		$this->_continue = $continue;
 	}

@@ -137,6 +137,11 @@ class GalleryDatabaseImport extends GalleryImportElement {
      */
     var $_fileReadChunkSize = 8192;
 
+    /* deprecated dynamic properties in php 8.2 */
+    var $_installedModuleVersion;
+    var $_installedCoreVersion;
+    var $_installedThemeVersion;
+
     function __construct() {
 	parent::__construct();
     }
@@ -743,6 +748,10 @@ class _GalleryRowTag extends GalleryImportElement {
 
     /** Holds the generated insert for this table */
     var $_currentSql;
+
+    /* deprecated dynamic properties in php 8.2 */
+    var $_fields;
+    var $_fieldNames;
 
     function __construct($parent, $tableName, $fields, $attributes) {
 	parent::__construct($parent);

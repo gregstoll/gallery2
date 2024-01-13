@@ -34,6 +34,16 @@ class ItemAddController extends GalleryController {
      */
     var $_optionInstances;
 
+    /* Deprecated dynamic properties in php 8.2 */
+    var $_coreModule;
+    var $_templateAdapter;
+    var $_storage;
+    var $_processingItemsMessage;
+    var $_extractionToolkitMap;
+    var $_processedItems;
+    var $_platform;
+    var $_extractingArchiveMessage;
+
     /**
      * Tests can use this method to hardwire a specific set of option instances to use.
      * This avoids situations where some of the option instances will do unpredictable

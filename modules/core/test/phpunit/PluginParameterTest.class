@@ -104,7 +104,7 @@ class PluginParameterTest extends GalleryTestCase {
 				'module',
 				'unitTestModule',
 				$key,
-				"${value}-$i"
+				"{$value}-$i"
 			);
 
 			if ($ret) {
@@ -118,7 +118,7 @@ class PluginParameterTest extends GalleryTestCase {
 			return $ret;
 		}
 
-		$this->assertEquals("${value}-2", $newValue);
+		$this->assertEquals("{$value}-2", $newValue);
 	}
 
 	public function testFetchAllParameters() {
@@ -131,8 +131,8 @@ class PluginParameterTest extends GalleryTestCase {
 			$ret = GalleryCoreApi::setPluginParameter(
 				'module',
 				'unitTestModule',
-				"${key}-$i",
-				"${value}-$i"
+				"{$key}-$i",
+				"{$value}-$i"
 			);
 
 			if ($ret) {
@@ -147,7 +147,7 @@ class PluginParameterTest extends GalleryTestCase {
 		}
 
 		for ($i = 0; $i < 3; $i++) {
-			$this->assertEquals("${value}-$i", $newValues["${key}-$i"]);
+			$this->assertEquals("{$value}-$i", $newValues["{$key}-$i"]);
 		}
 	}
 
@@ -162,7 +162,7 @@ class PluginParameterTest extends GalleryTestCase {
 				'module',
 				'unitTestModule',
 				$key,
-				"${value}-$i",
+				"{$value}-$i",
 				$i
 			);
 
@@ -178,7 +178,7 @@ class PluginParameterTest extends GalleryTestCase {
 				return $ret;
 			}
 
-			$this->assertEquals("${value}-$i", $newValue);
+			$this->assertEquals("{$value}-$i", $newValue);
 		}
 	}
 

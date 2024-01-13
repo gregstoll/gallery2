@@ -28,6 +28,9 @@ GalleryCoreApi::requireOnce('modules/rewrite/classes/RewriteHelper.class');
  * @version $Revision: 20886 $
  */
 class RewriteHelperTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_defaultOptions;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -1120,6 +1123,9 @@ class RewriteHelperMockModule extends GalleryModule {
 }
 
 class RewriteHelperMockPlatform extends GalleryPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_list;
+
 	public function file_exists($file) {
 		if (strpos($file, 'modules/rewritehelpermock/module.inc') !== false) {
 			return true;

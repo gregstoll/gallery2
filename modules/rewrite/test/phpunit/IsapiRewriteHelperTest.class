@@ -31,6 +31,9 @@ GalleryCoreApi::requireOnce(
 	'modules/rewrite/classes/parsers/isapirewrite/IsapiRewriteHelper.class'
 );
 class IsapiRewriteHelperTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_fileContent;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -218,6 +221,10 @@ class IsapiRewriteHelperMockPlatform extends GalleryPlatform {
 	public $_isReadable      = true;
 	public $_fileExists      = true;
 	public $_previousContent = array();
+
+	/* deprecated dynamic properties in php 8.2 */
+	public $_readBuffer;
+	public $_test;
 
 	public function init(&$test) {
 		$this->_test =& $test;

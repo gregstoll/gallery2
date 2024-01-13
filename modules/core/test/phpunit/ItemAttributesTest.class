@@ -917,6 +917,11 @@ class ItemAttributesTestSession {
 	public $_userId;
 	public $_creationTime;
 
+	/* deprecated dynamic properties in php 8.2 */
+	public $_isPersistent;
+	public $_isSearchEngineSession;
+	public $_data;
+
 	public function __construct($isPersistent = true, $isSearchEngineSession = false) {
 		$this->_creationTime          = time();
 		$this->_isPersistent          = $isPersistent;
@@ -965,6 +970,11 @@ class ItemAttributesTestSession {
 }
 
 class ItemAttributesTestPhpVm extends GalleryPhpVm {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_getAllHeadersExists;
+	public $_headers;
+	public $_time;
+
 	public function __construct($getAllHeadersExists = false, $headers = array(), $time = null) {
 		$this->_getAllHeadersExists = $getAllHeadersExists;
 		$this->_headers             = $headers;

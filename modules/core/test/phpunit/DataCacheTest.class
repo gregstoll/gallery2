@@ -1173,6 +1173,10 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryPhpVm.class');
  * Mock VM
  */
 class DataCacheTestMockVm extends GalleryPhpVm {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_time;
+	public $_randValue;
+
 	public function setTime($time) {
 		$this->_time = $time;
 	}

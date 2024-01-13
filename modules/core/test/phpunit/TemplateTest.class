@@ -26,6 +26,12 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryTemplate.class');
  * @version $Revision: 17950 $
  */
 class TemplateTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_mockSmarty;
+	public $_baseDirOverride;
+	public $_origPlatform;
+	public $_mockPlatform;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -564,6 +570,9 @@ class TemplateTest extends GalleryTestCase {
 }
 
 class TemplateTestMockPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_returns;
+
 	public function set($func, $filename, $return) {
 		$this->_returns[$func][$filename] = $return;
 	}
@@ -582,6 +591,10 @@ class TemplateTestMockPlatform {
 }
 
 class TemplateTestMockSmarty {
+	/* deprecated dynamic properties in php 8.2 */
+	public $template_dir;
+	public $_tpl_vars;
+
 	public function __construct() {
 		$this->template_dir = '/legal/path';
 		$this->_tpl_vars    = array(

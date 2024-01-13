@@ -29,6 +29,9 @@ GalleryCoreApi::requireOnce('modules/slideshow/classes/PicLensHelper.class');
  */
 class AdminSlideshowController extends GalleryController {
 
+    /* deprecated dynamic properties in php 8.2 */
+    var $_picLensHelper;
+
     /**
      * Provide an instance of PicLensHelper for the controller to use instead of
      * the default.  This allows tests to inject this dependency.

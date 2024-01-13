@@ -37,6 +37,16 @@ GalleryCoreApi::requireOnce('modules/core/classes/GalleryUnknownItem.class');
  * @version $Revision: 20940 $
  */
 class ItemAddFromWebTest extends ItemAddPluginTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_addController;
+	public $_outputFile;
+	public $_lockIds;
+	public $_session;
+	public $_saveRecentUrls;
+	public $_photo;
+	public $_movie;
+	public $_audio;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName, 'itemadd', 'ItemAddFromWeb');
 	}
@@ -831,6 +841,10 @@ class ItemAddFromWebTest extends ItemAddPluginTestCase {
  * @subpackage PHPUnit
  */
 class ItemAddFromWebTestPlatform {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_readBuffer;
+	public $_testCase;
+
 	public function __construct(&$testCase) {
 		$this->_testCase = $testCase;
 	}

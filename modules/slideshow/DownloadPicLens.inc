@@ -60,12 +60,12 @@ class DownloadPicLensView extends GalleryView {
 	$codeDir = $gallery->getConfig('data.gallery.plugins_data') . 'modules/slideshow/';
 	switch ($file) {
 	case 'js':
-	    return $this->_sendFile(array('path' => "${codeDir}piclens.js",
+	    return $this->_sendFile(array('path' => "{$codeDir}piclens.js",
 					  'mimeType' => 'application/x-javascript',
 					  'pseudoFileName' => 'piclens.js'));
 
 	case 'swf':
-	    return $this->_sendFile(array('path' => "${codeDir}PicLensLite.swf",
+	    return $this->_sendFile(array('path' => "{$codeDir}PicLensLite.swf",
 					  'mimeType' => 'application/x-shockwave-flash',
 					  'pseudoFileName' => 'PicLensLite.swf'));
 

@@ -29,6 +29,9 @@ GalleryCoreApi::requireOnce('modules/keyalbum/Callbacks.inc');
  * @version $Revision: 17580 $
  */
 class KeywordAlbumCallbacksTest extends GalleryTestCase {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_originalGuestUserId;
+
 	public function __construct($methodName) {
 		parent::__construct($methodName);
 	}
@@ -766,6 +769,10 @@ class KeywordAlbumCallbacksTest extends GalleryTestCase {
  * Mock storage for callbacks tests.
  */
 class KeywordAlbumCallbacksTestStorage {
+	/* deprecated dynamic properties in php 8.2 */
+	public $_storage;
+	public $_queries;
+
 	public function __construct($storage, $queries) {
 		// Avoid weird reference thing in php4 that makes _extras->_gs point to mock storage
 		$storage->_extras = null;
