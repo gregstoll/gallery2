@@ -3319,7 +3319,11 @@ if (!isset($gallery) || !method_exists($gallery, \'setConfig\')) {
 
 	GalleryCoreApi::requireOnce('modules/core/classes/GalleryEntity.class');
 	$lock = new GalleryEntity();
-	$lock->create();
+	$ret = $lock->create();
+	if ($ret) {
+	    return $ret;
+	}
+
 	$ret = $lock->save(false);
 	if ($ret) {
 	    return $ret;

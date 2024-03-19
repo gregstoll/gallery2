@@ -290,13 +290,14 @@ class GallerySetupUtilities {
      * @param string $name the file's name
      * @param string $contents the file's contents
      */
-    function generateTextFileForDownload($name, $contents) {
-	header('Content-Type: text/plain');
-	header('Content-Length: ' . strlen($contents));
-	header("Content-Description: Download $name to your computer.");
-	header("Content-Disposition: attachment; filename=$name");
-	print $contents;
-    }
+	static function generateTextFileForDownload($name, $contents)
+	{
+		header('Content-Type: text/plain');
+		header('Content-Length: ' . strlen($contents));
+		header("Content-Description: Download $name to your computer.");
+		header("Content-Disposition: attachment; filename=$name");
+		print $contents;
+	}
 
     /**
      * Cleanly start up our session.
