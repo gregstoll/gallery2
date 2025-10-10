@@ -1,0 +1,25 @@
+<!ELEMENT change ( table-name, schema-from, schema-to, (add | alter | remove)* ) >
+
+<!ELEMENT schema-from ( schema-major, schema-minor ) >
+<!ELEMENT schema-to ( schema-major, schema-minor ) >
+<!ELEMENT add ( (column | key | index)+ ) >
+<!ELEMENT alter ( column+ ) >
+<!ELEMENT remove ( (column-name | key | index)+ ) >
+<!ELEMENT column ( column-name, column-type, column-size?, not-null?, default? ) >
+<!ELEMENT key ( column-name+ ) >
+<!ELEMENT index ( column-name+ ) >
+
+<!ELEMENT table-name ( #PCDATA ) >
+<!ELEMENT schema-major ( #PCDATA ) >
+<!ELEMENT schema-minor ( #PCDATA ) >
+<!ELEMENT column-name ( #PCDATA ) >
+<!ELEMENT column-type ( #PCDATA ) >
+<!ELEMENT column-size ( #PCDATA ) >
+<!ELEMENT not-null EMPTY >
+<!ELEMENT null EMPTY >
+<!ELEMENT default ( #PCDATA ) >
+<!ATTLIST key primary (true | false) "false">
+<!ATTLIST not-null empty (allowed | disallowed) "disallowed">
+<!ATTLIST index name_mysql CDATA #IMPLIED>
+<!ATTLIST index name_postgres CDATA #IMPLIED>
+<!ATTLIST index name_oracle CDATA #IMPLIED>

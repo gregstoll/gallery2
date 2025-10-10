@@ -1,0 +1,26 @@
+RXP ?= $(shell which rxp 2>/dev/null)
+XMLLINT ?= $(shell which xmllint 2>/dev/null)
+PHP ?= php
+CLASSES = $(shell ls *.class 2>/dev/null)
+
+all: Entities.inc
+	if [ -f Maps.xml ]; then $(MAKE) Maps.inc; fi
+	if [ -f GalleryStorage/GNUmakefile ]; then cd GalleryStorage && $(MAKE); fi
+
+%:
+	if [ -f GalleryStorage/GNUmakefile ]; then cd GalleryStorage && $(MAKE) $@; fi
+
+Maps.inc: Maps.xml ../../../lib/tools/bin/maps.tpl
+	@if [ -x "$(XMLLINT)" ]; then \
+		xmllint --valid --noout Maps.xml; \
+	elif [ -x "$(RXP)" ]; then \
+		for xmlfile in $(XMLFILES); do \
+			rxp -sV Maps.xml; \
+		done \
+	else \
+		echo "No available XML validators (need xmllint or rxp)"; \
+	fi
+	$(PHP) -q -C ../../../lib/tools/bin/generate-maps.php
+
+Entities.inc: $(CLASSES) ../../../lib/tools/bin/entities.tpl
+	$(PHP) -q -C ../../../lib/tools/bin/generate-entities.php
