@@ -557,7 +557,7 @@ class GoogleMapUtilities {
 				$NorthSouth = '';
 				$EastWest   = '';
 
-				if (is_array($temp[0])) {
+				if (is_array($temp) && is_array($temp[0])) {
 					foreach ($temp[0] as $id => $data) {
 						if (is_array($data) and array_key_exists('Tag Name', $temp[0][$id])
 							and ($temp[0][$id]['Tag Name'] == 'GPS Info Image File Directory (IFD)')
