@@ -635,7 +635,13 @@ if ($ret && ($ret->getErrorCode() & ERROR_PERMISSION_DENIED)) {
 
 // Check that our dev environment is correct
 $incorrectDevEnv       = array();
-$desiredErrorReporting = E_ALL & ~E_STRICT;
+if (version_compare(PHP_VERSION, '8.4.0', '<')) {
+	$desiredErrorReporting = E_ALL & ~E_STRICT;
+}
+else {
+	/* E_STRICT deprecated in 8.4.0 */
+	$desiredErrorReporting = E_ALL;
+}
 
 foreach (array(
 	'error_reporting'                => array($desiredErrorReporting),

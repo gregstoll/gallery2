@@ -35,8 +35,13 @@ function GalleryInitFirstPass($params=array()) {
     }
 
     /* Specify that when an assertion fails, we terminate right away */
-    assert_options(ASSERT_WARNING, 1);
-    assert_options(ASSERT_BAIL, 1);
+    if (version_compare(PHP_VERSION, '8.3.0', '<')) {
+	assert_options(ASSERT_WARNING, 1);
+	assert_options(ASSERT_BAIL, 1);
+    }
+    else {
+	ini_set('assert.warning', '1');
+    }
 
     /* Load all the core Gallery classes */
     $galleryBase = dirname(__FILE__) . '/';
