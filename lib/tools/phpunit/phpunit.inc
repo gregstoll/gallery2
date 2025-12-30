@@ -22,7 +22,7 @@
 // ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-if (version_compare(phpversion(), '5.3', '>=')) {
+if (version_compare(phpversion(), '5.3', '>=') and version_compare(phpversion(), '8.4.0', '<')) {
 	// Ignore these warnings for PHP 5.3 in Gallery 2.3
 	error_reporting(E_ALL & ~E_STRICT);
 } else {

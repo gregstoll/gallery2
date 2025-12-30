@@ -862,11 +862,10 @@ class GalleryXmlProcessor {
 
 	$this->_xmlParser = xml_parser_create('UTF-8');
 	xml_parser_set_option($this->_xmlParser, XML_OPTION_CASE_FOLDING, 0);
-	xml_set_object($this->_xmlParser, $this);
 
 	/* Initialize the XML callback functions */
-	xml_set_element_handler($this->_xmlParser, '_processStartElement', '_processEndElement');
-	xml_set_character_data_handler($this->_xmlParser, '_processCData');
+	xml_set_element_handler($this->_xmlParser, [$this, '_processStartElement'], [$this, '_processEndElement']);
+	xml_set_character_data_handler($this->_xmlParser, [$this, '_processCData']);
         }
 
     /**
