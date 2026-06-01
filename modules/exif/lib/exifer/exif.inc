@@ -596,7 +596,7 @@ function read_entry(&$result,$in,$seek,$intel,$ifd_name,$globalOffset) {
 		return;
 	}
 	if($tag_name=="MakerNote") { //if its a maker tag, we need to parse this specially
-		$make = $result['IFD0']['Make'];
+		$make = isset($result['IFD0']['Make']) ? $result['IFD0']['Make'] : '';
 
 		if($result['VerboseOutput']==1) {
 			$result[$ifd_name]['MakerNote']['RawData'] = $data;
