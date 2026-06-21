@@ -583,16 +583,13 @@ class GalleryPlatform {
 	    $gallery->debug(sprintf("mkdir(%s, %o)", $path, $octalPerms));
 	}
 
-	/*
-	 * Another request (or an earlier guaranteeDirExists check) may have
-	 * created the directory between the caller's file_exists() test and
-	 * now. Treat an already-existing directory as success instead of
-	 * letting mkdir() emit a "File exists" warning (TOCTOU race).
-	 */
-	if (is_dir($path)) {
-	    return true;
-	}
 	$umask = umask(0);
+	/*
+	 * Treat an already-existing directory as success: another request (or an
+	 * earlier guaranteeDirExists check) may have created $path between the
+	 * caller's file_exists() test and now (TOCTOU race). @ suppresses the
+	 * resulting "File exists" warning; is_dir() confirms the dir is really there.
+	 */
 	$results = @mkdir($path, $octalPerms) || is_dir($path);
 	umask($umask);
 	return $results;
