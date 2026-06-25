@@ -584,7 +584,13 @@ class GalleryPlatform {
 	}
 
 	$umask = umask(0);
-	$results = mkdir($path, $octalPerms);
+	/*
+	 * Treat an already-existing directory as success: another request (or an
+	 * earlier guaranteeDirExists check) may have created $path between the
+	 * caller's file_exists() test and now (TOCTOU race). @ suppresses the
+	 * resulting "File exists" warning; is_dir() confirms the dir is really there.
+	 */
+	$results = @mkdir($path, $octalPerms) || is_dir($path);
 	umask($umask);
 	return $results;
     }
