@@ -171,6 +171,34 @@ class GalleryUser extends GalleryEntity {
      */
     function isCorrectPassword($password) {
 	$valid = $this->getHashedPassword();
+
+	/* Match crypt methods, which start with $x$ */
+	if (isset($valid[0]) && $valid[0] === '$') {
+	    if (strlen($valid) == 34 && (strpos($valid, '$P$') === 0 || strpos($valid, '$H$') === 0)) {
+		GalleryCoreApi::requireOnce('lib/phpass/PasswordHash.inc');
+		$hashGenerator = new PasswordHash(10, true);
+		return $hashGenerator->CheckPassword($password, $valid);
+	    }
+	    
+	    if (function_exists('password_verify')) {
+		if (preg_match('/^\$(2[axy]|argon2i|argon2id)\$/', $valid)) {
+		    return password_verify($password, $valid);
+		}
+	    }
+
+	    $hash = crypt($password, $valid);
+	    if (function_exists('hash_equals')) {
+		if (hash_equals($valid, $hash)) {
+		    return true;
+		}
+	    } else {
+		if ($hash === $valid) {
+		    return true;
+		}
+	    }
+	    return false;
+	}
+
 	$salt = substr($valid, 0, 4);
 	/* Support both old (G1 thru 1.4.0; G2 thru alpha-4) and new password schemes: */
 	$guess = (strlen($valid) == 32) ? md5($password) : ($salt . md5($salt . $password));
@@ -203,7 +231,7 @@ class GalleryUser extends GalleryEntity {
      * @param string $newPassword a plaintext password
      */
     function changePassword($newPassword) {
-	$this->setHashedPassword(GalleryUtilities::md5Salt($newPassword));
+	$this->setHashedPassword(GalleryUtilities::hashPassword($newPassword));
     }
 
     /**

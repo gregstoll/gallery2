@@ -205,7 +205,7 @@ class GalleryPendingUser extends GalleryUser {
      * @param string $newPassword a plaintext password
      */
     function changePassword($newPassword) {
-	$this->setHashedPassword(GalleryUtilities::md5Salt($newPassword));
+	$this->setHashedPassword(GalleryUtilities::hashPassword($newPassword));
     }
 
     /**

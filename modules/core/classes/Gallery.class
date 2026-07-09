@@ -286,6 +286,16 @@ class Gallery {
     }
 
     /**
+     * Get if a key exists from the Gallery configuration settings
+     *
+     * @return boolean
+     */
+    function isConfig($key) {
+	assert(!empty($key));
+	return array_key_exists($key,$this->_config);
+    }
+
+    /**
      * Initialize session.
      *
      * @return GalleryStatus a status code

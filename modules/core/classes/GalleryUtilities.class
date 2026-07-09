@@ -1290,7 +1290,78 @@ class GalleryUtilities {
      * @return boolean true if correct
      */
     static function isCorrectPassword($guess, $hashedPassword) {
+	/* Match crypt methods, which start with $x$ */
+	if (isset($hashedPassword[0]) && $hashedPassword[0] === '$') {
+	    if (strlen($hashedPassword) == 34 && (strpos($hashedPassword, '$P$') === 0 || strpos($hashedPassword, '$H$') === 0)) {
+		GalleryCoreApi::requireOnce('lib/phpass/PasswordHash.inc');
+		$hashGenerator = new PasswordHash(10, true);
+		return $hashGenerator->CheckPassword($guess, $hashedPassword);
+	    }
+	    
+	    if (function_exists('password_verify')) {
+		if (preg_match('/^\$(2[axy]|argon2i|argon2id)\$/', $hashedPassword)) {
+		    return password_verify($guess, $hashedPassword);
+		}
+	    }
+
+	    $hash = crypt($guess, $hashedPassword);
+	    if (function_exists('hash_equals')) {
+		if (hash_equals($hashedPassword, $hash)) {
+		    return true;
+		}
+	    } else {
+		if ($hash === $hashedPassword) {
+		    return true;
+		}
+	    }
+	    return false;
+	}
+
 	return (GalleryUtilities::md5Salt($guess, $hashedPassword) === $hashedPassword);
+    }
+
+    /**
+     * Create a hashed password using the configured hashing algorithm.
+     * @param string $password plaintext password
+     * @return string hashed password
+     */
+    static function hashPassword($password) {
+	global $gallery;
+	if ($gallery->isConfig('passwordHashMethod')) {
+	    $method = $gallery->getConfig('passwordHashMethod');
+	}
+	if (empty($method)) {
+	    $method = 'salted md5';
+	}
+
+	if ($method == 'phpass') {
+	    GalleryCoreApi::requireOnce('lib/phpass/PasswordHash.inc');
+	    $hashGenerator = new PasswordHash(10, true);
+	    return $hashGenerator->HashPassword($password);
+	} else if ($method == 'bcrypt') {
+	    if (function_exists('password_hash')) {
+		return password_hash($password, PASSWORD_BCRYPT);
+	    } else {
+		$chars = './ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+		$salt = '$2y$10$';
+		for ($i = 0; $i < 22; $i++) {
+		    $salt .= $chars[mt_rand(0, 63)];
+		}
+		return crypt($password, $salt);
+	    }
+	} else if ($method == 'crypt-sha256') {
+	    $salt = '$5$rounds=5000$' . substr(md5(mt_rand()), 0, 16) . '$';
+	    return crypt($password, $salt);
+	} else if ($method == 'crypt-sha512') {
+	    $salt = '$6$rounds=5000$' . substr(md5(mt_rand()), 0, 16) . '$';
+	    return crypt($password, $salt);
+	} else if ($method == 'argon2i' && defined('PASSWORD_ARGON2I')) {
+	    return password_hash($password, PASSWORD_ARGON2I);
+	} else if ($method == 'argon2id' && defined('PASSWORD_ARGON2ID')) {
+	    return password_hash($password, PASSWORD_ARGON2ID);
+	}
+
+	return GalleryUtilities::md5Salt($password);
     }
 
     /**
