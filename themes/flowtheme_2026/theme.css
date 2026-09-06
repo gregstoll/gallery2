@@ -1,0 +1,566 @@
+/*
+ * flowtheme_2026 v1.1 - a modern theme for Gallery 2.3.2
+ * Cool-neutral chrome so warm photography advances off the page.
+ * Three-state theming: system (default), explicit light, explicit dark.
+ */
+
+:root {
+  --bg:        #f4f5f6;
+  --surface:   #ffffff;
+  --surface-2: #eceef0;
+  --ink:       #16181a;
+  --ink-2:     #565d64;
+  --ink-3:     #848c94;
+  --rule:      #e2e5e8;
+  --rule-2:    #cdd3d8;
+  --accent:    #2f7d80;
+  --accent-sf: #e6f1f1;
+  --on-accent: #ffffff;
+  --danger:    #b4413a;
+  --shadow-sm: 0 1px 2px rgba(16,24,32,.05);
+  --shadow:    0 2px 4px rgba(16,24,32,.05), 0 12px 28px rgba(16,24,32,.09);
+  --radius:    12px;
+  --radius-sm: 8px;
+  --maxw:      1600px;
+  /* declare support for both; pinning one here would stop
+     prefers-color-scheme from ever matching the other */
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#0e1013; --surface:#16191c; --surface-2:#1d2126;
+    --ink:#e9ebed; --ink-2:#a2aab1; --ink-3:#727b83;
+    --rule:#242a2f; --rule-2:#333b42; --accent:#63b8bd; --accent-sf:#16292b; --on-accent:#0e1013;
+    --danger:#e0796f;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.5);
+    --shadow: 0 2px 4px rgba(0,0,0,.5), 0 12px 28px rgba(0,0,0,.42);
+  }
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:#0e1013; --surface:#16191c; --surface-2:#1d2126;
+  --ink:#e9ebed; --ink-2:#a2aab1; --ink-3:#727b83;
+  --rule:#242a2f; --rule-2:#333b42; --accent:#63b8bd; --accent-sf:#16292b; --on-accent:#0e1013;
+  --danger:#e0796f;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.5);
+  --shadow: 0 2px 4px rgba(0,0,0,.5), 0 12px 28px rgba(0,0,0,.42);
+}
+
+* { box-sizing: border-box; }
+body.gallery {
+  margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+       "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+a { color:var(--accent); text-decoration:none; }
+a:hover { text-decoration:underline; }
+a:focus-visible, button:focus-visible {
+  outline:2px solid var(--accent); outline-offset:2px; border-radius:4px;
+}
+img { max-width:100%; height:auto; }
+
+/* ================= header ================= */
+.ft-header {
+  position:sticky; top:0; z-index:40;
+  background:var(--surface); border-bottom:1px solid var(--rule);
+  box-shadow:var(--shadow-sm);
+}
+.ft-header-inner {
+  max-width:var(--maxw); margin:0 auto; padding:11px 22px;
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+}
+.ft-brand {
+  font-weight:680; letter-spacing:-.015em; font-size:15px; color:var(--ink);
+  white-space:nowrap; display:inline-flex; align-items:center; gap:8px;
+}
+.ft-brand::before {
+  content:""; width:9px; height:9px; border-radius:2px;
+  background:var(--accent); display:inline-block;
+}
+.ft-brand:hover { text-decoration:none; color:var(--accent); }
+
+/* ---- breadcrumb: chevrons, current emphasised ---- */
+.ft-crumb { flex:1 1 300px; min-width:0; font-size:13.5px; }
+.ft-crumb .block-core-BreadCrumb {
+  display:flex; align-items:center; flex-wrap:wrap; gap:0;
+}
+.ft-crumb [class^="BreadCrumb-"] { display:inline-flex; align-items:center; }
+.ft-crumb [class^="BreadCrumb-"] + [class^="BreadCrumb-"]::before {
+  content:"›"; margin:0 9px; color:var(--ink-3); font-size:15px; line-height:1;
+}
+.ft-crumb a { color:var(--ink-2); }
+.ft-crumb a:hover { color:var(--accent); text-decoration:none; }
+.ft-crumb span[class^="BreadCrumb-"] { color:var(--ink); font-weight:560; }
+
+/* ---- system links as quiet pills ---- */
+.ft-syslinks { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.ft-syslinks .block-core-SystemLink a {
+  display:inline-block; border:1px solid var(--rule-2); border-radius:999px;
+  padding:4px 12px; font-size:12.5px; color:var(--ink-2); background:var(--surface);
+  transition:border-color .15s ease, color .15s ease, background .15s ease;
+}
+.ft-syslinks .block-core-SystemLink a:hover {
+  border-color:var(--accent); color:var(--accent);
+  background:var(--accent-sf); text-decoration:none;
+}
+.ft-toggle {
+  appearance:none; border:1px solid var(--rule-2); background:var(--surface);
+  color:var(--ink-2); border-radius:999px; padding:4px 12px;
+  font:inherit; font-size:12.5px; cursor:pointer; line-height:1.5;
+  display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+  transition:border-color .15s ease, color .15s ease;
+}
+.ft-toggle::before {
+  content:""; width:8px; height:8px; border-radius:50%;
+  background:var(--accent); opacity:.85;
+}
+.ft-toggle:hover { border-color:var(--accent); color:var(--accent); }
+
+/* ================= layout ================= */
+.ft-main { max-width:var(--maxw); margin:0 auto; padding:30px 22px 80px; }
+.ft-layout { display:grid; grid-template-columns:1fr; gap:30px; }
+@media (min-width:1080px) { .ft-layout.has-side { grid-template-columns:236px minmax(0,1fr); } }
+.ft-side { min-width:0; }
+.ft-side:empty { display:none; }
+.ft-content { min-width:0; }
+
+/* ================= page head ================= */
+.ft-pagehead {
+  margin-bottom:26px; padding-bottom:18px; border-bottom:1px solid var(--rule);
+}
+.ft-pagehead h1 {
+  margin:0 0 8px; font-size:27px; font-weight:660;
+  letter-spacing:-.022em; line-height:1.2; text-wrap:balance;
+}
+.ft-desc { margin:0; color:var(--ink-2); max-width:70ch; }
+.ft-meta {
+  margin-top:12px; font-size:12.5px; color:var(--ink-3);
+  display:flex; gap:16px; flex-wrap:wrap; align-items:center;
+}
+.ft-count {
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:12px; letter-spacing:.03em; color:var(--ink-3);
+}
+
+/* ================= thumbnail grid ================= */
+.ft-grid {
+  display:grid; gap:22px; align-items:start;
+  grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));
+}
+.ft-cell { min-width:0; }
+.ft-tile {
+  display:flex; flex-direction:column; height:100%;
+  background:var(--surface); border:1px solid var(--rule);
+  border-radius:var(--radius); overflow:hidden;
+  transition:border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+.ft-tile:hover, .ft-tile:focus-visible {
+  border-color:var(--rule-2); box-shadow:var(--shadow);
+  transform:translateY(-3px); text-decoration:none;
+}
+.ft-frame {
+  display:block; aspect-ratio:4 / 3; background:var(--surface-2);
+  overflow:hidden; position:relative;
+}
+.ft-frame img {
+  width:100%; height:100%; object-fit:cover; display:block;
+  transition:transform .35s cubic-bezier(.2,.7,.3,1);
+}
+.ft-tile:hover .ft-frame img { transform:scale(1.045); }
+.ft-noimg {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  color:var(--ink-3); font-size:12px; text-align:center; padding:16px;
+}
+.ft-cap { padding:12px 13px 14px; display:flex; flex-direction:column; gap:4px; }
+.ft-cap-title {
+  font-size:14px; font-weight:560; color:var(--ink); line-height:1.35;
+  overflow-wrap:anywhere;   /* full titles, never truncated */
+}
+.ft-cap-sub {
+  font-size:12px; color:var(--ink-3); line-height:1.45; overflow-wrap:anywhere;
+}
+.ft-badge {
+  align-self:flex-start; font-size:9.5px; letter-spacing:.09em;
+  text-transform:uppercase; font-weight:650; color:var(--accent);
+  background:var(--accent-sf); border-radius:4px; padding:2px 6px;
+}
+
+/* ================= photo page ================= */
+.ft-photo { display:flex; justify-content:center; }
+.ft-photo-frame {
+  background:var(--surface); border:1px solid var(--rule);
+  border-radius:var(--radius); padding:12px; max-width:100%;
+  box-shadow:var(--shadow); line-height:0;
+}
+.ft-photo-frame img { border-radius:var(--radius-sm); display:block; }
+
+/* ================= pagination / navigator ================= */
+.gbNavigator, .ft-photo-nav { margin-top:30px; }
+.gbNavigator .block-core-Navigator,
+.ft-photo-nav .block-core-Navigator {
+  display:flex; justify-content:center; align-items:center;
+  gap:10px; flex-wrap:wrap;
+}
+.gbNavigator .block-core-Navigator > div,
+.ft-photo-nav .block-core-Navigator > div {
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+}
+.gbNavigator a, .ft-photo-nav a {
+  display:inline-flex; align-items:center; gap:7px;
+  border:1px solid var(--rule-2); background:var(--surface);
+  border-radius:999px; padding:9px 18px;
+  font-size:13.5px; font-weight:540; color:var(--ink-2);
+  transition:border-color .15s ease, color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.gbNavigator a:hover, .ft-photo-nav a:hover {
+  border-color:var(--accent); color:var(--accent);
+  background:var(--accent-sf); box-shadow:var(--shadow-sm); text-decoration:none;
+}
+.gbNavigator a.previous::before, .ft-photo-nav a.previous::before { content:"←"; }
+.gbNavigator a.next::after,      .ft-photo-nav a.next::after      { content:"→"; }
+.gbNavigator a.first::before,    .ft-photo-nav a.first::before    { content:"«"; }
+.gbNavigator a.last::after,      .ft-photo-nav a.last::after      { content:"»"; }
+.gbNavigator .block-core-Navigator { color:var(--ink-3); font-size:13px; }
+
+/* ================= sidebar / blocks ================= */
+.gbBlock { margin-bottom:18px; }
+.ft-side .gbBlock {
+  background:var(--surface); border:1px solid var(--rule);
+  border-radius:var(--radius); padding:14px 16px; font-size:13.5px;
+}
+.ft-side h3, .ft-side h4 {
+  margin:0 0 9px; font-size:11px; text-transform:uppercase;
+  letter-spacing:.09em; color:var(--ink-3); font-weight:680;
+}
+.ft-side ul { margin:0; padding-left:1.1em; }
+.ft-side li { margin:3px 0; }
+.ft-panel {
+  background:var(--surface); border:1px solid var(--rule);
+  border-radius:var(--radius); padding:22px 24px;
+}
+.ft-empty {
+  padding:64px 20px; text-align:center; color:var(--ink-3);
+  border:1px dashed var(--rule-2); border-radius:var(--radius);
+}
+
+/* Gallery2's own injected classes */
+.giDescription { color:var(--ink-2); }
+.giInfo { color:var(--ink-3); font-size:12.5px; }
+.block-core-ItemLinks { margin-top:8px; font-size:12.5px; }
+.block-core-ItemLinks a { color:var(--ink-3); }
+.block-core-ItemLinks a:hover { color:var(--accent); }
+table { border-collapse:collapse; }
+input, select, textarea, button { font:inherit; color:inherit; }
+input[type=text], input[type=password], select, textarea {
+  background:var(--surface); border:1px solid var(--rule-2);
+  border-radius:var(--radius-sm); padding:7px 10px;
+}
+.ft-footer {
+  border-top:1px solid var(--rule); margin-top:52px; padding-top:20px;
+  font-size:12px; color:var(--ink-3);
+  display:flex; gap:16px; flex-wrap:wrap; align-items:center;
+}
+.ft-error { border-left:3px solid var(--danger); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition:none !important; animation:none !important; }
+  .ft-tile:hover { transform:none; }
+  .ft-tile:hover .ft-frame img { transform:none; }
+}
+@media (max-width:640px) {
+  .ft-main { padding:22px 16px 60px; }
+  .ft-pagehead h1 { font-size:22px; }
+  .ft-grid { gap:16px; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); }
+}
+
+/* =========================================================
+   Justified photo grid (Immich / Google-Photos style)
+   Variable width, uniform row height, tight gaps, no chrome.
+   Aspect ratio comes from Gallery2's thumbnail dimensions.
+   ========================================================= */
+.ft-just {
+  display:flex; flex-wrap:wrap; gap:6px; margin:0;
+}
+.ft-just .ft-cell {
+  position:relative; height:200px; margin:0;
+  flex-grow:1; flex-basis:calc(var(--ar, 1.333) * 200px);
+  min-width:110px; max-width:100%;
+}
+/* keeps the final row at natural size instead of stretching it */
+.ft-just::after { content:""; flex-grow:999999; }
+
+.ft-just .ft-shot {
+  display:block; width:100%; height:100%; overflow:hidden;
+  border-radius:4px; background:var(--surface-2); position:relative;
+}
+.ft-just .ft-shot img {
+  width:100%; height:100%; object-fit:cover; display:block;
+  transition:transform .4s cubic-bezier(.2,.7,.3,1), filter .2s ease;
+}
+.ft-just .ft-shot:hover img { transform:scale(1.05); }
+.ft-just .ft-shot:hover { text-decoration:none; }
+.ft-just .ft-shot::after {
+  content:""; position:absolute; inset:0; border-radius:4px;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);
+  pointer-events:none;
+}
+/* caption slides up on hover, like Immich's hover chrome */
+.ft-shot-cap {
+  position:absolute; left:0; right:0; bottom:0; padding:20px 10px 8px;
+  font-size:11.5px; line-height:1.35; color:#fff;
+  background:linear-gradient(to top, rgba(0,0,0,.72), rgba(0,0,0,0));
+  opacity:0; transform:translateY(6px);
+  transition:opacity .18s ease, transform .18s ease;
+  overflow-wrap:anywhere; pointer-events:none;
+}
+.ft-just .ft-shot:hover .ft-shot-cap,
+.ft-just .ft-shot:focus-visible .ft-shot-cap { opacity:1; transform:translateY(0); }
+.ft-just .ft-noimg {
+  position:absolute; inset:0; display:flex; align-items:center;
+  justify-content:center; color:var(--ink-3); font-size:11px;
+}
+@media (max-width:640px) {
+  .ft-just .ft-cell { height:130px; flex-basis:calc(var(--ar,1.333) * 130px); }
+  .ft-just { gap:4px; }
+}
+
+/* ---- album cards: cover-led, closer to Immich's album tiles ---- */
+.ft-grid--albums { grid-template-columns:repeat(auto-fill, minmax(232px,1fr)); gap:24px; }
+.ft-grid--albums .ft-frame { aspect-ratio:1 / 1; border-radius:var(--radius) var(--radius) 0 0; }
+.ft-grid--albums .ft-tile { border-radius:var(--radius); }
+
+/* ========================= lightbox ========================= */
+.ft-lb {
+  position:fixed; inset:0; z-index:2000;
+  background:rgba(8,10,12,.94);
+  align-items:center; justify-content:center;
+  /* closed by default: visibility is driven by .is-open, never by [hidden] alone,
+     because an author display rule outranks the UA [hidden]{display:none} */
+  display:none;
+}
+.ft-lb.is-open { display:flex; animation:ft-fade .16s ease; }
+.ft-lb[hidden] { display:none !important; }
+/* an author rule beats the UA [hidden] display:none, so state it explicitly;
+   without this the lightbox overlay is permanently visible */
+.ft-lb[hidden] { display:none !important; }
+@keyframes ft-fade { from { opacity:0 } to { opacity:1 } }
+.ft-lb-stage {
+  position:relative; width:100%; height:100%;
+  display:flex; align-items:center; justify-content:center;
+  padding:64px 76px 84px;
+}
+.ft-lb-img {
+  max-width:100%; max-height:100%; object-fit:contain;
+  border-radius:4px; box-shadow:0 20px 60px rgba(0,0,0,.6);
+  opacity:1; transition:opacity .16s ease;
+}
+.ft-lb.is-loading .ft-lb-img { opacity:0; }
+.ft-lb-spin {
+  position:absolute; width:34px; height:34px; border-radius:50%;
+  border:2.5px solid rgba(255,255,255,.22); border-top-color:rgba(255,255,255,.85);
+  animation:ft-spin .7s linear infinite; opacity:0; pointer-events:none;
+}
+.ft-lb.is-loading .ft-lb-spin { opacity:1; }
+@keyframes ft-spin { to { transform:rotate(360deg) } }
+
+.ft-lb-close, .ft-lb-nav {
+  position:absolute; z-index:2; appearance:none; cursor:pointer;
+  background:rgba(255,255,255,.10); color:#fff;
+  border:1px solid rgba(255,255,255,.18); border-radius:999px;
+  font:inherit; line-height:1; display:flex; align-items:center; justify-content:center;
+  transition:background .15s ease, opacity .15s ease, border-color .15s ease;
+}
+.ft-lb-close { top:18px; right:20px; width:42px; height:42px; font-size:24px; }
+.ft-lb-nav   { top:50%; transform:translateY(-50%); width:48px; height:48px; font-size:20px; }
+.ft-lb-prev  { left:20px; }
+.ft-lb-next  { right:20px; }
+.ft-lb-close:hover, .ft-lb-nav:hover:not(:disabled) {
+  background:rgba(255,255,255,.20); border-color:rgba(255,255,255,.35);
+}
+.ft-lb-nav:disabled { opacity:.22; cursor:default; }
+.ft-lb-close:focus-visible, .ft-lb-nav:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+
+.ft-lb-bar {
+  position:absolute; left:0; right:0; bottom:0; padding:16px 24px 20px;
+  display:flex; align-items:center; justify-content:space-between; gap:20px;
+  color:rgba(255,255,255,.9); font-size:13px;
+  background:linear-gradient(to top, rgba(0,0,0,.68), rgba(0,0,0,0));
+}
+.ft-lb-cap   { overflow-wrap:anywhere; }
+.ft-lb-count { color:rgba(255,255,255,.55); font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+@media (max-width:640px) {
+  .ft-lb-stage { padding:56px 12px 76px; }
+  .ft-lb-nav { width:40px; height:40px; }
+  .ft-lb-prev { left:8px; } .ft-lb-next { right:8px; }
+}
+
+/* ===================== infinite scroll sentinel ===================== */
+.ft-sentinel {
+  height:56px; display:flex; align-items:center; justify-content:center; margin-top:22px;
+}
+.ft-sentinel-dot {
+  width:22px; height:22px; border-radius:50%;
+  border:2px solid var(--rule-2); border-top-color:var(--accent);
+  opacity:0; transition:opacity .2s ease;
+}
+.ft-sentinel.is-loading .ft-sentinel-dot { opacity:1; animation:ft-spin .7s linear infinite; }
+/* with JS active the pagination links become a fallback, so soften them */
+.ft-has-infinite .gbNavigator { opacity:.55; }
+
+/* ============ stock Gallery2 UI (admin, module and item views) ============
+   These templates are not ours - they ship with Gallery2 and use its own
+   structural classes. Style them into the theme rather than erasing them:
+   gcBackground1 alone appears 385 times across 192 module templates. */
+
+.gcBackground1 { background:var(--surface); }
+.gcBackground2 { background:var(--surface-2); }
+.gcBorder1, .gcBorder2 {
+  border:1px solid var(--rule); border-radius:var(--radius-sm);
+}
+.ft-panel .gcBorder1, .ft-panel .gcBorder2 { padding:14px 16px; }
+
+/* --- the admin two-column layout is a bare <table> --- */
+.ft-panel table { border-collapse:collapse; }
+.ft-panel > form > div > table > tbody > tr > td,
+.ft-panel > table > tbody > tr > td { vertical-align:top; }
+.ft-panel > form > div > table > tbody > tr > td + td,
+.ft-panel > table > tbody > tr > td + td { padding-left:26px; }
+
+/* --- admin navigation lists: <ul><li class="gbAdminLink"><a> --- */
+.ft-panel ul { list-style:none; margin:0; padding:0; }
+.ft-panel .gbBlock > ul > li + li {
+  margin-top:14px; padding-top:14px; border-top:1px solid var(--rule);
+}
+/* icons.css paints a 16px icon into the li's 22px left padding, then pulls the
+   anchor back over it with margin-left:-22px and relies on the anchor's own
+   padding-left to keep the label clear. Keep that reserve, widened for air. */
+.ft-panel li.gbAdminLink {
+  margin:1px 0; border-radius:var(--radius-sm);
+}
+.ft-panel li.gbAdminLink > a {
+  display:block; margin-left:-22px;
+  padding:6px 10px 6px 32px;
+  color:var(--ink-2); font-size:13.5px; line-height:1.4;
+}
+/* highlight the li, not the anchor: the icon is the li's background-image and a
+   child's background would paint straight over it */
+.ft-panel li.gbAdminLink:hover,
+.ft-panel li.gbAdminLink:focus-within { background-color:var(--accent-sf); }
+.ft-panel li.gbAdminLink:hover > a,
+.ft-panel li.gbAdminLink:focus-within > a { color:var(--accent); text-decoration:none; }
+
+/* --- headings inside stock panels --- */
+.ft-panel h2 {
+  margin:0 0 12px; font-size:11px; text-transform:uppercase;
+  letter-spacing:.09em; color:var(--ink-3); font-weight:680;
+}
+.ft-panel h3 { margin:22px 0 8px; font-size:16px; font-weight:640; }
+.ft-panel h4 { margin:18px 0 6px; font-size:14px; font-weight:640; }
+.ft-panel p  { margin:0 0 12px; }
+
+/* --- data tables --- */
+.gbDataTable { width:100%; border-collapse:collapse; font-size:13.5px; }
+.gbDataTable th, .gbDataTable td {
+  padding:8px 10px; text-align:left; vertical-align:top;
+  border-bottom:1px solid var(--rule);
+}
+.gbDataTable th {
+  font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--ink-3); font-weight:680; background:var(--surface-2);
+  border-bottom:1px solid var(--rule-2);
+}
+.gbDataTable tr:last-child td { border-bottom:0; }
+
+/* --- form controls --- */
+.ft-panel fieldset {
+  border:1px solid var(--rule); border-radius:var(--radius-sm);
+  padding:14px 16px; margin:0 0 18px;
+}
+.ft-panel legend { padding:0 6px; color:var(--ink-3); font-size:12px; }
+input[type=submit], input[type=button], input[type=reset],
+.inputTypeSubmit, .ft-panel button {
+  background:var(--accent); color:var(--on-accent);
+  border:1px solid transparent; border-radius:var(--radius-sm);
+  padding:8px 14px; font-weight:620; cursor:pointer;
+}
+input[type=submit]:hover, input[type=button]:hover,
+.inputTypeSubmit:hover, .ft-panel button:hover { filter:brightness(1.08); }
+input[type=submit]:disabled, .inputTypeSubmit:disabled { opacity:.5; cursor:default; }
+
+/* --- status messages --- */
+.giError, .giWarning, .giSuccess {
+  padding:10px 13px; border-radius:var(--radius-sm);
+  border:1px solid var(--rule-2); margin:0 0 14px;
+}
+.giError   { color:var(--danger); border-color:var(--danger); }
+.giSuccess { color:var(--accent); border-color:var(--accent); }
+
+/* ---- sidebar blocks ----------------------------------------------------
+   Gallery2 emits these as bare <a> and <span> elements with no wrappers at
+   all, so without explicit display rules they render as one run-on line of
+   inline text. Every block that can appear in the sidebar is covered. --- */
+
+/* icon-bearing admin links: Add Items, Edit Album, Advanced Search, ... */
+.ft-side a.gbAdminLink {
+  display:block; margin:0;
+  padding:6px 8px 6px 32px !important;   /* icons.css reserves 22px !important */
+  border-radius:var(--radius-sm); color:var(--ink-2); line-height:1.4;
+}
+/* background-color, never the shorthand: the shorthand drops the icon image */
+.ft-side a.gbAdminLink:hover,
+.ft-side a.gbAdminLink:focus-visible {
+  background-color:var(--accent-sf); color:var(--accent); text-decoration:none;
+}
+.ft-side .block-core-ItemLinks {
+  margin-top:0; font-size:13px; display:flex; flex-direction:column;
+}
+
+/* peer list (the "Gallery" box): sibling albums, where the current album is
+   a bare <span class="current"> and elided ranges a <span class="neck"> */
+.ft-side .block-core-PeerList { display:flex; flex-direction:column; font-size:13px; }
+.ft-side .block-core-PeerList a,
+.ft-side .block-core-PeerList .current {
+  display:block; padding:5px 8px; margin:0 -8px;
+  border-radius:var(--radius-sm); color:var(--ink-2); overflow-wrap:anywhere;
+}
+.ft-side .block-core-PeerList a:hover,
+.ft-side .block-core-PeerList a:focus-visible {
+  background-color:var(--accent-sf); color:var(--accent); text-decoration:none;
+}
+.ft-side .block-core-PeerList .current {
+  background-color:var(--surface-2); color:var(--ink); font-weight:640;
+}
+.ft-side .block-core-PeerList .neck {
+  display:block; padding:1px 8px; margin:0 -8px;
+  color:var(--ink-3); letter-spacing:.18em; line-height:1;
+}
+
+/* random-image block */
+.ft-side .one-image { display:flex; flex-direction:column; gap:8px; }
+.ft-side .one-image img {
+  display:block; width:100%; height:auto; border-radius:var(--radius-sm);
+}
+.ft-side .one-image h4 {
+  margin:0; font-size:13px; font-weight:600;
+  text-transform:none; letter-spacing:0; color:var(--ink);
+}
+.ft-side .one-image .giInfo,
+.ft-side .one-image .summary {
+  display:block; margin:0; font-size:12px; color:var(--ink-3);
+}
+
+/* search block */
+.ft-side form,
+.ft-side form > div { display:flex; flex-direction:column; gap:8px; }
+.ft-side input[type=text] { width:100%; }
+
+.giBlockToggle { font-size:12px; color:var(--ink-3); }
+
+/* ---- movie items: HTML5 player replacing Gallery2's ActiveX markup ---- */
+.ft-video video {
+  display:block; width:100%; height:auto; max-height:78vh;
+  background:#000; border-radius:var(--radius-sm);
+}
+.ft-video-note { margin:10px 0 0; font-size:12.5px; color:var(--ink-3); }
