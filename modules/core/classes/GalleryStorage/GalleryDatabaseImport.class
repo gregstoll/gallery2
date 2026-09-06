@@ -442,7 +442,7 @@ class _GalleryPluginTag extends GalleryImportElement {
      * @see GalleryXmlHandler::_processStartElement
      * @access protected
      */
-    function _processStartTag($tag, $attributes) {
+    function _processStartElement($tag, $attributes) {
     	if ($tag == 'sequence') {
 	    return new _GallerySequenceTag($this, $attributes);
     	} else if ($tag == 'table') {
@@ -730,7 +730,7 @@ class _GalleryFieldDefinitionTag extends GalleryImportElement {
 	    $this->_fieldDefinition['notNull'] = $attributes['not-null'];
 	}
 	if (!empty($attributes['not-null-empty-allowed'])) {
-	    $this->$this->_fieldDefinition['notNullEmptyAllowed'] =
+	    $this->_fieldDefinition['notNullEmptyAllowed'] =
 		    		$attributes['not-null-empty-allowed'];
 	}
     }
