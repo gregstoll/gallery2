@@ -179,6 +179,18 @@ class UpdatesAlbumView extends GalleryView {
 	}
 	$size = $params['size.' . $param];
 	$type = $params['type.' . $param];
+
+	/*
+	 * Let the sort field be configured per album type.  Galleries created by
+	 * import commonly share a single creationTimestamp across every item,
+	 * which leaves the date album in no meaningful order; originationTimestamp
+	 * (when the photo was taken) is the useful key in that case.  Unset or
+	 * empty leaves the caller's choice alone, so subclasses that pass an
+	 * explicit sort (random, viewCount) are unaffected.
+	 */
+	if (!empty($params['orderBy.' . $param])) {
+	    $orderBy = $params['orderBy.' . $param];
+	}
 	if (!$size) {
 	    return array(GalleryCoreApi::error(ERROR_PERMISSION_DENIED), null);
 	}
