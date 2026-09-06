@@ -9,7 +9,7 @@
     {if empty($head.title)}
       <title>{$theme.item.title|markup:strip|default:$theme.item.pathComponent}</title>
     {/if}
-    <link rel="stylesheet" type="text/css" href="{g->theme url="theme.css"}?v=4"/>
+    <link rel="stylesheet" type="text/css" href="{g->theme url="theme.css"}?v=5"/>
     {literal}<script type="text/javascript">
       /* Apply the stored appearance before first paint, to avoid a flash. */
       (function () {
@@ -29,8 +29,16 @@
     {if $theme.useFullScreen}
       {include file="gallery:`$theme.moduleTemplate`" l10Domain=$theme.moduleL10Domain}
     {else}
-      <div class="tl-shell">
+      {* Site Admin, Your Account and the item editors bring their own left
+         nav and their own panels. Showing the rail beside them gives two
+         sidebars and a pane inside a pane, so those run full width. *}
+      {assign var="taskPage" value=0}
+      {if $theme.pageType == 'admin' || $theme.pageType == 'module'}
+        {assign var="taskPage" value=1}
+      {/if}
+      <div class="tl-shell{if $taskPage} tl-shell--wide{/if}">
 
+        {if !$taskPage}
         <aside class="tl-rail" id="tlRail">
           <a class="tl-brand" href="{g->url}">
             <span class="tl-brand-mark" aria-hidden="true"></span>
@@ -52,13 +60,26 @@
 
           <div class="tl-rail-blocks">{g->theme include="sidebar.tpl"}</div>
         </aside>
+        {/if}
 
         <div class="tl-column">
           <header class="tl-topbar">
-            <button type="button" class="tl-railtoggle" id="tlRailToggle"
-                    aria-label="{g->text text="Toggle navigation"}">
-              <span aria-hidden="true"></span>
-            </button>
+            {if $taskPage}
+              <a class="tl-brand tl-brand--bar"
+                 href="{if !empty($theme.rootAlbumId)}{g->url arg1="itemId=`$theme.rootAlbumId`"}{else}{g->url}{/if}">
+                <span class="tl-brand-mark" aria-hidden="true"></span>
+                <span class="tl-brand-text">{g->text text="Gallery"}</span>
+              </a>
+              <nav class="tl-topnav" aria-label="{g->text text="Sections"}">
+                <a href="{g->url arg1="view=dynamicalbum.UpdatesAlbum"}">{g->text text="Photos"}</a>
+                <a href="{if !empty($theme.rootAlbumId)}{g->url arg1="itemId=`$theme.rootAlbumId`"}{else}{g->url}{/if}">{g->text text="Albums"}</a>
+              </nav>
+            {else}
+              <button type="button" class="tl-railtoggle" id="tlRailToggle"
+                      aria-label="{g->text text="Toggle navigation"}">
+                <span aria-hidden="true"></span>
+              </button>
+            {/if}
 
             <div class="tl-search">{g->block type="search.SearchBlock" showAdvancedLink=false}</div>
 
@@ -103,7 +124,7 @@
       </div>
     {/if}
     </div>
-    <script type="text/javascript" defer src="{g->theme url="timeline.js"}?v=4"></script>
+    <script type="text/javascript" defer src="{g->theme url="timeline.js"}?v=5"></script>
     {g->trailer}
   </body>
 </html>

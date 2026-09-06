@@ -385,6 +385,43 @@ h1,h2,h3,h4 { margin:0; font-weight:640; }
 .tl-v-date { color:rgba(255,255,255,.6); white-space:nowrap; }
 .tl-v-count { margin-left:auto; color:rgba(255,255,255,.55); font-variant-numeric:tabular-nums; }
 
+/* ===================== task pages: admin, account, editors ===============
+   These views ship their own left nav and their own panels. The rail is
+   suppressed for them (see theme.tpl) so there is one sidebar, not two, and
+   the outer card is flattened so Gallery2's panels are not boxed inside
+   another box. */
+
+.tl-shell--wide .tl-column { width:100%; min-width:0; }
+.tl-panel--host { background:transparent; border:0; padding:0; }
+
+.tl-brand--bar { padding:0 6px 0 0; margin-right:2px; }
+.tl-topnav { display:flex; gap:2px; }
+.tl-topnav a {
+  padding:7px 14px; border-radius:999px;
+  color:var(--ink-2); font-size:13.5px; font-weight:560;
+}
+.tl-topnav a:hover, .tl-topnav a:focus-visible {
+  background:var(--surface-2); color:var(--ink); text-decoration:none;
+}
+
+/* Gallery2 lays admin out as a two-cell table; give it room and align it */
+.tl-panel--host table { width:100%; }
+.tl-panel--host td { vertical-align:top; }
+#gsSidebarCol { width:246px; padding-right:26px; }
+#gsSidebar, #gsContent {
+  background:var(--surface); border:1px solid var(--rule);
+  border-radius:var(--radius); padding:18px 20px;
+}
+#gsSidebar h2 { margin-bottom:14px; }
+#gsContent { min-width:0; }
+
+@media (max-width: 900px) {
+  #gsSidebarCol { width:auto; padding-right:0; display:block; }
+  .tl-panel--host td { display:block; }
+  #gsSidebar { margin-bottom:18px; }
+  .tl-topnav a { padding:7px 10px; }
+}
+
 /* ==================== Gallery2's own markup (admin etc.) ================= */
 .tl-panel { background:var(--surface); border:1px solid var(--rule); border-radius:var(--radius); padding:22px 24px; }
 .gcBackground1 { background:var(--surface); }
