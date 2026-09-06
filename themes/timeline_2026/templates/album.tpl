@@ -76,84 +76,73 @@
   </div>
 
 {else}
-  {* ---------------- date-grouped photo stream ---------------- *}
-  <div class="tl-stream" id="tlStream">
-  {assign var="lastGroup" value="__none__"}
-  {foreach from=$theme.children item=child name=kids}
-
-    {* labels are precomputed in theme.inc: three strftime calls per item is
-       far too expensive across a whole-library stream *}
-    {assign var="grpKey" value=$child.groupKey}
-    {if $child.groupKey == 'undated'}
-      {capture assign="grpLabel"}{g->text text="Undated"}{/capture}
-    {else}
-      {assign var="grpLabel" value=$child.groupLabel}
-    {/if}
-
-    {if $grpKey != $lastGroup}
-      {if !$smarty.foreach.kids.first}
-        </div></section>
-      {/if}
-      <section class="tl-group" data-key="{$grpKey}">
-        <h2 class="tl-groupdate">{$grpLabel}</h2>
-        <div class="tl-just">
-      {assign var="lastGroup" value=$grpKey}
-    {/if}
-
-    {* row height comes from the ORIGINAL photo's shape, not the square thumb *}
-    {if !empty($child.width) && !empty($child.height)}
-      {math assign="ar" equation="w / h" w=$child.width h=$child.height format="%.4f"}
-    {elseif isset($child.thumbnail) && !empty($child.thumbnail.height)}
-      {math assign="ar" equation="w / h" w=$child.thumbnail.width h=$child.thumbnail.height format="%.4f"}
-    {else}
-      {assign var="ar" value="1.3333"}
-    {/if}
-
-    {capture assign=linkUrl}{strip}
-      {if $theme.params.dynamicLinks == 'jump'}
-        {g->url arg1="view=core.ShowItem" arg2="itemId=`$child.id`"}
-      {else}
-        {g->url params=$theme.pageUrl arg1="itemId=`$child.id`"}
-      {/if}
-    {/strip}{/capture}
-
-    <div class="tl-cell" style="--ar: {$ar};">
-      {if $child.canContainChildren}
-        {* a sub-album among photos: navigate, never open the viewer *}
-        <a class="tl-tile tl-tile--album" href="{$linkUrl}">
-          {if isset($child.thumbnail)}
-            {g->image item=$child image=$child.thumbnail class="giThumbnail"
+  {* ---------------- date-grouped photo stream ----------------
+     Every month gets a section so the scrubber can reach it, but only the
+     first few carry tiles as markup. The rest are hydrated by timeline.js
+     from the payload below when they come near the viewport. *}
+  <div class="tl-stream" id="tlStream"
+       data-thumb-tpl="{g->url arg1="view=core.DownloadItem" arg2="itemId=__TID__" arg3="serialNumber=__TSN__"}"
+       data-full-tpl="{g->url arg1="view=core.DownloadItem" arg2="itemId=__ID__"}"
+       data-link-tpl="{g->url params=$theme.pageUrl arg1="itemId=__ID__"}"
+       data-album-label="{g->text text="Album"}">
+  {foreach from=$theme.groups item=group}
+    <section class="tl-group{if !$group.eager} is-lazy{/if}" data-key="{$group.key}"
+             data-count="{$group.count}"
+             {if !$group.eager}style="contain-intrinsic-size:auto {$group.est}px;"{/if}>
+      <h2 class="tl-groupdate">{if $group.label}{$group.label}{else}{g->text text="Undated"}{/if}</h2>
+      <div class="tl-just"{if !$group.eager} style="min-height:{$group.est}px"{/if}>
+      {foreach from=$group.items item=child}
+        {if !empty($child.width) && !empty($child.height)}
+          {math assign="ar" equation="w / h" w=$child.width h=$child.height format="%.4f"}
+        {elseif isset($child.thumbnail) && !empty($child.thumbnail.height)}
+          {math assign="ar" equation="w / h" w=$child.thumbnail.width h=$child.thumbnail.height format="%.4f"}
+        {else}
+          {assign var="ar" value="1.3333"}
+        {/if}
+        {capture assign=linkUrl}{strip}
+          {if $theme.params.dynamicLinks == 'jump'}
+            {g->url arg1="view=core.ShowItem" arg2="itemId=`$child.id`"}
+          {else}
+            {g->url params=$theme.pageUrl arg1="itemId=`$child.id`"}
+          {/if}
+        {/strip}{/capture}
+        <div class="tl-cell" style="--ar: {$ar};">
+          {if $child.canContainChildren}
+            <a class="tl-tile tl-tile--album" href="{$linkUrl}">
+              {if isset($child.thumbnail)}
+                {g->image item=$child image=$child.thumbnail class="giThumbnail"
                        loading="lazy" decoding="async"}
-          {else}<span class="tl-noimg" aria-hidden="true"></span>{/if}
-          <span class="tl-tile-cap">
-            <span class="tl-badge">{g->text text="Album"}</span>
-            {if !empty($child.title)}{$child.title|markup:strip}{else}{$child.pathComponent}{/if}
-          </span>
-        </a>
-      {else}
-        <a class="tl-tile" href="{$linkUrl}"
-           data-full="{g->url arg1="view=core.DownloadItem" arg2="itemId=`$child.id`"}"
-           data-title="{if !empty($child.title)}{$child.title|markup:strip|escape}{else}{$child.pathComponent|escape}{/if}"
-           {if !empty($child.dateLabel)}data-date="{$child.dateLabel}"{/if}>
-          {if isset($child.thumbnail)}
-            {g->image item=$child image=$child.thumbnail class="giThumbnail"
+              {else}<span class="tl-noimg" aria-hidden="true"></span>{/if}
+              <span class="tl-tile-cap">
+                <span class="tl-badge">{g->text text="Album"}</span>
+                {if !empty($child.title)}{$child.title|markup:strip}{else}{$child.pathComponent}{/if}</span>
+            </a>
+          {else}
+            <a class="tl-tile" href="{$linkUrl}"
+               data-full="{g->url arg1="view=core.DownloadItem" arg2="itemId=`$child.id`"}"
+               data-title="{if !empty($child.title)}{$child.title|markup:strip|escape}{else}{$child.pathComponent|escape}{/if}"
+               {if !empty($child.dateLabel)}data-date="{$child.dateLabel}"{/if}>
+              {if isset($child.thumbnail)}
+                {g->image item=$child image=$child.thumbnail class="giThumbnail"
                        loading="lazy" decoding="async"}
-          {else}<span class="tl-noimg" aria-hidden="true"></span>{/if}
-          <span class="tl-tile-cap">
-            {if !empty($child.title)}{$child.title|markup:strip}{else}{$child.pathComponent}{/if}
-          </span>
-        </a>
-      {/if}
-    </div>
-  {/foreach}
-  {if count($theme.children)}
+              {else}<span class="tl-noimg" aria-hidden="true"></span>{/if}
+              <span class="tl-tile-cap">
+                {if !empty($child.title)}{$child.title|markup:strip}{else}{$child.pathComponent}{/if}</span>
+            </a>
+          {/if}
         </div>
-      </section>
-  {/if}
+      {/foreach}
+      </div>
+    </section>
+  {/foreach}
   </div>
 
-  {* the scrubber is rendered complete from the whole item set, so it does not
-     grow as further pages load *}
+  {if !empty($theme.lazyData)}
+    <script type="application/json" id="tlLazyData">{$theme.lazyData}</script>
+  {/if}
+
+  {* rendered complete from the whole item set, so it does not grow as
+     sections hydrate *}
   {if !empty($theme.yearMarks)}
     <nav class="tl-scrub" id="tlScrub" aria-label="{g->text text="Jump to year"}">
       {foreach from=$theme.yearMarks item=mark}

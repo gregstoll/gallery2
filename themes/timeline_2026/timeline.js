@@ -146,8 +146,11 @@
     lb.addEventListener('click', function (e) {
       if (e.target === lb || e.target.classList.contains('tl-v-stage')) { close(); }
     });
-    lbImg.addEventListener('load',  function () { lb.classList.remove('is-loading'); });
-    lbImg.addEventListener('error', function () { lb.classList.remove('is-loading'); });
+    /* Changing src aborts any load already in flight, so a single handler is
+       enough; the guard is that the old frame is gone before the new src is set. */
+    function settle() { lb.classList.remove('is-loading'); }
+    lbImg.addEventListener('load', settle);
+    lbImg.addEventListener('error', settle);
   }
 
   function preload(i) {
@@ -159,6 +162,12 @@
     index = i;
     var s = shots[i];
     lb.classList.add('is-loading');
+    /* Drop the old frame outright. Changing src alone keeps the previous
+       image painted until the new one decodes, so a smaller image lands on
+       top of the larger one still showing underneath. */
+    lbImg.removeAttribute('src');
+    lbImg.removeAttribute('width');
+    lbImg.removeAttribute('height');
     lbImg.src = s.full;
     lbCap.textContent = s.title;
     lbDate.textContent = s.date;
@@ -207,8 +216,108 @@
     open(parseInt(a.getAttribute('data-lb'), 10) || 0);
   });
 
+  /* Build the viewer shell, but do not walk every tile yet: open() collects
+     on demand. On a whole-library stream the eager pass wrote an attribute
+     onto thousands of anchors before the page could respond. */
   build();
-  collect();
+
+  /* ============================ hydration ================================
+     Distant months arrive as data rather than markup. Build their tiles only
+     when they come near the viewport, or when the scrubber jumps to them, so
+     the page is responsive immediately instead of after laying out thousands
+     of tiles. Sections and headers already exist, so scroll position and the
+     scrubber work before anything is hydrated. */
+  var lazyData = {};
+  (function () {
+    var el = document.getElementById('tlLazyData');
+    if (!el) { return; }
+    try { lazyData = JSON.parse(el.textContent || '{}'); } catch (e) { lazyData = {}; }
+  })();
+
+  var tplThumb = stream.getAttribute('data-thumb-tpl') || '';
+  var tplFull  = stream.getAttribute('data-full-tpl') || '';
+  var tplLink  = stream.getAttribute('data-link-tpl') || '';
+  var albumWord = stream.getAttribute('data-album-label') || 'Album';
+
+  function buildTile(t) {
+    /* t = [thumbId, thumbSerial, itemId, aspect, title, date, isAlbum] */
+    var cell = document.createElement('div');
+    cell.className = 'tl-cell';
+    cell.style.setProperty('--ar', t[3]);
+
+    var a = document.createElement('a');
+    a.className = t[6] ? 'tl-tile tl-tile--album' : 'tl-tile';
+    a.href = tplLink.replace('__ID__', t[2]);
+    if (!t[6]) {
+      a.setAttribute('data-full', tplFull.replace('__ID__', t[2]));
+      a.setAttribute('data-title', t[4] || '');
+      if (t[5]) { a.setAttribute('data-date', t[5]); }
+    }
+
+    if (t[0]) {
+      var img = document.createElement('img');
+      img.className = 'giThumbnail';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.alt = '';
+      img.src = tplThumb.replace('__TID__', t[0]).replace('__TSN__', t[1]);
+      a.appendChild(img);
+    } else {
+      var ph = document.createElement('span');
+      ph.className = 'tl-noimg';
+      ph.setAttribute('aria-hidden', 'true');
+      a.appendChild(ph);
+    }
+
+    var cap = document.createElement('span');
+    cap.className = 'tl-tile-cap';
+    if (t[6]) {
+      var b = document.createElement('span');
+      b.className = 'tl-badge';
+      b.textContent = albumWord;
+      cap.appendChild(b);
+      cap.appendChild(document.createTextNode(' '));
+    }
+    cap.appendChild(document.createTextNode(t[4] || ''));
+    a.appendChild(cap);
+
+    cell.appendChild(a);
+    return cell;
+  }
+
+  function hydrate(section) {
+    if (!section || !section.classList.contains('is-lazy')) { return; }
+    var key = section.getAttribute('data-key');
+    var rows = lazyData[key];
+    section.classList.remove('is-lazy');       /* before building, so a second
+                                                  observer entry cannot re-enter */
+    if (!rows || !rows.length) { return; }
+    var into = section.querySelector('.tl-just');
+    if (!into) { return; }
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < rows.length; i++) { frag.appendChild(buildTile(rows[i])); }
+    into.appendChild(frag);
+    into.style.minHeight = '';
+    section.style.containIntrinsicSize = '';
+    delete lazyData[key];
+  }
+
+  if ('IntersectionObserver' in window) {
+    var hyd = new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting) {
+          hydrate(entries[i].target);
+          hyd.unobserve(entries[i].target);
+        }
+      }
+    }, { rootMargin: '1200px 0px' });
+    var lazySections = stream.querySelectorAll('.tl-group.is-lazy');
+    for (var i = 0; i < lazySections.length; i++) { hyd.observe(lazySections[i]); }
+  } else {
+    /* no observer: build everything rather than show empty months */
+    var all = stream.querySelectorAll('.tl-group.is-lazy');
+    for (var j = 0; j < all.length; j++) { hydrate(all[j]); }
+  }
 
   /* ============================== scrubber =============================== */
   /* The scrubber is rendered server-side from the whole item set, so it is
@@ -228,8 +337,11 @@
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) { return; }
       var sec = yearSection(a.getAttribute('data-year'));
       if (sec) {
-        /* already loaded: scroll instead of reloading the page */
         e.preventDefault();
+        /* build that month, and the two after it, before jumping */
+        hydrate(sec);
+        var n = sec.nextElementSibling, k = 0;
+        while (n && k < 2) { hydrate(n); n = n.nextElementSibling; k++; }
         sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
       /* not loaded yet: the href navigates to the page holding that year */
@@ -241,29 +353,39 @@
     for (var i = 0; i < marks.length; i++) {
       byYear[marks[i].getAttribute('data-year')] = marks[i];
     }
-    function markCurrent() {
-      var groups = stream.querySelectorAll('.tl-group');
-      var top = null;
-      for (var i = 0; i < groups.length; i++) {
-        var r = groups[i].getBoundingClientRect();
-        if (r.top <= 140) { top = groups[i]; } else { break; }
-      }
-      if (!top) { top = groups[0]; }
-      if (!top) { return; }
-      var y = (top.getAttribute('data-key') || '').slice(0, 4);
+    /* Observe the group headers instead of measuring every group on each
+       scroll frame: the browser reports only what crosses the line. */
+    var current = null;
+    function mark(el) {
+      if (el === current) { return; }
+      current = el;
+      var y = (el.getAttribute('data-key') || '').slice(0, 4);
       for (var k in byYear) {
         if (Object.prototype.hasOwnProperty.call(byYear, k)) {
           byYear[k].classList.toggle('is-current', k === y);
         }
       }
     }
-    var ticking = false;
-    window.addEventListener('scroll', function () {
-      if (ticking) { return; }
-      ticking = true;
-      window.requestAnimationFrame(function () { markCurrent(); ticking = false; });
-    }, { passive: true });
-    markCurrent();
+    if ('IntersectionObserver' in window) {
+      var seen = [];
+      var io = new IntersectionObserver(function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          var t = entries[i].target;
+          if (entries[i].isIntersecting) {
+            if (seen.indexOf(t) < 0) { seen.push(t); }
+          } else {
+            var j = seen.indexOf(t);
+            if (j >= 0) { seen.splice(j, 1); }
+          }
+        }
+        if (seen.length) {
+          seen.sort(function (a, b) { return a.offsetTop - b.offsetTop; });
+          mark(seen[0]);
+        }
+      }, { rootMargin: '-120px 0px -70% 0px' });
+      var groups = stream.querySelectorAll('.tl-group');
+      for (var g = 0; g < groups.length; g++) { io.observe(groups[g]); }
+    }
   }
 
   /* =========================== infinite scroll =========================== */

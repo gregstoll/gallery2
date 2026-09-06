@@ -9,7 +9,7 @@
     {if empty($head.title)}
       <title>{$theme.item.title|markup:strip|default:$theme.item.pathComponent}</title>
     {/if}
-    <link rel="stylesheet" type="text/css" href="{g->theme url="theme.css"}?v=1"/>
+    <link rel="stylesheet" type="text/css" href="{g->theme url="theme.css"}?v=4"/>
     {literal}<script type="text/javascript">
       /* Apply the stored appearance before first paint, to avoid a flash. */
       (function () {
@@ -43,7 +43,8 @@
               <span class="tl-ico tl-ico-photos" aria-hidden="true"></span>
               {g->text text="Photos"}
             </a>
-            <a class="tl-nav-item" data-nav="albums" href="{g->url}">
+            <a class="tl-nav-item" data-nav="albums"
+               href="{if !empty($theme.rootAlbumId)}{g->url arg1="itemId=`$theme.rootAlbumId`"}{else}{g->url}{/if}">
               <span class="tl-ico tl-ico-albums" aria-hidden="true"></span>
               {g->text text="Albums"}
             </a>
@@ -102,7 +103,7 @@
       </div>
     {/if}
     </div>
-    <script type="text/javascript" src="{g->theme url="timeline.js"}?v=1"></script>
+    <script type="text/javascript" defer src="{g->theme url="timeline.js"}?v=4"></script>
     {g->trailer}
   </body>
 </html>

@@ -100,6 +100,105 @@ class timeline_2026Theme extends GalleryTheme {
     }
 
 
+
+
+    /**
+     * Split the children into date groups, materialising only the first few.
+     *
+     * A whole-library stream is thousands of tiles; handing all of them to the
+     * browser as markup costs seconds of layout before the page responds. Every
+     * group still gets a section and a header, so the scrubber can jump to any
+     * month immediately - but distant groups carry their tiles as compact data
+     * for the client to build when they come near the viewport.
+     */
+    function _buildGroups(&$theme, $eagerItems=260) {
+	if (empty($theme['children'])) {
+	    $theme['groups'] = array();
+	    $theme['lazyData'] = '{}';
+	    return;
+	}
+	$order = $bucket = array();
+	foreach ($theme['children'] as $child) {
+	    $key = isset($child['groupKey']) ? $child['groupKey'] : 'undated';
+	    if (!isset($bucket[$key])) {
+		$bucket[$key] = array();
+		$order[] = $key;
+	    }
+	    $bucket[$key][] = $child;
+	}
+
+	$groups = $lazy = array();
+	$shown = 0;
+	$filling = true;
+	foreach ($order as $key) {
+	    $items = $bucket[$key];
+	    $count = count($items);
+	    /* Materialise a contiguous run from the top and then stop: the reader
+	       starts at the top, so that is the only part that must be present
+	       before first paint. Skipping a large month to pick up smaller ones
+	       further down would materialise tiles nobody is looking at. The
+	       first group always counts, however big, so the page is never empty
+	       above the fold. */
+	    $eager = $filling && (empty($groups) || ($shown + $count) <= $eagerItems);
+	    if ($eager) {
+		$shown += $count;
+	    } else {
+		$filling = false;
+	    }
+	    $label = '';
+	    foreach ($items as $one) {
+		if (!empty($one['groupLabel'])) {
+		    $label = $one['groupLabel'];
+		    break;
+		}
+	    }
+	    /* A rough height so the scrollbar is sensible before hydration;
+	       content-visibility replaces it with the real one once measured. */
+	    $rows = (int)ceil($count / 5);
+	    $group = array('key' => $key, 'label' => $label, 'count' => $count,
+			   'eager' => $eager ? 1 : 0, 'est' => max(1, $rows) * 236,
+			   'items' => $eager ? $items : array());
+	    if (!$eager) {
+		$tuples = array();
+		foreach ($items as $one) {
+		    if (!empty($one['width']) && !empty($one['height'])) {
+			$ar = round($one['width'] / $one['height'], 3);
+		    } else {
+			$ar = 1.333;
+		    }
+		    $title = (isset($one['title']) && $one['title'] !== '')
+			? $one['title'] : $one['pathComponent'];
+		    $tuples[] = array(
+			isset($one['thumbnail']['id']) ? (int)$one['thumbnail']['id'] : 0,
+			isset($one['thumbnail']['serialNumber'])
+			    ? (int)$one['thumbnail']['serialNumber'] : 0,
+			(int)$one['id'],
+			$ar,
+			$title,
+			isset($one['dateLabel']) ? $one['dateLabel'] : '',
+			empty($one['canContainChildren']) ? 0 : 1);
+		}
+		$lazy[$key] = $tuples;
+	    }
+	    $groups[] = $group;
+	}
+	$theme['groups'] = $groups;
+	$theme['lazyData'] = json_encode($lazy);
+    }
+
+    /**
+     * The navigation rail needs a direct link to the root album. Linking to a
+     * bare main.php is ambiguous: a site can legitimately redirect that to a
+     * different landing view, which would make "Albums" unreachable.
+     */
+    function _addNavContext(&$theme) {
+	list ($ret, $rootId) = GalleryCoreApi::getPluginParameter(
+	    'module', 'core', 'id.rootAlbum');
+	if (!$ret && !empty($rootId)) {
+	    $theme['rootAlbumId'] = $rootId;
+	}
+    }
+
     /**
      * Precompute the date labels each child needs.
      *
@@ -155,6 +254,8 @@ class timeline_2026Theme extends GalleryTheme {
 	$theme =& $template->getVariableByReference('theme');
 	$theme['yearMarks'] = $this->_yearIndex($theme, $params['rows'] * $params['columns']);
 	$this->_addDateLabels($theme);
+	$this->_addNavContext($theme);
+	$this->_buildGroups($theme);
 
 	return array(null, 'theme.tpl');
     }
@@ -170,6 +271,9 @@ class timeline_2026Theme extends GalleryTheme {
 	if ($ret) {
 	    return array($ret, null);
 	}
+	$theme =& $template->getVariableByReference('theme');
+	$this->_addNavContext($theme);
+
 	return array(null, 'theme.tpl');
     }
 
@@ -183,6 +287,9 @@ class timeline_2026Theme extends GalleryTheme {
 	if ($ret) {
 	    return array($ret, null);
 	}
+	$theme =& $template->getVariableByReference('theme');
+	$this->_addNavContext($theme);
+
 	return array(null, 'theme.tpl');
     }
 
@@ -196,6 +303,9 @@ class timeline_2026Theme extends GalleryTheme {
 	if ($ret) {
 	    return array($ret, null);
 	}
+	$theme =& $template->getVariableByReference('theme');
+	$this->_addNavContext($theme);
+
 	return array(null, 'theme.tpl');
     }
 
