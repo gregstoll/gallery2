@@ -297,7 +297,7 @@ Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'dscn3232.mov':
 		$duration = 3600*$regs[1] + 60*$regs[2] + $regs[3];
 	    }
 
-	    if (preg_match("/Stream.*?Video:.*?(\d+)x(\d+).*\ +([0-9\.]+) (fps|tb).*/",
+	    if (preg_match("/Stream.*?Video:.*?[\s,](\d{2,5})x(\d{2,5})[\s,].*\ +([0-9\.]+) (fps|tb).*/",
 			   $resultLine, $regs)) {
 		$successfulRun = true;
 		list ($width, $height, $vframerate) = array($regs[1], $regs[2], $regs[3]);
