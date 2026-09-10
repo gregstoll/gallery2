@@ -252,6 +252,14 @@
               </a>
             </span>
             {/if}
+	    {else}
+	      {* This is the theme the site is currently rendering with, so it cannot be
+	         deactivated, uninstalled or deleted. Say so: otherwise the actions cell is
+	         simply empty, which reads as a broken or half-installed plugin. *}
+	      <span class="giDescription">
+	        {g->text text="currently in use"} &ndash;
+	        <a href="{g->url arg1="view=core.SiteAdmin" arg2="subView=core.AdminThemes"}">{g->text text="choose a different theme"}</a>
+	      </span>
             {/if}
 	  {/if}
           <script type="text/javascript"> updatePluginState('{$plugin.type}', '{$plugin.id}', '{$plugin.state}', false); </script>
