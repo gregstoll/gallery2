@@ -113,11 +113,11 @@
       '%A' => 'l',
       '%d' => 'd',
       '%e' => function ($timestamp) {
-        return sprintf('% 2u', $timestamp->format('j'));
+        return sprintf('% 2u', date('j', $timestamp));
       },
       '%j' => function ($timestamp) {
         // Day number in year, 001 to 366
-        return sprintf('%03d', $timestamp->format('z')+1);
+        return sprintf('%03d', date('z', $timestamp)+1);
       },
       '%u' => 'N',
       '%w' => 'w',
@@ -126,13 +126,13 @@
       '%U' => function ($timestamp) {
         // Number of weeks between date and first Sunday of year
         $day = new DateTime(sprintf('%d-01 Sunday', date('Y', $timestamp)));
-        return sprintf('%02u', 1 + ($timestamp->format('z') - $day->format('z')) / 7);
+        return sprintf('%02u', 1 + (date('z', $timestamp) - $day->format('z')) / 7);
       },
       '%V' => 'W',
       '%W' => function ($timestamp) {
         // Number of weeks between date and first Monday of year
-        $day = new DateTime(sprintf('%d-01 Monday', $timestamp->format('Y')));
-        return sprintf('%02u', 1 + ($timestamp->format('z') - $day->format('z')) / 7);
+        $day = new DateTime(sprintf('%d-01 Monday', date('Y', $timestamp)));
+        return sprintf('%02u', 1 + (date('z', $timestamp) - $day->format('z')) / 7);
       },
 
       // Month
@@ -144,10 +144,10 @@
       // Year
       '%C' => function ($timestamp) {
         // Century (-1): 19 for 20th century
-        return floor($timestamp->format('Y') / 100);
+        return floor(date('Y', $timestamp) / 100);
       },
       '%g' => function ($timestamp) {
-        return substr($timestamp->format('o'), -2);
+        return substr(date('o', $timestamp), -2);
       },
       '%G' => 'o',
       '%y' => 'y',
