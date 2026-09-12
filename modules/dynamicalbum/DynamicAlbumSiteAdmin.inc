@@ -63,6 +63,7 @@ class DynamicAlbumSiteAdminController extends GalleryController {
 	if (isset($form['action']['save']) && empty($error)) {
 	    foreach (array('themeId', 'size.date', 'size.views', 'size.random',
 			   'type.date', 'type.views', 'type.random',
+			   'orderBy.date', 'orderBy.views', 'orderBy.random',
 			   'description.date', 'description.views', 'description.random')
 		    as $key) {
 		$ret = GalleryCoreApi::setPluginParameter('module', 'dynamicalbum',
@@ -108,6 +109,7 @@ class DynamicAlbumSiteAdminView extends GalleryView {
 	if ($form['formName'] != 'DynamicAlbumSiteAdmin') {
 	    foreach (array('themeId', 'size.date', 'size.views', 'size.random',
 			   'type.date', 'type.views', 'type.random',
+			   'orderBy.date', 'orderBy.views', 'orderBy.random',
 			   'description.date', 'description.views', 'description.random',
 			   'itemlink.date', 'itemlink.views', 'itemlink.random')
 		    as $key) {
@@ -130,6 +132,15 @@ class DynamicAlbumSiteAdminView extends GalleryView {
 		'data' => $module->translate('Show data items only'),
 		'all' => $module->translate('Show all items'),
 		'album' => $module->translate('Show albums only'));
+
+	$orderByList = array(
+		'creationTimestamp' => $module->translate('Date added'),
+		'originationTimestamp' => $module->translate('Date taken'),
+		'modificationTimestamp' => $module->translate('Date modified'),
+		'title' => $module->translate('Title'),
+		'pathComponent' => $module->translate('Name'),
+		'viewCount' => $module->translate('View count'),
+		'random' => $module->translate('Random'));
 
 	/* Set up theme selection list */
 	$themeList = array('' => $module->translate('&laquo; default theme &raquo;'));
@@ -164,7 +175,8 @@ class DynamicAlbumSiteAdminView extends GalleryView {
 	}
 
 	$template->setVariable('DynamicAlbumSiteAdmin',
-		array('themeList' => $themeList, 'defaultList' => $defaultList));
+		array('themeList' => $themeList, 'defaultList' => $defaultList,
+		      'orderByList' => $orderByList));
 	$template->setVariable('controller', 'dynamicalbum.DynamicAlbumSiteAdmin');
 	return array(null,
 		     array('body' => 'modules/dynamicalbum/templates/DynamicAlbumSiteAdmin.tpl'));

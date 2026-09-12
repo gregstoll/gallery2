@@ -46,6 +46,17 @@
       {/if}
     </td>
   </tr><tr>
+      <td>
+	{g->text text="Sort By"}
+      </td><td>
+	<select name="{g->formVar var="form[orderBy_date]"}">
+	  {html_options options=$DynamicAlbumSiteAdmin.orderByList selected=$form.orderBy_date}
+	</select>
+	<p class="giDescription">
+	  {g->text text="Imported galleries often share one date added across every item; sort by date taken to order them chronologically."}
+	</p>
+      </td>
+    </tr><tr>
     <td>
       {g->text text="Default"}
     </td><td>
@@ -97,6 +108,17 @@
       {/if}
     </td>
   </tr><tr>
+      <td>
+	{g->text text="Sort By"}
+      </td><td>
+	<select name="{g->formVar var="form[orderBy_views]"}">
+	  {html_options options=$DynamicAlbumSiteAdmin.orderByList selected=$form.orderBy_views}
+	</select>
+	<p class="giDescription">
+	  {g->text text="Imported galleries often share one date added across every item; sort by date taken to order them chronologically."}
+	</p>
+      </td>
+    </tr><tr>
     <td>
       {g->text text="Default"}
     </td><td>
@@ -145,6 +167,17 @@
       {/if}
     </td>
   </tr><tr>
+      <td>
+	{g->text text="Sort By"}
+      </td><td>
+	<select name="{g->formVar var="form[orderBy_random]"}">
+	  {html_options options=$DynamicAlbumSiteAdmin.orderByList selected=$form.orderBy_random}
+	</select>
+	<p class="giDescription">
+	  {g->text text="Imported galleries often share one date added across every item; sort by date taken to order them chronologically."}
+	</p>
+      </td>
+    </tr><tr>
     <td>
       {g->text text="Default"}
     </td><td>

@@ -33,7 +33,7 @@ class DynamicAlbumModule extends GalleryModule {
 	$this->setName($gallery->i18n('Dynamic Albums'));
 	$this->setDescription(
 		$gallery->i18n('Dynamic albums for newest, most viewed or random items'));
-	$this->setVersion('1.0.3');
+	$this->setVersion('1.0.4');
 	$this->_templateVersion = 1;
 	$this->setGroup('display', $gallery->i18n('Display'));
 	$this->setCallbacks('getSiteAdminViews|getItemLinks');
@@ -52,7 +52,9 @@ class DynamicAlbumModule extends GalleryModule {
 	foreach (array('themeId' => '', 'size.date' => 24, 'size.views' => 24, 'size.random' => 24,
 		    'type.date' => 'data', 'type.views' => 'data', 'type.random' => 'data',
 		    'description.date' => '', 'description.views' => '', 'description.random' => '',
-		    'itemlink.date' => 0, 'itemlink.views' => 0, 'itemlink.random' => 0)
+		    'itemlink.date' => 0, 'itemlink.views' => 0, 'itemlink.random' => 0,
+		    'orderBy.date' => 'creationTimestamp',
+		    'orderBy.views' => 'viewCount', 'orderBy.random' => 'random')
 		as $key => $value) {
 	    if (!isset($params[$key])) {
 		$ret = $this->setParameter($key, $value);
