@@ -4,6 +4,8 @@ This is a fork of the now-dormant [gallery2](http://galleryproject.org/) project
 
 Since [#26](https://github.com/gregstoll/gallery2/pull/26) the code supports PHP 8, although it's very possible I've missed some problems; please open an issue if you find anything!
 
+The `auto-test.sh` script takes a server URL and test scope as its first two arguments.
+
 This code is based on gallery2 version 2.3.2 (core version 1.3.0.2)
 
 To upgrade from a stock Gallery2 installation:
