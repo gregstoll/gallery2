@@ -509,6 +509,11 @@ class GallerySession {
 	$this->_loadedSessionData = $localLoadedSessionData;
 	$this->setUserId($userId);
 
+    /* Carry the secure flag onto the new session so init() doesn't regenerate again */
+    if ($this->_isHttps()) {
+        $this->put('secure', true);
+    }
+
 	/* Start the session again (create a session in the DB, ...) */
 	$ret = $this->start();
 	if ($ret) {
