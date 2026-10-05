@@ -159,6 +159,20 @@ $gallery->setProfile(false);
 $gallery->setConfig('mode.maintenance', false);
 
 /*
+ * Password hashing method. This defines the algorithm used for hashing new passwords.
+ * Valid options are:
+ *  'salted md5' (default, legacy Gallery 2)
+ *  'phpass'
+ *  'bcrypt'
+ *  'crypt-sha256'
+ *  'crypt-sha512'
+ *  'argon2i'
+ *  'argon2id'
+ */
+$gallery->setConfig('passwordHashMethod', 'salted md5');
+
+
+/*
  * Embedded mode.  You can disable direct access to main.php (standalone G2)
  * by setting this flag.  Set value below to:
  *  true (without quotes) - block direct requests
