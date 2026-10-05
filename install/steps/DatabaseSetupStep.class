@@ -71,9 +71,9 @@ class DatabaseSetupStep extends InstallStep {
 	    $this->_config['type'] = 'mysqli';
 	    $mysqltType = 'mysqli';
 	}
-	if ($this->_config['type'] == 'pdo_sqlite') {    
-	    $this->_config['database'] = 
-	    	'sqlite:' . $galleryStub->getConfig('data.gallery.base') . 'gallery2.db';   
+	if ($this->_config['type'] == 'pdo_sqlite') {
+	    $this->_config['database'] =
+	    	'sqlite:' . $galleryStub->getConfig('data.gallery.base') . 'gallery2.db';
         }
 	switch ($this->_config['type']) {
 	    case 'mysql':
@@ -154,7 +154,8 @@ class DatabaseSetupStep extends InstallStep {
 		require_once(dirname(__FILE__) . '/../../lib/adodb/adodb.inc.php');
 
 		$this->_captureStart();
-		$this->_db =& ADONewConnection($this->_config['type']);
+		$ADOConnection = ADONewConnection($this->_config['type']);
+		$this->_db =& $ADOConnection;
 		$this->_captureEnd();
 
 		if (empty($this->_db)) {
@@ -162,7 +163,7 @@ class DatabaseSetupStep extends InstallStep {
 			_('Unable to create a database connection of type %s'),
 			$this->_config['type']);
 		}
-                
+
 		if (empty($templateData['errors'])) {
 		    $this->_captureStart();
 		    $this->_db->debug = true;
@@ -616,7 +617,7 @@ class DatabaseSetupStep extends InstallStep {
 	    $GLOBALS['gallery']->setConfig('plugins.dirname',
 					   $galleryStub->getConfig('plugins.dirname'));
 	    $GLOBALS['gallery']->setConfig('data.gallery.version', $configPath . 'versions.dat');
-	    $GLOBALS['gallery']->setConfig('data.gallery.locale', $configPath . 'locale' 
+	    $GLOBALS['gallery']->setConfig('data.gallery.locale', $configPath . 'locale'
 					   . DIRECTORY_SEPARATOR);
 	}
 	global $gallery;
