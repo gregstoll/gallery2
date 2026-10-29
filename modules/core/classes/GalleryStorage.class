@@ -211,7 +211,16 @@ class GalleryStorage {
 	global $gallery;
 
 	$this->_traceStart();
-	$db = ADONewConnection($this->getAdoDbType());
+	if (strncmp($this->_type, 'pdo_', 4) == 0) {
+	    /* ADOdb 5.x loads all PDO backends through the generic 'pdo' driver;
+	     * the PDO DSN (kept in _database) is passed as the first connect argument.
+	     * PHP >= 8.4 defaults PDO to ERRMODE_EXCEPTION; keep the silent mode ADOdb
+	     * (and Gallery's error handling) were designed for. */
+	    $db = ADONewConnection('pdo');
+	    $db->pdoParameters = [PDO::ATTR_ERRMODE => PDO::ERRMODE_SILENT];
+	} else {
+	    $db = ADONewConnection($this->getAdoDbType());
+	}
 	$this->_traceStop();
 	if (empty($db)) {
 	    return array(GalleryCoreApi::error(ERROR_STORAGE_FAILURE), null);
@@ -229,10 +238,16 @@ class GalleryStorage {
 
 	$this->_traceStart();
 	$connectMethod = ($forceNew || !$this->_usePersistentConnections) ? 'NConnect' : 'PConnect';
-	$ret = $db->$connectMethod($this->_hostname,
-				   $this->_username,
-				   $this->_password,
-				   $this->_database);
+	if (strncmp($this->_type, 'pdo_', 4) == 0) {
+	    $ret = $db->$connectMethod($this->_database,
+				       $this->_username,
+				       $this->_password);
+	} else {
+	    $ret = $db->$connectMethod($this->_hostname,
+				       $this->_username,
+				       $this->_password,
+				       $this->_database);
+	}
 	$this->_traceStop();
 
 	if (!$ret) {

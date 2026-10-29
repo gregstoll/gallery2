@@ -154,7 +154,16 @@ class DatabaseSetupStep extends InstallStep {
 		require_once(dirname(__FILE__) . '/../../lib/adodb/adodb.inc.php');
 
 		$this->_captureStart();
-		$this->_db =& ADONewConnection($this->_config['type']);
+		if (strncmp($this->_config['type'], 'pdo_', 4) == 0) {
+		    /* ADOdb 5.x loads all PDO backends through the generic 'pdo' driver;
+		     * the PDO DSN (kept in 'database') is passed as the first connect argument.
+		     * PHP >= 8.4 defaults PDO to ERRMODE_EXCEPTION; keep the silent mode ADOdb
+		     * (and Gallery's error handling) were designed for. */
+		    $this->_db =& ADONewConnection('pdo');
+		    $this->_db->pdoParameters = [PDO::ATTR_ERRMODE => PDO::ERRMODE_SILENT];
+		} else {
+		    $this->_db =& ADONewConnection($this->_config['type']);
+		}
 		$this->_captureEnd();
 
 		if (empty($this->_db)) {
@@ -167,10 +176,16 @@ class DatabaseSetupStep extends InstallStep {
 		    $this->_captureStart();
 		    $this->_db->debug = true;
 		    if ($dbPlatformType != 'mssql') {
-			$result = $this->_db->NConnect($this->_config['hostname'],
-						       $this->_config['username'],
-						       $this->_config['password'],
-						       $this->_config['database']);
+			if (strncmp($this->_config['type'], 'pdo_', 4) == 0) {
+			    $result = $this->_db->NConnect($this->_config['database'],
+							   $this->_config['username'],
+							   $this->_config['password']);
+			} else {
+			    $result = $this->_db->NConnect($this->_config['hostname'],
+							   $this->_config['username'],
+							   $this->_config['password'],
+							   $this->_config['database']);
+			}
 		    } else {
 			$result = $this->_db->NConnect(
 			    'PROVIDER=MSDASQL;DRIVER={SQL Server};SERVER='
