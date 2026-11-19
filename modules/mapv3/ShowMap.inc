@@ -495,7 +495,8 @@ class ShowMapView extends GalleryView {
 
 					if (!empty($albumfilter)) {
 						/** @todo: Include a marker for the album if it has coordinates */
-						$map['Filter'] = 'Album: ' . $albumfilter;
+						/* $albumfilter is entity-decoded request input; re-escape before it reaches HTML */
+						$map['Filter'] = 'Album: ' . htmlspecialchars($albumfilter, ENT_QUOTES, 'UTF-8');
 						$NumberOfIds   = count($ids);
 
 						for ($i = 0; $i < $NumberOfIds; $i++) {

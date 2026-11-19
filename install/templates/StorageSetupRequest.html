@@ -82,7 +82,7 @@
 
     <span class="label"><?php print _('Directory path:') ?></span>
     <input id="dir" name="dir" type="text" size="50"
-	   value="<?php print $templateData['dir'] ?>" autocomplete="off"/>
+	   value="<?php print htmlspecialchars($templateData['dir'], ENT_QUOTES) ?>" autocomplete="off"/>
     <input type="hidden" name="action" value="save"/>
     <script type="text/javascript">
 	// <![CDATA[
@@ -106,7 +106,7 @@
     <?php if ($templateData['OS'] == 'unix'): ?>
     <div class="example">
       <h2> <?php print _("Unix (with shell access)"); ?> </h2>
-      <pre> $ <b>mkdir <?php print $templateData['dir'] ?></b><br/> $ <b>chmod 777 <?php print $templateData['dir'] ?></b></pre>
+      <pre> $ <b>mkdir <?php print htmlspecialchars($templateData['dir'], ENT_QUOTES) ?></b><br/> $ <b>chmod 777 <?php print htmlspecialchars($templateData['dir'], ENT_QUOTES) ?></b></pre>
     </div>
 
     <div class="example">
@@ -119,7 +119,7 @@
 
     <div class="example">
       <h2> Windows </h2>
-      <pre> C:\&gt; <b>mkdir <?php print $templateData['dir'] ?></b></pre>
+      <pre> C:\&gt; <b>mkdir <?php print htmlspecialchars($templateData['dir'], ENT_QUOTES) ?></b></pre>
     </div>
     <?php endif; ?>
 

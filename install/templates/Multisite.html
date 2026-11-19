@@ -67,7 +67,7 @@
     <?php print _('Directory for the new Gallery installation (example: /var/www/example.com/gallery2) ') ?>
   </p>
   <input type="text" id="dir" name="configPath" size="50"
-         value="<?php print $templateData['configPath'] ?>" autocomplete="off"
+         value="<?php print htmlspecialchars($templateData['configPath'], ENT_QUOTES) ?>" autocomplete="off"
 	 <?php if (!$templateData['isMultisite']) print 'class="disabled" disabled="disabled"' ?>/>
   <?php if (isset($templateData['error']['uri']['missing'])): ?>
     <div class="error" style="margin-top: 1em; padding-top: 0.8em; padding-bottom: 0.9em">
@@ -78,7 +78,7 @@
     <?php print _('URL for the new Gallery installation (example: http://example.com/gallery2/main.php) ') ?>
   </p>
   <input type="text" id="url" name="baseUri" size="50"
-         value="<?php print $templateData['baseUri'] ?>"
+         value="<?php print htmlspecialchars($templateData['baseUri'], ENT_QUOTES) ?>"
 	 <?php if (!$templateData['isMultisite']) print 'class="disabled" disabled="disabled"' ?>/>
   <script type="text/javascript">
     // <![CDATA[

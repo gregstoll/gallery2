@@ -692,17 +692,13 @@ class GallerySession {
 		      'data' => serialize($this->_sessionData));
 
 	/* Get new sessionId, there's a 1:2^128 probability of collision (md5), try it 5 times */
-    	$remoteHost = '';
-    	if (!empty($this->_remoteIdentifier)){
-		$remoteHost = $this->_remoteIdentifier[0];
-	}
 	$attempt = 0;
 	$success = false;
 	do {
 	    /* If there's sessionId given, first try it with this, else generate a new one */
 	    if ($attempt != 0 || empty($this->_sessionId)) {
 		$this->_sessionId =
-		    $phpVm->md5(uniqid(substr($remoteHost . microtime() . rand(1, 32767), 0, 114)));
+		    $phpVm->md5(random_bytes(32));
 	    }
 	    $this->_sessionId = $data['id'] = GalleryUtilities::strToLower($this->_sessionId);
 
@@ -1433,7 +1429,7 @@ class GallerySession {
 	if (empty($authToken)) {
 	    global $gallery;
 	    $phpVm = $gallery->getPhpVm();
-	    $authToken = substr($phpVm->md5(uniqid(microtime() . mt_rand())), 0, 12);
+	    $authToken = substr($phpVm->md5(random_bytes(32)), 0, 12);
 	    $this->put('core.authToken', $authToken);
 	}
 	return $authToken;

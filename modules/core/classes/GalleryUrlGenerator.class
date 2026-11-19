@@ -836,6 +836,16 @@ class GalleryUrlGenerator {
 	     * normalize to URL / *nix style paths to check fewer cases
 	     */
 	    $normUrl = str_replace("\\", '/', $url);
+	    /*
+	     * Reject protocol-relative URLs (//evil.com, /\evil.com, \\evil.com); browsers treat
+	     * backslashes as slashes, so these would otherwise redirect off-site.
+	     */
+	    if (preg_match('{^[\s\x00-\x1f]*//}', $normUrl)) {
+		$message = sprintf('Invalid URL! The requested URL %s tried to insert a '
+				 . 'redirection to %s which is not a part of this Gallery.',
+				   $this->makeUrl($this->getCurrentRequestUri()), $url);
+		return GalleryCoreApi::error(ERROR_PERMISSION_DENIED, __FILE__, __LINE__, $message);
+	    }
 	    if (((empty($this->_file[0]) || strpos($url, $this->_file[0]) !== 0)
 			&& strpos($normUrl, $validPath) !== 0
 			&& strpos($url, $this->getCurrentUrlDir()) !== 0

@@ -68,7 +68,11 @@ class UnixPlatform extends GalleryPlatform {
 		if ($arg === '>') {
 		    $command .= '>';
 		} else {
-		    $command .= ' "' . $arg . '" ';
+		    /*
+		     * Use escapeshellarg rather than bare double quotes, which still allow
+		     * $(...), backticks and $VAR expansion (shell command injection).
+		     */
+		    $command .= ' ' . escapeshellarg($arg) . ' ';
 		}
 	    }
 	}
@@ -76,7 +80,7 @@ class UnixPlatform extends GalleryPlatform {
 	/* Redirect STDERR to a file */
 	$tmpDir = $gallery->getConfig('data.gallery.tmp');
 	$debugFile = tempnam($tmpDir, 'g2dbg');
-	$command = "($command) 2>\"$debugFile\"";
+	$command = "($command) 2>" . escapeshellarg($debugFile);
 
 	if ($gallery->getDebug()) {
 	    $gallery->debug("Executing: $command");

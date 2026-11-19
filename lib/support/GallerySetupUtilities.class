@@ -56,7 +56,7 @@ class GallerySetupUtilities {
      */
     static function regenerateSession() {
 	/* 1. Generate a new session id */
-	$newSessionId = md5(uniqid(substr(rand() . serialize($_REQUEST), 0, 114)));
+	$newSessionId = bin2hex(random_bytes(16));
 	$sessionData = array();
 	if (!empty($_SESSION) && is_array($_SESSION)) {
 	    foreach ($_SESSION as $key => $value) {

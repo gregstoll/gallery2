@@ -13,7 +13,7 @@ function start(startElId) {ldelim}
   {else}
   var p=PicLensLite;
   p.setCallbacks({ldelim} onNoPlugins:function(){ldelim}startLB(startElId){rdelim},
-                          onExit:function(){ldelim}location.href='{$Slideshow.returnUrl}' {rdelim}
+                          onExit:function(){ldelim}location.href='{$Slideshow.returnUrl|escape:"javascript"}' {rdelim}
                  {rdelim});
   p.setLiteURLs({ldelim} swf:'{$Slideshow.piclensSwfUrl}' {rdelim});
   p.start({ldelim} feedUrl:'{$Slideshow.mediaRssUrl}',

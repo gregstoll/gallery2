@@ -64,7 +64,7 @@ class CaptchaHelper {
 	$goodChars = 'ABEHJKMNPSUWXZ';
 	$code = '' ;
 	for ($i = 0; $i < 6; $i++) {
-	    $code .= substr($goodChars, rand(0, strlen($goodChars) - 1), 1);
+	    $code .= substr($goodChars, random_int(0, strlen($goodChars) - 1), 1);
 	}
 	$session =& $gallery->getSession();
 	$session->put('captcha.key', $code);

@@ -171,7 +171,8 @@ class CreateConfigFileStep extends InstallStep {
 	    }
 
 	    if (trim($line) == '$gallery->setConfig(\'baseUri\', \'\');') {
-		$line = sprintf("\$gallery->setConfig('baseUri', '%s');\n", $_SESSION['baseUri']);
+		$tmp = strtr($_SESSION['baseUri'], $addslashes);
+		$line = sprintf("\$gallery->setConfig('baseUri', '%s');\n", $tmp);
 	    }
 
 	    $contents .= $line;

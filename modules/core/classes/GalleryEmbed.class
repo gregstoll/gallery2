@@ -479,7 +479,7 @@ class GalleryEmbed /* implements GalleryEventListener */ {
 	    $user->setHashedPassword($args['hashedpassword']);
 	} else if ($create) {
 	    /* Create a random password */
-	    $user->changePassword('G' . rand(100000,999999) . '2');
+	    $user->changePassword(bin2hex(random_bytes(16)));
 	}
 
 	if (isset($args['username'])) {

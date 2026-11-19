@@ -55,7 +55,7 @@
 	  <td class="label"><?php print _('DB Hostname:') ?></td>
 	  <td>
 	    <input name="hostname" type="text" size="30"
-	      value="<?php print $templateData['config']['hostname'] ?>" />
+	      value="<?php print htmlspecialchars($templateData['config']['hostname'], ENT_QUOTES) ?>" />
 	    <input type="hidden" name="action" value="save"/>
 	    <input type="hidden" name="confirmReuseTables" value=""/>
 	    <input type="hidden" name="confirmCleanInstall" value=""/>
@@ -65,21 +65,21 @@
 	  <td class="label"><?php print _('DB Username:') ?></td>
 	  <td>
 	    <input name="username" type="text" size="30"
-	      value="<?php print $templateData['config']['username'] ?>" />
+	      value="<?php print htmlspecialchars($templateData['config']['username'], ENT_QUOTES) ?>" />
 	  </td>
 	</tr>
 	<tr>
 	  <td class="label"><?php print _('DB Password:') ?></td>
 	  <td>
 	    <input name="password" type="password" size="30"
-	      value="<?php print $templateData['password'] ?>" />
+	      value="<?php print htmlspecialchars($templateData['password'], ENT_QUOTES) ?>" />
 	  </td>
 	</tr>
 	<tr>
 	  <td class="label"><?php print _('DB Name:') ?></td>
 	  <td>
 	    <input name="database" type="text" size="30"
-	      value="<?php print $templateData['config']['database'] ?>" />
+	      value="<?php print htmlspecialchars($templateData['config']['database'], ENT_QUOTES) ?>" />
 	  </td>
 	</tr>
 	<tr id="dbSchema"<?php
@@ -87,7 +87,7 @@
 	  <td class="label"><?php print _('DB Schema:') ?></td>
 	  <td>
 	    <input name="schema" type="text" size="30"
-	      value="<?php print $templateData['config']['schema'] ?>" />
+	      value="<?php print htmlspecialchars($templateData['config']['schema'], ENT_QUOTES) ?>" />
 	    <?php print _('(optional)') ?>
 	  </td>
 	</tr>
@@ -95,7 +95,7 @@
 	  <td class="label"><?php print _('Table Prefix:') ?></td>
 	  <td>
 	    <input name="tablePrefix" type="text" size="30"
-	      value="<?php print $templateData['config']['tablePrefix'] ?>" />
+	      value="<?php print htmlspecialchars($templateData['config']['tablePrefix'], ENT_QUOTES) ?>" />
 	  </td>
 	</tr>
 	<?php if (!empty($templateData['error']['tablePrefix'])): ?>
@@ -111,7 +111,7 @@
 	  <td class="label"><?php print _('Column Prefix:') ?></td>
 	  <td>
 	    <input name="columnPrefix" type="text" size="30"
-	      value="<?php print $templateData['config']['columnPrefix'] ?>" />
+	      value="<?php print htmlspecialchars($templateData['config']['columnPrefix'], ENT_QUOTES) ?>" />
 	  </td>
 	</tr>
 	</tbody>

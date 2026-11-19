@@ -550,7 +550,7 @@ class RssHelper {
 	if (!empty($parentSequence)) {
 	    $query .= "
 	      AND
-	      [GalleryItemAttributesMap::parentSequence] LIKE '$parentSequence/%'";
+	      [GalleryItemAttributesMap::parentSequence] LIKE ?";
 	}
 
 	$query .= "
@@ -563,6 +563,9 @@ class RssHelper {
 	    ";
 
 	$data = $aclIds;
+	if (!empty($parentSequence)) {
+	    array_unshift($data, $parentSequence . '/%');
+	}
 
 	$params = array();
 

@@ -33,9 +33,10 @@ class WelcomeStep extends InstallStep {
 	if (!empty($_POST['language'])) {
 	    global $translator, $gallery;
 	    $gallery = new GalleryStub();
-	    $translator->init($_POST['language'], true);
+	    /* init() validates against supported languages; store the normalized code */
+	    list ($ignored, $languageCode) = $translator->init((string)$_POST['language'], true);
 	    unset($gallery);
-	    $_SESSION['language'] = $_POST['language'];
+	    $_SESSION['language'] = $languageCode;
 	}
 	return true;
     }

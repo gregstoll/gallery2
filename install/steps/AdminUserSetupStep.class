@@ -57,7 +57,7 @@ class AdminUserSetupStep extends InstallStep {
 	    } else if (empty($_POST['passwordB'])) {
 		$templateData['error']['passwordB_missing'] = 1;
 		$templateData['passwordA'] = $templateData['passwordB'] = '';
-	    } else if ($_POST['passwordA'] != $_POST['passwordB']) {
+	    } else if ((string)$_POST['passwordA'] !== (string)$_POST['passwordB']) {
 		$templateData['error']['password_mismatch'] = 1;
 		$templateData['passwordA'] = $templateData['passwordB'] = '';
 	    } else {

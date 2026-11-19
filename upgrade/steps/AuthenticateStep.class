@@ -49,7 +49,8 @@ class AuthenticateStep extends UpgradeStep {
 		    $templateData['authFileErrors']['unreadable'] = 1;
 		} else {
 		    $authKeyFromFile = trim(join('', file($authFile)));
-		    if ($authKeyFromFile == $templateData['authKey']) {
+		    if ((string)$templateData['authKey'] !== ''
+			    && hash_equals((string)$templateData['authKey'], $authKeyFromFile)) {
 			GallerySetupUtilities::authenticateThisSession();
 		    } else {
 			$templateData['authFileErrors']['mismatch'] = 1;
@@ -60,7 +61,9 @@ class AuthenticateStep extends UpgradeStep {
 		if (isset($_POST['password_sent'])) {
 		    if (empty($_POST['password'])) {
 			$templateData['error']['password'] = _('<b>Error:</b> missing password.');
-		    } else if ($_POST['password'] != $gallery->getConfig('setup.password')) {
+		    } else if (!is_string($_POST['password'])
+			    || !hash_equals((string)$gallery->getConfig('setup.password'),
+					    $_POST['password'])) {
 			$templateData['error']['password'] = _('<b>Error:</b> invalid password.');
 			GallerySetupUtilities::setLoginAttempts(++$attempts);
 			if ($attempts > G2_SUPPORT_MAX_LOGIN_ATTEMPTS) {

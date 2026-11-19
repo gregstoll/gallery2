@@ -195,7 +195,7 @@ class GalleryPendingUser extends GalleryUser {
 	}
 
 	$this->setUserName($userName);
-	$this->setRegistrationKey('G' . rand(100000,999999) . '2');
+	$this->setRegistrationKey(bin2hex(random_bytes(15)));
 	return null;
     }
 
@@ -205,7 +205,7 @@ class GalleryPendingUser extends GalleryUser {
      * @param string $newPassword a plaintext password
      */
     function changePassword($newPassword) {
-	$this->setHashedPassword(GalleryUtilities::md5Salt($newPassword));
+	$this->setHashedPassword(password_hash((string)$newPassword, PASSWORD_DEFAULT));
     }
 
     /**

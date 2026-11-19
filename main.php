@@ -273,6 +273,11 @@ function _GalleryMain($embedded=false, $template=null) {
 		$redirectUrl = GalleryUtilities::getRequestVariables('formUrl');
 	    }
 	    /* Prevent open redirect: only allow relative URLs or same-host URLs */
+	    if (!empty($redirectUrl)
+		    && preg_match('{^[\s\x00-\x1f]*[/\\\\]{2}}', $redirectUrl)) {
+		/* Protocol-relative (//host, /\host, \\host) URLs leave the site */
+		$redirectUrl = '';
+	    }
 	    if (!empty($redirectUrl)) {
 		$parsed = parse_url($redirectUrl);
 		if (!empty($parsed['host'])) {

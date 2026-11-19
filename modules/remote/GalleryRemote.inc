@@ -779,7 +779,7 @@ class GalleryRemoteController extends GalleryController {
 	    if (!empty($parentSequence)) {
 		$query .= "
 		  AND
-		  [GalleryItemAttributesMap::parentSequence] LIKE '$parentSequence/%'";
+		  [GalleryItemAttributesMap::parentSequence] LIKE ?";
 	    }
 
 	    $query .= "
@@ -792,6 +792,9 @@ class GalleryRemoteController extends GalleryController {
 		";
 
 	    $data = $aclIds;
+	    if (!empty($parentSequence)) {
+		array_unshift($data, $parentSequence . '/%');
+	    }
 
 	    $params = array();
 	    $params['limit'] = array('count' => $form['limit']);

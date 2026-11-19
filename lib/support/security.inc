@@ -71,7 +71,8 @@ if (empty($config)) {
 	    $options['authFileErrors']['unreadable'] = 1;
 	} else {
 	    $authKeyFromFile = trim(join('', file($authFile)));
-	    if ($authKeyFromFile == $options['key']) {
+	    if ((string)$options['key'] !== ''
+		    && hash_equals((string)$options['key'], $authKeyFromFile)) {
 		GallerySetupUtilities::authenticateThisSession();
 		GallerySetupUtilities::redirectBackToSelf();
 		exit;
@@ -81,7 +82,8 @@ if (empty($config)) {
 	}
 	render('loginTxtForm', $options);
     } else if (!empty($_POST['password'])) {
-	if (hash_equals($config['setup.password'], $_POST['password'])) {
+	if (is_string($_POST['password'])
+		&& hash_equals((string)$config['setup.password'], $_POST['password'])) {
 	    GallerySetupUtilities::authenticateThisSession();
 	    GallerySetupUtilities::redirectBackToSelf();
 	    exit;

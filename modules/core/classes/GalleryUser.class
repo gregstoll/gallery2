@@ -170,11 +170,17 @@ class GalleryUser extends GalleryEntity {
      * @return boolean true if the password is correct
      */
     function isCorrectPassword($password) {
-	$valid = $this->getHashedPassword();
+	$valid = (string)$this->getHashedPassword();
+
+	/* Modern hashes produced by password_hash() (bcrypt / argon2) */
+	if (strncmp($valid, '$2y$', 4) == 0 || strncmp($valid, '$argon2', 7) == 0) {
+	    return password_verify((string)$password, $valid);
+	}
+
 	$salt = substr($valid, 0, 4);
 	/* Support both old (G1 thru 1.4.0; G2 thru alpha-4) and new password schemes: */
 	$guess = (strlen($valid) == 32) ? md5($password) : ($salt . md5($salt . $password));
-	if (!strcmp($guess, $valid)) {
+	if (hash_equals($valid, $guess)) {
 	    return true;
 	}
 
@@ -183,7 +189,7 @@ class GalleryUser extends GalleryEntity {
 	GalleryUtilities::sanitizeInputValues($sanitizedPassword, false);
 	$guess = (strlen($valid) == 32) ? md5($sanitizedPassword)
 					: ($salt . md5($salt . $sanitizedPassword));
-	if (!strcmp($guess, $valid)) {
+	if (hash_equals($valid, $guess)) {
 	    return true;
 	}
 
@@ -203,7 +209,8 @@ class GalleryUser extends GalleryEntity {
      * @param string $newPassword a plaintext password
      */
     function changePassword($newPassword) {
-	$this->setHashedPassword(GalleryUtilities::md5Salt($newPassword));
+	/* Salted md5 is far too fast to resist offline cracking; use password_hash() */
+	$this->setHashedPassword(password_hash((string)$newPassword, PASSWORD_DEFAULT));
     }
 
     /**

@@ -56,7 +56,7 @@ class ConfirmRegistrationController extends GalleryController {
 	    }
 	} else {
 	    /* verify registration key: */
-	    if ($regKey != $user->getRegistrationKey()) {
+	    if (!is_string($regKey) || !hash_equals((string)$user->getRegistrationKey(), $regKey)) {
 		$results['error'][] = 'form[error][unknownUser]';
 	    } else {
 		$ret = GalleryPendingUserHelper::createGalleryUser($user);
